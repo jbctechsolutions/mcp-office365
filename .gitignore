@@ -1,0 +1,15 @@
+# SQLite database files
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+*.sqlite-journal
+
+# macOS
+.DS_Store
+
+# Node modules (if applicable)
+node_modules/
+
+# Environment files
+.env
+.env.local
