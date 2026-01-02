@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "outlook-mac": {
+      "command": "node",
+      "args": ["/Users/joel.castillo.cq/conductor/workspaces/outlook-mac-mcp/salem/dist/index.js"],
+      "env": {}
+    }
+  }
+}
