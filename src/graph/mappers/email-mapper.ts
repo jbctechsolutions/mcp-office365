@@ -51,7 +51,9 @@ export function mapMessageToEmailRow(
     size: 0, // Not available in Graph API message response
     priority: importanceToPriority(message.importance),
     flagStatus: flagStatusToNumber(flag),
-    categories: null, // Could map message.categories if needed
+    categories: message.categories != null && message.categories.length > 0
+      ? Buffer.from(message.categories.join(','), 'utf-8')
+      : null,
     messageId: message.internetMessageId ?? null,
     conversationId: message.conversationId != null ? hashStringToNumber(message.conversationId) : null,
     dataFilePath: createGraphContentPath('email', messageId),
