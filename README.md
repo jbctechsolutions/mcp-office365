@@ -4,7 +4,7 @@ A [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) server that p
 
 ## Features
 
-- **Read-only access** - Never modifies your Outlook data
+- **Mostly read-only** - Calendar event creation supported; all other data is read-only
 - **Two backends** - AppleScript for classic Outlook, Microsoft Graph API for new Outlook
 - **Works offline** - AppleScript backend requires no network (Graph API requires internet)
 - **Fast and reliable** - Direct communication with Outlook or Microsoft servers
@@ -26,6 +26,7 @@ A [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) server that p
 - `list_events` - List events with date range filtering
 - `get_event` - Get event details
 - `search_events` - Search events by title
+- `create_event` - Create a new calendar event (AppleScript backend only)
 
 **Contacts**
 - `list_contacts` - List all contacts with pagination
@@ -102,7 +103,7 @@ Your authentication tokens are stored securely in `~/.outlook-mcp/tokens.json` a
 
 The Graph API backend requests these Microsoft Graph permissions:
 - `Mail.Read` - Read your mail
-- `Calendars.Read` - Read your calendars
+- `Calendars.Read` - Read your calendars (will require `Calendars.ReadWrite` when Graph API event creation is added)
 - `Contacts.Read` - Read your contacts
 - `Tasks.Read` - Read your tasks
 - `User.Read` - Read your profile
