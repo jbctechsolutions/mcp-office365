@@ -7,6 +7,7 @@
 
 import type {
   IRepository,
+  IWriteableRepository,
   FolderRow,
   EmailRow,
   EventRow,
@@ -181,7 +182,7 @@ function toNoteRow(asNote: parser.AppleScriptNoteRow): NoteRow {
  * Communicates with Microsoft Outlook via osascript to fetch data.
  * Works with both classic and new Outlook for Mac.
  */
-export class AppleScriptRepository implements IRepository {
+export class AppleScriptRepository implements IWriteableRepository {
   // Cache for folder ID lookup
   private folderCache: Map<number, FolderRow> = new Map();
   private folderCacheExpiry: number = 0;
@@ -398,11 +399,87 @@ export class AppleScriptRepository implements IRepository {
       return undefined;
     }
   }
+
+  // ---------------------------------------------------------------------------
+  // Write Operations
+  // ---------------------------------------------------------------------------
+
+  moveEmail(emailId: number, destinationFolderId: number): void {
+    const script = scripts.moveMessage(emailId, destinationFolderId);
+    executeAppleScriptOrThrow(script);
+  }
+
+  deleteEmail(emailId: number): void {
+    const script = scripts.deleteMessage(emailId);
+    executeAppleScriptOrThrow(script);
+  }
+
+  archiveEmail(emailId: number): void {
+    const script = scripts.archiveMessage(emailId);
+    executeAppleScriptOrThrow(script);
+  }
+
+  junkEmail(emailId: number): void {
+    const script = scripts.junkMessage(emailId);
+    executeAppleScriptOrThrow(script);
+  }
+
+  markEmailRead(emailId: number, isRead: boolean): void {
+    const script = scripts.setMessageReadStatus(emailId, isRead);
+    executeAppleScriptOrThrow(script);
+  }
+
+  setEmailFlag(emailId: number, flagStatus: number): void {
+    const script = scripts.setMessageFlag(emailId, flagStatus);
+    executeAppleScriptOrThrow(script);
+  }
+
+  setEmailCategories(emailId: number, categories: string[]): void {
+    const script = scripts.setMessageCategories(emailId, categories);
+    executeAppleScriptOrThrow(script);
+  }
+
+  createFolder(name: string, parentFolderId?: number): FolderRow {
+    const script = scripts.createMailFolder(name, parentFolderId);
+    const output = executeAppleScriptOrThrow(script);
+    const newFolderId = parseInt(output.trim(), 10);
+
+    return {
+      id: newFolderId,
+      name,
+      parentId: parentFolderId ?? null,
+      specialType: 0,
+      folderType: 1,
+      accountId: 1,
+      messageCount: 0,
+      unreadCount: 0,
+    };
+  }
+
+  deleteFolder(folderId: number): void {
+    const script = scripts.deleteMailFolder(folderId);
+    executeAppleScriptOrThrow(script);
+  }
+
+  renameFolder(folderId: number, newName: string): void {
+    const script = scripts.renameMailFolder(folderId, newName);
+    executeAppleScriptOrThrow(script);
+  }
+
+  moveFolder(folderId: number, destinationParentId: number): void {
+    const script = scripts.moveMailFolder(folderId, destinationParentId);
+    executeAppleScriptOrThrow(script);
+  }
+
+  emptyFolder(folderId: number): void {
+    const script = scripts.emptyMailFolder(folderId);
+    executeAppleScriptOrThrow(script);
+  }
 }
 
 /**
  * Creates an AppleScript-based repository.
  */
-export function createAppleScriptRepository(): IRepository {
+export function createAppleScriptRepository(): IWriteableRepository {
   return new AppleScriptRepository();
 }

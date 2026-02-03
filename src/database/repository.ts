@@ -137,6 +137,32 @@ export interface IRepository {
 }
 
 // =============================================================================
+// Writeable Repository Interface
+// =============================================================================
+
+/**
+ * Interface for writable Outlook data operations.
+ * Extends IRepository with mutation methods for mailbox organization.
+ */
+export interface IWriteableRepository extends IRepository {
+  // Email organization
+  moveEmail(emailId: number, destinationFolderId: number): void;
+  deleteEmail(emailId: number): void;
+  archiveEmail(emailId: number): void;
+  junkEmail(emailId: number): void;
+  markEmailRead(emailId: number, isRead: boolean): void;
+  setEmailFlag(emailId: number, flagStatus: number): void;
+  setEmailCategories(emailId: number, categories: string[]): void;
+
+  // Folder management
+  createFolder(name: string, parentFolderId?: number): FolderRow;
+  deleteFolder(folderId: number): void;
+  renameFolder(folderId: number, newName: string): void;
+  moveFolder(folderId: number, destinationParentId: number): void;
+  emptyFolder(folderId: number): void;
+}
+
+// =============================================================================
 // Repository Implementation
 // =============================================================================
 

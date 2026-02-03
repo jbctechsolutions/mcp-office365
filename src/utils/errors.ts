@@ -21,6 +21,9 @@ export const ErrorCode = {
   GRAPH_RATE_LIMITED: 'GRAPH_RATE_LIMITED',
   GRAPH_PERMISSION_DENIED: 'GRAPH_PERMISSION_DENIED',
   GRAPH_ERROR: 'GRAPH_ERROR',
+  APPROVAL_EXPIRED: 'APPROVAL_EXPIRED',
+  APPROVAL_INVALID: 'APPROVAL_INVALID',
+  TARGET_CHANGED: 'TARGET_CHANGED',
 } as const;
 
 export type ErrorCode = (typeof ErrorCode)[keyof typeof ErrorCode];
@@ -259,5 +262,47 @@ export class GraphError extends OutlookMcpError {
 
   constructor(message: string, readonly cause?: Error) {
     super(message);
+  }
+}
+
+// =============================================================================
+// Approval Errors
+// =============================================================================
+
+/**
+ * Thrown when an approval token has expired.
+ */
+export class ApprovalExpiredError extends OutlookMcpError {
+  readonly code = ErrorCode.APPROVAL_EXPIRED;
+
+  constructor() {
+    super(
+      'Approval token has expired. Please prepare the operation again.'
+    );
+  }
+}
+
+/**
+ * Thrown when an approval token is invalid.
+ */
+export class ApprovalInvalidError extends OutlookMcpError {
+  readonly code = ErrorCode.APPROVAL_INVALID;
+
+  constructor(reason: string) {
+    super(`Invalid approval token: ${reason}`);
+  }
+}
+
+/**
+ * Thrown when the target has been modified since the approval was generated.
+ */
+export class TargetChangedError extends OutlookMcpError {
+  readonly code = ErrorCode.TARGET_CHANGED;
+
+  constructor() {
+    super(
+      'The target has been modified since the approval was generated. ' +
+        'Please prepare the operation again.'
+    );
   }
 }

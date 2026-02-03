@@ -116,7 +116,29 @@ function transformEmailSummary(row: EmailRow): EmailSummary {
     hasAttachment: row.hasAttachment === 1,
     priority: row.priority as PriorityValue,
     flagStatus: row.flagStatus as FlagStatusValue,
+    categories: parseCategories(row.categories),
   };
+}
+
+/**
+ * Parses categories from the database buffer.
+ * Outlook stores categories as a null-delimited or comma-delimited buffer.
+ */
+function parseCategories(buffer: Buffer | null): readonly string[] {
+  if (buffer == null || buffer.length === 0) {
+    return [];
+  }
+
+  try {
+    const text = buffer.toString('utf-8');
+    // Categories may be stored as null-delimited or comma-delimited strings
+    const categories = text.includes('\0')
+      ? text.split('\0').filter(s => s.length > 0)
+      : text.split(',').map(s => s.trim()).filter(s => s.length > 0);
+    return categories;
+  } catch {
+    return [];
+  }
 }
 
 /**
