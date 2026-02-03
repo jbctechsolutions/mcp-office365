@@ -1193,3 +1193,93 @@ tell application "Microsoft Outlook"
 end tell
 `;
 }
+
+// =============================================================================
+// Email Sending Scripts
+// =============================================================================
+
+export interface SendEmailParams {
+  readonly to: readonly string[];
+  readonly subject: string;
+  readonly body: string;
+  readonly bodyType: 'plain' | 'html';
+  readonly cc?: readonly string[];
+  readonly bcc?: readonly string[];
+  readonly replyTo?: string;
+  readonly attachments?: readonly { path: string; name?: string }[];
+  readonly accountId?: number;
+}
+
+/**
+ * Sends an email with optional CC, BCC, attachments, and account selection.
+ */
+export function sendEmail(params: SendEmailParams): string {
+  const { to, subject, body, bodyType, cc, bcc, replyTo, attachments, accountId } = params;
+
+  const escapedSubject = escapeForAppleScript(subject);
+  const escapedBody = escapeForAppleScript(body);
+
+  const toRecipients = to.map(email =>
+    `    make new recipient at newMessage with properties {email address:{address:"${email}"}}`
+  ).join('\n');
+
+  const ccRecipients = cc != null && cc.length > 0
+    ? cc.map(email =>
+        `    make new recipient at newMessage with properties {email address:{address:"${email}"}, recipient type:recipient cc}`
+      ).join('\n')
+    : '';
+
+  const bccRecipients = bcc != null && bcc.length > 0
+    ? bcc.map(email =>
+        `    make new recipient at newMessage with properties {email address:{address:"${email}"}, recipient type:recipient bcc}`
+      ).join('\n')
+    : '';
+
+  const contentProperty = bodyType === 'html'
+    ? `html content:"${escapedBody}"`
+    : `plain text content:"${escapedBody}"`;
+
+  const replyToStatement = replyTo != null
+    ? `    set reply to of newMessage to "${replyTo}"`
+    : '';
+
+  const attachmentStatements = attachments != null && attachments.length > 0
+    ? attachments.map(att =>
+        `    make new attachment at newMessage with properties {file:(POSIX file "${att.path}")}`
+      ).join('\n')
+    : '';
+
+  const accountStatement = accountId != null
+    ? `    set sending account of newMessage to account id ${accountId}`
+    : '';
+
+  return `
+tell application "Microsoft Outlook"
+  try
+    set newMessage to make new outgoing message with properties {subject:"${escapedSubject}", ${contentProperty}}
+
+${toRecipients}
+${ccRecipients}
+${bccRecipients}
+${replyToStatement}
+${accountStatement}
+${attachmentStatements}
+
+    send newMessage
+
+    -- Get message ID and timestamp
+    set msgId to id of newMessage as string
+    set sentTime to current date
+    set sentISO to sentTime as «class isot» as string
+
+    -- Return success
+    set output to "{{RECORD}}success{{=}}true{{FIELD}}messageId{{=}}" & msgId & "{{FIELD}}sentAt{{=}}" & sentISO
+    return output
+  on error errMsg
+    -- Return failure
+    set output to "{{RECORD}}success{{=}}false{{FIELD}}error{{=}}" & errMsg
+    return output
+  end try
+end tell
+`;
+}

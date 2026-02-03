@@ -575,3 +575,36 @@ export function parseUpdateEventResult(output: string): UpdateEventResult | null
     };
   }
 }
+
+export interface SendEmailResult {
+  readonly success: boolean;
+  readonly messageId?: string;
+  readonly sentAt?: string;
+  readonly error?: string;
+}
+
+/**
+ * Parses the result of a send-email operation.
+ */
+export function parseSendEmailResult(output: string): SendEmailResult | null {
+  const records = parseRawOutput(output);
+  if (records.length === 0) return null;
+
+  const record = records[0];
+  if (!record) return null;
+
+  const success = record['success'] === 'true';
+
+  if (success) {
+    return {
+      success: true,
+      messageId: record['messageId'] ?? '',
+      sentAt: record['sentAt'] ?? '',
+    };
+  } else {
+    return {
+      success: false,
+      error: record['error'] ?? 'Unknown error',
+    };
+  }
+}

@@ -42,6 +42,7 @@ export {
   parseRespondToEventResult,
   parseDeleteEventResult,
   parseUpdateEventResult,
+  parseSendEmailResult,
   type AppleScriptFolderRow,
   type AppleScriptEmailRow,
   type AppleScriptCalendarRow,
@@ -54,6 +55,7 @@ export {
   type RespondToEventResult,
   type DeleteEventResult,
   type UpdateEventResult,
+  type SendEmailResult,
 } from './parser.js';
 
 // Repository
@@ -110,3 +112,13 @@ export {
   NOTE_PATH_PREFIX,
   type AppleScriptContentReaders,
 } from './content-readers.js';
+
+// Mail Sender
+export {
+  AppleScriptMailSender,
+  createMailSender,
+  type IMailSender,
+  type SendEmailParams as MailSenderSendEmailParams,
+  type SentEmail,
+  type Attachment,
+} from './mail-sender.js';

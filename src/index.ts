@@ -24,10 +24,12 @@ import {
   createAccountRepository,
   createCalendarWriter,
   createCalendarManager,
+  createMailSender,
   isOutlookRunning,
   type IAccountRepository,
   type ICalendarWriter,
   type ICalendarManager,
+  type IMailSender,
   type RecurrenceConfig,
 } from './applescript/index.js';
 import {
@@ -620,6 +622,74 @@ const TOOLS: Tool[] = [
       required: ['query'],
     },
   },
+  // Email sending tool
+  {
+    name: 'send_email',
+    description: 'Send an email with optional CC, BCC, attachments, and HTML formatting. Returns the sent message ID and timestamp.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        to: {
+          type: 'array',
+          items: { type: 'string' },
+          minItems: 1,
+          description: 'Recipient email addresses',
+        },
+        subject: {
+          type: 'string',
+          minLength: 1,
+          description: 'Email subject',
+        },
+        body: {
+          type: 'string',
+          description: 'Email body content',
+        },
+        body_type: {
+          type: 'string',
+          enum: ['plain', 'html'],
+          default: 'plain',
+          description: 'Body content type (default: plain)',
+        },
+        cc: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'CC recipients',
+        },
+        bcc: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'BCC recipients',
+        },
+        reply_to: {
+          type: 'string',
+          description: 'Reply-to address',
+        },
+        attachments: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              path: {
+                type: 'string',
+                description: 'Absolute file path to attachment',
+              },
+              name: {
+                type: 'string',
+                description: 'Display name for attachment',
+              },
+            },
+            required: ['path'],
+          },
+          description: 'File attachments',
+        },
+        account_id: {
+          type: 'number',
+          description: 'Account to send from (optional)',
+        },
+      },
+      required: ['to', 'subject', 'body'],
+    },
+  },
 ];
 
 // =============================================================================
@@ -655,6 +725,7 @@ export function createServer(): Server {
   let notesTools: ReturnType<typeof createNotesTools> | null = null;
   let calendarWriter: ICalendarWriter | null = null;
   let calendarManager: ICalendarManager | null = null;
+  let mailSender: IMailSender | null = null;
 
   // Graph-specific state
   let graphRepository: GraphRepository | null = null;
@@ -679,6 +750,7 @@ export function createServer(): Server {
     notesTools = createNotesTools(repository, contentReaders.note);
     calendarWriter = createCalendarWriter();
     calendarManager = createCalendarManager();
+    mailSender = createMailSender();
 
     initialized = true;
   }
@@ -744,7 +816,8 @@ export function createServer(): Server {
         tasksTools!,
         notesTools!,
         calendarWriter,
-        calendarManager
+        calendarManager,
+        mailSender
       );
     } catch (error) {
       const wrappedError = wrapError(error, 'An error occurred');
@@ -816,7 +889,8 @@ function handleAppleScriptToolCall(
   tasksTools: ReturnType<typeof createTasksTools>,
   notesTools: ReturnType<typeof createNotesTools>,
   calendarWriter: ICalendarWriter | null,
-  calendarManager: ICalendarManager | null
+  calendarManager: ICalendarManager | null,
+  mailSender: IMailSender | null
 ): { content: Array<{ type: string; text: string }>; isError?: boolean } {
   switch (name) {
     // Account tools
@@ -1058,13 +1132,13 @@ function handleAppleScriptToolCall(
       }
 
       const applyTo = params.apply_to ?? 'this_instance';
-      const updates = {
-        title: params.title,
-        startDate: params.start_date,
-        endDate: params.end_date,
-        location: params.location,
-        description: params.description,
-        isAllDay: params.is_all_day,
+      const updates: import('./applescript/index.js').EventUpdates = {
+        ...(params.title != null && { title: params.title }),
+        ...(params.start_date != null && { startDate: params.start_date }),
+        ...(params.end_date != null && { endDate: params.end_date }),
+        ...(params.location != null && { location: params.location }),
+        ...(params.description != null && { description: params.description }),
+        ...(params.is_all_day != null && { isAllDay: params.is_all_day }),
       };
 
       const result = calendarManager.updateEvent(params.event_id, updates, applyTo);
@@ -1142,6 +1216,53 @@ function handleAppleScriptToolCall(
       const params = SearchNotesInput.parse(args);
       const result = notesTools.searchNotes(params);
       return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+    }
+
+    // Email sending tool
+    case 'send_email': {
+      if (mailSender == null) {
+        return {
+          content: [{ type: 'text', text: 'Email sending is not available' }],
+          isError: true,
+        };
+      }
+
+      const params = args as {
+        to: string[];
+        subject: string;
+        body: string;
+        body_type?: 'plain' | 'html';
+        cc?: string[];
+        bcc?: string[];
+        reply_to?: string;
+        attachments?: Array<{ path: string; name?: string }>;
+        account_id?: number;
+      };
+
+      let sendParams: import('./applescript/index.js').MailSenderSendEmailParams = {
+        to: params.to,
+        subject: params.subject,
+        body: params.body,
+        bodyType: params.body_type ?? 'plain',
+      };
+
+      if (params.cc != null) sendParams = { ...sendParams, cc: params.cc };
+      if (params.bcc != null) sendParams = { ...sendParams, bcc: params.bcc };
+      if (params.reply_to != null) sendParams = { ...sendParams, replyTo: params.reply_to };
+      if (params.attachments != null) sendParams = { ...sendParams, attachments: params.attachments };
+      if (params.account_id != null) sendParams = { ...sendParams, accountId: params.account_id };
+
+      const sent = mailSender.sendEmail(sendParams);
+
+      const result = {
+        message_id: sent.messageId,
+        sent_at: sent.sentAt,
+        status: 'sent',
+      };
+
+      return {
+        content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
+      };
     }
 
     default:

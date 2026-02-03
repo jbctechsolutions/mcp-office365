@@ -85,17 +85,19 @@ export class AppleScriptCalendarManager implements ICalendarManager {
    * All fields in updates are optional - only specified fields will be updated.
    */
   updateEvent(eventId: number, updates: EventUpdates, applyTo: ApplyToScope): UpdatedEvent {
+    const scriptUpdates: scripts.UpdateEventParams['updates'] = {
+      ...(updates.title != null && { title: updates.title }),
+      ...(updates.location != null && { location: updates.location }),
+      ...(updates.description != null && { description: updates.description }),
+      ...(updates.startDate != null && { startDate: updates.startDate }),
+      ...(updates.endDate != null && { endDate: updates.endDate }),
+      ...(updates.isAllDay != null && { isAllDay: updates.isAllDay }),
+    };
+
     const scriptParams: scripts.UpdateEventParams = {
       eventId,
       applyTo,
-      updates: {
-        title: updates.title,
-        location: updates.location,
-        description: updates.description,
-        startDate: updates.startDate,
-        endDate: updates.endDate,
-        isAllDay: updates.isAllDay,
-      },
+      updates: scriptUpdates,
     };
 
     const script = scripts.updateEvent(scriptParams);
