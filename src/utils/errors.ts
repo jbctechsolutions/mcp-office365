@@ -21,6 +21,9 @@ export const ErrorCode = {
   GRAPH_RATE_LIMITED: 'GRAPH_RATE_LIMITED',
   GRAPH_PERMISSION_DENIED: 'GRAPH_PERMISSION_DENIED',
   GRAPH_ERROR: 'GRAPH_ERROR',
+  ATTACHMENT_NOT_FOUND: 'ATTACHMENT_NOT_FOUND',
+  MAIL_SEND_ERROR: 'MAIL_SEND_ERROR',
+  RECURRING_EVENT_ERROR: 'RECURRING_EVENT_ERROR',
 } as const;
 
 export type ErrorCode = (typeof ErrorCode)[keyof typeof ErrorCode];
@@ -258,6 +261,43 @@ export class GraphError extends OutlookMcpError {
   readonly code = ErrorCode.GRAPH_ERROR;
 
   constructor(message: string, readonly cause?: Error) {
+    super(message);
+  }
+}
+
+// =============================================================================
+// Event Management and Email Errors
+// =============================================================================
+
+/**
+ * Thrown when an attachment file cannot be found.
+ */
+export class AttachmentNotFoundError extends OutlookMcpError {
+  readonly code = ErrorCode.ATTACHMENT_NOT_FOUND;
+
+  constructor(path: string) {
+    super(`Attachment file not found: ${path}. Please check the file path exists.`);
+  }
+}
+
+/**
+ * Thrown when sending an email fails.
+ */
+export class MailSendError extends OutlookMcpError {
+  readonly code = ErrorCode.MAIL_SEND_ERROR;
+
+  constructor(reason: string) {
+    super(`Failed to send email: ${reason}`);
+  }
+}
+
+/**
+ * Thrown when there's an error with recurring events.
+ */
+export class RecurringEventError extends OutlookMcpError {
+  readonly code = ErrorCode.RECURRING_EVENT_ERROR;
+
+  constructor(message: string) {
     super(message);
   }
 }
