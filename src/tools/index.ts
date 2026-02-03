@@ -87,3 +87,32 @@ export {
   type NoteDetails,
   nullNoteContentReader,
 } from './notes.js';
+
+// Mailbox organization tools
+export {
+  MailboxOrganizationTools,
+  createMailboxOrganizationTools,
+  PrepareDeleteEmailInput,
+  ConfirmDeleteEmailInput,
+  PrepareMoveEmailInput,
+  ConfirmMoveEmailInput,
+  PrepareArchiveEmailInput,
+  ConfirmArchiveEmailInput,
+  PrepareJunkEmailInput,
+  ConfirmJunkEmailInput,
+  PrepareDeleteFolderInput,
+  ConfirmDeleteFolderInput,
+  PrepareEmptyFolderInput,
+  ConfirmEmptyFolderInput,
+  PrepareBatchDeleteEmailsInput,
+  PrepareBatchMoveEmailsInput,
+  ConfirmBatchOperationInput,
+  MarkEmailReadInput,
+  MarkEmailUnreadInput,
+  SetEmailFlagInput,
+  ClearEmailFlagInput,
+  SetEmailCategoriesInput,
+  CreateFolderInput,
+  RenameFolderInput,
+  MoveFolderInput,
+} from './mailbox-organization.js';

@@ -262,10 +262,32 @@ describe('graph/mappers/email-mapper', () => {
       expect(result.size).toBe(0);
     });
 
-    it('sets categories to null', () => {
+    it('maps categories to buffer', () => {
       const message: MicrosoftGraph.Message = {
         id: 'msg-123',
         categories: ['Work', 'Important'],
+      };
+
+      const result = mapMessageToEmailRow(message);
+
+      expect(result.categories).toBeInstanceOf(Buffer);
+      expect(result.categories!.toString('utf-8')).toBe('Work,Important');
+    });
+
+    it('sets categories to null when empty', () => {
+      const message: MicrosoftGraph.Message = {
+        id: 'msg-123',
+        categories: [],
+      };
+
+      const result = mapMessageToEmailRow(message);
+
+      expect(result.categories).toBeNull();
+    });
+
+    it('sets categories to null when undefined', () => {
+      const message: MicrosoftGraph.Message = {
+        id: 'msg-123',
       };
 
       const result = mapMessageToEmailRow(message);

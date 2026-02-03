@@ -54,6 +54,7 @@ export {
 
 // Repository exports
 export { GraphRepository, createGraphRepository } from './repository.js';
+export { GraphMailboxAdapter } from './mailbox-adapter.js';
 
 // Content reader exports
 export {
