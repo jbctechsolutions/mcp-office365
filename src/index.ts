@@ -21,7 +21,9 @@ import {
 import {
   createAppleScriptRepository,
   createAppleScriptContentReaders,
+  createAccountRepository,
   isOutlookRunning,
+  type IAccountRepository,
 } from './applescript/index.js';
 import {
   createGraphRepository,
@@ -78,13 +80,32 @@ function shouldUseGraphApi(): boolean {
 // =============================================================================
 
 const TOOLS: Tool[] = [
-  // Mail tools
+  // Account tools
   {
-    name: 'list_folders',
-    description: 'List all mail folders with message and unread counts',
+    name: 'list_accounts',
+    description: 'List all Exchange accounts configured in Outlook with their details',
     inputSchema: {
       type: 'object',
       properties: {},
+      required: [],
+    },
+  },
+  // Mail tools
+  {
+    name: 'list_folders',
+    description: 'List all mail folders with message and unread counts. Can filter by account.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        account_id: {
+          oneOf: [
+            { type: 'number', description: 'Specific account ID' },
+            { type: 'array', items: { type: 'number' }, description: 'Multiple account IDs' },
+            { type: 'string', enum: ['all'], description: 'All accounts' },
+          ],
+          description: 'Account filter: number (specific account), array (multiple accounts), "all" (all accounts), or omit for default account',
+        },
+      },
       required: [],
     },
   },
@@ -442,6 +463,7 @@ export function createServer(): Server {
 
   // Tools and backend state
   let initialized = false;
+  let accountRepository: IAccountRepository | null = null;
   let mailTools: ReturnType<typeof createMailTools> | null = null;
   let calendarTools: ReturnType<typeof createCalendarTools> | null = null;
   let contactsTools: ReturnType<typeof createContactsTools> | null = null;
@@ -463,6 +485,7 @@ export function createServer(): Server {
     const repository = createAppleScriptRepository();
     const contentReaders = createAppleScriptContentReaders();
 
+    accountRepository = createAccountRepository();
     mailTools = createMailTools(repository, contentReaders.email);
     calendarTools = createCalendarTools(repository, contentReaders.event);
     contactsTools = createContactsTools(repository, contentReaders.contact);
@@ -526,6 +549,7 @@ export function createServer(): Server {
       return handleAppleScriptToolCall(
         name,
         args,
+        accountRepository!,
         mailTools!,
         calendarTools!,
         contactsTools!,
@@ -547,12 +571,55 @@ export function createServer(): Server {
 }
 
 // =============================================================================
+// Account Resolution Helper
+// =============================================================================
+
+/**
+ * Resolves account_id parameter to an array of account IDs.
+ * - undefined → [defaultAccountId]
+ * - "all" → all account IDs
+ * - number → [number]
+ * - number[] → number[]
+ */
+function resolveAccountIds(
+  accountId: number | number[] | 'all' | undefined,
+  accountRepository: IAccountRepository
+): number[] {
+  // Case: undefined → use default account
+  if (accountId === undefined) {
+    const defaultId = accountRepository.getDefaultAccountId();
+    return defaultId !== null ? [defaultId] : [];
+  }
+
+  // Case: "all" → use all accounts
+  if (accountId === 'all') {
+    const accounts = accountRepository.listAccounts();
+    return accounts.map(acc => acc.id);
+  }
+
+  // Case: single number → return as array
+  if (typeof accountId === 'number') {
+    return [accountId];
+  }
+
+  // Case: array of numbers → return as-is
+  if (Array.isArray(accountId)) {
+    return accountId;
+  }
+
+  // Fallback: default account
+  const defaultId = accountRepository.getDefaultAccountId();
+  return defaultId !== null ? [defaultId] : [];
+}
+
+// =============================================================================
 // AppleScript Tool Handler
 // =============================================================================
 
 function handleAppleScriptToolCall(
   name: string,
   args: unknown,
+  accountRepository: IAccountRepository,
   mailTools: ReturnType<typeof createMailTools>,
   calendarTools: ReturnType<typeof createCalendarTools>,
   contactsTools: ReturnType<typeof createContactsTools>,
@@ -560,10 +627,56 @@ function handleAppleScriptToolCall(
   notesTools: ReturnType<typeof createNotesTools>
 ): { content: Array<{ type: string; text: string }>; isError?: boolean } {
   switch (name) {
+    // Account tools
+    case 'list_accounts': {
+      const accounts = accountRepository.listAccounts();
+      const result = {
+        accounts: accounts.map(acc => ({
+          id: acc.id,
+          name: acc.name,
+          email: acc.email,
+          type: acc.type,
+        })),
+      };
+      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+    }
+
     // Mail tools
     case 'list_folders': {
-      const params = ListFoldersInput.parse(args ?? {});
-      const result = mailTools.listFolders(params);
+      const params = args as { account_id?: number | number[] | 'all' } | undefined;
+      const accountIds = resolveAccountIds(params?.account_id, accountRepository);
+
+      // If querying multiple accounts, use grouped format
+      if (accountIds.length > 1 || params?.account_id === 'all') {
+        const foldersWithAccount = accountRepository.listMailFoldersByAccounts(accountIds);
+        const accounts = accountRepository.listAccounts();
+
+        // Group folders by account
+        const groupedByAccount = accountIds.map(accountId => {
+          const account = accounts.find(a => a.id === accountId);
+          const folders = foldersWithAccount
+            .filter(f => f.accountId === accountId)
+            .map(f => ({
+              id: f.id,
+              name: f.name,
+              unreadCount: f.unreadCount,
+              messageCount: f.messageCount,
+            }));
+
+          return {
+            account_id: accountId,
+            account_name: account?.name ?? null,
+            account_email: account?.email ?? null,
+            folders,
+          };
+        });
+
+        const result = { accounts: groupedByAccount };
+        return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+      }
+
+      // Single account - use existing format for backward compatibility
+      const result = mailTools.listFolders({});
       return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
     }
 

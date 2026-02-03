@@ -11,8 +11,11 @@ A [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) server that p
 
 ### Available Tools
 
+**Accounts**
+- `list_accounts` - List all configured Outlook accounts
+
 **Mail**
-- `list_folders` - List all mail folders with unread counts
+- `list_folders` - List all mail folders with unread counts (supports `account_id` filtering)
 - `list_emails` - List emails in a folder with pagination
 - `search_emails` - Search emails by subject, sender, or content
 - `get_email` - Get full email details including body
@@ -40,6 +43,32 @@ A [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) server that p
 - `search_notes` - Search notes by content
 
 > **Note**: Notes are only supported with the AppleScript backend. Microsoft Graph API does not provide access to Outlook Notes.
+
+## Known Limitations
+
+### AppleScript Backend
+
+**Google Accounts Not Supported**
+
+Google accounts configured in Outlook for Mac cannot be accessed via the AppleScript backend. This is a macOS/Outlook limitation - Google accounts use a proprietary OAuth integration that isn't exposed through AppleScript.
+
+**Supported account types:**
+- Exchange accounts
+- IMAP accounts
+- POP accounts
+
+**Not supported:**
+- Google accounts (native integration)
+
+**Workarounds:**
+1. Configure Google as an IMAP account instead of using the native Google integration
+2. Use the Graph API backend (`USE_GRAPH_API=1`) which has different account handling
+
+### Graph API Backend
+
+**Notes Not Available**
+
+Microsoft Graph API does not provide access to Outlook Notes. If you need access to notes, use the AppleScript backend.
 
 ## Backends
 
