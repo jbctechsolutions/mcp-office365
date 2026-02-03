@@ -404,6 +404,161 @@ end tell
 `;
 }
 
+/**
+ * Recurrence parameters for AppleScript generation.
+ */
+export interface RecurrenceScriptParams {
+  readonly frequency: 'daily' | 'weekly' | 'monthly' | 'yearly';
+  readonly interval: number;
+  readonly daysOfWeek?: readonly string[];
+  readonly dayOfMonth?: number;
+  readonly weekOfMonth?: string;
+  readonly dayOfWeekMonthly?: string;
+  readonly endDate?: {
+    readonly year: number;
+    readonly month: number;
+    readonly day: number;
+    readonly hours: number;
+    readonly minutes: number;
+  };
+  readonly endAfterCount?: number;
+}
+
+/**
+ * Builds AppleScript to set recurrence on a newly created event.
+ * Assumes `newEvent` variable is already in scope from createEvent.
+ */
+function buildRecurrenceScript(params: RecurrenceScriptParams): string {
+  const isOrdinalMonthly = params.frequency === 'monthly' && params.weekOfMonth != null;
+  const frequencyMap: Record<string, string> = {
+    daily: 'daily recurrence',
+    weekly: 'weekly recurrence',
+    monthly: isOrdinalMonthly ? 'month nth recurrence' : 'monthly recurrence',
+    yearly: 'yearly recurrence',
+  };
+
+  const recurrenceType = frequencyMap[params.frequency]!;
+  const capitalize = (s: string): string => s.charAt(0).toUpperCase() + s.slice(1);
+
+  let script = `
+  set is recurring of newEvent to true
+  set theRecurrence to recurrence of newEvent
+  set recurrence type of theRecurrence to ${recurrenceType}
+  set occurrence interval of theRecurrence to ${params.interval}`;
+
+  // Weekly: days of week mask
+  if (params.frequency === 'weekly' && params.daysOfWeek != null) {
+    const daysList = params.daysOfWeek.map(capitalize).join(', ');
+    script += `\n  set day of week mask of theRecurrence to {${daysList}}`;
+  }
+
+  // Monthly by date
+  if (params.frequency === 'monthly' && params.dayOfMonth != null && params.weekOfMonth == null) {
+    script += `\n  set day of month of theRecurrence to ${params.dayOfMonth}`;
+  }
+
+  // Monthly ordinal (e.g., 3rd Thursday)
+  if (params.frequency === 'monthly' && params.weekOfMonth != null && params.dayOfWeekMonthly != null) {
+    const instanceMap: Record<string, number> = { first: 1, second: 2, third: 3, fourth: 4, last: 5 };
+    const instance = instanceMap[params.weekOfMonth] ?? 1;
+    script += `\n  set day of week mask of theRecurrence to {${capitalize(params.dayOfWeekMonthly)}}`;
+    script += `\n  set instance of theRecurrence to ${instance}`;
+  }
+
+  // End after count
+  if (params.endAfterCount != null) {
+    script += `\n  set occurrences of theRecurrence to ${params.endAfterCount}`;
+  }
+
+  // End by date (component-based for locale safety)
+  if (params.endDate != null) {
+    script += `
+  set theEndRecurrenceDate to current date
+  set day of theEndRecurrenceDate to 1
+  set year of theEndRecurrenceDate to ${params.endDate.year}
+  set month of theEndRecurrenceDate to ${params.endDate.month}
+  set day of theEndRecurrenceDate to ${params.endDate.day}
+  set hours of theEndRecurrenceDate to ${params.endDate.hours}
+  set minutes of theEndRecurrenceDate to ${params.endDate.minutes}
+  set seconds of theEndRecurrenceDate to 0
+  set pattern end date of theRecurrence to theEndRecurrenceDate`;
+  }
+
+  return script;
+}
+
+/**
+ * Creates a new calendar event.
+ * Uses component-based date construction for locale safety.
+ */
+export function createEvent(params: {
+  title: string;
+  startYear: number;
+  startMonth: number;
+  startDay: number;
+  startHours: number;
+  startMinutes: number;
+  endYear: number;
+  endMonth: number;
+  endDay: number;
+  endHours: number;
+  endMinutes: number;
+  calendarId?: number;
+  location?: string;
+  description?: string;
+  isAllDay?: boolean;
+  recurrence?: RecurrenceScriptParams;
+}): string {
+  const escapedTitle = escapeForAppleScript(params.title);
+  const escapedLocation = params.location ? escapeForAppleScript(params.location) : '';
+  const escapedDescription = params.description ? escapeForAppleScript(params.description) : '';
+
+  // Build properties list
+  let properties = `subject:"${escapedTitle}", start time:theStartDate, end time:theEndDate`;
+  if (params.location) {
+    properties += `, location:"${escapedLocation}"`;
+  }
+  if (params.isAllDay) {
+    properties += ', all day flag:true';
+  }
+
+  // Build the target clause for calendar
+  const targetClause = params.calendarId != null
+    ? `at calendar id ${params.calendarId} `
+    : '';
+
+  return `
+tell application "Microsoft Outlook"
+  set theStartDate to current date
+  set day of theStartDate to 1
+  set year of theStartDate to ${params.startYear}
+  set month of theStartDate to ${params.startMonth}
+  set day of theStartDate to ${params.startDay}
+  set hours of theStartDate to ${params.startHours}
+  set minutes of theStartDate to ${params.startMinutes}
+  set seconds of theStartDate to 0
+
+  set theEndDate to current date
+  set day of theEndDate to 1
+  set year of theEndDate to ${params.endYear}
+  set month of theEndDate to ${params.endMonth}
+  set day of theEndDate to ${params.endDay}
+  set hours of theEndDate to ${params.endHours}
+  set minutes of theEndDate to ${params.endMinutes}
+  set seconds of theEndDate to 0
+
+  set newEvent to make new calendar event ${targetClause}with properties {${properties}}
+  ${escapedDescription ? `set plain text content of newEvent to "${escapedDescription}"` : ''}${params.recurrence != null ? buildRecurrenceScript(params.recurrence) : ''}
+  set eId to id of newEvent
+  set eCalId to ""
+  try
+    set eCalId to id of calendar of newEvent
+  end try
+  return "{{RECORD}}id{{=}}" & eId & "{{FIELD}}calendarId{{=}}" & eCalId
+end tell
+`;
+}
+
 // =============================================================================
 // Contact Scripts
 // =============================================================================

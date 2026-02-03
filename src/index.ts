@@ -22,8 +22,11 @@ import {
   createAppleScriptRepository,
   createAppleScriptContentReaders,
   createAccountRepository,
+  createCalendarWriter,
   isOutlookRunning,
   type IAccountRepository,
+  type ICalendarWriter,
+  type RecurrenceConfig,
 } from './applescript/index.js';
 import {
   createGraphRepository,
@@ -49,6 +52,7 @@ import {
   ListEventsInput,
   GetEventInput,
   SearchEventsInput,
+  CreateEventInput,
   ListContactsInput,
   SearchContactsInput,
   GetContactInput,
@@ -83,6 +87,7 @@ import {
   MoveFolderInput,
 } from './tools/index.js';
 import { ApprovalTokenManager } from './approval/index.js';
+import type { CreateEventResult } from './tools/index.js';
 import {
   wrapError,
   OutlookNotRunningError,
@@ -293,6 +298,90 @@ const TOOLS: Tool[] = [
         },
       },
       required: ['query'],
+    },
+  },
+  {
+    name: 'create_event',
+    description: 'Create a new calendar event in Outlook',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        title: {
+          type: 'string',
+          description: 'Event title/subject',
+        },
+        start_date: {
+          type: 'string',
+          description: 'Start date in ISO 8601 UTC format (e.g., 2026-02-03T14:00:00Z). Times are interpreted as UTC.',
+        },
+        end_date: {
+          type: 'string',
+          description: 'End date in ISO 8601 UTC format (e.g., 2026-02-03T15:00:00Z). Times are interpreted as UTC.',
+        },
+        calendar_id: {
+          type: 'number',
+          description: 'Optional calendar ID to create the event in (defaults to primary calendar)',
+        },
+        location: {
+          type: 'string',
+          description: 'Event location',
+        },
+        description: {
+          type: 'string',
+          description: 'Event description/body text',
+        },
+        is_all_day: {
+          type: 'boolean',
+          description: 'Whether this is an all-day event (default false)',
+          default: false,
+        },
+        recurrence: {
+          type: 'object',
+          description: 'Recurrence pattern to make this a repeating event',
+          properties: {
+            frequency: {
+              type: 'string',
+              enum: ['daily', 'weekly', 'monthly', 'yearly'],
+              description: 'How often the event repeats',
+            },
+            interval: {
+              type: 'number',
+              description: 'Number of frequency units between occurrences (default 1)',
+              default: 1,
+            },
+            days_of_week: {
+              type: 'array',
+              items: { type: 'string', enum: ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'] },
+              description: 'Days of the week for weekly recurrence (e.g., ["monday", "wednesday"])',
+            },
+            day_of_month: {
+              type: 'number',
+              description: 'Day of the month for monthly recurrence (e.g., 15)',
+            },
+            week_of_month: {
+              type: 'string',
+              enum: ['first', 'second', 'third', 'fourth', 'last'],
+              description: 'Week of the month for ordinal monthly recurrence (e.g., "third" for 3rd Thursday)',
+            },
+            day_of_week_monthly: {
+              type: 'string',
+              enum: ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'],
+              description: 'Day of week for ordinal monthly recurrence (used with week_of_month)',
+            },
+            end: {
+              type: 'object',
+              description: 'When the recurrence ends (default: no end)',
+              oneOf: [
+                { properties: { type: { const: 'no_end' } }, required: ['type'] },
+                { properties: { type: { const: 'end_date' }, date: { type: 'string', description: 'End date in ISO 8601 format' } }, required: ['type', 'date'] },
+                { properties: { type: { const: 'end_after_count' }, count: { type: 'number', description: 'Number of occurrences' } }, required: ['type', 'count'] },
+              ],
+            },
+          },
+          required: ['frequency'],
+        },
+      },
+      required: ['title', 'start_date', 'end_date'],
     },
   },
   // Contact tools
@@ -797,6 +886,7 @@ export function createServer(): Server {
   let tasksTools: ReturnType<typeof createTasksTools> | null = null;
   let notesTools: ReturnType<typeof createNotesTools> | null = null;
   let orgTools: ReturnType<typeof createMailboxOrganizationTools> | null = null;
+  let calendarWriter: ICalendarWriter | null = null;
 
   // Graph-specific state
   let graphRepository: GraphRepository | null = null;
@@ -820,6 +910,7 @@ export function createServer(): Server {
     tasksTools = createTasksTools(repository, contentReaders.task);
     notesTools = createNotesTools(repository, contentReaders.note);
     orgTools = createMailboxOrganizationTools(repository, tokenManager);
+    calendarWriter = createCalendarWriter();
 
     initialized = true;
   }
@@ -883,7 +974,8 @@ export function createServer(): Server {
         contactsTools!,
         tasksTools!,
         notesTools!,
-        orgTools!
+        orgTools!,
+        calendarWriter
       );
     } catch (error) {
       const wrappedError = wrapError(error, 'An error occurred');
@@ -1092,7 +1184,8 @@ async function handleAppleScriptToolCall(
   contactsTools: ReturnType<typeof createContactsTools>,
   tasksTools: ReturnType<typeof createTasksTools>,
   notesTools: ReturnType<typeof createNotesTools>,
-  orgTools: ReturnType<typeof createMailboxOrganizationTools>
+  orgTools: ReturnType<typeof createMailboxOrganizationTools>,
+  calendarWriter: ICalendarWriter | null
 ): Promise<ToolResult> {
   // Handle mailbox organization tools (shared between backends)
   const orgResult = await handleOrgToolCall(name, args, orgTools);
@@ -1204,6 +1297,57 @@ async function handleAppleScriptToolCall(
     case 'search_events': {
       const params = SearchEventsInput.parse(args);
       const result = calendarTools.searchEvents(params);
+      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+    }
+
+    case 'create_event': {
+      if (calendarWriter == null) {
+        return {
+          content: [{ type: 'text', text: 'Event creation is not available' }],
+          isError: true,
+        };
+      }
+      const params = CreateEventInput.parse(args);
+      const writerParams: { title: string; startDate: string; endDate: string; calendarId?: number; location?: string; description?: string; isAllDay?: boolean; recurrence?: RecurrenceConfig } = {
+        title: params.title,
+        startDate: params.start_date,
+        endDate: params.end_date,
+      };
+      if (params.calendar_id != null) writerParams.calendarId = params.calendar_id;
+      if (params.location != null) writerParams.location = params.location;
+      if (params.description != null) writerParams.description = params.description;
+      if (params.is_all_day != null) writerParams.isAllDay = params.is_all_day;
+
+      if (params.recurrence != null) {
+        const rec = params.recurrence;
+        const recConfig: RecurrenceConfig = {
+          frequency: rec.frequency,
+          interval: rec.interval,
+        };
+        const mut = recConfig as { -readonly [K in keyof RecurrenceConfig]: RecurrenceConfig[K] };
+        if (rec.days_of_week != null) mut.daysOfWeek = rec.days_of_week;
+        if (rec.day_of_month != null) mut.dayOfMonth = rec.day_of_month;
+        if (rec.week_of_month != null) mut.weekOfMonth = rec.week_of_month;
+        if (rec.day_of_week_monthly != null) mut.dayOfWeekMonthly = rec.day_of_week_monthly;
+        if (rec.end.type === 'end_date') mut.endDate = rec.end.date;
+        if (rec.end.type === 'end_after_count') mut.endAfterCount = rec.end.count;
+        writerParams.recurrence = recConfig;
+      }
+
+      const created = calendarWriter.createEvent(writerParams);
+
+      const result: CreateEventResult = {
+        id: created.id,
+        title: params.title,
+        start_date: params.start_date,
+        end_date: params.end_date,
+        calendar_id: created.calendarId,
+        location: params.location ?? null,
+        description: params.description ?? null,
+        is_all_day: params.is_all_day,
+        is_recurring: params.recurrence != null,
+      };
+
       return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
     }
 
@@ -1396,6 +1540,13 @@ async function handleGraphToolCall(
         );
         const result = { events: events.slice(0, params.limit).map(transformEventRow) };
         return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+      }
+
+      case 'create_event': {
+        return {
+          content: [{ type: 'text', text: 'Event creation is not yet supported via Microsoft Graph API' }],
+          isError: true,
+        };
       }
 
       // Contact tools

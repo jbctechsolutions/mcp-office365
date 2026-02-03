@@ -449,6 +449,22 @@ export function parseDefaultAccountId(output: string): number | null {
 }
 
 /**
+ * Parses the result of a create event AppleScript.
+ * Returns the created event's ID and calendar ID.
+ */
+export function parseCreateEventResult(output: string): { id: number; calendarId: number | null } | null {
+  const records = parseRawOutput(output);
+  if (records.length === 0) return null;
+  const r = records[0]!;
+  const id = parseNumber(r['id']);
+  if (id === 0) return null; // 0 indicates malformed output, not a real event ID
+  return {
+    id,
+    calendarId: parseNumberOrNull(r['calendarId']),
+  };
+}
+
+/**
  * Parses folders with account information from AppleScript.
  */
 export function parseFoldersWithAccount(output: string): AppleScriptFolderWithAccountRow[] {

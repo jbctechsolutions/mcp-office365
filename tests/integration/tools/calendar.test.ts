@@ -9,6 +9,8 @@ import {
   ListEventsInput,
   GetEventInput,
   SearchEventsInput,
+  CreateEventInput,
+  RecurrenceInput,
   type IEventContentReader,
   type EventDetails,
 } from '../../../src/tools/calendar.js';
@@ -66,6 +68,197 @@ describe('CalendarTools', () => {
       const parsed = SearchEventsInput.parse({ query: 'meeting' });
       expect(parsed.query).toBe('meeting');
       expect(parsed.limit).toBe(50);
+    });
+
+    it('validates CreateEventInput with required fields', () => {
+      const parsed = CreateEventInput.parse({
+        title: 'Meeting',
+        start_date: '2026-02-03T14:00:00Z',
+        end_date: '2026-02-03T15:00:00Z',
+      });
+      expect(parsed.title).toBe('Meeting');
+      expect(parsed.is_all_day).toBe(false);
+    });
+
+    it('rejects CreateEventInput missing title', () => {
+      expect(() => CreateEventInput.parse({
+        start_date: '2026-02-03T14:00:00Z',
+        end_date: '2026-02-03T15:00:00Z',
+      })).toThrow();
+    });
+
+    it('validates CreateEventInput with all optional fields', () => {
+      const parsed = CreateEventInput.parse({
+        title: 'Meeting',
+        start_date: '2026-02-03T14:00:00Z',
+        end_date: '2026-02-03T15:00:00Z',
+        calendar_id: 123,
+        location: 'Room A',
+        description: 'Weekly sync',
+        is_all_day: true,
+      });
+      expect(parsed.calendar_id).toBe(123);
+      expect(parsed.location).toBe('Room A');
+      expect(parsed.description).toBe('Weekly sync');
+      expect(parsed.is_all_day).toBe(true);
+    });
+
+    it('rejects CreateEventInput with unknown fields', () => {
+      expect(() => CreateEventInput.parse({
+        title: 'Meeting',
+        start_date: '2026-02-03T14:00:00Z',
+        end_date: '2026-02-03T15:00:00Z',
+        unknown_field: 'value',
+      })).toThrow();
+    });
+
+    it('rejects CreateEventInput with empty title', () => {
+      expect(() => CreateEventInput.parse({
+        title: '',
+        start_date: '2026-02-03T14:00:00Z',
+        end_date: '2026-02-03T15:00:00Z',
+      })).toThrow();
+    });
+
+    it('rejects CreateEventInput with invalid start_date format', () => {
+      expect(() => CreateEventInput.parse({
+        title: 'Meeting',
+        start_date: 'not-a-date',
+        end_date: '2026-02-03T15:00:00Z',
+      })).toThrow();
+    });
+
+    it('rejects CreateEventInput with invalid end_date format', () => {
+      expect(() => CreateEventInput.parse({
+        title: 'Meeting',
+        start_date: '2026-02-03T14:00:00Z',
+        end_date: 'not-a-date',
+      })).toThrow();
+    });
+
+    it('rejects CreateEventInput when start_date is after end_date', () => {
+      expect(() => CreateEventInput.parse({
+        title: 'Meeting',
+        start_date: '2026-02-03T16:00:00Z',
+        end_date: '2026-02-03T15:00:00Z',
+      })).toThrow();
+    });
+
+    it('rejects CreateEventInput when start_date equals end_date', () => {
+      expect(() => CreateEventInput.parse({
+        title: 'Meeting',
+        start_date: '2026-02-03T14:00:00Z',
+        end_date: '2026-02-03T14:00:00Z',
+      })).toThrow();
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // Recurrence Input Validation
+  // ---------------------------------------------------------------------------
+
+  describe('recurrence input validation', () => {
+    it('accepts daily recurrence with defaults', () => {
+      const parsed = RecurrenceInput.parse({ frequency: 'daily' });
+      expect(parsed.frequency).toBe('daily');
+      expect(parsed.interval).toBe(1);
+      expect(parsed.end).toEqual({ type: 'no_end' });
+    });
+
+    it('accepts weekly recurrence with days_of_week', () => {
+      const parsed = RecurrenceInput.parse({
+        frequency: 'weekly',
+        days_of_week: ['monday', 'wednesday', 'friday'],
+      });
+      expect(parsed.frequency).toBe('weekly');
+      expect(parsed.days_of_week).toEqual(['monday', 'wednesday', 'friday']);
+    });
+
+    it('rejects weekly recurrence without days_of_week', () => {
+      expect(() => RecurrenceInput.parse({ frequency: 'weekly' })).toThrow();
+    });
+
+    it('accepts monthly recurrence with day_of_month', () => {
+      const parsed = RecurrenceInput.parse({
+        frequency: 'monthly',
+        day_of_month: 15,
+      });
+      expect(parsed.day_of_month).toBe(15);
+    });
+
+    it('accepts monthly ordinal recurrence', () => {
+      const parsed = RecurrenceInput.parse({
+        frequency: 'monthly',
+        week_of_month: 'third',
+        day_of_week_monthly: 'thursday',
+      });
+      expect(parsed.week_of_month).toBe('third');
+      expect(parsed.day_of_week_monthly).toBe('thursday');
+    });
+
+    it('rejects incomplete ordinal monthly (only week_of_month)', () => {
+      expect(() => RecurrenceInput.parse({
+        frequency: 'monthly',
+        week_of_month: 'third',
+      })).toThrow();
+    });
+
+    it('rejects incomplete ordinal monthly (only day_of_week_monthly)', () => {
+      expect(() => RecurrenceInput.parse({
+        frequency: 'monthly',
+        day_of_week_monthly: 'thursday',
+      })).toThrow();
+    });
+
+    it('accepts yearly recurrence with interval', () => {
+      const parsed = RecurrenceInput.parse({ frequency: 'yearly', interval: 2 });
+      expect(parsed.frequency).toBe('yearly');
+      expect(parsed.interval).toBe(2);
+    });
+
+    it('accepts end_date end condition', () => {
+      const parsed = RecurrenceInput.parse({
+        frequency: 'daily',
+        end: { type: 'end_date', date: '2026-12-31T00:00:00Z' },
+      });
+      expect(parsed.end).toEqual({ type: 'end_date', date: '2026-12-31T00:00:00Z' });
+    });
+
+    it('accepts end_after_count end condition', () => {
+      const parsed = RecurrenceInput.parse({
+        frequency: 'daily',
+        end: { type: 'end_after_count', count: 10 },
+      });
+      expect(parsed.end).toEqual({ type: 'end_after_count', count: 10 });
+    });
+
+    it('rejects days_of_week on non-weekly frequency', () => {
+      expect(() => RecurrenceInput.parse({
+        frequency: 'daily',
+        days_of_week: ['monday'],
+      })).toThrow();
+    });
+
+    it('rejects monthly-specific fields on non-monthly frequency', () => {
+      expect(() => RecurrenceInput.parse({
+        frequency: 'weekly',
+        days_of_week: ['monday'],
+        day_of_month: 15,
+      })).toThrow();
+    });
+
+    it('accepts recurrence on CreateEventInput', () => {
+      const parsed = CreateEventInput.parse({
+        title: 'Weekly Standup',
+        start_date: '2026-02-03T09:00:00Z',
+        end_date: '2026-02-03T09:30:00Z',
+        recurrence: {
+          frequency: 'weekly',
+          days_of_week: ['monday', 'wednesday', 'friday'],
+        },
+      });
+      expect(parsed.recurrence).toBeDefined();
+      expect(parsed.recurrence!.frequency).toBe('weekly');
     });
   });
 

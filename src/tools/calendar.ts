@@ -49,6 +49,98 @@ export const SearchEventsInput = z
   })
   .strict();
 
+const DayOfWeek = z.enum([
+  'sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday',
+]);
+
+const RecurrenceEndInput = z.discriminatedUnion('type', [
+  z.object({ type: z.literal('no_end') }).strict(),
+  z.object({
+    type: z.literal('end_date'),
+    date: z.string().describe('End date in ISO 8601 format'),
+  }).strict(),
+  z.object({
+    type: z.literal('end_after_count'),
+    count: z.number().int().min(1).max(999).describe('Number of occurrences'),
+  }).strict(),
+]);
+
+export const RecurrenceInput = z.object({
+  frequency: z.enum(['daily', 'weekly', 'monthly', 'yearly']).describe('How often the event repeats'),
+  interval: z.number().int().min(1).max(999).default(1).describe(
+    'Number of frequency units between occurrences (e.g., 2 for every 2 weeks)'
+  ),
+  days_of_week: z.array(DayOfWeek).min(1).optional().describe(
+    'Days of the week for weekly recurrence (e.g., ["monday", "wednesday"])'
+  ),
+  day_of_month: z.number().int().min(1).max(31).optional().describe(
+    'Day of the month for monthly recurrence (e.g., 15 for the 15th)'
+  ),
+  week_of_month: z.enum(['first', 'second', 'third', 'fourth', 'last']).optional().describe(
+    'Week of the month for ordinal monthly recurrence (e.g., "third" for 3rd Thursday)'
+  ),
+  day_of_week_monthly: DayOfWeek.optional().describe(
+    'Day of week for ordinal monthly recurrence (used with week_of_month)'
+  ),
+  end: RecurrenceEndInput.default({ type: 'no_end' }).describe('When the recurrence ends'),
+}).strict().superRefine((data, ctx) => {
+  if (data.frequency === 'weekly' && (data.days_of_week == null || data.days_of_week.length === 0)) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'days_of_week is required for weekly recurrence',
+      path: ['days_of_week'],
+    });
+  }
+  if (data.frequency === 'monthly') {
+    const hasOrdinal = data.week_of_month != null;
+    const hasDayOfWeekMonthly = data.day_of_week_monthly != null;
+    if (hasOrdinal !== hasDayOfWeekMonthly) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'week_of_month and day_of_week_monthly must both be provided for ordinal monthly recurrence',
+        path: ['week_of_month'],
+      });
+    }
+  }
+  if (data.frequency !== 'monthly') {
+    if (data.day_of_month != null || data.week_of_month != null || data.day_of_week_monthly != null) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'day_of_month, week_of_month, and day_of_week_monthly are only valid for monthly recurrence',
+        path: ['frequency'],
+      });
+    }
+  }
+  if (data.frequency !== 'weekly' && data.days_of_week != null) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'days_of_week is only valid for weekly recurrence',
+      path: ['days_of_week'],
+    });
+  }
+});
+
+const isoDateString = z
+  .string()
+  .refine((s) => !isNaN(Date.parse(s)), { message: 'Must be a valid ISO 8601 date string' });
+
+export const CreateEventInput = z
+  .object({
+    title: z.string().min(1).describe('Event title/subject'),
+    start_date: isoDateString.describe('Start date in ISO 8601 UTC format'),
+    end_date: isoDateString.describe('End date in ISO 8601 UTC format'),
+    calendar_id: z.number().int().positive().optional().describe('Optional calendar ID to create the event in'),
+    location: z.string().optional().describe('Event location'),
+    description: z.string().optional().describe('Event description/body text'),
+    is_all_day: z.boolean().optional().default(false).describe('Whether this is an all-day event'),
+    recurrence: RecurrenceInput.optional().describe('Recurrence pattern to make this a repeating event'),
+  })
+  .strict()
+  .refine(
+    (data) => new Date(data.start_date).getTime() < new Date(data.end_date).getTime(),
+    { message: 'start_date must be before end_date', path: ['start_date'] }
+  );
+
 // =============================================================================
 // Type Definitions
 // =============================================================================
@@ -57,6 +149,23 @@ export type ListCalendarsParams = z.infer<typeof ListCalendarsInput>;
 export type ListEventsParams = z.infer<typeof ListEventsInput>;
 export type GetEventParams = z.infer<typeof GetEventInput>;
 export type SearchEventsParams = z.infer<typeof SearchEventsInput>;
+export type CreateEventParams = z.infer<typeof CreateEventInput>;
+export type RecurrenceParams = z.infer<typeof RecurrenceInput>;
+
+/**
+ * Result of creating a calendar event.
+ */
+export interface CreateEventResult {
+  readonly id: number;
+  readonly title: string;
+  readonly start_date: string;
+  readonly end_date: string;
+  readonly calendar_id: number | null;
+  readonly location: string | null;
+  readonly description: string | null;
+  readonly is_all_day: boolean;
+  readonly is_recurring: boolean;
+}
 
 // =============================================================================
 // Content Reader Interface
