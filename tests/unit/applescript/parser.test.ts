@@ -17,6 +17,7 @@ import {
   parseNotes,
   parseNote,
   parseCount,
+  parseRespondToEventResult,
 } from '../../../src/applescript/parser.js';
 import { DELIMITERS } from '../../../src/applescript/scripts.js';
 
@@ -233,6 +234,25 @@ describe('AppleScript Parser', () => {
     it('should return 0 for invalid input', () => {
       expect(parseCount('')).toBe(0);
       expect(parseCount('abc')).toBe(0);
+    });
+  });
+
+  describe('parseRespondToEventResult', () => {
+    it('should parse successful response', () => {
+      const output = `${DELIMITERS.RECORD}success${DELIMITERS.EQUALS}true${DELIMITERS.FIELD}eventId${DELIMITERS.EQUALS}123`;
+      const result = parseRespondToEventResult(output);
+      expect(result).toEqual({ success: true, eventId: 123 });
+    });
+
+    it('should parse failure response', () => {
+      const output = `${DELIMITERS.RECORD}success${DELIMITERS.EQUALS}false${DELIMITERS.FIELD}error${DELIMITERS.EQUALS}Permission denied`;
+      const result = parseRespondToEventResult(output);
+      expect(result).toEqual({ success: false, error: 'Permission denied' });
+    });
+
+    it('should handle empty output', () => {
+      const result = parseRespondToEventResult('');
+      expect(result).toBeNull();
     });
   });
 });

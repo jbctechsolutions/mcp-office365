@@ -111,6 +111,12 @@ export interface AppleScriptNoteRow {
   readonly plainContent: string | null;
 }
 
+export interface RespondToEventResult {
+  readonly success: boolean;
+  readonly eventId?: number;
+  readonly error?: string;
+}
+
 export interface AppleScriptAccountRow {
   readonly id: number;
   readonly name: string | null;
@@ -476,4 +482,27 @@ export function parseFoldersWithAccount(output: string): AppleScriptFolderWithAc
     messageCount: parseNumber(r['messageCount']),
     accountId: parseNumber(r['accountId']),
   }));
+}
+
+/**
+ * Parses the result of a respond-to-event operation.
+ */
+export function parseRespondToEventResult(output: string): RespondToEventResult | null {
+  const records = parseRawOutput(output);
+  if (records.length === 0) return null;
+
+  const record = records[0];
+  const success = record['success'] === 'true';
+
+  if (success) {
+    return {
+      success: true,
+      eventId: parseNumber(record['eventId']),
+    };
+  } else {
+    return {
+      success: false,
+      error: record['error'] ?? 'Unknown error',
+    };
+  }
 }
