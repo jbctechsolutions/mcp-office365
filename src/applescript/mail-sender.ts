@@ -5,7 +5,7 @@
 import { existsSync } from 'fs';
 import { executeAppleScriptOrThrow } from './executor.js';
 import * as scripts from './scripts.js';
-import { parseSendEmailResult, type SendEmailResult } from './parser.js';
+import { parseSendEmailResult } from './parser.js';
 import { AppleScriptError, AttachmentNotFoundError, MailSendError } from '../utils/errors.js';
 
 export interface Attachment {

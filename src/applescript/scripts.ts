@@ -501,7 +501,7 @@ export interface RespondToEventParams {
  * Responds to an event invitation (RSVP).
  */
 export function respondToEvent(params: RespondToEventParams): string {
-  const { eventId, response, sendResponse, comment } = params;
+  const { eventId, response, comment } = params;
 
   // Map response to AppleScript status value
   const statusMap = {
@@ -698,15 +698,15 @@ export function createEvent(params: {
   recurrence?: RecurrenceScriptParams;
 }): string {
   const escapedTitle = escapeForAppleScript(params.title);
-  const escapedLocation = params.location ? escapeForAppleScript(params.location) : '';
-  const escapedDescription = params.description ? escapeForAppleScript(params.description) : '';
+  const escapedLocation = params.location != null ? escapeForAppleScript(params.location) : '';
+  const escapedDescription = params.description != null ? escapeForAppleScript(params.description) : '';
 
   // Build properties list
   let properties = `subject:"${escapedTitle}", start time:theStartDate, end time:theEndDate`;
-  if (params.location) {
+  if (params.location != null) {
     properties += `, location:"${escapedLocation}"`;
   }
-  if (params.isAllDay) {
+  if (params.isAllDay === true) {
     properties += ', all day flag:true';
   }
 

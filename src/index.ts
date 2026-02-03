@@ -45,7 +45,6 @@ import { createContactsTools } from './tools/contacts.js';
 import { createTasksTools } from './tools/tasks.js';
 import { createNotesTools } from './tools/notes.js';
 import {
-  ListFoldersInput,
   ListEmailsInput,
   SearchEmailsInput,
   GetEmailInput,
@@ -1489,7 +1488,16 @@ async function handleGraphToolCall(
 import type { FolderRow, EmailRow, EventRow, ContactRow, TaskRow } from './database/repository.js';
 import { appleTimestampToIso } from './utils/dates.js';
 
-function transformFolderRow(row: FolderRow) {
+function transformFolderRow(row: FolderRow): {
+  id: number;
+  name: string;
+  parentId: number | null;
+  specialType: number;
+  folderType: number;
+  accountId: number;
+  messageCount: number;
+  unreadCount: number;
+} {
   return {
     id: row.id,
     name: row.name ?? 'Unnamed',
@@ -1502,7 +1510,20 @@ function transformFolderRow(row: FolderRow) {
   };
 }
 
-function transformEmailRow(row: EmailRow) {
+function transformEmailRow(row: EmailRow): {
+  id: number;
+  folderId: number | null;
+  subject: string | null;
+  sender: string | null;
+  senderAddress: string | null;
+  preview: string | null;
+  isRead: boolean;
+  timeReceived: string | null;
+  timeSent: string | null;
+  hasAttachment: boolean;
+  priority: number | null;
+  flagStatus: number | null;
+} {
   return {
     id: row.id,
     folderId: row.folderId,
@@ -1519,7 +1540,16 @@ function transformEmailRow(row: EmailRow) {
   };
 }
 
-function transformEventRow(row: EventRow) {
+function transformEventRow(row: EventRow): {
+  id: number;
+  folderId: number | null;
+  title: string | null;
+  startDate: string | null;
+  endDate: string | null;
+  isRecurring: boolean;
+  hasReminder: boolean;
+  attendeeCount: number | null;
+} {
   return {
     id: row.id,
     folderId: row.folderId,
@@ -1532,7 +1562,11 @@ function transformEventRow(row: EventRow) {
   };
 }
 
-function transformContactRow(row: ContactRow) {
+function transformContactRow(row: ContactRow): {
+  id: number;
+  displayName: string | null;
+  sortName: string | null;
+} {
   return {
     id: row.id,
     displayName: row.displayName,
@@ -1540,7 +1574,16 @@ function transformContactRow(row: ContactRow) {
   };
 }
 
-function transformTaskRow(row: TaskRow) {
+function transformTaskRow(row: TaskRow): {
+  id: number;
+  folderId: number | null;
+  name: string | null;
+  isCompleted: boolean;
+  dueDate: string | null;
+  startDate: string | null;
+  priority: number | null;
+  hasReminder: boolean;
+} {
   return {
     id: row.id,
     folderId: row.folderId,

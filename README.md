@@ -20,6 +20,7 @@ A [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) server that p
 - `search_emails` - Search emails by subject, sender, or content
 - `get_email` - Get full email details including body
 - `get_unread_count` - Get unread email count
+- `send_email` - Send an email with attachments and HTML support (AppleScript backend only)
 
 **Calendar**
 - `list_calendars` - List all calendars
@@ -27,6 +28,9 @@ A [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) server that p
 - `get_event` - Get event details
 - `search_events` - Search events by title
 - `create_event` - Create a new calendar event (AppleScript backend only)
+- `respond_to_event` - Accept, decline, or tentatively accept event invitations (AppleScript backend only)
+- `delete_event` - Delete a calendar event or recurring series (AppleScript backend only)
+- `update_event` - Update event details (title, time, location, etc.) (AppleScript backend only)
 
 **Contacts**
 - `list_contacts` - List all contacts with pagination
@@ -64,6 +68,16 @@ Google accounts configured in Outlook for Mac cannot be accessed via the AppleSc
 **Workarounds:**
 1. Configure Google as an IMAP account instead of using the native Google integration
 2. Use the Graph API backend (`USE_GRAPH_API=1`) which has different account handling
+
+**Write Operations**
+
+Currently, write operations (event management, email sending) are only supported via the AppleScript backend. These features will be added to the Graph API backend in a future release:
+- Event RSVP operations
+- Event deletion
+- Event updates
+- Email sending
+
+For these operations, use the AppleScript backend with classic Outlook for Mac.
 
 ### Graph API Backend
 
