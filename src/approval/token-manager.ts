@@ -65,7 +65,7 @@ export class ApprovalTokenManager {
   }
 
   /**
-   * Validates a token without consuming it.
+   * Validates a token without consuming it or modifying state.
    * Checks existence, expiry, operation match, and target match.
    */
   validateToken(
@@ -80,7 +80,6 @@ export class ApprovalTokenManager {
     }
 
     if (Date.now() > token.expiresAt) {
-      this.tokens.delete(tokenId);
       return { valid: false, error: 'EXPIRED' };
     }
 

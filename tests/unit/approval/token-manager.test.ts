@@ -150,6 +150,24 @@ describe('ApprovalTokenManager', () => {
       }
     });
 
+    it('does not remove expired tokens from the store', () => {
+      vi.useFakeTimers();
+      try {
+        const token = manager.generateToken(defaultParams);
+        expect(manager.size).toBe(1);
+
+        vi.advanceTimersByTime(5 * 60 * 1000 + 1);
+
+        const result = manager.validateToken(token.tokenId, 'delete_email', 1);
+        expect(result.valid).toBe(false);
+        expect(result.error).toBe('EXPIRED');
+        // Token should still be in the store (not eagerly evicted)
+        expect(manager.size).toBe(1);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
     it('returns NOT_FOUND for an unknown token', () => {
       const result = manager.validateToken('nonexistent-id', 'delete_email', 1);
       expect(result.valid).toBe(false);
