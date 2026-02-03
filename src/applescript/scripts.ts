@@ -488,6 +488,54 @@ function buildRecurrenceScript(params: RecurrenceScriptParams): string {
 }
 
 /**
+ * Parameters for responding to an event invitation (RSVP).
+ */
+export interface RespondToEventParams {
+  readonly eventId: number;
+  readonly response: 'accept' | 'decline' | 'tentative';
+  readonly sendResponse: boolean;
+  readonly comment?: string;
+}
+
+/**
+ * Responds to an event invitation (RSVP).
+ */
+export function respondToEvent(params: RespondToEventParams): string {
+  const { eventId, response, sendResponse, comment } = params;
+
+  // Map response to AppleScript status value
+  const statusMap = {
+    accept: 'accept',
+    decline: 'decline',
+    tentative: 'tentative accept',
+  };
+  const status = statusMap[response];
+
+  // Escape comment if provided
+  const commentLine = comment != null
+    ? `set comment of myEvent to "${escapeForAppleScript(comment)}"`
+    : '';
+
+  return `
+tell application "Microsoft Outlook"
+  try
+    set myEvent to calendar event id ${eventId}
+    set response status of myEvent to ${status}
+    ${commentLine}
+
+    -- Return success
+    set output to "{{RECORD}}success{{=}}true{{FIELD}}eventId{{=}}" & ${eventId}
+    return output
+  on error errMsg
+    -- Return failure
+    set output to "{{RECORD}}success{{=}}false{{FIELD}}error{{=}}" & errMsg
+    return output
+  end try
+end tell
+`;
+}
+
+/**
  * Creates a new calendar event.
  * Uses component-based date construction for locale safety.
  */
