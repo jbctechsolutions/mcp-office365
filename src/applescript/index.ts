@@ -73,6 +73,17 @@ export {
   type RecurrenceConfig,
 } from './calendar-writer.js';
 
+// Calendar Manager
+export {
+  AppleScriptCalendarManager,
+  createCalendarManager,
+  type ICalendarManager,
+  type ResponseType,
+  type ApplyToScope,
+  type EventUpdates,
+  type UpdatedEvent,
+} from './calendar-manager.js';
+
 // Content Readers
 export {
   AppleScriptEmailContentReader,

@@ -49,6 +49,15 @@ export const SearchEventsInput = z
   })
   .strict();
 
+export const RespondToEventInput = z
+  .object({
+    event_id: z.number().int().positive().describe('The event ID to respond to'),
+    response: z.enum(['accept', 'decline', 'tentative']).describe('Your response to the invitation'),
+    send_response: z.boolean().default(true).describe('Whether to send response to organizer'),
+    comment: z.string().optional().describe('Optional comment to include with response'),
+  })
+  .strict();
+
 const DayOfWeek = z.enum([
   'sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday',
 ]);
@@ -151,6 +160,7 @@ export type GetEventParams = z.infer<typeof GetEventInput>;
 export type SearchEventsParams = z.infer<typeof SearchEventsInput>;
 export type CreateEventParams = z.infer<typeof CreateEventInput>;
 export type RecurrenceParams = z.infer<typeof RecurrenceInput>;
+export type RespondToEventParams = z.infer<typeof RespondToEventInput>;
 
 /**
  * Result of creating a calendar event.

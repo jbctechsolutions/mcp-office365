@@ -23,9 +23,11 @@ import {
   createAppleScriptContentReaders,
   createAccountRepository,
   createCalendarWriter,
+  createCalendarManager,
   isOutlookRunning,
   type IAccountRepository,
   type ICalendarWriter,
+  type ICalendarManager,
   type RecurrenceConfig,
 } from './applescript/index.js';
 import {
@@ -51,6 +53,7 @@ import {
   GetEventInput,
   SearchEventsInput,
   CreateEventInput,
+  RespondToEventInput,
   ListContactsInput,
   SearchContactsInput,
   GetContactInput,
@@ -358,6 +361,34 @@ const TOOLS: Tool[] = [
       required: ['title', 'start_date', 'end_date'],
     },
   },
+  {
+    name: 'respond_to_event',
+    description: 'Respond to a meeting invitation (accept, decline, or tentative). Updates your response status and optionally notifies the organizer.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        event_id: {
+          type: 'number',
+          description: 'The event ID to respond to',
+        },
+        response: {
+          type: 'string',
+          enum: ['accept', 'decline', 'tentative'],
+          description: 'Your response to the invitation',
+        },
+        send_response: {
+          type: 'boolean',
+          description: 'Whether to send response to organizer (default true)',
+          default: true,
+        },
+        comment: {
+          type: 'string',
+          description: 'Optional comment to include with response',
+        },
+      },
+      required: ['event_id', 'response'],
+    },
+  },
   // Contact tools
   {
     name: 'list_contacts',
@@ -559,6 +590,7 @@ export function createServer(): Server {
   let tasksTools: ReturnType<typeof createTasksTools> | null = null;
   let notesTools: ReturnType<typeof createNotesTools> | null = null;
   let calendarWriter: ICalendarWriter | null = null;
+  let calendarManager: ICalendarManager | null = null;
 
   // Graph-specific state
   let graphRepository: GraphRepository | null = null;
@@ -582,6 +614,7 @@ export function createServer(): Server {
     tasksTools = createTasksTools(repository, contentReaders.task);
     notesTools = createNotesTools(repository, contentReaders.note);
     calendarWriter = createCalendarWriter();
+    calendarManager = createCalendarManager();
 
     initialized = true;
   }
@@ -646,7 +679,8 @@ export function createServer(): Server {
         contactsTools!,
         tasksTools!,
         notesTools!,
-        calendarWriter
+        calendarWriter,
+        calendarManager
       );
     } catch (error) {
       const wrappedError = wrapError(error, 'An error occurred');
@@ -717,7 +751,8 @@ function handleAppleScriptToolCall(
   contactsTools: ReturnType<typeof createContactsTools>,
   tasksTools: ReturnType<typeof createTasksTools>,
   notesTools: ReturnType<typeof createNotesTools>,
-  calendarWriter: ICalendarWriter | null
+  calendarWriter: ICalendarWriter | null,
+  calendarManager: ICalendarManager | null
 ): { content: Array<{ type: string; text: string }>; isError?: boolean } {
   switch (name) {
     // Account tools
@@ -877,6 +912,36 @@ function handleAppleScriptToolCall(
       };
 
       return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+    }
+
+    case 'respond_to_event': {
+      if (calendarManager == null) {
+        return {
+          content: [{ type: 'text', text: 'Event response is not available' }],
+          isError: true,
+        };
+      }
+      const params = RespondToEventInput.parse(args);
+
+      const result = calendarManager.respondToEvent(
+        params.event_id,
+        params.response,
+        params.send_response,
+        params.comment
+      );
+
+      const responseText = params.response === 'accept'
+        ? 'accepted'
+        : params.response === 'decline'
+        ? 'declined'
+        : 'tentatively accepted';
+
+      return {
+        content: [{
+          type: 'text',
+          text: `Successfully ${responseText} event ${result.eventId}`,
+        }],
+      };
     }
 
     // Contact tools
