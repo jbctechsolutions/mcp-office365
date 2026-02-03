@@ -539,3 +539,39 @@ export function parseDeleteEventResult(output: string): DeleteEventResult | null
     };
   }
 }
+
+export interface UpdateEventResult {
+  readonly success: boolean;
+  readonly id?: number;
+  readonly updatedFields?: readonly string[];
+  readonly error?: string;
+}
+
+/**
+ * Parses the result of an update-event operation.
+ */
+export function parseUpdateEventResult(output: string): UpdateEventResult | null {
+  const records = parseRawOutput(output);
+  if (records.length === 0) return null;
+
+  const record = records[0];
+  if (!record) return null;
+
+  const success = record['success'] === 'true';
+
+  if (success) {
+    const fieldsStr = record['updatedFields'] ?? '';
+    const fields = fieldsStr.length > 0 ? fieldsStr.split(',') : [];
+
+    return {
+      success: true,
+      id: parseNumber(record['eventId']),
+      updatedFields: fields,
+    };
+  } else {
+    return {
+      success: false,
+      error: record['error'] ?? 'Unknown error',
+    };
+  }
+}

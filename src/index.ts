@@ -409,6 +409,50 @@ const TOOLS: Tool[] = [
       required: ['event_id'],
     },
   },
+  {
+    name: 'update_event',
+    description: 'Update a calendar event. All fields are optional - only specified fields will be updated. For recurring events, you can update a single instance or the entire series.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        event_id: {
+          type: 'number',
+          description: 'The event ID to update',
+        },
+        apply_to: {
+          type: 'string',
+          enum: ['this_instance', 'all_in_series'],
+          description: 'For recurring events: update single instance or entire series (default: this_instance)',
+          default: 'this_instance',
+        },
+        title: {
+          type: 'string',
+          description: 'New event title',
+        },
+        start_date: {
+          type: 'string',
+          description: 'New start date (ISO 8601 UTC format)',
+        },
+        end_date: {
+          type: 'string',
+          description: 'New end date (ISO 8601 UTC format)',
+        },
+        location: {
+          type: 'string',
+          description: 'New location',
+        },
+        description: {
+          type: 'string',
+          description: 'New description',
+        },
+        is_all_day: {
+          type: 'boolean',
+          description: 'Whether event is all day',
+        },
+      },
+      required: ['event_id'],
+    },
+  },
   // Contact tools
   {
     name: 'list_contacts',
@@ -981,6 +1025,55 @@ function handleAppleScriptToolCall(
         content: [{
           type: 'text',
           text: `Successfully deleted event ${params.event_id}${deleteText}`,
+        }],
+      };
+    }
+
+    case 'update_event': {
+      if (calendarManager == null) {
+        return {
+          content: [{ type: 'text', text: 'Event update is not available' }],
+          isError: true,
+        };
+      }
+      const params = args as {
+        event_id: number;
+        apply_to?: 'this_instance' | 'all_in_series';
+        title?: string;
+        start_date?: string;
+        end_date?: string;
+        location?: string;
+        description?: string;
+        is_all_day?: boolean;
+      };
+
+      // Validate date ordering if both dates are provided
+      if (params.start_date != null && params.end_date != null) {
+        if (new Date(params.start_date).getTime() >= new Date(params.end_date).getTime()) {
+          return {
+            content: [{ type: 'text', text: 'start_date must be before end_date' }],
+            isError: true,
+          };
+        }
+      }
+
+      const applyTo = params.apply_to ?? 'this_instance';
+      const updates = {
+        title: params.title,
+        startDate: params.start_date,
+        endDate: params.end_date,
+        location: params.location,
+        description: params.description,
+        isAllDay: params.is_all_day,
+      };
+
+      const result = calendarManager.updateEvent(params.event_id, updates, applyTo);
+
+      const updateText = applyTo === 'all_in_series' ? ' (entire series)' : '';
+      return {
+        content: [{
+          type: 'text',
+          text: `Successfully updated event ${result.id}${updateText}. Updated fields: ${result.updatedFields.join(', ')}`,
         }],
       };
     }

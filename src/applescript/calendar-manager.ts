@@ -6,7 +6,7 @@
 
 import { executeAppleScriptOrThrow } from './executor.js';
 import * as scripts from './scripts.js';
-import { parseRespondToEventResult, parseDeleteEventResult, type RespondToEventResult } from './parser.js';
+import { parseRespondToEventResult, parseDeleteEventResult, parseUpdateEventResult, type RespondToEventResult } from './parser.js';
 import { AppleScriptError } from '../utils/errors.js';
 
 // =============================================================================
@@ -29,7 +29,6 @@ export interface EventUpdates {
   readonly location?: string;
   readonly description?: string;
   readonly isAllDay?: boolean;
-  readonly recurrence?: scripts.RecurrenceScriptParams;
 }
 
 export interface UpdatedEvent {
@@ -82,10 +81,39 @@ export class AppleScriptCalendarManager implements ICalendarManager {
   }
 
   /**
-   * Updates an event (to be implemented in future tasks).
+   * Updates an event (single instance or entire recurring series).
+   * All fields in updates are optional - only specified fields will be updated.
    */
-  updateEvent(_eventId: number, _updates: EventUpdates, _applyTo: ApplyToScope): UpdatedEvent {
-    throw new Error('Not yet implemented');
+  updateEvent(eventId: number, updates: EventUpdates, applyTo: ApplyToScope): UpdatedEvent {
+    const scriptParams: scripts.UpdateEventParams = {
+      eventId,
+      applyTo,
+      updates: {
+        title: updates.title,
+        location: updates.location,
+        description: updates.description,
+        startDate: updates.startDate,
+        endDate: updates.endDate,
+        isAllDay: updates.isAllDay,
+      },
+    };
+
+    const script = scripts.updateEvent(scriptParams);
+    const output = executeAppleScriptOrThrow(script);
+    const result = parseUpdateEventResult(output);
+
+    if (result == null) {
+      throw new AppleScriptError('Failed to parse update response');
+    }
+
+    if (!result.success) {
+      throw new AppleScriptError(result.error ?? 'Update operation failed');
+    }
+
+    return {
+      id: result.id!,
+      updatedFields: result.updatedFields ?? [],
+    };
   }
 }
 

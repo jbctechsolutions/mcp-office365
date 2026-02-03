@@ -39,6 +39,9 @@ export {
   parseAccounts,
   parseDefaultAccountId,
   parseFoldersWithAccount,
+  parseRespondToEventResult,
+  parseDeleteEventResult,
+  parseUpdateEventResult,
   type AppleScriptFolderRow,
   type AppleScriptEmailRow,
   type AppleScriptCalendarRow,
@@ -48,6 +51,9 @@ export {
   type AppleScriptNoteRow,
   type AppleScriptAccountRow,
   type AppleScriptFolderWithAccountRow,
+  type RespondToEventResult,
+  type DeleteEventResult,
+  type UpdateEventResult,
 } from './parser.js';
 
 // Repository

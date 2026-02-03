@@ -95,4 +95,111 @@ describe('AppleScriptCalendarManager', () => {
       }).toThrow('Failed to parse delete response');
     });
   });
+
+  describe('updateEvent', () => {
+    it('updates event title only', () => {
+      mockedExecute.mockReturnValue('{{RECORD}}success{{=}}true{{FIELD}}eventId{{=}}123{{FIELD}}updatedFields{{=}}title');
+
+      const result = manager.updateEvent(123, { title: 'Updated Meeting' }, 'this_instance');
+
+      expect(result).toEqual({ id: 123, updatedFields: ['title'] });
+      expect(mockedExecute).toHaveBeenCalledOnce();
+      const script = mockedExecute.mock.calls[0]![0];
+      expect(script).toContain('calendar event id 123');
+      expect(script).toContain('set subject of myEvent to "Updated Meeting"');
+    });
+
+    it('updates multiple fields', () => {
+      mockedExecute.mockReturnValue('{{RECORD}}success{{=}}true{{FIELD}}eventId{{=}}456{{FIELD}}updatedFields{{=}}title,location,description');
+
+      const result = manager.updateEvent(
+        456,
+        {
+          title: 'New Title',
+          location: 'New Location',
+          description: 'New Description',
+        },
+        'this_instance'
+      );
+
+      expect(result.id).toBe(456);
+      expect(result.updatedFields).toEqual(['title', 'location', 'description']);
+      const script = mockedExecute.mock.calls[0]![0];
+      expect(script).toContain('set subject of myEvent to "New Title"');
+      expect(script).toContain('set location of myEvent to "New Location"');
+      expect(script).toContain('set content of myEvent to "New Description"');
+    });
+
+    it('updates dates', () => {
+      mockedExecute.mockReturnValue('{{RECORD}}success{{=}}true{{FIELD}}eventId{{=}}789{{FIELD}}updatedFields{{=}}startDate,endDate');
+
+      const result = manager.updateEvent(
+        789,
+        {
+          startDate: '2026-02-03T10:00:00Z',
+          endDate: '2026-02-03T11:00:00Z',
+        },
+        'this_instance'
+      );
+
+      expect(result.updatedFields).toEqual(['startDate', 'endDate']);
+      const script = mockedExecute.mock.calls[0]![0];
+      expect(script).toContain('set start time of myEvent to date');
+      expect(script).toContain('set end time of myEvent to date');
+    });
+
+    it('updates all day flag', () => {
+      mockedExecute.mockReturnValue('{{RECORD}}success{{=}}true{{FIELD}}eventId{{=}}100{{FIELD}}updatedFields{{=}}isAllDay');
+
+      const result = manager.updateEvent(100, { isAllDay: true }, 'this_instance');
+
+      expect(result.updatedFields).toEqual(['isAllDay']);
+      const script = mockedExecute.mock.calls[0]![0];
+      expect(script).toContain('set all day flag of myEvent to true');
+    });
+
+    it('updates entire series', () => {
+      mockedExecute.mockReturnValue('{{RECORD}}success{{=}}true{{FIELD}}eventId{{=}}200{{FIELD}}updatedFields{{=}}title');
+
+      manager.updateEvent(200, { title: 'Updated Series' }, 'all_in_series');
+
+      const script = mockedExecute.mock.calls[0]![0];
+      expect(script).toContain('-- Updating entire series');
+    });
+
+    it('handles no fields updated', () => {
+      mockedExecute.mockReturnValue('{{RECORD}}success{{=}}true{{FIELD}}eventId{{=}}300{{FIELD}}updatedFields{{=}}');
+
+      const result = manager.updateEvent(300, {}, 'this_instance');
+
+      expect(result.id).toBe(300);
+      expect(result.updatedFields).toEqual([]);
+    });
+
+    it('throws on failure', () => {
+      mockedExecute.mockReturnValue('{{RECORD}}success{{=}}false{{FIELD}}error{{=}}Event not found');
+
+      expect(() => {
+        manager.updateEvent(999, { title: 'Test' }, 'this_instance');
+      }).toThrow('Event not found');
+    });
+
+    it('throws when parser returns null', () => {
+      mockedExecute.mockReturnValue('invalid output');
+
+      expect(() => {
+        manager.updateEvent(123, { title: 'Test' }, 'this_instance');
+      }).toThrow('Failed to parse update response');
+    });
+
+    it('escapes special characters', () => {
+      mockedExecute.mockReturnValue('{{RECORD}}success{{=}}true{{FIELD}}eventId{{=}}123{{FIELD}}updatedFields{{=}}title');
+
+      manager.updateEvent(123, { title: 'Test "quotes" and \\backslash' }, 'this_instance');
+
+      const script = mockedExecute.mock.calls[0]![0];
+      expect(script).toContain('\\"quotes\\"');
+      expect(script).toContain('\\\\backslash');
+    });
+  });
 });

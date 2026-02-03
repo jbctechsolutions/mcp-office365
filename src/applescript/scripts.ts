@@ -573,6 +573,109 @@ end tell
 }
 
 /**
+ * Parameters for updating an event.
+ */
+export interface UpdateEventParams {
+  readonly eventId: number;
+  readonly applyTo: 'this_instance' | 'all_in_series';
+  readonly updates: {
+    readonly title?: string;
+    readonly startDate?: string; // ISO 8601
+    readonly endDate?: string; // ISO 8601
+    readonly location?: string;
+    readonly description?: string;
+    readonly isAllDay?: boolean;
+  };
+}
+
+/**
+ * Converts an ISO 8601 date string into individual UTC date components.
+ */
+function isoToDateComponents(isoString: string): {
+  year: number;
+  month: number;
+  day: number;
+  hours: number;
+  minutes: number;
+} {
+  const date = new Date(isoString);
+  return {
+    year: date.getUTCFullYear(),
+    month: date.getUTCMonth() + 1,
+    day: date.getUTCDate(),
+    hours: date.getUTCHours(),
+    minutes: date.getUTCMinutes(),
+  };
+}
+
+/**
+ * Updates an event. For recurring events, can update single instance or entire series.
+ * All update fields are optional - only specified fields will be updated.
+ */
+export function updateEvent(params: UpdateEventParams): string {
+  const { eventId, applyTo, updates } = params;
+  const updatedFields: string[] = [];
+
+  let updateStatements = '';
+
+  if (updates.title != null) {
+    updateStatements += `    set subject of myEvent to "${escapeForAppleScript(updates.title)}"\n`;
+    updatedFields.push('title');
+  }
+
+  if (updates.location != null) {
+    updateStatements += `    set location of myEvent to "${escapeForAppleScript(updates.location)}"\n`;
+    updatedFields.push('location');
+  }
+
+  if (updates.description != null) {
+    updateStatements += `    set content of myEvent to "${escapeForAppleScript(updates.description)}"\n`;
+    updatedFields.push('description');
+  }
+
+  if (updates.startDate != null) {
+    const start = isoToDateComponents(updates.startDate);
+    updateStatements += `    set start time of myEvent to date "${start.year}-${start.month}-${start.day} ${start.hours}:${start.minutes}:00"\n`;
+    updatedFields.push('startDate');
+  }
+
+  if (updates.endDate != null) {
+    const end = isoToDateComponents(updates.endDate);
+    updateStatements += `    set end time of myEvent to date "${end.year}-${end.month}-${end.day} ${end.hours}:${end.minutes}:00"\n`;
+    updatedFields.push('endDate');
+  }
+
+  if (updates.isAllDay != null) {
+    updateStatements += `    set all day flag of myEvent to ${updates.isAllDay}\n`;
+    updatedFields.push('isAllDay');
+  }
+
+  const comment = applyTo === 'all_in_series'
+    ? '-- Updating entire series'
+    : '-- Updating single instance';
+
+  const fieldsOutput = updatedFields.join(',');
+
+  return `
+tell application "Microsoft Outlook"
+  try
+    ${comment}
+    set myEvent to calendar event id ${eventId}
+
+${updateStatements}
+    -- Return success
+    set output to "{{RECORD}}success{{=}}true{{FIELD}}eventId{{=}}" & ${eventId} & "{{FIELD}}updatedFields{{=}}${fieldsOutput}"
+    return output
+  on error errMsg
+    -- Return failure
+    set output to "{{RECORD}}success{{=}}false{{FIELD}}error{{=}}" & errMsg
+    return output
+  end try
+end tell
+`;
+}
+
+/**
  * Creates a new calendar event.
  * Uses component-based date construction for locale safety.
  */

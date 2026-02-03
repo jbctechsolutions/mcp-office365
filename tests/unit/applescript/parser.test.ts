@@ -19,6 +19,7 @@ import {
   parseCount,
   parseRespondToEventResult,
   parseDeleteEventResult,
+  parseUpdateEventResult,
 } from '../../../src/applescript/parser.js';
 import { DELIMITERS } from '../../../src/applescript/scripts.js';
 
@@ -272,6 +273,60 @@ describe('AppleScript Parser', () => {
 
     it('should handle empty output', () => {
       const result = parseDeleteEventResult('');
+      expect(result).toBeNull();
+    });
+  });
+
+  describe('parseUpdateEventResult', () => {
+    it('should parse successful update with multiple fields', () => {
+      const output = `${DELIMITERS.RECORD}success${DELIMITERS.EQUALS}true${DELIMITERS.FIELD}eventId${DELIMITERS.EQUALS}123${DELIMITERS.FIELD}updatedFields${DELIMITERS.EQUALS}title,location,description`;
+      const result = parseUpdateEventResult(output);
+      expect(result).toEqual({
+        success: true,
+        id: 123,
+        updatedFields: ['title', 'location', 'description'],
+      });
+    });
+
+    it('should parse successful update with single field', () => {
+      const output = `${DELIMITERS.RECORD}success${DELIMITERS.EQUALS}true${DELIMITERS.FIELD}eventId${DELIMITERS.EQUALS}456${DELIMITERS.FIELD}updatedFields${DELIMITERS.EQUALS}title`;
+      const result = parseUpdateEventResult(output);
+      expect(result).toEqual({
+        success: true,
+        id: 456,
+        updatedFields: ['title'],
+      });
+    });
+
+    it('should parse successful update with no fields', () => {
+      const output = `${DELIMITERS.RECORD}success${DELIMITERS.EQUALS}true${DELIMITERS.FIELD}eventId${DELIMITERS.EQUALS}789${DELIMITERS.FIELD}updatedFields${DELIMITERS.EQUALS}`;
+      const result = parseUpdateEventResult(output);
+      expect(result).toEqual({
+        success: true,
+        id: 789,
+        updatedFields: [],
+      });
+    });
+
+    it('should parse failure', () => {
+      const output = `${DELIMITERS.RECORD}success${DELIMITERS.EQUALS}false${DELIMITERS.FIELD}error${DELIMITERS.EQUALS}Event not found`;
+      const result = parseUpdateEventResult(output);
+      expect(result).toEqual({ success: false, error: 'Event not found' });
+    });
+
+    it('should parse failure with missing error field', () => {
+      const output = `${DELIMITERS.RECORD}success${DELIMITERS.EQUALS}false`;
+      const result = parseUpdateEventResult(output);
+      expect(result).toEqual({ success: false, error: 'Unknown error' });
+    });
+
+    it('should handle empty output', () => {
+      const result = parseUpdateEventResult('');
+      expect(result).toBeNull();
+    });
+
+    it('should handle missing record', () => {
+      const result = parseUpdateEventResult('invalid');
       expect(result).toBeNull();
     });
   });
