@@ -29,6 +29,7 @@ import {
   createGraphRepository,
   createGraphContentReadersWithClient,
   isAuthenticated,
+  GraphMailboxAdapter,
   type GraphRepository,
   type GraphContentReaders,
 } from './graph/index.js';
@@ -81,21 +82,12 @@ import {
   RenameFolderInput,
   MoveFolderInput,
 } from './tools/index.js';
-import {
-  ApprovalTokenManager,
-  hashEmailForApproval,
-  hashFolderForApproval,
-  type OperationType,
-} from './approval/index.js';
+import { ApprovalTokenManager } from './approval/index.js';
 import {
   wrapError,
   OutlookNotRunningError,
   GraphAuthRequiredError,
   GraphError,
-  NotFoundError,
-  ApprovalExpiredError,
-  ApprovalInvalidError,
-  TargetChangedError,
 } from './utils/errors.js';
 
 // =============================================================================
@@ -845,9 +837,8 @@ export function createServer(): Server {
     graphRepository = createGraphRepository();
     graphContentReaders = createGraphContentReadersWithClient(graphRepository.getClient());
 
-    // Note: We can't use the sync tool interfaces with async Graph API
-    // So we won't initialize the *Tools objects for Graph mode
-    // Instead, we'll handle Graph calls directly in the request handler
+    const adapter = new GraphMailboxAdapter(graphRepository);
+    orgTools = createMailboxOrganizationTools(adapter, tokenManager);
 
     initialized = true;
   }
@@ -879,7 +870,7 @@ export function createServer(): Server {
 
       // Graph API mode - handle async operations directly
       if (useGraphApi && graphRepository != null) {
-        return await handleGraphToolCall(name, args, graphRepository, graphContentReaders!, tokenManager);
+        return await handleGraphToolCall(name, args, graphRepository, graphContentReaders!, orgTools!);
       }
 
       // AppleScript mode - use sync tool interfaces
@@ -951,10 +942,148 @@ function resolveAccountIds(
 }
 
 // =============================================================================
+// Shared Mailbox Organization Handler
+// =============================================================================
+
+type ToolResult = { content: Array<{ type: string; text: string }>; isError?: boolean };
+
+async function handleOrgToolCall(
+  name: string,
+  args: unknown,
+  orgTools: ReturnType<typeof createMailboxOrganizationTools>
+): Promise<ToolResult | null> {
+  switch (name) {
+    // Destructive (Two-Phase)
+    case 'prepare_delete_email': {
+      const params = PrepareDeleteEmailInput.parse(args);
+      const result = await orgTools.prepareDeleteEmail(params);
+      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+    }
+    case 'confirm_delete_email': {
+      const params = ConfirmDeleteEmailInput.parse(args);
+      const result = await orgTools.confirmDeleteEmail(params);
+      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+    }
+    case 'prepare_move_email': {
+      const params = PrepareMoveEmailInput.parse(args);
+      const result = await orgTools.prepareMoveEmail(params);
+      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+    }
+    case 'confirm_move_email': {
+      const params = ConfirmMoveEmailInput.parse(args);
+      const result = await orgTools.confirmMoveEmail(params);
+      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+    }
+    case 'prepare_archive_email': {
+      const params = PrepareArchiveEmailInput.parse(args);
+      const result = await orgTools.prepareArchiveEmail(params);
+      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+    }
+    case 'confirm_archive_email': {
+      const params = ConfirmArchiveEmailInput.parse(args);
+      const result = await orgTools.confirmArchiveEmail(params);
+      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+    }
+    case 'prepare_junk_email': {
+      const params = PrepareJunkEmailInput.parse(args);
+      const result = await orgTools.prepareJunkEmail(params);
+      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+    }
+    case 'confirm_junk_email': {
+      const params = ConfirmJunkEmailInput.parse(args);
+      const result = await orgTools.confirmJunkEmail(params);
+      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+    }
+    case 'prepare_delete_folder': {
+      const params = PrepareDeleteFolderInput.parse(args);
+      const result = await orgTools.prepareDeleteFolder(params);
+      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+    }
+    case 'confirm_delete_folder': {
+      const params = ConfirmDeleteFolderInput.parse(args);
+      const result = await orgTools.confirmDeleteFolder(params);
+      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+    }
+    case 'prepare_empty_folder': {
+      const params = PrepareEmptyFolderInput.parse(args);
+      const result = await orgTools.prepareEmptyFolder(params);
+      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+    }
+    case 'confirm_empty_folder': {
+      const params = ConfirmEmptyFolderInput.parse(args);
+      const result = await orgTools.confirmEmptyFolder(params);
+      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+    }
+    case 'prepare_batch_delete_emails': {
+      const params = PrepareBatchDeleteEmailsInput.parse(args);
+      const result = await orgTools.prepareBatchDeleteEmails(params);
+      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+    }
+    case 'prepare_batch_move_emails': {
+      const params = PrepareBatchMoveEmailsInput.parse(args);
+      const result = await orgTools.prepareBatchMoveEmails(params);
+      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+    }
+    case 'confirm_batch_operation': {
+      const params = ConfirmBatchOperationInput.parse(args);
+      const result = await orgTools.confirmBatchOperation(params);
+      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+    }
+
+    // Low-Risk
+    case 'mark_email_read': {
+      const params = MarkEmailReadInput.parse(args);
+      const result = await orgTools.markEmailRead(params);
+      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+    }
+    case 'mark_email_unread': {
+      const params = MarkEmailUnreadInput.parse(args);
+      const result = await orgTools.markEmailUnread(params);
+      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+    }
+    case 'set_email_flag': {
+      const params = SetEmailFlagInput.parse(args);
+      const result = await orgTools.setEmailFlag(params);
+      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+    }
+    case 'clear_email_flag': {
+      const params = ClearEmailFlagInput.parse(args);
+      const result = await orgTools.clearEmailFlag(params);
+      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+    }
+    case 'set_email_categories': {
+      const params = SetEmailCategoriesInput.parse(args);
+      const result = await orgTools.setEmailCategories(params);
+      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+    }
+
+    // Non-Destructive
+    case 'create_folder': {
+      const params = CreateFolderInput.parse(args);
+      const result = await orgTools.createFolder(params);
+      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+    }
+    case 'rename_folder': {
+      const params = RenameFolderInput.parse(args);
+      const result = await orgTools.renameFolder(params);
+      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+    }
+    case 'move_folder': {
+      const params = MoveFolderInput.parse(args);
+      const result = await orgTools.moveFolder(params);
+      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+    }
+
+    default:
+      return null;
+  }
+}
+
+// =============================================================================
 // AppleScript Tool Handler
 // =============================================================================
 
-function handleAppleScriptToolCall(
+async function handleAppleScriptToolCall(
   name: string,
   args: unknown,
   accountRepository: IAccountRepository,
@@ -964,7 +1093,11 @@ function handleAppleScriptToolCall(
   tasksTools: ReturnType<typeof createTasksTools>,
   notesTools: ReturnType<typeof createNotesTools>,
   orgTools: ReturnType<typeof createMailboxOrganizationTools>
-): { content: Array<{ type: string; text: string }>; isError?: boolean } {
+): Promise<ToolResult> {
+  // Handle mailbox organization tools (shared between backends)
+  const orgResult = await handleOrgToolCall(name, args, orgTools);
+  if (orgResult != null) return orgResult;
+
   switch (name) {
     // Account tools
     case 'list_accounts': {
@@ -1140,127 +1273,6 @@ function handleAppleScriptToolCall(
       return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
     }
 
-    // Mailbox Organization — Destructive (Two-Phase)
-    case 'prepare_delete_email': {
-      const params = PrepareDeleteEmailInput.parse(args);
-      const result = orgTools.prepareDeleteEmail(params);
-      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
-    }
-    case 'confirm_delete_email': {
-      const params = ConfirmDeleteEmailInput.parse(args);
-      const result = orgTools.confirmDeleteEmail(params);
-      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
-    }
-    case 'prepare_move_email': {
-      const params = PrepareMoveEmailInput.parse(args);
-      const result = orgTools.prepareMoveEmail(params);
-      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
-    }
-    case 'confirm_move_email': {
-      const params = ConfirmMoveEmailInput.parse(args);
-      const result = orgTools.confirmMoveEmail(params);
-      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
-    }
-    case 'prepare_archive_email': {
-      const params = PrepareArchiveEmailInput.parse(args);
-      const result = orgTools.prepareArchiveEmail(params);
-      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
-    }
-    case 'confirm_archive_email': {
-      const params = ConfirmArchiveEmailInput.parse(args);
-      const result = orgTools.confirmArchiveEmail(params);
-      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
-    }
-    case 'prepare_junk_email': {
-      const params = PrepareJunkEmailInput.parse(args);
-      const result = orgTools.prepareJunkEmail(params);
-      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
-    }
-    case 'confirm_junk_email': {
-      const params = ConfirmJunkEmailInput.parse(args);
-      const result = orgTools.confirmJunkEmail(params);
-      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
-    }
-    case 'prepare_delete_folder': {
-      const params = PrepareDeleteFolderInput.parse(args);
-      const result = orgTools.prepareDeleteFolder(params);
-      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
-    }
-    case 'confirm_delete_folder': {
-      const params = ConfirmDeleteFolderInput.parse(args);
-      const result = orgTools.confirmDeleteFolder(params);
-      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
-    }
-    case 'prepare_empty_folder': {
-      const params = PrepareEmptyFolderInput.parse(args);
-      const result = orgTools.prepareEmptyFolder(params);
-      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
-    }
-    case 'confirm_empty_folder': {
-      const params = ConfirmEmptyFolderInput.parse(args);
-      const result = orgTools.confirmEmptyFolder(params);
-      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
-    }
-    case 'prepare_batch_delete_emails': {
-      const params = PrepareBatchDeleteEmailsInput.parse(args);
-      const result = orgTools.prepareBatchDeleteEmails(params);
-      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
-    }
-    case 'prepare_batch_move_emails': {
-      const params = PrepareBatchMoveEmailsInput.parse(args);
-      const result = orgTools.prepareBatchMoveEmails(params);
-      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
-    }
-    case 'confirm_batch_operation': {
-      const params = ConfirmBatchOperationInput.parse(args);
-      const result = orgTools.confirmBatchOperation(params);
-      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
-    }
-
-    // Mailbox Organization — Low-Risk
-    case 'mark_email_read': {
-      const params = MarkEmailReadInput.parse(args);
-      const result = orgTools.markEmailRead(params);
-      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
-    }
-    case 'mark_email_unread': {
-      const params = MarkEmailUnreadInput.parse(args);
-      const result = orgTools.markEmailUnread(params);
-      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
-    }
-    case 'set_email_flag': {
-      const params = SetEmailFlagInput.parse(args);
-      const result = orgTools.setEmailFlag(params);
-      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
-    }
-    case 'clear_email_flag': {
-      const params = ClearEmailFlagInput.parse(args);
-      const result = orgTools.clearEmailFlag(params);
-      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
-    }
-    case 'set_email_categories': {
-      const params = SetEmailCategoriesInput.parse(args);
-      const result = orgTools.setEmailCategories(params);
-      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
-    }
-
-    // Mailbox Organization — Non-Destructive
-    case 'create_folder': {
-      const params = CreateFolderInput.parse(args);
-      const result = orgTools.createFolder(params);
-      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
-    }
-    case 'rename_folder': {
-      const params = RenameFolderInput.parse(args);
-      const result = orgTools.renameFolder(params);
-      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
-    }
-    case 'move_folder': {
-      const params = MoveFolderInput.parse(args);
-      const result = orgTools.moveFolder(params);
-      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
-    }
-
     default:
       return {
         content: [{ type: 'text', text: `Unknown tool: ${name}` }],
@@ -1278,8 +1290,12 @@ async function handleGraphToolCall(
   args: unknown,
   repository: GraphRepository,
   contentReaders: GraphContentReaders,
-  tokenMgr: ApprovalTokenManager
-): Promise<{ content: Array<{ type: string; text: string }>; isError?: boolean }> {
+  orgTools: ReturnType<typeof createMailboxOrganizationTools>
+): Promise<ToolResult> {
+  // Handle mailbox organization tools (shared between backends)
+  const orgResult = await handleOrgToolCall(name, args, orgTools);
+  if (orgResult != null) return orgResult;
+
   try {
     switch (name) {
       // Mail tools
@@ -1458,190 +1474,6 @@ async function handleGraphToolCall(
         };
       }
 
-      // Mailbox Organization — Destructive (Two-Phase)
-      case 'prepare_delete_email': {
-        const params = PrepareDeleteEmailInput.parse(args);
-        const email = await requireGraphEmail(repository, params.email_id);
-        const hash = hashEmailForApproval(email);
-        const token = tokenMgr.generateToken({ operation: 'delete_email', targetType: 'email', targetId: email.id, targetHash: hash });
-        return { content: [{ type: 'text', text: JSON.stringify({ token_id: token.tokenId, expires_at: new Date(token.expiresAt).toISOString(), email: graphEmailPreview(email), action: 'This email will be moved to the Deleted Items folder.' }, null, 2) }] };
-      }
-      case 'confirm_delete_email': {
-        const params = ConfirmDeleteEmailInput.parse(args);
-        await consumeAndVerifyGraphEmail(tokenMgr, repository, params.token_id, 'delete_email', params.email_id);
-        await repository.deleteEmailAsync(params.email_id);
-        return { content: [{ type: 'text', text: JSON.stringify({ success: true, message: 'Email moved to Deleted Items.' }, null, 2) }] };
-      }
-      case 'prepare_move_email': {
-        const params = PrepareMoveEmailInput.parse(args);
-        const email = await requireGraphEmail(repository, params.email_id);
-        const destFolder = await requireGraphFolder(repository, params.destination_folder_id);
-        const hash = hashEmailForApproval(email);
-        const token = tokenMgr.generateToken({ operation: 'move_email', targetType: 'email', targetId: email.id, targetHash: hash, metadata: { destinationFolderId: destFolder.id } });
-        return { content: [{ type: 'text', text: JSON.stringify({ token_id: token.tokenId, expires_at: new Date(token.expiresAt).toISOString(), email: graphEmailPreview(email), destination_folder: graphFolderPreview(destFolder), action: `This email will be moved to "${destFolder.name ?? 'Unnamed'}".` }, null, 2) }] };
-      }
-      case 'confirm_move_email': {
-        const params = ConfirmMoveEmailInput.parse(args);
-        const token = await consumeAndVerifyGraphEmail(tokenMgr, repository, params.token_id, 'move_email', params.email_id);
-        const destFolderId = token.metadata['destinationFolderId'] as number;
-        await repository.moveEmailAsync(params.email_id, destFolderId);
-        return { content: [{ type: 'text', text: JSON.stringify({ success: true, message: 'Email moved successfully.' }, null, 2) }] };
-      }
-      case 'prepare_archive_email': {
-        const params = PrepareArchiveEmailInput.parse(args);
-        const email = await requireGraphEmail(repository, params.email_id);
-        const hash = hashEmailForApproval(email);
-        const token = tokenMgr.generateToken({ operation: 'archive_email', targetType: 'email', targetId: email.id, targetHash: hash });
-        return { content: [{ type: 'text', text: JSON.stringify({ token_id: token.tokenId, expires_at: new Date(token.expiresAt).toISOString(), email: graphEmailPreview(email), action: 'This email will be moved to the Archive folder.' }, null, 2) }] };
-      }
-      case 'confirm_archive_email': {
-        const params = ConfirmArchiveEmailInput.parse(args);
-        await consumeAndVerifyGraphEmail(tokenMgr, repository, params.token_id, 'archive_email', params.email_id);
-        await repository.archiveEmailAsync(params.email_id);
-        return { content: [{ type: 'text', text: JSON.stringify({ success: true, message: 'Email moved to Archive.' }, null, 2) }] };
-      }
-      case 'prepare_junk_email': {
-        const params = PrepareJunkEmailInput.parse(args);
-        const email = await requireGraphEmail(repository, params.email_id);
-        const hash = hashEmailForApproval(email);
-        const token = tokenMgr.generateToken({ operation: 'junk_email', targetType: 'email', targetId: email.id, targetHash: hash });
-        return { content: [{ type: 'text', text: JSON.stringify({ token_id: token.tokenId, expires_at: new Date(token.expiresAt).toISOString(), email: graphEmailPreview(email), action: 'This email will be moved to the Junk folder.' }, null, 2) }] };
-      }
-      case 'confirm_junk_email': {
-        const params = ConfirmJunkEmailInput.parse(args);
-        await consumeAndVerifyGraphEmail(tokenMgr, repository, params.token_id, 'junk_email', params.email_id);
-        await repository.junkEmailAsync(params.email_id);
-        return { content: [{ type: 'text', text: JSON.stringify({ success: true, message: 'Email moved to Junk.' }, null, 2) }] };
-      }
-      case 'prepare_delete_folder': {
-        const params = PrepareDeleteFolderInput.parse(args);
-        const folder = await requireGraphFolder(repository, params.folder_id);
-        const hash = hashFolderForApproval(folder);
-        const token = tokenMgr.generateToken({ operation: 'delete_folder', targetType: 'folder', targetId: folder.id, targetHash: hash });
-        return { content: [{ type: 'text', text: JSON.stringify({ token_id: token.tokenId, expires_at: new Date(token.expiresAt).toISOString(), folder: graphFolderPreview(folder), action: `This folder and its ${folder.messageCount} messages will be deleted.` }, null, 2) }] };
-      }
-      case 'confirm_delete_folder': {
-        const params = ConfirmDeleteFolderInput.parse(args);
-        await consumeAndVerifyGraphFolder(tokenMgr, repository, params.token_id, 'delete_folder', params.folder_id);
-        await repository.deleteFolderAsync(params.folder_id);
-        return { content: [{ type: 'text', text: JSON.stringify({ success: true, message: 'Folder deleted.' }, null, 2) }] };
-      }
-      case 'prepare_empty_folder': {
-        const params = PrepareEmptyFolderInput.parse(args);
-        const folder = await requireGraphFolder(repository, params.folder_id);
-        const hash = hashFolderForApproval(folder);
-        const token = tokenMgr.generateToken({ operation: 'empty_folder', targetType: 'folder', targetId: folder.id, targetHash: hash });
-        return { content: [{ type: 'text', text: JSON.stringify({ token_id: token.tokenId, expires_at: new Date(token.expiresAt).toISOString(), folder: graphFolderPreview(folder), action: `All ${folder.messageCount} messages in this folder will be deleted.` }, null, 2) }] };
-      }
-      case 'confirm_empty_folder': {
-        const params = ConfirmEmptyFolderInput.parse(args);
-        await consumeAndVerifyGraphFolder(tokenMgr, repository, params.token_id, 'empty_folder', params.folder_id);
-        await repository.emptyFolderAsync(params.folder_id);
-        return { content: [{ type: 'text', text: JSON.stringify({ success: true, message: 'Folder emptied.' }, null, 2) }] };
-      }
-      case 'prepare_batch_delete_emails': {
-        const params = PrepareBatchDeleteEmailsInput.parse(args);
-        const tokens = [];
-        for (const emailId of params.email_ids) {
-          const email = await requireGraphEmail(repository, emailId);
-          const hash = hashEmailForApproval(email);
-          const token = tokenMgr.generateToken({ operation: 'batch_delete_emails', targetType: 'email', targetId: email.id, targetHash: hash });
-          tokens.push({ token_id: token.tokenId, email: graphEmailPreview(email) });
-        }
-        const firstToken = tokenMgr.validateToken(tokens[0]!.token_id, 'batch_delete_emails', params.email_ids[0]!);
-        return { content: [{ type: 'text', text: JSON.stringify({ tokens, expires_at: firstToken.token != null ? new Date(firstToken.token.expiresAt).toISOString() : null, action: `${tokens.length} emails will be moved to the Deleted Items folder. You may selectively confirm by omitting tokens.` }, null, 2) }] };
-      }
-      case 'prepare_batch_move_emails': {
-        const params = PrepareBatchMoveEmailsInput.parse(args);
-        const destFolder = await requireGraphFolder(repository, params.destination_folder_id);
-        const tokens = [];
-        for (const emailId of params.email_ids) {
-          const email = await requireGraphEmail(repository, emailId);
-          const hash = hashEmailForApproval(email);
-          const token = tokenMgr.generateToken({ operation: 'batch_move_emails', targetType: 'email', targetId: email.id, targetHash: hash, metadata: { destinationFolderId: destFolder.id } });
-          tokens.push({ token_id: token.tokenId, email: graphEmailPreview(email) });
-        }
-        const firstToken = tokenMgr.validateToken(tokens[0]!.token_id, 'batch_move_emails', params.email_ids[0]!);
-        return { content: [{ type: 'text', text: JSON.stringify({ tokens, destination_folder: graphFolderPreview(destFolder), expires_at: firstToken.token != null ? new Date(firstToken.token.expiresAt).toISOString() : null, action: `${tokens.length} emails will be moved to "${destFolder.name ?? 'Unnamed'}". You may selectively confirm by omitting tokens.` }, null, 2) }] };
-      }
-      case 'confirm_batch_operation': {
-        const params = ConfirmBatchOperationInput.parse(args);
-        const results = [];
-        for (const { token_id, email_id } of params.tokens) {
-          try {
-            const peekResult = tokenMgr.validateToken(token_id, 'batch_delete_emails', email_id);
-            let operation: OperationType;
-            if (peekResult.valid) {
-              operation = 'batch_delete_emails';
-            } else if (peekResult.error === 'OPERATION_MISMATCH') {
-              const moveResult = tokenMgr.validateToken(token_id, 'batch_move_emails', email_id);
-              if (!moveResult.valid) { throwGraphValidationError(moveResult.error!); }
-              operation = 'batch_move_emails';
-            } else {
-              throwGraphValidationError(peekResult.error!);
-              operation = 'batch_delete_emails';
-            }
-            const token = await consumeAndVerifyGraphEmail(tokenMgr, repository, token_id, operation, email_id);
-            if (operation === 'batch_delete_emails') {
-              await repository.deleteEmailAsync(email_id);
-            } else {
-              const destFolderId = token.metadata['destinationFolderId'] as number;
-              await repository.moveEmailAsync(email_id, destFolderId);
-            }
-            results.push({ email_id, success: true });
-          } catch (error) {
-            results.push({ email_id, success: false, error: error instanceof Error ? error.message : 'Unknown error' });
-          }
-        }
-        const succeeded = results.filter((r) => r.success).length;
-        const failed = results.filter((r) => !r.success).length;
-        return { content: [{ type: 'text', text: JSON.stringify({ results, summary: { total: results.length, succeeded, failed } }, null, 2) }] };
-      }
-
-      // Mailbox Organization — Low-Risk
-      case 'mark_email_read': {
-        const params = MarkEmailReadInput.parse(args);
-        await repository.markEmailReadAsync(params.email_id, true);
-        return { content: [{ type: 'text', text: JSON.stringify({ success: true, message: 'Email marked as read.' }, null, 2) }] };
-      }
-      case 'mark_email_unread': {
-        const params = MarkEmailUnreadInput.parse(args);
-        await repository.markEmailReadAsync(params.email_id, false);
-        return { content: [{ type: 'text', text: JSON.stringify({ success: true, message: 'Email marked as unread.' }, null, 2) }] };
-      }
-      case 'set_email_flag': {
-        const params = SetEmailFlagInput.parse(args);
-        await repository.setEmailFlagAsync(params.email_id, params.flag_status);
-        return { content: [{ type: 'text', text: JSON.stringify({ success: true, message: 'Email flag updated.' }, null, 2) }] };
-      }
-      case 'clear_email_flag': {
-        const params = ClearEmailFlagInput.parse(args);
-        await repository.setEmailFlagAsync(params.email_id, 0);
-        return { content: [{ type: 'text', text: JSON.stringify({ success: true, message: 'Email flag cleared.' }, null, 2) }] };
-      }
-      case 'set_email_categories': {
-        const params = SetEmailCategoriesInput.parse(args);
-        await repository.setEmailCategoriesAsync(params.email_id, params.categories);
-        return { content: [{ type: 'text', text: JSON.stringify({ success: true, message: 'Email categories updated.' }, null, 2) }] };
-      }
-
-      // Mailbox Organization — Non-Destructive
-      case 'create_folder': {
-        const params = CreateFolderInput.parse(args);
-        const newFolder = await repository.createFolderAsync(params.name, params.parent_folder_id);
-        return { content: [{ type: 'text', text: JSON.stringify({ success: true, folder: graphFolderPreview(newFolder) }, null, 2) }] };
-      }
-      case 'rename_folder': {
-        const params = RenameFolderInput.parse(args);
-        await repository.renameFolderAsync(params.folder_id, params.new_name);
-        return { content: [{ type: 'text', text: JSON.stringify({ success: true, message: `Folder renamed to "${params.new_name}".` }, null, 2) }] };
-      }
-      case 'move_folder': {
-        const params = MoveFolderInput.parse(args);
-        await repository.moveFolderAsync(params.folder_id, params.destination_parent_id);
-        return { content: [{ type: 'text', text: JSON.stringify({ success: true, message: 'Folder moved.' }, null, 2) }] };
-      }
-
       default:
         return {
           content: [{ type: 'text', text: `Unknown tool: ${name}` }],
@@ -1654,70 +1486,6 @@ async function handleGraphToolCall(
       error instanceof Error ? error : undefined
     );
   }
-}
-
-// =============================================================================
-// Graph Mode — Approval Helpers
-// =============================================================================
-
-async function requireGraphEmail(repository: GraphRepository, emailId: number): Promise<EmailRow> {
-  const email = await repository.getEmailAsync(emailId);
-  if (email == null) throw new NotFoundError('Email', emailId);
-  return email;
-}
-
-async function requireGraphFolder(repository: GraphRepository, folderId: number): Promise<FolderRow> {
-  const folder = await repository.getFolderAsync(folderId);
-  if (folder == null) throw new NotFoundError('Folder', folderId);
-  return folder;
-}
-
-function throwGraphValidationError(error: import('./approval/types.js').ValidationErrorReason): never {
-  switch (error) {
-    case 'EXPIRED': throw new ApprovalExpiredError();
-    case 'NOT_FOUND': throw new ApprovalInvalidError('Token not found or already used');
-    case 'OPERATION_MISMATCH': throw new ApprovalInvalidError('Token was issued for a different operation');
-    case 'TARGET_MISMATCH': throw new ApprovalInvalidError('Token was issued for a different target');
-    case 'ALREADY_CONSUMED': throw new ApprovalInvalidError('Token has already been used');
-    case 'TARGET_CHANGED': throw new TargetChangedError();
-  }
-}
-
-async function consumeAndVerifyGraphEmail(
-  tokenMgr: ApprovalTokenManager,
-  repository: GraphRepository,
-  tokenId: string,
-  operation: OperationType,
-  emailId: number
-) {
-  const result = tokenMgr.consumeToken(tokenId, operation, emailId);
-  if (!result.valid) throwGraphValidationError(result.error!);
-  const token = result.token!;
-  const email = await requireGraphEmail(repository, emailId);
-  if (hashEmailForApproval(email) !== token.targetHash) throw new TargetChangedError();
-  return token;
-}
-
-async function consumeAndVerifyGraphFolder(
-  tokenMgr: ApprovalTokenManager,
-  repository: GraphRepository,
-  tokenId: string,
-  operation: OperationType,
-  folderId: number
-): Promise<void> {
-  const result = tokenMgr.consumeToken(tokenId, operation, folderId);
-  if (!result.valid) throwGraphValidationError(result.error!);
-  const token = result.token!;
-  const folder = await requireGraphFolder(repository, folderId);
-  if (hashFolderForApproval(folder) !== token.targetHash) throw new TargetChangedError();
-}
-
-function graphEmailPreview(row: EmailRow) {
-  return { id: row.id, subject: row.subject, sender: row.sender, senderAddress: row.senderAddress, folderId: row.folderId, timeReceived: row.timeReceived != null ? appleTimestampToIso(row.timeReceived) : null };
-}
-
-function graphFolderPreview(row: FolderRow) {
-  return { id: row.id, name: row.name, messageCount: row.messageCount, unreadCount: row.unreadCount };
 }
 
 // =============================================================================
