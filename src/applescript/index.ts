@@ -63,6 +63,16 @@ export {
   type IAccountRepository,
 } from './account-repository.js';
 
+// Calendar Writer
+export {
+  AppleScriptCalendarWriter,
+  createCalendarWriter,
+  type ICalendarWriter,
+  type CreateEventParams as CalendarWriterCreateEventParams,
+  type CreatedEvent,
+  type RecurrenceConfig,
+} from './calendar-writer.js';
+
 // Content Readers
 export {
   AppleScriptEmailContentReader,
