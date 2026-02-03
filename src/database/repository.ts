@@ -163,6 +163,44 @@ export interface IWriteableRepository extends IRepository {
 }
 
 // =============================================================================
+// Async-Compatible Repository Interface
+// =============================================================================
+
+/**
+ * A value that may be synchronous or wrapped in a Promise.
+ */
+export type MaybePromise<T> = T | Promise<T>;
+
+/**
+ * Async-compatible repository interface for mailbox organization tools.
+ *
+ * Both sync (AppleScript) and async (Graph) repositories satisfy this
+ * interface. AppleScript repos return plain values; Graph repos return
+ * Promises. MailboxOrganizationTools awaits all calls uniformly.
+ */
+export interface IMailboxRepository {
+  // Read
+  getEmail(id: number): MaybePromise<EmailRow | undefined>;
+  getFolder(id: number): MaybePromise<FolderRow | undefined>;
+
+  // Email organization
+  moveEmail(emailId: number, destinationFolderId: number): MaybePromise<void>;
+  deleteEmail(emailId: number): MaybePromise<void>;
+  archiveEmail(emailId: number): MaybePromise<void>;
+  junkEmail(emailId: number): MaybePromise<void>;
+  markEmailRead(emailId: number, isRead: boolean): MaybePromise<void>;
+  setEmailFlag(emailId: number, flagStatus: number): MaybePromise<void>;
+  setEmailCategories(emailId: number, categories: string[]): MaybePromise<void>;
+
+  // Folder management
+  createFolder(name: string, parentFolderId?: number): MaybePromise<FolderRow>;
+  deleteFolder(folderId: number): MaybePromise<void>;
+  renameFolder(folderId: number, newName: string): MaybePromise<void>;
+  moveFolder(folderId: number, destinationParentId: number): MaybePromise<void>;
+  emptyFolder(folderId: number): MaybePromise<void>;
+}
+
+// =============================================================================
 // Repository Implementation
 // =============================================================================
 
