@@ -492,6 +492,8 @@ export function parseRespondToEventResult(output: string): RespondToEventResult 
   if (records.length === 0) return null;
 
   const record = records[0];
+  if (!record) return null;
+
   const success = record['success'] === 'true';
 
   if (success) {
