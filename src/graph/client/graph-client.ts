@@ -478,6 +478,158 @@ export class GraphClient {
     }
   }
 
+  // ===========================================================================
+  // Write Operations
+  // ===========================================================================
+
+  /**
+   * Moves a message to a different folder.
+   */
+  async moveMessage(messageId: string, destinationFolderId: string): Promise<void> {
+    const client = await this.getClient();
+    await client
+      .api(`/me/messages/${messageId}/move`)
+      .post({ destinationId: destinationFolderId });
+    this.cache.clear(); // Invalidate cache after mutation
+  }
+
+  /**
+   * Deletes a message (moves to Deleted Items).
+   */
+  async deleteMessage(messageId: string): Promise<void> {
+    const client = await this.getClient();
+    // Move to deletedItems well-known folder
+    await client
+      .api(`/me/messages/${messageId}/move`)
+      .post({ destinationId: 'deleteditems' });
+    this.cache.clear();
+  }
+
+  /**
+   * Archives a message (moves to Archive folder).
+   */
+  async archiveMessage(messageId: string): Promise<void> {
+    const client = await this.getClient();
+    await client
+      .api(`/me/messages/${messageId}/move`)
+      .post({ destinationId: 'archive' });
+    this.cache.clear();
+  }
+
+  /**
+   * Moves a message to the Junk folder.
+   */
+  async junkMessage(messageId: string): Promise<void> {
+    const client = await this.getClient();
+    await client
+      .api(`/me/messages/${messageId}/move`)
+      .post({ destinationId: 'junkemail' });
+    this.cache.clear();
+  }
+
+  /**
+   * Updates message properties (read status, flag, categories).
+   */
+  async updateMessage(messageId: string, updates: Record<string, unknown>): Promise<void> {
+    const client = await this.getClient();
+    await client
+      .api(`/me/messages/${messageId}`)
+      .patch(updates);
+    this.cache.clear();
+  }
+
+  /**
+   * Creates a new mail folder.
+   */
+  async createMailFolder(
+    displayName: string,
+    parentFolderId?: string
+  ): Promise<MicrosoftGraph.MailFolder> {
+    const client = await this.getClient();
+    const url = parentFolderId != null
+      ? `/me/mailFolders/${parentFolderId}/childFolders`
+      : '/me/mailFolders';
+
+    const result = await client
+      .api(url)
+      .post({ displayName }) as MicrosoftGraph.MailFolder;
+    this.cache.clear();
+    return result;
+  }
+
+  /**
+   * Deletes a mail folder.
+   */
+  async deleteMailFolder(folderId: string): Promise<void> {
+    const client = await this.getClient();
+    await client
+      .api(`/me/mailFolders/${folderId}`)
+      .delete();
+    this.cache.clear();
+  }
+
+  /**
+   * Renames a mail folder.
+   */
+  async renameMailFolder(folderId: string, newName: string): Promise<void> {
+    const client = await this.getClient();
+    await client
+      .api(`/me/mailFolders/${folderId}`)
+      .patch({ displayName: newName });
+    this.cache.clear();
+  }
+
+  /**
+   * Moves a mail folder to a new parent.
+   */
+  async moveMailFolder(folderId: string, destinationParentId: string): Promise<void> {
+    const client = await this.getClient();
+    await client
+      .api(`/me/mailFolders/${folderId}/move`)
+      .post({ destinationId: destinationParentId });
+    this.cache.clear();
+  }
+
+  /**
+   * Deletes all messages in a folder.
+   */
+  async emptyMailFolder(folderId: string): Promise<void> {
+    const client = await this.getClient();
+    // Get all messages in the folder
+    let response = await client
+      .api(`/me/mailFolders/${folderId}/messages`)
+      .select('id')
+      .top(100)
+      .get() as PageCollection;
+
+    // Delete each message
+    for (const message of response.value as MicrosoftGraph.Message[]) {
+      if (message.id != null) {
+        await client
+          .api(`/me/messages/${message.id}/move`)
+          .post({ destinationId: 'deleteditems' });
+      }
+    }
+
+    // Handle pagination
+    while (response['@odata.nextLink'] != null) {
+      response = await client.api(response['@odata.nextLink']).get() as PageCollection;
+      for (const message of response.value as MicrosoftGraph.Message[]) {
+        if (message.id != null) {
+          await client
+            .api(`/me/messages/${message.id}/move`)
+            .post({ destinationId: 'deleteditems' });
+        }
+      }
+    }
+
+    this.cache.clear();
+  }
+
+  // ===========================================================================
+  // Tasks (Microsoft To Do) - continued
+  // ===========================================================================
+
   /**
    * Searches tasks by title.
    */

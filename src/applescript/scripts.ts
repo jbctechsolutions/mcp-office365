@@ -1194,6 +1194,217 @@ end tell
 `;
 }
 
+// Write Operation Scripts
+// =============================================================================
+
+/**
+ * Moves a message to a different folder.
+ */
+export function moveMessage(messageId: number, destinationFolderId: number): string {
+  return `
+tell application "Microsoft Outlook"
+  set m to message id ${messageId}
+  set targetFolder to mail folder id ${destinationFolderId}
+  move m to targetFolder
+  return "ok"
+end tell
+`;
+}
+
+/**
+ * Moves a message to the Deleted Items folder.
+ */
+export function deleteMessage(messageId: number): string {
+  return `
+tell application "Microsoft Outlook"
+  set m to message id ${messageId}
+  set deletedFolder to deleted items
+  move m to deletedFolder
+  return "ok"
+end tell
+`;
+}
+
+/**
+ * Moves a message to the Archive folder.
+ * Falls back to an "Archive" named folder if the well-known folder isn't available.
+ */
+export function archiveMessage(messageId: number): string {
+  return `
+tell application "Microsoft Outlook"
+  set m to message id ${messageId}
+  try
+    set archiveFolder to mail folder "Archive"
+    move m to archiveFolder
+  on error
+    -- Try finding by name
+    set allFolders to mail folders
+    repeat with f in allFolders
+      if name of f is "Archive" then
+        move m to f
+        return "ok"
+      end if
+    end repeat
+    error "Archive folder not found"
+  end try
+  return "ok"
+end tell
+`;
+}
+
+/**
+ * Moves a message to the Junk folder.
+ */
+export function junkMessage(messageId: number): string {
+  return `
+tell application "Microsoft Outlook"
+  set m to message id ${messageId}
+  set junkFolder to junk mail
+  move m to junkFolder
+  return "ok"
+end tell
+`;
+}
+
+/**
+ * Sets the read status of a message.
+ */
+export function setMessageReadStatus(messageId: number, isRead: boolean): string {
+  return `
+tell application "Microsoft Outlook"
+  set m to message id ${messageId}
+  set is read of m to ${isRead}
+  return "ok"
+end tell
+`;
+}
+
+/**
+ * Sets the flag status of a message.
+ * flagStatus: 0 = none, 1 = flagged, 2 = completed
+ */
+export function setMessageFlag(messageId: number, flagStatus: number): string {
+  let flagValue: string;
+  switch (flagStatus) {
+    case 1:
+      flagValue = 'flag marked';
+      break;
+    case 2:
+      flagValue = 'flag complete';
+      break;
+    default:
+      flagValue = 'flag not flagged';
+  }
+
+  return `
+tell application "Microsoft Outlook"
+  set m to message id ${messageId}
+  set todo flag of m to ${flagValue}
+  return "ok"
+end tell
+`;
+}
+
+/**
+ * Sets categories on a message.
+ */
+export function setMessageCategories(messageId: number, categories: string[]): string {
+  const categoryList = categories.map(c => `"${escapeForAppleScript(c)}"`).join(', ');
+
+  return `
+tell application "Microsoft Outlook"
+  set m to message id ${messageId}
+  set category of m to {${categoryList}}
+  return "ok"
+end tell
+`;
+}
+
+/**
+ * Creates a new mail folder.
+ */
+export function createMailFolder(name: string, parentFolderId: number | undefined): string {
+  const escapedName = escapeForAppleScript(name);
+
+  if (parentFolderId != null) {
+    return `
+tell application "Microsoft Outlook"
+  set parentFolder to mail folder id ${parentFolderId}
+  set newFolder to make new mail folder at parentFolder with properties {name:"${escapedName}"}
+  return id of newFolder
+end tell
+`;
+  }
+
+  return `
+tell application "Microsoft Outlook"
+  set newFolder to make new mail folder with properties {name:"${escapedName}"}
+  return id of newFolder
+end tell
+`;
+}
+
+/**
+ * Deletes a mail folder.
+ */
+export function deleteMailFolder(folderId: number): string {
+  return `
+tell application "Microsoft Outlook"
+  set f to mail folder id ${folderId}
+  delete f
+  return "ok"
+end tell
+`;
+}
+
+/**
+ * Renames a mail folder.
+ */
+export function renameMailFolder(folderId: number, newName: string): string {
+  const escapedName = escapeForAppleScript(newName);
+
+  return `
+tell application "Microsoft Outlook"
+  set f to mail folder id ${folderId}
+  set name of f to "${escapedName}"
+  return "ok"
+end tell
+`;
+}
+
+/**
+ * Moves a mail folder to a new parent.
+ */
+export function moveMailFolder(folderId: number, destinationParentId: number): string {
+  return `
+tell application "Microsoft Outlook"
+  set f to mail folder id ${folderId}
+  set targetParent to mail folder id ${destinationParentId}
+  move f to targetParent
+  return "ok"
+end tell
+`;
+}
+
+/**
+ * Deletes all messages in a folder (empties the folder).
+ */
+export function emptyMailFolder(folderId: number): string {
+  return `
+tell application "Microsoft Outlook"
+  set targetFolder to mail folder id ${folderId}
+  set msgs to messages of targetFolder
+  set deletedFolder to deleted items
+  repeat with m in msgs
+    try
+      move m to deletedFolder
+    end try
+  end repeat
+  return "ok"
+end tell
+`;
+}
+
 // =============================================================================
 // Email Sending Scripts
 // =============================================================================

@@ -14,6 +14,9 @@ export * as queries from './queries.js';
 
 export {
   type IRepository,
+  type IWriteableRepository,
+  type IMailboxRepository,
+  type MaybePromise,
   type FolderRow,
   type EmailRow,
   type EventRow,

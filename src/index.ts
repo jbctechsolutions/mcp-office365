@@ -36,6 +36,7 @@ import {
   createGraphRepository,
   createGraphContentReadersWithClient,
   isAuthenticated,
+  GraphMailboxAdapter,
   type GraphRepository,
   type GraphContentReaders,
 } from './graph/index.js';
@@ -44,6 +45,7 @@ import { createCalendarTools } from './tools/calendar.js';
 import { createContactsTools } from './tools/contacts.js';
 import { createTasksTools } from './tools/tasks.js';
 import { createNotesTools } from './tools/notes.js';
+import { createMailboxOrganizationTools } from './tools/mailbox-organization.js';
 import {
   ListEmailsInput,
   SearchEmailsInput,
@@ -64,7 +66,31 @@ import {
   ListNotesInput,
   GetNoteInput,
   SearchNotesInput,
+  PrepareDeleteEmailInput,
+  ConfirmDeleteEmailInput,
+  PrepareMoveEmailInput,
+  ConfirmMoveEmailInput,
+  PrepareArchiveEmailInput,
+  ConfirmArchiveEmailInput,
+  PrepareJunkEmailInput,
+  ConfirmJunkEmailInput,
+  PrepareDeleteFolderInput,
+  ConfirmDeleteFolderInput,
+  PrepareEmptyFolderInput,
+  ConfirmEmptyFolderInput,
+  PrepareBatchDeleteEmailsInput,
+  PrepareBatchMoveEmailsInput,
+  ConfirmBatchOperationInput,
+  MarkEmailReadInput,
+  MarkEmailUnreadInput,
+  SetEmailFlagInput,
+  ClearEmailFlagInput,
+  SetEmailCategoriesInput,
+  CreateFolderInput,
+  RenameFolderInput,
+  MoveFolderInput,
 } from './tools/index.js';
+import { ApprovalTokenManager } from './approval/index.js';
 import type { CreateEventResult } from './tools/index.js';
 import {
   wrapError,
@@ -621,6 +647,304 @@ const TOOLS: Tool[] = [
       required: ['query'],
     },
   },
+  // =========================================================================
+  // Mailbox Organization — Destructive (Two-Phase Approval)
+  // =========================================================================
+  {
+    name: 'prepare_delete_email',
+    description: 'Prepare to delete an email (move to trash). Returns a preview and approval token. Call confirm_delete_email to execute.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        email_id: { type: 'number', description: 'The email ID to delete' },
+      },
+      required: ['email_id'],
+    },
+  },
+  {
+    name: 'confirm_delete_email',
+    description: 'Confirm deletion of an email using a token from prepare_delete_email',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        token_id: { type: 'string', description: 'The approval token from prepare_delete_email' },
+        email_id: { type: 'number', description: 'The email ID to delete' },
+      },
+      required: ['token_id', 'email_id'],
+    },
+  },
+  {
+    name: 'prepare_move_email',
+    description: 'Prepare to move an email to another folder. Returns a preview and approval token. Call confirm_move_email to execute.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        email_id: { type: 'number', description: 'The email ID to move' },
+        destination_folder_id: { type: 'number', description: 'The destination folder ID' },
+      },
+      required: ['email_id', 'destination_folder_id'],
+    },
+  },
+  {
+    name: 'confirm_move_email',
+    description: 'Confirm moving an email using a token from prepare_move_email',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        token_id: { type: 'string', description: 'The approval token from prepare_move_email' },
+        email_id: { type: 'number', description: 'The email ID to move' },
+      },
+      required: ['token_id', 'email_id'],
+    },
+  },
+  {
+    name: 'prepare_archive_email',
+    description: 'Prepare to archive an email. Returns a preview and approval token. Call confirm_archive_email to execute.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        email_id: { type: 'number', description: 'The email ID to archive' },
+      },
+      required: ['email_id'],
+    },
+  },
+  {
+    name: 'confirm_archive_email',
+    description: 'Confirm archiving an email using a token from prepare_archive_email',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        token_id: { type: 'string', description: 'The approval token from prepare_archive_email' },
+        email_id: { type: 'number', description: 'The email ID to archive' },
+      },
+      required: ['token_id', 'email_id'],
+    },
+  },
+  {
+    name: 'prepare_junk_email',
+    description: 'Prepare to mark an email as junk. Returns a preview and approval token. Call confirm_junk_email to execute.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        email_id: { type: 'number', description: 'The email ID to mark as junk' },
+      },
+      required: ['email_id'],
+    },
+  },
+  {
+    name: 'confirm_junk_email',
+    description: 'Confirm marking an email as junk using a token from prepare_junk_email',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        token_id: { type: 'string', description: 'The approval token from prepare_junk_email' },
+        email_id: { type: 'number', description: 'The email ID to mark as junk' },
+      },
+      required: ['token_id', 'email_id'],
+    },
+  },
+  {
+    name: 'prepare_delete_folder',
+    description: 'Prepare to delete a mail folder. Returns a preview and approval token. Call confirm_delete_folder to execute.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        folder_id: { type: 'number', description: 'The folder ID to delete' },
+      },
+      required: ['folder_id'],
+    },
+  },
+  {
+    name: 'confirm_delete_folder',
+    description: 'Confirm deletion of a folder using a token from prepare_delete_folder',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        token_id: { type: 'string', description: 'The approval token from prepare_delete_folder' },
+        folder_id: { type: 'number', description: 'The folder ID to delete' },
+      },
+      required: ['token_id', 'folder_id'],
+    },
+  },
+  {
+    name: 'prepare_empty_folder',
+    description: 'Prepare to empty a mail folder (delete all messages). Returns a preview and approval token. Call confirm_empty_folder to execute.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        folder_id: { type: 'number', description: 'The folder ID to empty' },
+      },
+      required: ['folder_id'],
+    },
+  },
+  {
+    name: 'confirm_empty_folder',
+    description: 'Confirm emptying a folder using a token from prepare_empty_folder',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        token_id: { type: 'string', description: 'The approval token from prepare_empty_folder' },
+        folder_id: { type: 'number', description: 'The folder ID to empty' },
+      },
+      required: ['token_id', 'folder_id'],
+    },
+  },
+  {
+    name: 'prepare_batch_delete_emails',
+    description: 'Prepare to delete multiple emails. Returns individual tokens per email so you can selectively confirm. Call confirm_batch_operation to execute.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        email_ids: {
+          type: 'array',
+          items: { type: 'number' },
+          description: 'The email IDs to delete (max 50)',
+        },
+      },
+      required: ['email_ids'],
+    },
+  },
+  {
+    name: 'prepare_batch_move_emails',
+    description: 'Prepare to move multiple emails. Returns individual tokens per email so you can selectively confirm. Call confirm_batch_operation to execute.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        email_ids: {
+          type: 'array',
+          items: { type: 'number' },
+          description: 'The email IDs to move (max 50)',
+        },
+        destination_folder_id: { type: 'number', description: 'The destination folder ID' },
+      },
+      required: ['email_ids', 'destination_folder_id'],
+    },
+  },
+  {
+    name: 'confirm_batch_operation',
+    description: 'Confirm a batch operation using tokens from prepare_batch_delete_emails or prepare_batch_move_emails. You may selectively confirm by omitting tokens.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        tokens: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              token_id: { type: 'string', description: 'The approval token' },
+              email_id: { type: 'number', description: 'The email ID' },
+            },
+            required: ['token_id', 'email_id'],
+          },
+          description: 'Array of token/email pairs to confirm',
+        },
+      },
+      required: ['tokens'],
+    },
+  },
+  // =========================================================================
+  // Mailbox Organization — Low-Risk (No Approval)
+  // =========================================================================
+  {
+    name: 'mark_email_read',
+    description: 'Mark an email as read',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        email_id: { type: 'number', description: 'The email ID to mark as read' },
+      },
+      required: ['email_id'],
+    },
+  },
+  {
+    name: 'mark_email_unread',
+    description: 'Mark an email as unread',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        email_id: { type: 'number', description: 'The email ID to mark as unread' },
+      },
+      required: ['email_id'],
+    },
+  },
+  {
+    name: 'set_email_flag',
+    description: 'Set a follow-up flag on an email',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        email_id: { type: 'number', description: 'The email ID to flag' },
+        flag_status: { type: 'number', description: 'Flag status: 0=not flagged, 1=flagged, 2=completed' },
+      },
+      required: ['email_id', 'flag_status'],
+    },
+  },
+  {
+    name: 'clear_email_flag',
+    description: 'Clear the follow-up flag from an email',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        email_id: { type: 'number', description: 'The email ID to clear the flag from' },
+      },
+      required: ['email_id'],
+    },
+  },
+  {
+    name: 'set_email_categories',
+    description: 'Set categories on an email (replaces existing categories)',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        email_id: { type: 'number', description: 'The email ID' },
+        categories: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Categories to set. Use empty array to clear.',
+        },
+      },
+      required: ['email_id', 'categories'],
+    },
+  },
+  // =========================================================================
+  // Mailbox Organization — Non-Destructive
+  // =========================================================================
+  {
+    name: 'create_folder',
+    description: 'Create a new mail folder',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        name: { type: 'string', description: 'Name for the new folder' },
+        parent_folder_id: { type: 'number', description: 'Optional parent folder ID (top-level if omitted)' },
+      },
+      required: ['name'],
+    },
+  },
+  {
+    name: 'rename_folder',
+    description: 'Rename a mail folder',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        folder_id: { type: 'number', description: 'The folder ID to rename' },
+        new_name: { type: 'string', description: 'The new folder name' },
+      },
+      required: ['folder_id', 'new_name'],
+    },
+  },
+  {
+    name: 'move_folder',
+    description: 'Move a mail folder under a different parent',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        folder_id: { type: 'number', description: 'The folder ID to move' },
+        destination_parent_id: { type: 'number', description: 'The destination parent folder ID' },
+      },
+      required: ['folder_id', 'destination_parent_id'],
+    },
+  },
   // Email sending tool
   {
     name: 'send_email',
@@ -714,6 +1038,9 @@ export function createServer(): Server {
   // Determine which backend to use
   const useGraphApi = shouldUseGraphApi();
 
+  // Shared state (used by both backends)
+  const tokenManager = new ApprovalTokenManager();
+
   // Tools and backend state
   let initialized = false;
   let accountRepository: IAccountRepository | null = null;
@@ -722,6 +1049,7 @@ export function createServer(): Server {
   let contactsTools: ReturnType<typeof createContactsTools> | null = null;
   let tasksTools: ReturnType<typeof createTasksTools> | null = null;
   let notesTools: ReturnType<typeof createNotesTools> | null = null;
+  let orgTools: ReturnType<typeof createMailboxOrganizationTools> | null = null;
   let calendarWriter: ICalendarWriter | null = null;
   let calendarManager: ICalendarManager | null = null;
   let mailSender: IMailSender | null = null;
@@ -747,6 +1075,7 @@ export function createServer(): Server {
     contactsTools = createContactsTools(repository, contentReaders.contact);
     tasksTools = createTasksTools(repository, contentReaders.task);
     notesTools = createNotesTools(repository, contentReaders.note);
+    orgTools = createMailboxOrganizationTools(repository, tokenManager);
     calendarWriter = createCalendarWriter();
     calendarManager = createCalendarManager();
     mailSender = createMailSender();
@@ -767,9 +1096,8 @@ export function createServer(): Server {
     graphRepository = createGraphRepository();
     graphContentReaders = createGraphContentReadersWithClient(graphRepository.getClient());
 
-    // Note: We can't use the sync tool interfaces with async Graph API
-    // So we won't initialize the *Tools objects for Graph mode
-    // Instead, we'll handle Graph calls directly in the request handler
+    const adapter = new GraphMailboxAdapter(graphRepository);
+    orgTools = createMailboxOrganizationTools(adapter, tokenManager);
 
     initialized = true;
   }
@@ -801,7 +1129,7 @@ export function createServer(): Server {
 
       // Graph API mode - handle async operations directly
       if (useGraphApi && graphRepository != null) {
-        return await handleGraphToolCall(name, args, graphRepository, graphContentReaders!);
+        return await handleGraphToolCall(name, args, graphRepository, graphContentReaders!, orgTools!);
       }
 
       // AppleScript mode - use sync tool interfaces
@@ -814,6 +1142,7 @@ export function createServer(): Server {
         contactsTools!,
         tasksTools!,
         notesTools!,
+        orgTools!,
         calendarWriter,
         calendarManager,
         mailSender
@@ -875,10 +1204,148 @@ function resolveAccountIds(
 }
 
 // =============================================================================
+// Shared Mailbox Organization Handler
+// =============================================================================
+
+type ToolResult = { content: Array<{ type: string; text: string }>; isError?: boolean };
+
+async function handleOrgToolCall(
+  name: string,
+  args: unknown,
+  orgTools: ReturnType<typeof createMailboxOrganizationTools>
+): Promise<ToolResult | null> {
+  switch (name) {
+    // Destructive (Two-Phase)
+    case 'prepare_delete_email': {
+      const params = PrepareDeleteEmailInput.parse(args);
+      const result = await orgTools.prepareDeleteEmail(params);
+      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+    }
+    case 'confirm_delete_email': {
+      const params = ConfirmDeleteEmailInput.parse(args);
+      const result = await orgTools.confirmDeleteEmail(params);
+      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+    }
+    case 'prepare_move_email': {
+      const params = PrepareMoveEmailInput.parse(args);
+      const result = await orgTools.prepareMoveEmail(params);
+      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+    }
+    case 'confirm_move_email': {
+      const params = ConfirmMoveEmailInput.parse(args);
+      const result = await orgTools.confirmMoveEmail(params);
+      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+    }
+    case 'prepare_archive_email': {
+      const params = PrepareArchiveEmailInput.parse(args);
+      const result = await orgTools.prepareArchiveEmail(params);
+      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+    }
+    case 'confirm_archive_email': {
+      const params = ConfirmArchiveEmailInput.parse(args);
+      const result = await orgTools.confirmArchiveEmail(params);
+      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+    }
+    case 'prepare_junk_email': {
+      const params = PrepareJunkEmailInput.parse(args);
+      const result = await orgTools.prepareJunkEmail(params);
+      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+    }
+    case 'confirm_junk_email': {
+      const params = ConfirmJunkEmailInput.parse(args);
+      const result = await orgTools.confirmJunkEmail(params);
+      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+    }
+    case 'prepare_delete_folder': {
+      const params = PrepareDeleteFolderInput.parse(args);
+      const result = await orgTools.prepareDeleteFolder(params);
+      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+    }
+    case 'confirm_delete_folder': {
+      const params = ConfirmDeleteFolderInput.parse(args);
+      const result = await orgTools.confirmDeleteFolder(params);
+      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+    }
+    case 'prepare_empty_folder': {
+      const params = PrepareEmptyFolderInput.parse(args);
+      const result = await orgTools.prepareEmptyFolder(params);
+      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+    }
+    case 'confirm_empty_folder': {
+      const params = ConfirmEmptyFolderInput.parse(args);
+      const result = await orgTools.confirmEmptyFolder(params);
+      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+    }
+    case 'prepare_batch_delete_emails': {
+      const params = PrepareBatchDeleteEmailsInput.parse(args);
+      const result = await orgTools.prepareBatchDeleteEmails(params);
+      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+    }
+    case 'prepare_batch_move_emails': {
+      const params = PrepareBatchMoveEmailsInput.parse(args);
+      const result = await orgTools.prepareBatchMoveEmails(params);
+      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+    }
+    case 'confirm_batch_operation': {
+      const params = ConfirmBatchOperationInput.parse(args);
+      const result = await orgTools.confirmBatchOperation(params);
+      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+    }
+
+    // Low-Risk
+    case 'mark_email_read': {
+      const params = MarkEmailReadInput.parse(args);
+      const result = await orgTools.markEmailRead(params);
+      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+    }
+    case 'mark_email_unread': {
+      const params = MarkEmailUnreadInput.parse(args);
+      const result = await orgTools.markEmailUnread(params);
+      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+    }
+    case 'set_email_flag': {
+      const params = SetEmailFlagInput.parse(args);
+      const result = await orgTools.setEmailFlag(params);
+      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+    }
+    case 'clear_email_flag': {
+      const params = ClearEmailFlagInput.parse(args);
+      const result = await orgTools.clearEmailFlag(params);
+      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+    }
+    case 'set_email_categories': {
+      const params = SetEmailCategoriesInput.parse(args);
+      const result = await orgTools.setEmailCategories(params);
+      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+    }
+
+    // Non-Destructive
+    case 'create_folder': {
+      const params = CreateFolderInput.parse(args);
+      const result = await orgTools.createFolder(params);
+      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+    }
+    case 'rename_folder': {
+      const params = RenameFolderInput.parse(args);
+      const result = await orgTools.renameFolder(params);
+      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+    }
+    case 'move_folder': {
+      const params = MoveFolderInput.parse(args);
+      const result = await orgTools.moveFolder(params);
+      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+    }
+
+    default:
+      return null;
+  }
+}
+
+// =============================================================================
 // AppleScript Tool Handler
 // =============================================================================
 
-function handleAppleScriptToolCall(
+async function handleAppleScriptToolCall(
   name: string,
   args: unknown,
   accountRepository: IAccountRepository,
@@ -887,10 +1354,15 @@ function handleAppleScriptToolCall(
   contactsTools: ReturnType<typeof createContactsTools>,
   tasksTools: ReturnType<typeof createTasksTools>,
   notesTools: ReturnType<typeof createNotesTools>,
+  orgTools: ReturnType<typeof createMailboxOrganizationTools>,
   calendarWriter: ICalendarWriter | null,
   calendarManager: ICalendarManager | null,
   mailSender: IMailSender | null
-): { content: Array<{ type: string; text: string }>; isError?: boolean } {
+): Promise<ToolResult> {
+  // Handle mailbox organization tools (shared between backends)
+  const orgResult = await handleOrgToolCall(name, args, orgTools);
+  if (orgResult != null) return orgResult;
+
   switch (name) {
     // Account tools
     case 'list_accounts': {
@@ -1280,8 +1752,13 @@ async function handleGraphToolCall(
   name: string,
   args: unknown,
   repository: GraphRepository,
-  contentReaders: GraphContentReaders
-): Promise<{ content: Array<{ type: string; text: string }>; isError?: boolean }> {
+  contentReaders: GraphContentReaders,
+  orgTools: ReturnType<typeof createMailboxOrganizationTools>
+): Promise<ToolResult> {
+  // Handle mailbox organization tools (shared between backends)
+  const orgResult = await handleOrgToolCall(name, args, orgTools);
+  if (orgResult != null) return orgResult;
+
   try {
     switch (name) {
       // Mail tools
@@ -1537,19 +2014,23 @@ function transformEmailRow(row: EmailRow): {
     hasAttachment: row.hasAttachment === 1,
     priority: row.priority,
     flagStatus: row.flagStatus,
+    categories: parseEmailCategories(row.categories),
   };
 }
 
-function transformEventRow(row: EventRow): {
-  id: number;
-  folderId: number | null;
-  title: string | null;
-  startDate: string | null;
-  endDate: string | null;
-  isRecurring: boolean;
-  hasReminder: boolean;
-  attendeeCount: number | null;
-} {
+function parseEmailCategories(buffer: Buffer | null): string[] {
+  if (buffer == null || buffer.length === 0) return [];
+  try {
+    const text = buffer.toString('utf-8');
+    return text.includes('\0')
+      ? text.split('\0').filter(s => s.length > 0)
+      : text.split(',').map(s => s.trim()).filter(s => s.length > 0);
+  } catch {
+    return [];
+  }
+}
+
+function transformEventRow(row: EventRow) {
   return {
     id: row.id,
     folderId: row.folderId,

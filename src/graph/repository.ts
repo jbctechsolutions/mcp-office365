@@ -7,6 +7,7 @@
 
 import type {
   IRepository,
+  IWriteableRepository,
   FolderRow,
   EmailRow,
   EventRow,
@@ -536,6 +537,144 @@ export class GraphRepository implements IRepository {
    */
   getTaskInfo(numericId: number): { taskListId: string; taskId: string } | undefined {
     return this.idCache.tasks.get(numericId);
+  }
+
+  // ===========================================================================
+  // Write Operations (Async)
+  // ===========================================================================
+
+  // Sync versions throw — use async versions from index.ts handler
+  moveEmail(_emailId: number, _destinationFolderId: number): void {
+    throw new Error('Use moveEmailAsync() for Graph repository');
+  }
+  deleteEmail(_emailId: number): void {
+    throw new Error('Use deleteEmailAsync() for Graph repository');
+  }
+  archiveEmail(_emailId: number): void {
+    throw new Error('Use archiveEmailAsync() for Graph repository');
+  }
+  junkEmail(_emailId: number): void {
+    throw new Error('Use junkEmailAsync() for Graph repository');
+  }
+  markEmailRead(_emailId: number, _isRead: boolean): void {
+    throw new Error('Use markEmailReadAsync() for Graph repository');
+  }
+  setEmailFlag(_emailId: number, _flagStatus: number): void {
+    throw new Error('Use setEmailFlagAsync() for Graph repository');
+  }
+  setEmailCategories(_emailId: number, _categories: string[]): void {
+    throw new Error('Use setEmailCategoriesAsync() for Graph repository');
+  }
+  createFolder(_name: string, _parentFolderId?: number): FolderRow {
+    throw new Error('Use createFolderAsync() for Graph repository');
+  }
+  deleteFolder(_folderId: number): void {
+    throw new Error('Use deleteFolderAsync() for Graph repository');
+  }
+  renameFolder(_folderId: number, _newName: string): void {
+    throw new Error('Use renameFolderAsync() for Graph repository');
+  }
+  moveFolder(_folderId: number, _destinationParentId: number): void {
+    throw new Error('Use moveFolderAsync() for Graph repository');
+  }
+  emptyFolder(_folderId: number): void {
+    throw new Error('Use emptyFolderAsync() for Graph repository');
+  }
+
+  // Async implementations
+
+  async moveEmailAsync(emailId: number, destinationFolderId: number): Promise<void> {
+    const graphMessageId = this.idCache.messages.get(emailId);
+    const graphFolderId = this.idCache.folders.get(destinationFolderId);
+    if (graphMessageId == null) throw new Error(`Message ID ${emailId} not found in cache`);
+    if (graphFolderId == null) throw new Error(`Folder ID ${destinationFolderId} not found in cache`);
+    await this.client.moveMessage(graphMessageId, graphFolderId);
+  }
+
+  async deleteEmailAsync(emailId: number): Promise<void> {
+    const graphId = this.idCache.messages.get(emailId);
+    if (graphId == null) throw new Error(`Message ID ${emailId} not found in cache`);
+    await this.client.deleteMessage(graphId);
+  }
+
+  async archiveEmailAsync(emailId: number): Promise<void> {
+    const graphId = this.idCache.messages.get(emailId);
+    if (graphId == null) throw new Error(`Message ID ${emailId} not found in cache`);
+    await this.client.archiveMessage(graphId);
+  }
+
+  async junkEmailAsync(emailId: number): Promise<void> {
+    const graphId = this.idCache.messages.get(emailId);
+    if (graphId == null) throw new Error(`Message ID ${emailId} not found in cache`);
+    await this.client.junkMessage(graphId);
+  }
+
+  async markEmailReadAsync(emailId: number, isRead: boolean): Promise<void> {
+    const graphId = this.idCache.messages.get(emailId);
+    if (graphId == null) throw new Error(`Message ID ${emailId} not found in cache`);
+    await this.client.updateMessage(graphId, { isRead });
+  }
+
+  async setEmailFlagAsync(emailId: number, flagStatus: number): Promise<void> {
+    const graphId = this.idCache.messages.get(emailId);
+    if (graphId == null) throw new Error(`Message ID ${emailId} not found in cache`);
+    const flagStatusMap: Record<number, string> = {
+      0: 'notFlagged',
+      1: 'flagged',
+      2: 'complete',
+    };
+    await this.client.updateMessage(graphId, {
+      flag: { flagStatus: flagStatusMap[flagStatus] ?? 'notFlagged' },
+    });
+  }
+
+  async setEmailCategoriesAsync(emailId: number, categories: string[]): Promise<void> {
+    const graphId = this.idCache.messages.get(emailId);
+    if (graphId == null) throw new Error(`Message ID ${emailId} not found in cache`);
+    await this.client.updateMessage(graphId, { categories });
+  }
+
+  async createFolderAsync(name: string, parentFolderId?: number): Promise<FolderRow> {
+    const graphParentId = parentFolderId != null
+      ? this.idCache.folders.get(parentFolderId)
+      : undefined;
+
+    const folder = await this.client.createMailFolder(name, graphParentId ?? undefined);
+
+    // Update cache with new folder
+    if (folder.id != null) {
+      const numericId = hashStringToNumber(folder.id);
+      this.idCache.folders.set(numericId, folder.id);
+    }
+
+    return mapMailFolderToRow(folder);
+  }
+
+  async deleteFolderAsync(folderId: number): Promise<void> {
+    const graphId = this.idCache.folders.get(folderId);
+    if (graphId == null) throw new Error(`Folder ID ${folderId} not found in cache`);
+    await this.client.deleteMailFolder(graphId);
+    this.idCache.folders.delete(folderId);
+  }
+
+  async renameFolderAsync(folderId: number, newName: string): Promise<void> {
+    const graphId = this.idCache.folders.get(folderId);
+    if (graphId == null) throw new Error(`Folder ID ${folderId} not found in cache`);
+    await this.client.renameMailFolder(graphId, newName);
+  }
+
+  async moveFolderAsync(folderId: number, destinationParentId: number): Promise<void> {
+    const graphFolderId = this.idCache.folders.get(folderId);
+    const graphParentId = this.idCache.folders.get(destinationParentId);
+    if (graphFolderId == null) throw new Error(`Folder ID ${folderId} not found in cache`);
+    if (graphParentId == null) throw new Error(`Parent folder ID ${destinationParentId} not found in cache`);
+    await this.client.moveMailFolder(graphFolderId, graphParentId);
+  }
+
+  async emptyFolderAsync(folderId: number): Promise<void> {
+    const graphId = this.idCache.folders.get(folderId);
+    if (graphId == null) throw new Error(`Folder ID ${folderId} not found in cache`);
+    await this.client.emptyMailFolder(graphId);
   }
 }
 

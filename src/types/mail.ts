@@ -70,6 +70,7 @@ export interface EmailSummary {
   readonly hasAttachment: boolean;
   readonly priority: PriorityValue;
   readonly flagStatus: FlagStatusValue;
+  readonly categories: readonly string[];
 }
 
 /**
