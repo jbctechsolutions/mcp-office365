@@ -6,7 +6,7 @@
 
 import { executeAppleScriptOrThrow } from './executor.js';
 import * as scripts from './scripts.js';
-import { parseRespondToEventResult, type RespondToEventResult } from './parser.js';
+import { parseRespondToEventResult, parseDeleteEventResult, type RespondToEventResult } from './parser.js';
 import { AppleScriptError } from '../utils/errors.js';
 
 // =============================================================================
@@ -65,10 +65,20 @@ export class AppleScriptCalendarManager implements ICalendarManager {
   }
 
   /**
-   * Deletes an event (to be implemented in future tasks).
+   * Deletes an event (single instance or entire recurring series).
    */
-  deleteEvent(_eventId: number, _applyTo: ApplyToScope): void {
-    throw new Error('Not yet implemented');
+  deleteEvent(eventId: number, applyTo: ApplyToScope): void {
+    const script = scripts.deleteEvent({ eventId, applyTo });
+    const output = executeAppleScriptOrThrow(script);
+    const result = parseDeleteEventResult(output);
+
+    if (result == null) {
+      throw new AppleScriptError('Failed to parse delete response');
+    }
+
+    if (!result.success) {
+      throw new AppleScriptError(result.error ?? 'Delete operation failed');
+    }
   }
 
   /**

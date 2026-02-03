@@ -3,7 +3,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { respondToEvent } from '../../../src/applescript/scripts.js';
+import { respondToEvent, deleteEvent } from '../../../src/applescript/scripts.js';
 
 describe('respondToEvent', () => {
   it('should generate accept script with comment', () => {
@@ -39,5 +39,27 @@ describe('respondToEvent', () => {
 
     expect(script).toContain('calendar event id 789');
     expect(script).toContain('tentative');
+  });
+});
+
+describe('deleteEvent', () => {
+  it('should generate script for single instance', () => {
+    const script = deleteEvent({ eventId: 123, applyTo: 'this_instance' });
+    expect(script).toContain('calendar event id 123');
+    expect(script).toContain('delete');
+    expect(script).toContain('Deleting single instance');
+  });
+
+  it('should generate script for all in series', () => {
+    const script = deleteEvent({ eventId: 456, applyTo: 'all_in_series' });
+    expect(script).toContain('calendar event id 456');
+    expect(script).toContain('delete');
+    expect(script).toContain('Deleting entire series');
+  });
+
+  it('should include success output format', () => {
+    const script = deleteEvent({ eventId: 789, applyTo: 'this_instance' });
+    expect(script).toContain('success{{=}}true');
+    expect(script).toContain('eventId{{=}}');
   });
 });

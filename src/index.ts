@@ -389,6 +389,26 @@ const TOOLS: Tool[] = [
       required: ['event_id', 'response'],
     },
   },
+  {
+    name: 'delete_event',
+    description: 'Delete a calendar event. For recurring events, you can delete a single instance or the entire series.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        event_id: {
+          type: 'number',
+          description: 'The event ID to delete',
+        },
+        apply_to: {
+          type: 'string',
+          enum: ['this_instance', 'all_in_series'],
+          description: 'For recurring events: delete single instance or entire series (default: this_instance)',
+          default: 'this_instance',
+        },
+      },
+      required: ['event_id'],
+    },
+  },
   // Contact tools
   {
     name: 'list_contacts',
@@ -940,6 +960,27 @@ function handleAppleScriptToolCall(
         content: [{
           type: 'text',
           text: `Successfully ${responseText} event ${result.eventId}`,
+        }],
+      };
+    }
+
+    case 'delete_event': {
+      if (calendarManager == null) {
+        return {
+          content: [{ type: 'text', text: 'Event deletion is not available' }],
+          isError: true,
+        };
+      }
+      const params = args as { event_id: number; apply_to?: 'this_instance' | 'all_in_series' };
+      const applyTo = params.apply_to ?? 'this_instance';
+
+      calendarManager.deleteEvent(params.event_id, applyTo);
+
+      const deleteText = applyTo === 'all_in_series' ? ' (entire series)' : '';
+      return {
+        content: [{
+          type: 'text',
+          text: `Successfully deleted event ${params.event_id}${deleteText}`,
         }],
       };
     }

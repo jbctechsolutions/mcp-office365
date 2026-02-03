@@ -18,6 +18,7 @@ import {
   parseNote,
   parseCount,
   parseRespondToEventResult,
+  parseDeleteEventResult,
 } from '../../../src/applescript/parser.js';
 import { DELIMITERS } from '../../../src/applescript/scripts.js';
 
@@ -252,6 +253,25 @@ describe('AppleScript Parser', () => {
 
     it('should handle empty output', () => {
       const result = parseRespondToEventResult('');
+      expect(result).toBeNull();
+    });
+  });
+
+  describe('parseDeleteEventResult', () => {
+    it('should parse successful delete', () => {
+      const output = `${DELIMITERS.RECORD}success${DELIMITERS.EQUALS}true${DELIMITERS.FIELD}eventId${DELIMITERS.EQUALS}123`;
+      const result = parseDeleteEventResult(output);
+      expect(result).toEqual({ success: true, eventId: 123 });
+    });
+
+    it('should parse failure', () => {
+      const output = `${DELIMITERS.RECORD}success${DELIMITERS.EQUALS}false${DELIMITERS.FIELD}error${DELIMITERS.EQUALS}Event not found`;
+      const result = parseDeleteEventResult(output);
+      expect(result).toEqual({ success: false, error: 'Event not found' });
+    });
+
+    it('should handle empty output', () => {
+      const result = parseDeleteEventResult('');
       expect(result).toBeNull();
     });
   });

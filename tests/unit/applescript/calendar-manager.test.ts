@@ -56,4 +56,43 @@ describe('AppleScriptCalendarManager', () => {
       }).toThrow('Failed to parse RSVP response');
     });
   });
+
+  describe('deleteEvent', () => {
+    it('deletes single instance', () => {
+      mockedExecute.mockReturnValue('{{RECORD}}success{{=}}true{{FIELD}}eventId{{=}}123');
+
+      manager.deleteEvent(123, 'this_instance');
+
+      expect(mockedExecute).toHaveBeenCalledOnce();
+      const script = mockedExecute.mock.calls[0]![0];
+      expect(script).toContain('calendar event id 123');
+      expect(script).toContain('delete');
+    });
+
+    it('deletes all in series', () => {
+      mockedExecute.mockReturnValue('{{RECORD}}success{{=}}true{{FIELD}}eventId{{=}}456');
+
+      manager.deleteEvent(456, 'all_in_series');
+
+      expect(mockedExecute).toHaveBeenCalledOnce();
+      const script = mockedExecute.mock.calls[0]![0];
+      expect(script).toContain('calendar event id 456');
+    });
+
+    it('throws on failure', () => {
+      mockedExecute.mockReturnValue('{{RECORD}}success{{=}}false{{FIELD}}error{{=}}Not found');
+
+      expect(() => {
+        manager.deleteEvent(789, 'this_instance');
+      }).toThrow('Not found');
+    });
+
+    it('throws when parser returns null', () => {
+      mockedExecute.mockReturnValue('invalid output');
+
+      expect(() => {
+        manager.deleteEvent(123, 'this_instance');
+      }).toThrow('Failed to parse delete response');
+    });
+  });
 });

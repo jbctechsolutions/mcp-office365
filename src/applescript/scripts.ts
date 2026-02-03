@@ -536,6 +536,43 @@ end tell
 }
 
 /**
+ * Parameters for deleting an event.
+ */
+export interface DeleteEventParams {
+  readonly eventId: number;
+  readonly applyTo: 'this_instance' | 'all_in_series';
+}
+
+/**
+ * Deletes an event. For recurring events, can delete single instance or entire series.
+ */
+export function deleteEvent(params: DeleteEventParams): string {
+  const { eventId, applyTo } = params;
+
+  const comment = applyTo === 'all_in_series'
+    ? '-- Deleting entire series'
+    : '-- Deleting single instance';
+
+  return `
+tell application "Microsoft Outlook"
+  try
+    ${comment}
+    set myEvent to calendar event id ${eventId}
+    delete myEvent
+
+    -- Return success
+    set output to "{{RECORD}}success{{=}}true{{FIELD}}eventId{{=}}" & ${eventId}
+    return output
+  on error errMsg
+    -- Return failure
+    set output to "{{RECORD}}success{{=}}false{{FIELD}}error{{=}}" & errMsg
+    return output
+  end try
+end tell
+`;
+}
+
+/**
  * Creates a new calendar event.
  * Uses component-based date construction for locale safety.
  */
