@@ -3,7 +3,7 @@ import {
   MailboxOrganizationTools,
   createMailboxOrganizationTools,
 } from '../../../src/tools/mailbox-organization.js';
-import type { IWriteableRepository, EmailRow, FolderRow } from '../../../src/database/repository.js';
+import type { IMailboxRepository, EmailRow, FolderRow } from '../../../src/database/repository.js';
 import { ApprovalTokenManager } from '../../../src/approval/index.js';
 import {
   NotFoundError,
@@ -61,33 +61,10 @@ function makeFolderRow(overrides: Partial<FolderRow> = {}): FolderRow {
 // Mock Repository
 // =============================================================================
 
-function createMockRepository(): IWriteableRepository {
+function createMockRepository(): IMailboxRepository {
   return {
-    // Read methods (IRepository)
     getEmail: vi.fn(),
     getFolder: vi.fn(),
-    listFolders: vi.fn().mockReturnValue([]),
-    listEmails: vi.fn().mockReturnValue([]),
-    listUnreadEmails: vi.fn().mockReturnValue([]),
-    searchEmails: vi.fn().mockReturnValue([]),
-    searchEmailsInFolder: vi.fn().mockReturnValue([]),
-    getUnreadCount: vi.fn().mockReturnValue(0),
-    getUnreadCountByFolder: vi.fn().mockReturnValue(0),
-    listCalendars: vi.fn().mockReturnValue([]),
-    listEvents: vi.fn().mockReturnValue([]),
-    listEventsByFolder: vi.fn().mockReturnValue([]),
-    listEventsByDateRange: vi.fn().mockReturnValue([]),
-    getEvent: vi.fn(),
-    listContacts: vi.fn().mockReturnValue([]),
-    searchContacts: vi.fn().mockReturnValue([]),
-    getContact: vi.fn(),
-    listTasks: vi.fn().mockReturnValue([]),
-    listIncompleteTasks: vi.fn().mockReturnValue([]),
-    searchTasks: vi.fn().mockReturnValue([]),
-    getTask: vi.fn(),
-    listNotes: vi.fn().mockReturnValue([]),
-    getNote: vi.fn(),
-    // Write methods (IWriteableRepository)
     moveEmail: vi.fn(),
     deleteEmail: vi.fn(),
     archiveEmail: vi.fn(),
@@ -100,7 +77,7 @@ function createMockRepository(): IWriteableRepository {
     renameFolder: vi.fn(),
     moveFolder: vi.fn(),
     emptyFolder: vi.fn(),
-  } as unknown as IWriteableRepository;
+  };
 }
 
 // =============================================================================
@@ -143,8 +120,8 @@ describe('MailboxOrganizationTools', () => {
   // ===========================================================================
 
   describe('prepareDeleteEmail / confirmDeleteEmail', () => {
-    it('prepareDeleteEmail returns token and email preview', () => {
-      const result = tools.prepareDeleteEmail({ email_id: 1 });
+    it('prepareDeleteEmail returns token and email preview', async () => {
+      const result = await tools.prepareDeleteEmail({ email_id: 1 });
 
       expect(result.token_id).toBeDefined();
       expect(typeof result.token_id).toBe('string');
@@ -158,9 +135,9 @@ describe('MailboxOrganizationTools', () => {
       expect(result.action).toContain('Deleted Items');
     });
 
-    it('confirmDeleteEmail validates token and calls deleteEmail', () => {
-      const prepared = tools.prepareDeleteEmail({ email_id: 1 });
-      const result = tools.confirmDeleteEmail({
+    it('confirmDeleteEmail validates token and calls deleteEmail', async () => {
+      const prepared = await tools.prepareDeleteEmail({ email_id: 1 });
+      const result = await tools.confirmDeleteEmail({
         token_id: prepared.token_id,
         email_id: 1,
       });
@@ -170,21 +147,21 @@ describe('MailboxOrganizationTools', () => {
       expect(repo.deleteEmail).toHaveBeenCalledWith(1);
     });
 
-    it('confirmDeleteEmail throws if token expired', () => {
+    it('confirmDeleteEmail throws if token expired', async () => {
       vi.useFakeTimers();
 
       try {
-        const prepared = tools.prepareDeleteEmail({ email_id: 1 });
+        const prepared = await tools.prepareDeleteEmail({ email_id: 1 });
 
         // Advance past the 5-minute TTL
         vi.advanceTimersByTime(6 * 60 * 1000);
 
-        expect(() =>
+        await expect(
           tools.confirmDeleteEmail({
             token_id: prepared.token_id,
             email_id: 1,
           })
-        ).toThrow(ApprovalExpiredError);
+        ).rejects.toThrow(ApprovalExpiredError);
 
         expect(repo.deleteEmail).not.toHaveBeenCalled();
       } finally {
@@ -192,8 +169,8 @@ describe('MailboxOrganizationTools', () => {
       }
     });
 
-    it('confirmDeleteEmail throws if email changed between prepare and confirm', () => {
-      const prepared = tools.prepareDeleteEmail({ email_id: 1 });
+    it('confirmDeleteEmail throws if email changed between prepare and confirm', async () => {
+      const prepared = await tools.prepareDeleteEmail({ email_id: 1 });
 
       // Simulate the email changing after prepare (different subject changes the hash)
       const modifiedEmail = makeEmailRow({
@@ -206,20 +183,20 @@ describe('MailboxOrganizationTools', () => {
         return undefined;
       });
 
-      expect(() =>
+      await expect(
         tools.confirmDeleteEmail({
           token_id: prepared.token_id,
           email_id: 1,
         })
-      ).toThrow(TargetChangedError);
+      ).rejects.toThrow(TargetChangedError);
 
       expect(repo.deleteEmail).not.toHaveBeenCalled();
     });
   });
 
   describe('prepareMoveEmail / confirmMoveEmail', () => {
-    it('prepareMoveEmail includes destination folder in response', () => {
-      const result = tools.prepareMoveEmail({
+    it('prepareMoveEmail includes destination folder in response', async () => {
+      const result = await tools.prepareMoveEmail({
         email_id: 1,
         destination_folder_id: 20,
       });
@@ -232,13 +209,13 @@ describe('MailboxOrganizationTools', () => {
       expect(result.action).toContain('Archive');
     });
 
-    it('confirmMoveEmail calls moveEmail with correct destination', () => {
-      const prepared = tools.prepareMoveEmail({
+    it('confirmMoveEmail calls moveEmail with correct destination', async () => {
+      const prepared = await tools.prepareMoveEmail({
         email_id: 1,
         destination_folder_id: 20,
       });
 
-      const result = tools.confirmMoveEmail({
+      const result = await tools.confirmMoveEmail({
         token_id: prepared.token_id,
         email_id: 1,
       });
@@ -249,18 +226,18 @@ describe('MailboxOrganizationTools', () => {
   });
 
   describe('prepareArchiveEmail / confirmArchiveEmail', () => {
-    it('prepareArchiveEmail returns token and email preview', () => {
-      const result = tools.prepareArchiveEmail({ email_id: 1 });
+    it('prepareArchiveEmail returns token and email preview', async () => {
+      const result = await tools.prepareArchiveEmail({ email_id: 1 });
 
       expect(result.token_id).toBeDefined();
       expect(result.email.id).toBe(1);
       expect(result.action).toContain('Archive');
     });
 
-    it('confirmArchiveEmail calls archiveEmail', () => {
-      const prepared = tools.prepareArchiveEmail({ email_id: 1 });
+    it('confirmArchiveEmail calls archiveEmail', async () => {
+      const prepared = await tools.prepareArchiveEmail({ email_id: 1 });
 
-      const result = tools.confirmArchiveEmail({
+      const result = await tools.confirmArchiveEmail({
         token_id: prepared.token_id,
         email_id: 1,
       });
@@ -271,18 +248,18 @@ describe('MailboxOrganizationTools', () => {
   });
 
   describe('prepareJunkEmail / confirmJunkEmail', () => {
-    it('prepareJunkEmail returns token and email preview', () => {
-      const result = tools.prepareJunkEmail({ email_id: 1 });
+    it('prepareJunkEmail returns token and email preview', async () => {
+      const result = await tools.prepareJunkEmail({ email_id: 1 });
 
       expect(result.token_id).toBeDefined();
       expect(result.email.id).toBe(1);
       expect(result.action).toContain('Junk');
     });
 
-    it('confirmJunkEmail calls junkEmail', () => {
-      const prepared = tools.prepareJunkEmail({ email_id: 1 });
+    it('confirmJunkEmail calls junkEmail', async () => {
+      const prepared = await tools.prepareJunkEmail({ email_id: 1 });
 
-      const result = tools.confirmJunkEmail({
+      const result = await tools.confirmJunkEmail({
         token_id: prepared.token_id,
         email_id: 1,
       });
@@ -293,8 +270,8 @@ describe('MailboxOrganizationTools', () => {
   });
 
   describe('prepareDeleteFolder / confirmDeleteFolder', () => {
-    it('prepareDeleteFolder returns token and folder preview', () => {
-      const result = tools.prepareDeleteFolder({ folder_id: 10 });
+    it('prepareDeleteFolder returns token and folder preview', async () => {
+      const result = await tools.prepareDeleteFolder({ folder_id: 10 });
 
       expect(result.token_id).toBeDefined();
       expect(result.folder.id).toBe(10);
@@ -303,10 +280,10 @@ describe('MailboxOrganizationTools', () => {
       expect(result.action).toContain('25');
     });
 
-    it('confirmDeleteFolder calls deleteFolder', () => {
-      const prepared = tools.prepareDeleteFolder({ folder_id: 10 });
+    it('confirmDeleteFolder calls deleteFolder', async () => {
+      const prepared = await tools.prepareDeleteFolder({ folder_id: 10 });
 
-      const result = tools.confirmDeleteFolder({
+      const result = await tools.confirmDeleteFolder({
         token_id: prepared.token_id,
         folder_id: 10,
       });
@@ -317,18 +294,18 @@ describe('MailboxOrganizationTools', () => {
   });
 
   describe('prepareEmptyFolder / confirmEmptyFolder', () => {
-    it('prepareEmptyFolder returns token and folder preview', () => {
-      const result = tools.prepareEmptyFolder({ folder_id: 10 });
+    it('prepareEmptyFolder returns token and folder preview', async () => {
+      const result = await tools.prepareEmptyFolder({ folder_id: 10 });
 
       expect(result.token_id).toBeDefined();
       expect(result.folder.id).toBe(10);
       expect(result.action).toContain('25');
     });
 
-    it('confirmEmptyFolder calls emptyFolder', () => {
-      const prepared = tools.prepareEmptyFolder({ folder_id: 10 });
+    it('confirmEmptyFolder calls emptyFolder', async () => {
+      const prepared = await tools.prepareEmptyFolder({ folder_id: 10 });
 
-      const result = tools.confirmEmptyFolder({
+      const result = await tools.confirmEmptyFolder({
         token_id: prepared.token_id,
         folder_id: 10,
       });
@@ -343,8 +320,8 @@ describe('MailboxOrganizationTools', () => {
   // ===========================================================================
 
   describe('prepareBatchDeleteEmails / confirmBatchOperation', () => {
-    it('prepareBatchDeleteEmails returns individual tokens per email', () => {
-      const result = tools.prepareBatchDeleteEmails({
+    it('prepareBatchDeleteEmails returns individual tokens per email', async () => {
+      const result = await tools.prepareBatchDeleteEmails({
         email_ids: [1, 2, 3],
       });
 
@@ -361,12 +338,12 @@ describe('MailboxOrganizationTools', () => {
       expect(result.expires_at).toBeDefined();
     });
 
-    it('confirmBatchOperation processes each token independently', () => {
-      const prepared = tools.prepareBatchDeleteEmails({
+    it('confirmBatchOperation processes each token independently', async () => {
+      const prepared = await tools.prepareBatchDeleteEmails({
         email_ids: [1, 2, 3],
       });
 
-      const result = tools.confirmBatchOperation({
+      const result = await tools.confirmBatchOperation({
         tokens: prepared.tokens.map((t) => ({
           token_id: t.token_id,
           email_id: t.email.id,
@@ -382,8 +359,8 @@ describe('MailboxOrganizationTools', () => {
       expect(repo.deleteEmail).toHaveBeenCalledWith(3);
     });
 
-    it('confirmBatchOperation reports partial success (some succeed, some fail)', () => {
-      const prepared = tools.prepareBatchDeleteEmails({
+    it('confirmBatchOperation reports partial success (some succeed, some fail)', async () => {
+      const prepared = await tools.prepareBatchDeleteEmails({
         email_ids: [1, 2, 3],
       });
 
@@ -395,7 +372,7 @@ describe('MailboxOrganizationTools', () => {
         return undefined;
       });
 
-      const result = tools.confirmBatchOperation({
+      const result = await tools.confirmBatchOperation({
         tokens: prepared.tokens.map((t) => ({
           token_id: t.token_id,
           email_id: t.email.id,
@@ -424,8 +401,8 @@ describe('MailboxOrganizationTools', () => {
   // ===========================================================================
 
   describe('markEmailRead', () => {
-    it('calls markEmailRead(id, true)', () => {
-      const result = tools.markEmailRead({ email_id: 1 });
+    it('calls markEmailRead(id, true)', async () => {
+      const result = await tools.markEmailRead({ email_id: 1 });
 
       expect(result.success).toBe(true);
       expect(result.message).toContain('read');
@@ -434,8 +411,8 @@ describe('MailboxOrganizationTools', () => {
   });
 
   describe('markEmailUnread', () => {
-    it('calls markEmailRead(id, false)', () => {
-      const result = tools.markEmailUnread({ email_id: 1 });
+    it('calls markEmailRead(id, false)', async () => {
+      const result = await tools.markEmailUnread({ email_id: 1 });
 
       expect(result.success).toBe(true);
       expect(result.message).toContain('unread');
@@ -444,8 +421,8 @@ describe('MailboxOrganizationTools', () => {
   });
 
   describe('setEmailFlag', () => {
-    it('calls setEmailFlag with correct status', () => {
-      const result = tools.setEmailFlag({ email_id: 1, flag_status: 1 });
+    it('calls setEmailFlag with correct status', async () => {
+      const result = await tools.setEmailFlag({ email_id: 1, flag_status: 1 });
 
       expect(result.success).toBe(true);
       expect(repo.setEmailFlag).toHaveBeenCalledWith(1, 1);
@@ -453,8 +430,8 @@ describe('MailboxOrganizationTools', () => {
   });
 
   describe('clearEmailFlag', () => {
-    it('calls setEmailFlag with 0', () => {
-      const result = tools.clearEmailFlag({ email_id: 1 });
+    it('calls setEmailFlag with 0', async () => {
+      const result = await tools.clearEmailFlag({ email_id: 1 });
 
       expect(result.success).toBe(true);
       expect(repo.setEmailFlag).toHaveBeenCalledWith(1, 0);
@@ -462,9 +439,9 @@ describe('MailboxOrganizationTools', () => {
   });
 
   describe('setEmailCategories', () => {
-    it('calls setEmailCategories with categories', () => {
+    it('calls setEmailCategories with categories', async () => {
       const categories = ['Important', 'Work'];
-      const result = tools.setEmailCategories({ email_id: 1, categories });
+      const result = await tools.setEmailCategories({ email_id: 1, categories });
 
       expect(result.success).toBe(true);
       expect(repo.setEmailCategories).toHaveBeenCalledWith(1, ['Important', 'Work']);
@@ -476,7 +453,7 @@ describe('MailboxOrganizationTools', () => {
   // ===========================================================================
 
   describe('createFolder', () => {
-    it('calls createFolder and returns preview', () => {
+    it('calls createFolder and returns preview', async () => {
       const newFolder = makeFolderRow({
         id: 30,
         name: 'My New Folder',
@@ -485,7 +462,7 @@ describe('MailboxOrganizationTools', () => {
       });
       (repo.createFolder as ReturnType<typeof vi.fn>).mockReturnValue(newFolder);
 
-      const result = tools.createFolder({ name: 'My New Folder' });
+      const result = await tools.createFolder({ name: 'My New Folder' });
 
       expect(result.success).toBe(true);
       expect(result.folder.id).toBe(30);
@@ -494,19 +471,19 @@ describe('MailboxOrganizationTools', () => {
       expect(repo.createFolder).toHaveBeenCalledWith('My New Folder', undefined);
     });
 
-    it('passes parent_folder_id when provided', () => {
+    it('passes parent_folder_id when provided', async () => {
       const newFolder = makeFolderRow({ id: 31, name: 'Subfolder', parentId: 10 });
       (repo.createFolder as ReturnType<typeof vi.fn>).mockReturnValue(newFolder);
 
-      tools.createFolder({ name: 'Subfolder', parent_folder_id: 10 });
+      await tools.createFolder({ name: 'Subfolder', parent_folder_id: 10 });
 
       expect(repo.createFolder).toHaveBeenCalledWith('Subfolder', 10);
     });
   });
 
   describe('renameFolder', () => {
-    it('calls renameFolder', () => {
-      const result = tools.renameFolder({ folder_id: 10, new_name: 'Renamed Inbox' });
+    it('calls renameFolder', async () => {
+      const result = await tools.renameFolder({ folder_id: 10, new_name: 'Renamed Inbox' });
 
       expect(result.success).toBe(true);
       expect(result.message).toContain('Renamed Inbox');
@@ -515,8 +492,8 @@ describe('MailboxOrganizationTools', () => {
   });
 
   describe('moveFolder', () => {
-    it('calls moveFolder', () => {
-      const result = tools.moveFolder({ folder_id: 10, destination_parent_id: 20 });
+    it('calls moveFolder', async () => {
+      const result = await tools.moveFolder({ folder_id: 10, destination_parent_id: 20 });
 
       expect(result.success).toBe(true);
       expect(repo.moveFolder).toHaveBeenCalledWith(10, 20);
@@ -528,95 +505,95 @@ describe('MailboxOrganizationTools', () => {
   // ===========================================================================
 
   describe('error handling', () => {
-    it('prepareDeleteEmail throws NotFoundError for missing email', () => {
-      expect(() => tools.prepareDeleteEmail({ email_id: 999 })).toThrow(NotFoundError);
+    it('prepareDeleteEmail throws NotFoundError for missing email', async () => {
+      await expect(tools.prepareDeleteEmail({ email_id: 999 })).rejects.toThrow(NotFoundError);
     });
 
-    it('prepareMoveEmail throws NotFoundError for missing email', () => {
-      expect(() =>
+    it('prepareMoveEmail throws NotFoundError for missing email', async () => {
+      await expect(
         tools.prepareMoveEmail({ email_id: 999, destination_folder_id: 20 })
-      ).toThrow(NotFoundError);
+      ).rejects.toThrow(NotFoundError);
     });
 
-    it('prepareMoveEmail throws NotFoundError for missing destination folder', () => {
-      expect(() =>
+    it('prepareMoveEmail throws NotFoundError for missing destination folder', async () => {
+      await expect(
         tools.prepareMoveEmail({ email_id: 1, destination_folder_id: 999 })
-      ).toThrow(NotFoundError);
+      ).rejects.toThrow(NotFoundError);
     });
 
-    it('prepareArchiveEmail throws NotFoundError for missing email', () => {
-      expect(() => tools.prepareArchiveEmail({ email_id: 999 })).toThrow(NotFoundError);
+    it('prepareArchiveEmail throws NotFoundError for missing email', async () => {
+      await expect(tools.prepareArchiveEmail({ email_id: 999 })).rejects.toThrow(NotFoundError);
     });
 
-    it('prepareJunkEmail throws NotFoundError for missing email', () => {
-      expect(() => tools.prepareJunkEmail({ email_id: 999 })).toThrow(NotFoundError);
+    it('prepareJunkEmail throws NotFoundError for missing email', async () => {
+      await expect(tools.prepareJunkEmail({ email_id: 999 })).rejects.toThrow(NotFoundError);
     });
 
-    it('prepareDeleteFolder throws NotFoundError for missing folder', () => {
-      expect(() => tools.prepareDeleteFolder({ folder_id: 999 })).toThrow(NotFoundError);
+    it('prepareDeleteFolder throws NotFoundError for missing folder', async () => {
+      await expect(tools.prepareDeleteFolder({ folder_id: 999 })).rejects.toThrow(NotFoundError);
     });
 
-    it('prepareEmptyFolder throws NotFoundError for missing folder', () => {
-      expect(() => tools.prepareEmptyFolder({ folder_id: 999 })).toThrow(NotFoundError);
+    it('prepareEmptyFolder throws NotFoundError for missing folder', async () => {
+      await expect(tools.prepareEmptyFolder({ folder_id: 999 })).rejects.toThrow(NotFoundError);
     });
 
-    it('markEmailRead throws NotFoundError for missing email', () => {
-      expect(() => tools.markEmailRead({ email_id: 999 })).toThrow(NotFoundError);
+    it('markEmailRead throws NotFoundError for missing email', async () => {
+      await expect(tools.markEmailRead({ email_id: 999 })).rejects.toThrow(NotFoundError);
     });
 
-    it('markEmailUnread throws NotFoundError for missing email', () => {
-      expect(() => tools.markEmailUnread({ email_id: 999 })).toThrow(NotFoundError);
+    it('markEmailUnread throws NotFoundError for missing email', async () => {
+      await expect(tools.markEmailUnread({ email_id: 999 })).rejects.toThrow(NotFoundError);
     });
 
-    it('setEmailFlag throws NotFoundError for missing email', () => {
-      expect(() => tools.setEmailFlag({ email_id: 999, flag_status: 1 })).toThrow(NotFoundError);
+    it('setEmailFlag throws NotFoundError for missing email', async () => {
+      await expect(tools.setEmailFlag({ email_id: 999, flag_status: 1 })).rejects.toThrow(NotFoundError);
     });
 
-    it('clearEmailFlag throws NotFoundError for missing email', () => {
-      expect(() => tools.clearEmailFlag({ email_id: 999 })).toThrow(NotFoundError);
+    it('clearEmailFlag throws NotFoundError for missing email', async () => {
+      await expect(tools.clearEmailFlag({ email_id: 999 })).rejects.toThrow(NotFoundError);
     });
 
-    it('setEmailCategories throws NotFoundError for missing email', () => {
-      expect(() =>
+    it('setEmailCategories throws NotFoundError for missing email', async () => {
+      await expect(
         tools.setEmailCategories({ email_id: 999, categories: ['Work'] })
-      ).toThrow(NotFoundError);
+      ).rejects.toThrow(NotFoundError);
     });
 
-    it('renameFolder throws NotFoundError for missing folder', () => {
-      expect(() =>
+    it('renameFolder throws NotFoundError for missing folder', async () => {
+      await expect(
         tools.renameFolder({ folder_id: 999, new_name: 'New Name' })
-      ).toThrow(NotFoundError);
+      ).rejects.toThrow(NotFoundError);
     });
 
-    it('moveFolder throws NotFoundError for missing source folder', () => {
-      expect(() =>
+    it('moveFolder throws NotFoundError for missing source folder', async () => {
+      await expect(
         tools.moveFolder({ folder_id: 999, destination_parent_id: 20 })
-      ).toThrow(NotFoundError);
+      ).rejects.toThrow(NotFoundError);
     });
 
-    it('moveFolder throws NotFoundError for missing destination folder', () => {
-      expect(() =>
+    it('moveFolder throws NotFoundError for missing destination folder', async () => {
+      await expect(
         tools.moveFolder({ folder_id: 10, destination_parent_id: 999 })
-      ).toThrow(NotFoundError);
+      ).rejects.toThrow(NotFoundError);
     });
 
-    it('token cannot be reused (one-time use)', () => {
-      const prepared = tools.prepareDeleteEmail({ email_id: 1 });
+    it('token cannot be reused (one-time use)', async () => {
+      const prepared = await tools.prepareDeleteEmail({ email_id: 1 });
 
       // First confirm succeeds
-      const result = tools.confirmDeleteEmail({
+      const result = await tools.confirmDeleteEmail({
         token_id: prepared.token_id,
         email_id: 1,
       });
       expect(result.success).toBe(true);
 
       // Second confirm with the same token fails
-      expect(() =>
+      await expect(
         tools.confirmDeleteEmail({
           token_id: prepared.token_id,
           email_id: 1,
         })
-      ).toThrow(ApprovalInvalidError);
+      ).rejects.toThrow(ApprovalInvalidError);
     });
   });
 

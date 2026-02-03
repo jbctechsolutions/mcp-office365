@@ -6,7 +6,7 @@
  */
 
 import { z } from 'zod';
-import type { IWriteableRepository, EmailRow, FolderRow } from '../database/repository.js';
+import type { IMailboxRepository, EmailRow, FolderRow } from '../database/repository.js';
 import {
   ApprovalTokenManager,
   hashEmailForApproval,
@@ -298,12 +298,12 @@ function throwValidationError(error: ValidationErrorReason): never {
 /**
  * Mailbox organization tools with two-phase approval for destructive ops.
  *
- * Used in AppleScript (sync) mode. Graph API mode handles these
- * operations directly in the tool call handler with async methods.
+ * Works with both sync (AppleScript) and async (Graph) backends via
+ * the IMailboxRepository interface and MaybePromise return types.
  */
 export class MailboxOrganizationTools {
   constructor(
-    private readonly repository: IWriteableRepository,
+    private readonly repository: IMailboxRepository,
     private readonly tokenManager: ApprovalTokenManager
   ) {}
 
@@ -311,8 +311,8 @@ export class MailboxOrganizationTools {
   // Prepare Methods (Destructive — Phase 1)
   // ---------------------------------------------------------------------------
 
-  prepareDeleteEmail(params: PrepareDeleteEmailParams) {
-    const email = this.requireEmail(params.email_id);
+  async prepareDeleteEmail(params: PrepareDeleteEmailParams) {
+    const email = await this.requireEmail(params.email_id);
     const hash = hashEmailForApproval(email);
     const token = this.tokenManager.generateToken({
       operation: 'delete_email',
@@ -329,9 +329,9 @@ export class MailboxOrganizationTools {
     };
   }
 
-  prepareMoveEmail(params: PrepareMoveEmailParams) {
-    const email = this.requireEmail(params.email_id);
-    const destFolder = this.requireFolder(params.destination_folder_id);
+  async prepareMoveEmail(params: PrepareMoveEmailParams) {
+    const email = await this.requireEmail(params.email_id);
+    const destFolder = await this.requireFolder(params.destination_folder_id);
     const hash = hashEmailForApproval(email);
     const token = this.tokenManager.generateToken({
       operation: 'move_email',
@@ -350,8 +350,8 @@ export class MailboxOrganizationTools {
     };
   }
 
-  prepareArchiveEmail(params: PrepareArchiveEmailParams) {
-    const email = this.requireEmail(params.email_id);
+  async prepareArchiveEmail(params: PrepareArchiveEmailParams) {
+    const email = await this.requireEmail(params.email_id);
     const hash = hashEmailForApproval(email);
     const token = this.tokenManager.generateToken({
       operation: 'archive_email',
@@ -368,8 +368,8 @@ export class MailboxOrganizationTools {
     };
   }
 
-  prepareJunkEmail(params: PrepareJunkEmailParams) {
-    const email = this.requireEmail(params.email_id);
+  async prepareJunkEmail(params: PrepareJunkEmailParams) {
+    const email = await this.requireEmail(params.email_id);
     const hash = hashEmailForApproval(email);
     const token = this.tokenManager.generateToken({
       operation: 'junk_email',
@@ -386,8 +386,8 @@ export class MailboxOrganizationTools {
     };
   }
 
-  prepareDeleteFolder(params: PrepareDeleteFolderParams) {
-    const folder = this.requireFolder(params.folder_id);
+  async prepareDeleteFolder(params: PrepareDeleteFolderParams) {
+    const folder = await this.requireFolder(params.folder_id);
     const hash = hashFolderForApproval(folder);
     const token = this.tokenManager.generateToken({
       operation: 'delete_folder',
@@ -404,8 +404,8 @@ export class MailboxOrganizationTools {
     };
   }
 
-  prepareEmptyFolder(params: PrepareEmptyFolderParams) {
-    const folder = this.requireFolder(params.folder_id);
+  async prepareEmptyFolder(params: PrepareEmptyFolderParams) {
+    const folder = await this.requireFolder(params.folder_id);
     const hash = hashFolderForApproval(folder);
     const token = this.tokenManager.generateToken({
       operation: 'empty_folder',
@@ -422,9 +422,10 @@ export class MailboxOrganizationTools {
     };
   }
 
-  prepareBatchDeleteEmails(params: PrepareBatchDeleteEmailsParams) {
-    const tokens = params.email_ids.map((emailId) => {
-      const email = this.requireEmail(emailId);
+  async prepareBatchDeleteEmails(params: PrepareBatchDeleteEmailsParams) {
+    const tokens = [];
+    for (const emailId of params.email_ids) {
+      const email = await this.requireEmail(emailId);
       const hash = hashEmailForApproval(email);
       const token = this.tokenManager.generateToken({
         operation: 'batch_delete_emails',
@@ -432,11 +433,11 @@ export class MailboxOrganizationTools {
         targetId: email.id,
         targetHash: hash,
       });
-      return {
+      tokens.push({
         token_id: token.tokenId,
         email: emailPreview(email),
-      };
-    });
+      });
+    }
 
     const firstToken = this.tokenManager.validateToken(
       tokens[0]!.token_id,
@@ -453,11 +454,12 @@ export class MailboxOrganizationTools {
     };
   }
 
-  prepareBatchMoveEmails(params: PrepareBatchMoveEmailsParams) {
-    const destFolder = this.requireFolder(params.destination_folder_id);
+  async prepareBatchMoveEmails(params: PrepareBatchMoveEmailsParams) {
+    const destFolder = await this.requireFolder(params.destination_folder_id);
 
-    const tokens = params.email_ids.map((emailId) => {
-      const email = this.requireEmail(emailId);
+    const tokens = [];
+    for (const emailId of params.email_ids) {
+      const email = await this.requireEmail(emailId);
       const hash = hashEmailForApproval(email);
       const token = this.tokenManager.generateToken({
         operation: 'batch_move_emails',
@@ -466,11 +468,11 @@ export class MailboxOrganizationTools {
         targetHash: hash,
         metadata: { destinationFolderId: destFolder.id },
       });
-      return {
+      tokens.push({
         token_id: token.tokenId,
         email: emailPreview(email),
-      };
-    });
+      });
+    }
 
     const firstToken = this.tokenManager.validateToken(
       tokens[0]!.token_id,
@@ -492,45 +494,46 @@ export class MailboxOrganizationTools {
   // Confirm Methods (Destructive — Phase 2)
   // ---------------------------------------------------------------------------
 
-  confirmDeleteEmail(params: ConfirmDeleteEmailParams) {
-    this.consumeAndVerifyEmail(params.token_id, 'delete_email', params.email_id);
-    this.repository.deleteEmail(params.email_id);
+  async confirmDeleteEmail(params: ConfirmDeleteEmailParams) {
+    await this.consumeAndVerifyEmail(params.token_id, 'delete_email', params.email_id);
+    await this.repository.deleteEmail(params.email_id);
     return { success: true, message: 'Email moved to Deleted Items.' };
   }
 
-  confirmMoveEmail(params: ConfirmMoveEmailParams) {
-    const token = this.consumeAndVerifyEmail(params.token_id, 'move_email', params.email_id);
+  async confirmMoveEmail(params: ConfirmMoveEmailParams) {
+    const token = await this.consumeAndVerifyEmail(params.token_id, 'move_email', params.email_id);
     const destFolderId = token.metadata['destinationFolderId'] as number;
-    this.repository.moveEmail(params.email_id, destFolderId);
+    await this.repository.moveEmail(params.email_id, destFolderId);
     return { success: true, message: 'Email moved successfully.' };
   }
 
-  confirmArchiveEmail(params: ConfirmArchiveEmailParams) {
-    this.consumeAndVerifyEmail(params.token_id, 'archive_email', params.email_id);
-    this.repository.archiveEmail(params.email_id);
+  async confirmArchiveEmail(params: ConfirmArchiveEmailParams) {
+    await this.consumeAndVerifyEmail(params.token_id, 'archive_email', params.email_id);
+    await this.repository.archiveEmail(params.email_id);
     return { success: true, message: 'Email moved to Archive.' };
   }
 
-  confirmJunkEmail(params: ConfirmJunkEmailParams) {
-    this.consumeAndVerifyEmail(params.token_id, 'junk_email', params.email_id);
-    this.repository.junkEmail(params.email_id);
+  async confirmJunkEmail(params: ConfirmJunkEmailParams) {
+    await this.consumeAndVerifyEmail(params.token_id, 'junk_email', params.email_id);
+    await this.repository.junkEmail(params.email_id);
     return { success: true, message: 'Email moved to Junk.' };
   }
 
-  confirmDeleteFolder(params: ConfirmDeleteFolderParams) {
-    this.consumeAndVerifyFolder(params.token_id, 'delete_folder', params.folder_id);
-    this.repository.deleteFolder(params.folder_id);
+  async confirmDeleteFolder(params: ConfirmDeleteFolderParams) {
+    await this.consumeAndVerifyFolder(params.token_id, 'delete_folder', params.folder_id);
+    await this.repository.deleteFolder(params.folder_id);
     return { success: true, message: 'Folder deleted.' };
   }
 
-  confirmEmptyFolder(params: ConfirmEmptyFolderParams) {
-    this.consumeAndVerifyFolder(params.token_id, 'empty_folder', params.folder_id);
-    this.repository.emptyFolder(params.folder_id);
+  async confirmEmptyFolder(params: ConfirmEmptyFolderParams) {
+    await this.consumeAndVerifyFolder(params.token_id, 'empty_folder', params.folder_id);
+    await this.repository.emptyFolder(params.folder_id);
     return { success: true, message: 'Folder emptied.' };
   }
 
-  confirmBatchOperation(params: ConfirmBatchOperationParams) {
-    const results = params.tokens.map(({ token_id, email_id }) => {
+  async confirmBatchOperation(params: ConfirmBatchOperationParams) {
+    const results = [];
+    for (const { token_id, email_id } of params.tokens) {
       try {
         // Peek at the token to determine the operation type
         const peekResult = this.tokenManager.validateToken(token_id, 'batch_delete_emails', email_id);
@@ -551,21 +554,21 @@ export class MailboxOrganizationTools {
           operation = 'batch_delete_emails';
         }
 
-        const token = this.consumeAndVerifyEmail(token_id, operation, email_id);
+        const token = await this.consumeAndVerifyEmail(token_id, operation, email_id);
 
         if (operation === 'batch_delete_emails') {
-          this.repository.deleteEmail(email_id);
+          await this.repository.deleteEmail(email_id);
         } else {
           const destFolderId = token.metadata['destinationFolderId'] as number;
-          this.repository.moveEmail(email_id, destFolderId);
+          await this.repository.moveEmail(email_id, destFolderId);
         }
 
-        return { email_id, success: true as const };
+        results.push({ email_id, success: true as const });
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Unknown error';
-        return { email_id, success: false as const, error: message };
+        results.push({ email_id, success: false as const, error: message });
       }
-    });
+    }
 
     const succeeded = results.filter((r) => r.success).length;
     const failed = results.filter((r) => !r.success).length;
@@ -580,33 +583,33 @@ export class MailboxOrganizationTools {
   // Low-Risk Modifications (Single Tool)
   // ---------------------------------------------------------------------------
 
-  markEmailRead(params: MarkEmailReadParams) {
-    this.requireEmail(params.email_id);
-    this.repository.markEmailRead(params.email_id, true);
+  async markEmailRead(params: MarkEmailReadParams) {
+    await this.requireEmail(params.email_id);
+    await this.repository.markEmailRead(params.email_id, true);
     return { success: true, message: 'Email marked as read.' };
   }
 
-  markEmailUnread(params: MarkEmailUnreadParams) {
-    this.requireEmail(params.email_id);
-    this.repository.markEmailRead(params.email_id, false);
+  async markEmailUnread(params: MarkEmailUnreadParams) {
+    await this.requireEmail(params.email_id);
+    await this.repository.markEmailRead(params.email_id, false);
     return { success: true, message: 'Email marked as unread.' };
   }
 
-  setEmailFlag(params: SetEmailFlagParams) {
-    this.requireEmail(params.email_id);
-    this.repository.setEmailFlag(params.email_id, params.flag_status);
+  async setEmailFlag(params: SetEmailFlagParams) {
+    await this.requireEmail(params.email_id);
+    await this.repository.setEmailFlag(params.email_id, params.flag_status);
     return { success: true, message: 'Email flag updated.' };
   }
 
-  clearEmailFlag(params: ClearEmailFlagParams) {
-    this.requireEmail(params.email_id);
-    this.repository.setEmailFlag(params.email_id, 0);
+  async clearEmailFlag(params: ClearEmailFlagParams) {
+    await this.requireEmail(params.email_id);
+    await this.repository.setEmailFlag(params.email_id, 0);
     return { success: true, message: 'Email flag cleared.' };
   }
 
-  setEmailCategories(params: SetEmailCategoriesParams) {
-    this.requireEmail(params.email_id);
-    this.repository.setEmailCategories(params.email_id, params.categories);
+  async setEmailCategories(params: SetEmailCategoriesParams) {
+    await this.requireEmail(params.email_id);
+    await this.repository.setEmailCategories(params.email_id, params.categories);
     return { success: true, message: 'Email categories updated.' };
   }
 
@@ -614,21 +617,21 @@ export class MailboxOrganizationTools {
   // Non-Destructive Operations
   // ---------------------------------------------------------------------------
 
-  createFolder(params: CreateFolderParams) {
-    const newFolder = this.repository.createFolder(params.name, params.parent_folder_id);
+  async createFolder(params: CreateFolderParams) {
+    const newFolder = await this.repository.createFolder(params.name, params.parent_folder_id);
     return { success: true, folder: folderPreview(newFolder) };
   }
 
-  renameFolder(params: RenameFolderParams) {
-    this.requireFolder(params.folder_id);
-    this.repository.renameFolder(params.folder_id, params.new_name);
+  async renameFolder(params: RenameFolderParams) {
+    await this.requireFolder(params.folder_id);
+    await this.repository.renameFolder(params.folder_id, params.new_name);
     return { success: true, message: `Folder renamed to "${params.new_name}".` };
   }
 
-  moveFolder(params: MoveFolderParams) {
-    this.requireFolder(params.folder_id);
-    this.requireFolder(params.destination_parent_id);
-    this.repository.moveFolder(params.folder_id, params.destination_parent_id);
+  async moveFolder(params: MoveFolderParams) {
+    await this.requireFolder(params.folder_id);
+    await this.requireFolder(params.destination_parent_id);
+    await this.repository.moveFolder(params.folder_id, params.destination_parent_id);
     return { success: true, message: 'Folder moved.' };
   }
 
@@ -636,16 +639,16 @@ export class MailboxOrganizationTools {
   // Private Helpers
   // ---------------------------------------------------------------------------
 
-  private requireEmail(emailId: number): EmailRow {
-    const email = this.repository.getEmail(emailId);
+  private async requireEmail(emailId: number): Promise<EmailRow> {
+    const email = await this.repository.getEmail(emailId);
     if (email == null) {
       throw new NotFoundError('Email', emailId);
     }
     return email;
   }
 
-  private requireFolder(folderId: number): FolderRow {
-    const folder = this.repository.getFolder(folderId);
+  private async requireFolder(folderId: number): Promise<FolderRow> {
+    const folder = await this.repository.getFolder(folderId);
     if (folder == null) {
       throw new NotFoundError('Folder', folderId);
     }
@@ -656,7 +659,7 @@ export class MailboxOrganizationTools {
    * Consumes a token and verifies the email hasn't changed.
    * Returns the consumed token for metadata access.
    */
-  private consumeAndVerifyEmail(
+  private async consumeAndVerifyEmail(
     tokenId: string,
     operation: OperationType,
     emailId: number
@@ -667,7 +670,7 @@ export class MailboxOrganizationTools {
     }
 
     const token = result.token!;
-    const email = this.requireEmail(emailId);
+    const email = await this.requireEmail(emailId);
     const currentHash = hashEmailForApproval(email);
 
     if (currentHash !== token.targetHash) {
@@ -680,18 +683,18 @@ export class MailboxOrganizationTools {
   /**
    * Consumes a token and verifies the folder hasn't changed.
    */
-  private consumeAndVerifyFolder(
+  private async consumeAndVerifyFolder(
     tokenId: string,
     operation: OperationType,
     folderId: number
-  ): void {
+  ): Promise<void> {
     const result = this.tokenManager.consumeToken(tokenId, operation, folderId);
     if (!result.valid) {
       throwValidationError(result.error!);
     }
 
     const token = result.token!;
-    const folder = this.requireFolder(folderId);
+    const folder = await this.requireFolder(folderId);
     const currentHash = hashFolderForApproval(folder);
 
     if (currentHash !== token.targetHash) {
@@ -704,7 +707,7 @@ export class MailboxOrganizationTools {
  * Creates mailbox organization tools with the given repository and token manager.
  */
 export function createMailboxOrganizationTools(
-  repository: IWriteableRepository,
+  repository: IMailboxRepository,
   tokenManager: ApprovalTokenManager
 ): MailboxOrganizationTools {
   return new MailboxOrganizationTools(repository, tokenManager);
