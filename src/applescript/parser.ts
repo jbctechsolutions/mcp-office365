@@ -111,6 +111,18 @@ export interface AppleScriptNoteRow {
   readonly plainContent: string | null;
 }
 
+export interface AppleScriptAccountRow {
+  readonly id: number;
+  readonly name: string | null;
+  readonly email: string | null;
+  readonly type: string;
+}
+
+export interface AppleScriptFolderWithAccountRow extends AppleScriptFolderRow {
+  readonly accountId: number;
+  readonly messageCount: number;
+}
+
 // =============================================================================
 // Core Parsing Functions
 // =============================================================================
@@ -405,4 +417,47 @@ export function parseCount(output: string): number {
   const trimmed = output.trim();
   const num = parseInt(trimmed, 10);
   return isNaN(num) ? 0 : num;
+}
+
+/**
+ * Parses account list output from AppleScript.
+ */
+export function parseAccounts(output: string): AppleScriptAccountRow[] {
+  const records = parseRawOutput(output);
+  return records.map((r) => ({
+    id: parseNumber(r['id']),
+    name: parseString(r['name']),
+    email: parseString(r['email']),
+    type: r['type'] ?? 'exchange',
+  }));
+}
+
+/**
+ * Parses default account output from AppleScript.
+ * Returns the account ID or null if not found.
+ */
+export function parseDefaultAccountId(output: string): number | null {
+  const trimmed = output.trim();
+  if (trimmed.startsWith('error')) {
+    return null;
+  }
+  const parts = trimmed.split(DELIMITERS.EQUALS);
+  if (parts[0] === 'id' && parts[1] !== undefined) {
+    return parseNumberOrNull(parts[1]);
+  }
+  return null;
+}
+
+/**
+ * Parses folders with account information from AppleScript.
+ */
+export function parseFoldersWithAccount(output: string): AppleScriptFolderWithAccountRow[] {
+  const records = parseRawOutput(output);
+  return records.map((r) => ({
+    id: parseNumber(r['id']),
+    name: parseString(r['name']),
+    unreadCount: parseNumber(r['unreadCount']),
+    messageCount: parseNumber(r['messageCount']),
+    accountId: parseNumber(r['accountId']),
+  }));
 }

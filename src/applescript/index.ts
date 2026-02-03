@@ -36,6 +36,9 @@ export {
   parseNotes,
   parseNote,
   parseCount,
+  parseAccounts,
+  parseDefaultAccountId,
+  parseFoldersWithAccount,
   type AppleScriptFolderRow,
   type AppleScriptEmailRow,
   type AppleScriptCalendarRow,
@@ -43,6 +46,8 @@ export {
   type AppleScriptContactRow,
   type AppleScriptTaskRow,
   type AppleScriptNoteRow,
+  type AppleScriptAccountRow,
+  type AppleScriptFolderWithAccountRow,
 } from './parser.js';
 
 // Repository
@@ -50,6 +55,13 @@ export {
   AppleScriptRepository,
   createAppleScriptRepository,
 } from './repository.js';
+
+// Account Repository
+export {
+  AccountRepository,
+  createAccountRepository,
+  type IAccountRepository,
+} from './account-repository.js';
 
 // Content Readers
 export {

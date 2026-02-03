@@ -41,10 +41,11 @@ describe('MCP Client E2E', () => {
       // Verify tools were returned
       expect(result.tools).toBeDefined();
       expect(Array.isArray(result.tools)).toBe(true);
-      expect(result.tools.length).toBe(18);
+      expect(result.tools.length).toBe(19);
 
       // Verify specific tools exist
       const toolNames = result.tools.map((t) => t.name);
+      expect(toolNames).toContain('list_accounts');
       expect(toolNames).toContain('list_folders');
       expect(toolNames).toContain('list_emails');
       expect(toolNames).toContain('search_emails');
