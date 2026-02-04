@@ -17,6 +17,10 @@ import {
   parseNotes,
   parseNote,
   parseCount,
+  parseRespondToEventResult,
+  parseDeleteEventResult,
+  parseUpdateEventResult,
+  parseSendEmailResult,
 } from '../../../src/applescript/parser.js';
 import { DELIMITERS } from '../../../src/applescript/scripts.js';
 
@@ -233,6 +237,132 @@ describe('AppleScript Parser', () => {
     it('should return 0 for invalid input', () => {
       expect(parseCount('')).toBe(0);
       expect(parseCount('abc')).toBe(0);
+    });
+  });
+
+  describe('parseRespondToEventResult', () => {
+    it('should parse successful response', () => {
+      const output = `${DELIMITERS.RECORD}success${DELIMITERS.EQUALS}true${DELIMITERS.FIELD}eventId${DELIMITERS.EQUALS}123`;
+      const result = parseRespondToEventResult(output);
+      expect(result).toEqual({ success: true, eventId: 123 });
+    });
+
+    it('should parse failure response', () => {
+      const output = `${DELIMITERS.RECORD}success${DELIMITERS.EQUALS}false${DELIMITERS.FIELD}error${DELIMITERS.EQUALS}Permission denied`;
+      const result = parseRespondToEventResult(output);
+      expect(result).toEqual({ success: false, error: 'Permission denied' });
+    });
+
+    it('should handle empty output', () => {
+      const result = parseRespondToEventResult('');
+      expect(result).toBeNull();
+    });
+  });
+
+  describe('parseDeleteEventResult', () => {
+    it('should parse successful delete', () => {
+      const output = `${DELIMITERS.RECORD}success${DELIMITERS.EQUALS}true${DELIMITERS.FIELD}eventId${DELIMITERS.EQUALS}123`;
+      const result = parseDeleteEventResult(output);
+      expect(result).toEqual({ success: true, eventId: 123 });
+    });
+
+    it('should parse failure', () => {
+      const output = `${DELIMITERS.RECORD}success${DELIMITERS.EQUALS}false${DELIMITERS.FIELD}error${DELIMITERS.EQUALS}Event not found`;
+      const result = parseDeleteEventResult(output);
+      expect(result).toEqual({ success: false, error: 'Event not found' });
+    });
+
+    it('should handle empty output', () => {
+      const result = parseDeleteEventResult('');
+      expect(result).toBeNull();
+    });
+  });
+
+  describe('parseUpdateEventResult', () => {
+    it('should parse successful update with multiple fields', () => {
+      const output = `${DELIMITERS.RECORD}success${DELIMITERS.EQUALS}true${DELIMITERS.FIELD}eventId${DELIMITERS.EQUALS}123${DELIMITERS.FIELD}updatedFields${DELIMITERS.EQUALS}title,location,description`;
+      const result = parseUpdateEventResult(output);
+      expect(result).toEqual({
+        success: true,
+        id: 123,
+        updatedFields: ['title', 'location', 'description'],
+      });
+    });
+
+    it('should parse successful update with single field', () => {
+      const output = `${DELIMITERS.RECORD}success${DELIMITERS.EQUALS}true${DELIMITERS.FIELD}eventId${DELIMITERS.EQUALS}456${DELIMITERS.FIELD}updatedFields${DELIMITERS.EQUALS}title`;
+      const result = parseUpdateEventResult(output);
+      expect(result).toEqual({
+        success: true,
+        id: 456,
+        updatedFields: ['title'],
+      });
+    });
+
+    it('should parse successful update with no fields', () => {
+      const output = `${DELIMITERS.RECORD}success${DELIMITERS.EQUALS}true${DELIMITERS.FIELD}eventId${DELIMITERS.EQUALS}789${DELIMITERS.FIELD}updatedFields${DELIMITERS.EQUALS}`;
+      const result = parseUpdateEventResult(output);
+      expect(result).toEqual({
+        success: true,
+        id: 789,
+        updatedFields: [],
+      });
+    });
+
+    it('should parse failure', () => {
+      const output = `${DELIMITERS.RECORD}success${DELIMITERS.EQUALS}false${DELIMITERS.FIELD}error${DELIMITERS.EQUALS}Event not found`;
+      const result = parseUpdateEventResult(output);
+      expect(result).toEqual({ success: false, error: 'Event not found' });
+    });
+
+    it('should parse failure with missing error field', () => {
+      const output = `${DELIMITERS.RECORD}success${DELIMITERS.EQUALS}false`;
+      const result = parseUpdateEventResult(output);
+      expect(result).toEqual({ success: false, error: 'Unknown error' });
+    });
+
+    it('should handle empty output', () => {
+      const result = parseUpdateEventResult('');
+      expect(result).toBeNull();
+    });
+
+    it('should handle missing record', () => {
+      const result = parseUpdateEventResult('invalid');
+      expect(result).toBeNull();
+    });
+  });
+
+  describe('parseSendEmailResult', () => {
+    it('should parse successful send', () => {
+      const output = `${DELIMITERS.RECORD}success${DELIMITERS.EQUALS}true${DELIMITERS.FIELD}messageId${DELIMITERS.EQUALS}12345${DELIMITERS.FIELD}sentAt${DELIMITERS.EQUALS}2024-01-15T10:30:00Z`;
+      const result = parseSendEmailResult(output);
+      expect(result).toEqual({
+        success: true,
+        messageId: '12345',
+        sentAt: '2024-01-15T10:30:00Z',
+      });
+    });
+
+    it('should parse failure', () => {
+      const output = `${DELIMITERS.RECORD}success${DELIMITERS.EQUALS}false${DELIMITERS.FIELD}error${DELIMITERS.EQUALS}Recipient not found`;
+      const result = parseSendEmailResult(output);
+      expect(result).toEqual({ success: false, error: 'Recipient not found' });
+    });
+
+    it('should parse failure with missing error field', () => {
+      const output = `${DELIMITERS.RECORD}success${DELIMITERS.EQUALS}false`;
+      const result = parseSendEmailResult(output);
+      expect(result).toEqual({ success: false, error: 'Unknown error' });
+    });
+
+    it('should handle empty output', () => {
+      const result = parseSendEmailResult('');
+      expect(result).toBeNull();
+    });
+
+    it('should handle missing record', () => {
+      const result = parseSendEmailResult('invalid');
+      expect(result).toBeNull();
     });
   });
 });

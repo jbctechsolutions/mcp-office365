@@ -111,6 +111,18 @@ export interface AppleScriptNoteRow {
   readonly plainContent: string | null;
 }
 
+export interface RespondToEventResult {
+  readonly success: boolean;
+  readonly eventId?: number;
+  readonly error?: string;
+}
+
+export interface DeleteEventResult {
+  readonly success: boolean;
+  readonly eventId?: number;
+  readonly error?: string;
+}
+
 export interface AppleScriptAccountRow {
   readonly id: number;
   readonly name: string | null;
@@ -476,4 +488,123 @@ export function parseFoldersWithAccount(output: string): AppleScriptFolderWithAc
     messageCount: parseNumber(r['messageCount']),
     accountId: parseNumber(r['accountId']),
   }));
+}
+
+/**
+ * Parses the result of a respond-to-event operation.
+ */
+export function parseRespondToEventResult(output: string): RespondToEventResult | null {
+  const records = parseRawOutput(output);
+  if (records.length === 0) return null;
+
+  const record = records[0];
+  if (!record) return null;
+
+  const success = record['success'] === 'true';
+
+  if (success) {
+    return {
+      success: true,
+      eventId: parseNumber(record['eventId']),
+    };
+  } else {
+    return {
+      success: false,
+      error: record['error'] ?? 'Unknown error',
+    };
+  }
+}
+
+/**
+ * Parses the result of a delete-event operation.
+ */
+export function parseDeleteEventResult(output: string): DeleteEventResult | null {
+  const records = parseRawOutput(output);
+  if (records.length === 0) return null;
+
+  const record = records[0];
+  if (!record) return null;
+
+  const success = record['success'] === 'true';
+
+  if (success) {
+    return {
+      success: true,
+      eventId: parseNumber(record['eventId']),
+    };
+  } else {
+    return {
+      success: false,
+      error: record['error'] ?? 'Unknown error',
+    };
+  }
+}
+
+export interface UpdateEventResult {
+  readonly success: boolean;
+  readonly id?: number;
+  readonly updatedFields?: readonly string[];
+  readonly error?: string;
+}
+
+/**
+ * Parses the result of an update-event operation.
+ */
+export function parseUpdateEventResult(output: string): UpdateEventResult | null {
+  const records = parseRawOutput(output);
+  if (records.length === 0) return null;
+
+  const record = records[0];
+  if (!record) return null;
+
+  const success = record['success'] === 'true';
+
+  if (success) {
+    const fieldsStr = record['updatedFields'] ?? '';
+    const fields = fieldsStr.length > 0 ? fieldsStr.split(',') : [];
+
+    return {
+      success: true,
+      id: parseNumber(record['eventId']),
+      updatedFields: fields,
+    };
+  } else {
+    return {
+      success: false,
+      error: record['error'] ?? 'Unknown error',
+    };
+  }
+}
+
+export interface SendEmailResult {
+  readonly success: boolean;
+  readonly messageId?: string;
+  readonly sentAt?: string;
+  readonly error?: string;
+}
+
+/**
+ * Parses the result of a send-email operation.
+ */
+export function parseSendEmailResult(output: string): SendEmailResult | null {
+  const records = parseRawOutput(output);
+  if (records.length === 0) return null;
+
+  const record = records[0];
+  if (!record) return null;
+
+  const success = record['success'] === 'true';
+
+  if (success) {
+    return {
+      success: true,
+      messageId: record['messageId'] ?? '',
+      sentAt: record['sentAt'] ?? '',
+    };
+  } else {
+    return {
+      success: false,
+      error: record['error'] ?? 'Unknown error',
+    };
+  }
 }

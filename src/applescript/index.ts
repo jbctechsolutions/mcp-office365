@@ -39,6 +39,10 @@ export {
   parseAccounts,
   parseDefaultAccountId,
   parseFoldersWithAccount,
+  parseRespondToEventResult,
+  parseDeleteEventResult,
+  parseUpdateEventResult,
+  parseSendEmailResult,
   type AppleScriptFolderRow,
   type AppleScriptEmailRow,
   type AppleScriptCalendarRow,
@@ -48,6 +52,10 @@ export {
   type AppleScriptNoteRow,
   type AppleScriptAccountRow,
   type AppleScriptFolderWithAccountRow,
+  type RespondToEventResult,
+  type DeleteEventResult,
+  type UpdateEventResult,
+  type SendEmailResult,
 } from './parser.js';
 
 // Repository
@@ -73,6 +81,17 @@ export {
   type RecurrenceConfig,
 } from './calendar-writer.js';
 
+// Calendar Manager
+export {
+  AppleScriptCalendarManager,
+  createCalendarManager,
+  type ICalendarManager,
+  type ResponseType,
+  type ApplyToScope,
+  type EventUpdates,
+  type UpdatedEvent,
+} from './calendar-manager.js';
+
 // Content Readers
 export {
   AppleScriptEmailContentReader,
@@ -93,3 +112,13 @@ export {
   NOTE_PATH_PREFIX,
   type AppleScriptContentReaders,
 } from './content-readers.js';
+
+// Mail Sender
+export {
+  AppleScriptMailSender,
+  createMailSender,
+  type IMailSender,
+  type SendEmailParams as MailSenderSendEmailParams,
+  type SentEmail,
+  type Attachment,
+} from './mail-sender.js';

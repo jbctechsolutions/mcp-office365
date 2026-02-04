@@ -17,6 +17,9 @@ import {
   GraphRateLimitedError,
   GraphPermissionDeniedError,
   GraphError,
+  AttachmentNotFoundError,
+  MailSendError,
+  RecurringEventError,
   isOutlookMcpError,
   wrapError,
 } from '../../../src/utils/errors.js';
@@ -39,6 +42,9 @@ describe('errors', () => {
       expect(ErrorCode.GRAPH_RATE_LIMITED).toBe('GRAPH_RATE_LIMITED');
       expect(ErrorCode.GRAPH_PERMISSION_DENIED).toBe('GRAPH_PERMISSION_DENIED');
       expect(ErrorCode.GRAPH_ERROR).toBe('GRAPH_ERROR');
+      expect(ErrorCode.ATTACHMENT_NOT_FOUND).toBe('ATTACHMENT_NOT_FOUND');
+      expect(ErrorCode.MAIL_SEND_ERROR).toBe('MAIL_SEND_ERROR');
+      expect(ErrorCode.RECURRING_EVENT_ERROR).toBe('RECURRING_EVENT_ERROR');
     });
   });
 
@@ -311,6 +317,57 @@ describe('errors', () => {
       expect(isOutlookMcpError(new AppleScriptPermissionError())).toBe(true);
       expect(isOutlookMcpError(new AppleScriptTimeoutError('op'))).toBe(true);
       expect(isOutlookMcpError(new AppleScriptError('msg'))).toBe(true);
+    });
+  });
+
+  // =========================================================================
+  // Event Management and Email Errors
+  // =========================================================================
+
+  describe('AttachmentNotFoundError', () => {
+    it('creates error with file path', () => {
+      const error = new AttachmentNotFoundError('/path/to/file.pdf');
+      expect(error.code).toBe(ErrorCode.ATTACHMENT_NOT_FOUND);
+      expect(error.message).toContain('/path/to/file.pdf');
+      expect(error.message).toContain('not found');
+      expect(error.name).toBe('AttachmentNotFoundError');
+    });
+
+    it('extends OutlookMcpError', () => {
+      const error = new AttachmentNotFoundError('/path/to/file.pdf');
+      expect(error).toBeInstanceOf(OutlookMcpError);
+      expect(error).toBeInstanceOf(Error);
+    });
+  });
+
+  describe('MailSendError', () => {
+    it('creates error with reason', () => {
+      const error = new MailSendError('Network timeout');
+      expect(error.code).toBe(ErrorCode.MAIL_SEND_ERROR);
+      expect(error.message).toContain('Failed to send email');
+      expect(error.message).toContain('Network timeout');
+      expect(error.name).toBe('MailSendError');
+    });
+
+    it('extends OutlookMcpError', () => {
+      const error = new MailSendError('Test reason');
+      expect(error).toBeInstanceOf(OutlookMcpError);
+      expect(error).toBeInstanceOf(Error);
+    });
+  });
+
+  describe('RecurringEventError', () => {
+    it('creates error with custom message', () => {
+      const error = new RecurringEventError('Invalid recurrence pattern');
+      expect(error.code).toBe(ErrorCode.RECURRING_EVENT_ERROR);
+      expect(error.message).toBe('Invalid recurrence pattern');
+      expect(error.name).toBe('RecurringEventError');
+    });
+
+    it('extends OutlookMcpError', () => {
+      const error = new RecurringEventError('Test message');
+      expect(error).toBeInstanceOf(OutlookMcpError);
+      expect(error).toBeInstanceOf(Error);
     });
   });
 });

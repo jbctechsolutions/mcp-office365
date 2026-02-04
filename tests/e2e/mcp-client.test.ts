@@ -41,7 +41,7 @@ describe('MCP Client E2E', () => {
       // Verify tools were returned
       expect(result.tools).toBeDefined();
       expect(Array.isArray(result.tools)).toBe(true);
-      expect(result.tools.length).toBe(43);
+      expect(result.tools.length).toBe(44);
 
       // Verify specific tools exist
       const toolNames = result.tools.map((t) => t.name);
@@ -56,6 +56,9 @@ describe('MCP Client E2E', () => {
       expect(toolNames).toContain('get_event');
       expect(toolNames).toContain('search_events');
       expect(toolNames).toContain('create_event');
+      expect(toolNames).toContain('respond_to_event');
+      expect(toolNames).toContain('delete_event');
+      expect(toolNames).toContain('update_event');
       expect(toolNames).toContain('list_contacts');
       expect(toolNames).toContain('search_contacts');
       expect(toolNames).toContain('get_contact');
@@ -64,6 +67,7 @@ describe('MCP Client E2E', () => {
       expect(toolNames).toContain('get_task');
       expect(toolNames).toContain('list_notes');
       expect(toolNames).toContain('search_notes');
+      expect(toolNames).toContain('send_email');
       expect(toolNames).toContain('get_note');
 
       // Clean up

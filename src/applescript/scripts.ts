@@ -488,6 +488,194 @@ function buildRecurrenceScript(params: RecurrenceScriptParams): string {
 }
 
 /**
+ * Parameters for responding to an event invitation (RSVP).
+ */
+export interface RespondToEventParams {
+  readonly eventId: number;
+  readonly response: 'accept' | 'decline' | 'tentative';
+  readonly sendResponse: boolean;
+  readonly comment?: string;
+}
+
+/**
+ * Responds to an event invitation (RSVP).
+ */
+export function respondToEvent(params: RespondToEventParams): string {
+  const { eventId, response, comment } = params;
+
+  // Map response to AppleScript status value
+  const statusMap = {
+    accept: 'accept',
+    decline: 'decline',
+    tentative: 'tentative accept',
+  };
+  const status = statusMap[response];
+
+  // Escape comment if provided
+  const commentLine = comment != null
+    ? `set comment of myEvent to "${escapeForAppleScript(comment)}"`
+    : '';
+
+  return `
+tell application "Microsoft Outlook"
+  try
+    set myEvent to calendar event id ${eventId}
+    set response status of myEvent to ${status}
+    ${commentLine}
+
+    -- Return success
+    set output to "{{RECORD}}success{{=}}true{{FIELD}}eventId{{=}}" & ${eventId}
+    return output
+  on error errMsg
+    -- Return failure
+    set output to "{{RECORD}}success{{=}}false{{FIELD}}error{{=}}" & errMsg
+    return output
+  end try
+end tell
+`;
+}
+
+/**
+ * Parameters for deleting an event.
+ */
+export interface DeleteEventParams {
+  readonly eventId: number;
+  readonly applyTo: 'this_instance' | 'all_in_series';
+}
+
+/**
+ * Deletes an event. For recurring events, can delete single instance or entire series.
+ */
+export function deleteEvent(params: DeleteEventParams): string {
+  const { eventId, applyTo } = params;
+
+  const comment = applyTo === 'all_in_series'
+    ? '-- Deleting entire series'
+    : '-- Deleting single instance';
+
+  return `
+tell application "Microsoft Outlook"
+  try
+    ${comment}
+    set myEvent to calendar event id ${eventId}
+    delete myEvent
+
+    -- Return success
+    set output to "{{RECORD}}success{{=}}true{{FIELD}}eventId{{=}}" & ${eventId}
+    return output
+  on error errMsg
+    -- Return failure
+    set output to "{{RECORD}}success{{=}}false{{FIELD}}error{{=}}" & errMsg
+    return output
+  end try
+end tell
+`;
+}
+
+/**
+ * Parameters for updating an event.
+ */
+export interface UpdateEventParams {
+  readonly eventId: number;
+  readonly applyTo: 'this_instance' | 'all_in_series';
+  readonly updates: {
+    readonly title?: string;
+    readonly startDate?: string; // ISO 8601
+    readonly endDate?: string; // ISO 8601
+    readonly location?: string;
+    readonly description?: string;
+    readonly isAllDay?: boolean;
+  };
+}
+
+/**
+ * Converts an ISO 8601 date string into individual UTC date components.
+ */
+function isoToDateComponents(isoString: string): {
+  year: number;
+  month: number;
+  day: number;
+  hours: number;
+  minutes: number;
+} {
+  const date = new Date(isoString);
+  return {
+    year: date.getUTCFullYear(),
+    month: date.getUTCMonth() + 1,
+    day: date.getUTCDate(),
+    hours: date.getUTCHours(),
+    minutes: date.getUTCMinutes(),
+  };
+}
+
+/**
+ * Updates an event. For recurring events, can update single instance or entire series.
+ * All update fields are optional - only specified fields will be updated.
+ */
+export function updateEvent(params: UpdateEventParams): string {
+  const { eventId, applyTo, updates } = params;
+  const updatedFields: string[] = [];
+
+  let updateStatements = '';
+
+  if (updates.title != null) {
+    updateStatements += `    set subject of myEvent to "${escapeForAppleScript(updates.title)}"\n`;
+    updatedFields.push('title');
+  }
+
+  if (updates.location != null) {
+    updateStatements += `    set location of myEvent to "${escapeForAppleScript(updates.location)}"\n`;
+    updatedFields.push('location');
+  }
+
+  if (updates.description != null) {
+    updateStatements += `    set content of myEvent to "${escapeForAppleScript(updates.description)}"\n`;
+    updatedFields.push('description');
+  }
+
+  if (updates.startDate != null) {
+    const start = isoToDateComponents(updates.startDate);
+    updateStatements += `    set start time of myEvent to date "${start.year}-${start.month}-${start.day} ${start.hours}:${start.minutes}:00"\n`;
+    updatedFields.push('startDate');
+  }
+
+  if (updates.endDate != null) {
+    const end = isoToDateComponents(updates.endDate);
+    updateStatements += `    set end time of myEvent to date "${end.year}-${end.month}-${end.day} ${end.hours}:${end.minutes}:00"\n`;
+    updatedFields.push('endDate');
+  }
+
+  if (updates.isAllDay != null) {
+    updateStatements += `    set all day flag of myEvent to ${updates.isAllDay}\n`;
+    updatedFields.push('isAllDay');
+  }
+
+  const comment = applyTo === 'all_in_series'
+    ? '-- Updating entire series'
+    : '-- Updating single instance';
+
+  const fieldsOutput = updatedFields.join(',');
+
+  return `
+tell application "Microsoft Outlook"
+  try
+    ${comment}
+    set myEvent to calendar event id ${eventId}
+
+${updateStatements}
+    -- Return success
+    set output to "{{RECORD}}success{{=}}true{{FIELD}}eventId{{=}}" & ${eventId} & "{{FIELD}}updatedFields{{=}}${fieldsOutput}"
+    return output
+  on error errMsg
+    -- Return failure
+    set output to "{{RECORD}}success{{=}}false{{FIELD}}error{{=}}" & errMsg
+    return output
+  end try
+end tell
+`;
+}
+
+/**
  * Creates a new calendar event.
  * Uses component-based date construction for locale safety.
  */
@@ -510,15 +698,15 @@ export function createEvent(params: {
   recurrence?: RecurrenceScriptParams;
 }): string {
   const escapedTitle = escapeForAppleScript(params.title);
-  const escapedLocation = params.location ? escapeForAppleScript(params.location) : '';
-  const escapedDescription = params.description ? escapeForAppleScript(params.description) : '';
+  const escapedLocation = params.location != null ? escapeForAppleScript(params.location) : '';
+  const escapedDescription = params.description != null ? escapeForAppleScript(params.description) : '';
 
   // Build properties list
   let properties = `subject:"${escapedTitle}", start time:theStartDate, end time:theEndDate`;
-  if (params.location) {
+  if (params.location != null) {
     properties += `, location:"${escapedLocation}"`;
   }
-  if (params.isAllDay) {
+  if (params.isAllDay === true) {
     properties += ', all day flag:true';
   }
 
@@ -1006,7 +1194,6 @@ end tell
 `;
 }
 
-// =============================================================================
 // Write Operation Scripts
 // =============================================================================
 
@@ -1214,6 +1401,96 @@ tell application "Microsoft Outlook"
     end try
   end repeat
   return "ok"
+end tell
+`;
+}
+
+// =============================================================================
+// Email Sending Scripts
+// =============================================================================
+
+export interface SendEmailParams {
+  readonly to: readonly string[];
+  readonly subject: string;
+  readonly body: string;
+  readonly bodyType: 'plain' | 'html';
+  readonly cc?: readonly string[];
+  readonly bcc?: readonly string[];
+  readonly replyTo?: string;
+  readonly attachments?: readonly { path: string; name?: string }[];
+  readonly accountId?: number;
+}
+
+/**
+ * Sends an email with optional CC, BCC, attachments, and account selection.
+ */
+export function sendEmail(params: SendEmailParams): string {
+  const { to, subject, body, bodyType, cc, bcc, replyTo, attachments, accountId } = params;
+
+  const escapedSubject = escapeForAppleScript(subject);
+  const escapedBody = escapeForAppleScript(body);
+
+  const toRecipients = to.map(email =>
+    `    make new recipient at newMessage with properties {email address:{address:"${email}"}}`
+  ).join('\n');
+
+  const ccRecipients = cc != null && cc.length > 0
+    ? cc.map(email =>
+        `    make new recipient at newMessage with properties {email address:{address:"${email}"}, recipient type:recipient cc}`
+      ).join('\n')
+    : '';
+
+  const bccRecipients = bcc != null && bcc.length > 0
+    ? bcc.map(email =>
+        `    make new recipient at newMessage with properties {email address:{address:"${email}"}, recipient type:recipient bcc}`
+      ).join('\n')
+    : '';
+
+  const contentProperty = bodyType === 'html'
+    ? `html content:"${escapedBody}"`
+    : `plain text content:"${escapedBody}"`;
+
+  const replyToStatement = replyTo != null
+    ? `    set reply to of newMessage to "${replyTo}"`
+    : '';
+
+  const attachmentStatements = attachments != null && attachments.length > 0
+    ? attachments.map(att =>
+        `    make new attachment at newMessage with properties {file:(POSIX file "${att.path}")}`
+      ).join('\n')
+    : '';
+
+  const accountStatement = accountId != null
+    ? `    set sending account of newMessage to account id ${accountId}`
+    : '';
+
+  return `
+tell application "Microsoft Outlook"
+  try
+    set newMessage to make new outgoing message with properties {subject:"${escapedSubject}", ${contentProperty}}
+
+${toRecipients}
+${ccRecipients}
+${bccRecipients}
+${replyToStatement}
+${accountStatement}
+${attachmentStatements}
+
+    send newMessage
+
+    -- Get message ID and timestamp
+    set msgId to id of newMessage as string
+    set sentTime to current date
+    set sentISO to sentTime as «class isot» as string
+
+    -- Return success
+    set output to "{{RECORD}}success{{=}}true{{FIELD}}messageId{{=}}" & msgId & "{{FIELD}}sentAt{{=}}" & sentISO
+    return output
+  on error errMsg
+    -- Return failure
+    set output to "{{RECORD}}success{{=}}false{{FIELD}}error{{=}}" & errMsg
+    return output
+  end try
 end tell
 `;
 }

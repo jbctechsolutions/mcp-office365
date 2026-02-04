@@ -23,9 +23,13 @@ import {
   createAppleScriptContentReaders,
   createAccountRepository,
   createCalendarWriter,
+  createCalendarManager,
+  createMailSender,
   isOutlookRunning,
   type IAccountRepository,
   type ICalendarWriter,
+  type ICalendarManager,
+  type IMailSender,
   type RecurrenceConfig,
 } from './applescript/index.js';
 import {
@@ -43,7 +47,6 @@ import { createTasksTools } from './tools/tasks.js';
 import { createNotesTools } from './tools/notes.js';
 import { createMailboxOrganizationTools } from './tools/mailbox-organization.js';
 import {
-  ListFoldersInput,
   ListEmailsInput,
   SearchEmailsInput,
   GetEmailInput,
@@ -53,6 +56,7 @@ import {
   GetEventInput,
   SearchEventsInput,
   CreateEventInput,
+  RespondToEventInput,
   ListContactsInput,
   SearchContactsInput,
   GetContactInput,
@@ -382,6 +386,98 @@ const TOOLS: Tool[] = [
         },
       },
       required: ['title', 'start_date', 'end_date'],
+    },
+  },
+  {
+    name: 'respond_to_event',
+    description: 'Respond to a meeting invitation (accept, decline, or tentative). Updates your response status and optionally notifies the organizer.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        event_id: {
+          type: 'number',
+          description: 'The event ID to respond to',
+        },
+        response: {
+          type: 'string',
+          enum: ['accept', 'decline', 'tentative'],
+          description: 'Your response to the invitation',
+        },
+        send_response: {
+          type: 'boolean',
+          description: 'Whether to send response to organizer (default true)',
+          default: true,
+        },
+        comment: {
+          type: 'string',
+          description: 'Optional comment to include with response',
+        },
+      },
+      required: ['event_id', 'response'],
+    },
+  },
+  {
+    name: 'delete_event',
+    description: 'Delete a calendar event. For recurring events, you can delete a single instance or the entire series.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        event_id: {
+          type: 'number',
+          description: 'The event ID to delete',
+        },
+        apply_to: {
+          type: 'string',
+          enum: ['this_instance', 'all_in_series'],
+          description: 'For recurring events: delete single instance or entire series (default: this_instance)',
+          default: 'this_instance',
+        },
+      },
+      required: ['event_id'],
+    },
+  },
+  {
+    name: 'update_event',
+    description: 'Update a calendar event. All fields are optional - only specified fields will be updated. For recurring events, you can update a single instance or the entire series.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        event_id: {
+          type: 'number',
+          description: 'The event ID to update',
+        },
+        apply_to: {
+          type: 'string',
+          enum: ['this_instance', 'all_in_series'],
+          description: 'For recurring events: update single instance or entire series (default: this_instance)',
+          default: 'this_instance',
+        },
+        title: {
+          type: 'string',
+          description: 'New event title',
+        },
+        start_date: {
+          type: 'string',
+          description: 'New start date (ISO 8601 UTC format)',
+        },
+        end_date: {
+          type: 'string',
+          description: 'New end date (ISO 8601 UTC format)',
+        },
+        location: {
+          type: 'string',
+          description: 'New location',
+        },
+        description: {
+          type: 'string',
+          description: 'New description',
+        },
+        is_all_day: {
+          type: 'boolean',
+          description: 'Whether event is all day',
+        },
+      },
+      required: ['event_id'],
     },
   },
   // Contact tools
@@ -849,6 +945,74 @@ const TOOLS: Tool[] = [
       required: ['folder_id', 'destination_parent_id'],
     },
   },
+  // Email sending tool
+  {
+    name: 'send_email',
+    description: 'Send an email with optional CC, BCC, attachments, and HTML formatting. Returns the sent message ID and timestamp.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        to: {
+          type: 'array',
+          items: { type: 'string' },
+          minItems: 1,
+          description: 'Recipient email addresses',
+        },
+        subject: {
+          type: 'string',
+          minLength: 1,
+          description: 'Email subject',
+        },
+        body: {
+          type: 'string',
+          description: 'Email body content',
+        },
+        body_type: {
+          type: 'string',
+          enum: ['plain', 'html'],
+          default: 'plain',
+          description: 'Body content type (default: plain)',
+        },
+        cc: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'CC recipients',
+        },
+        bcc: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'BCC recipients',
+        },
+        reply_to: {
+          type: 'string',
+          description: 'Reply-to address',
+        },
+        attachments: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              path: {
+                type: 'string',
+                description: 'Absolute file path to attachment',
+              },
+              name: {
+                type: 'string',
+                description: 'Display name for attachment',
+              },
+            },
+            required: ['path'],
+          },
+          description: 'File attachments',
+        },
+        account_id: {
+          type: 'number',
+          description: 'Account to send from (optional)',
+        },
+      },
+      required: ['to', 'subject', 'body'],
+    },
+  },
 ];
 
 // =============================================================================
@@ -887,6 +1051,8 @@ export function createServer(): Server {
   let notesTools: ReturnType<typeof createNotesTools> | null = null;
   let orgTools: ReturnType<typeof createMailboxOrganizationTools> | null = null;
   let calendarWriter: ICalendarWriter | null = null;
+  let calendarManager: ICalendarManager | null = null;
+  let mailSender: IMailSender | null = null;
 
   // Graph-specific state
   let graphRepository: GraphRepository | null = null;
@@ -911,6 +1077,8 @@ export function createServer(): Server {
     notesTools = createNotesTools(repository, contentReaders.note);
     orgTools = createMailboxOrganizationTools(repository, tokenManager);
     calendarWriter = createCalendarWriter();
+    calendarManager = createCalendarManager();
+    mailSender = createMailSender();
 
     initialized = true;
   }
@@ -975,7 +1143,9 @@ export function createServer(): Server {
         tasksTools!,
         notesTools!,
         orgTools!,
-        calendarWriter
+        calendarWriter,
+        calendarManager,
+        mailSender
       );
     } catch (error) {
       const wrappedError = wrapError(error, 'An error occurred');
@@ -1185,7 +1355,9 @@ async function handleAppleScriptToolCall(
   tasksTools: ReturnType<typeof createTasksTools>,
   notesTools: ReturnType<typeof createNotesTools>,
   orgTools: ReturnType<typeof createMailboxOrganizationTools>,
-  calendarWriter: ICalendarWriter | null
+  calendarWriter: ICalendarWriter | null,
+  calendarManager: ICalendarManager | null,
+  mailSender: IMailSender | null
 ): Promise<ToolResult> {
   // Handle mailbox organization tools (shared between backends)
   const orgResult = await handleOrgToolCall(name, args, orgTools);
@@ -1351,6 +1523,106 @@ async function handleAppleScriptToolCall(
       return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
     }
 
+    case 'respond_to_event': {
+      if (calendarManager == null) {
+        return {
+          content: [{ type: 'text', text: 'Event response is not available' }],
+          isError: true,
+        };
+      }
+      const params = RespondToEventInput.parse(args);
+
+      const result = calendarManager.respondToEvent(
+        params.event_id,
+        params.response,
+        params.send_response,
+        params.comment
+      );
+
+      const responseText = params.response === 'accept'
+        ? 'accepted'
+        : params.response === 'decline'
+        ? 'declined'
+        : 'tentatively accepted';
+
+      return {
+        content: [{
+          type: 'text',
+          text: `Successfully ${responseText} event ${result.eventId}`,
+        }],
+      };
+    }
+
+    case 'delete_event': {
+      if (calendarManager == null) {
+        return {
+          content: [{ type: 'text', text: 'Event deletion is not available' }],
+          isError: true,
+        };
+      }
+      const params = args as { event_id: number; apply_to?: 'this_instance' | 'all_in_series' };
+      const applyTo = params.apply_to ?? 'this_instance';
+
+      calendarManager.deleteEvent(params.event_id, applyTo);
+
+      const deleteText = applyTo === 'all_in_series' ? ' (entire series)' : '';
+      return {
+        content: [{
+          type: 'text',
+          text: `Successfully deleted event ${params.event_id}${deleteText}`,
+        }],
+      };
+    }
+
+    case 'update_event': {
+      if (calendarManager == null) {
+        return {
+          content: [{ type: 'text', text: 'Event update is not available' }],
+          isError: true,
+        };
+      }
+      const params = args as {
+        event_id: number;
+        apply_to?: 'this_instance' | 'all_in_series';
+        title?: string;
+        start_date?: string;
+        end_date?: string;
+        location?: string;
+        description?: string;
+        is_all_day?: boolean;
+      };
+
+      // Validate date ordering if both dates are provided
+      if (params.start_date != null && params.end_date != null) {
+        if (new Date(params.start_date).getTime() >= new Date(params.end_date).getTime()) {
+          return {
+            content: [{ type: 'text', text: 'start_date must be before end_date' }],
+            isError: true,
+          };
+        }
+      }
+
+      const applyTo = params.apply_to ?? 'this_instance';
+      const updates: import('./applescript/index.js').EventUpdates = {
+        ...(params.title != null && { title: params.title }),
+        ...(params.start_date != null && { startDate: params.start_date }),
+        ...(params.end_date != null && { endDate: params.end_date }),
+        ...(params.location != null && { location: params.location }),
+        ...(params.description != null && { description: params.description }),
+        ...(params.is_all_day != null && { isAllDay: params.is_all_day }),
+      };
+
+      const result = calendarManager.updateEvent(params.event_id, updates, applyTo);
+
+      const updateText = applyTo === 'all_in_series' ? ' (entire series)' : '';
+      return {
+        content: [{
+          type: 'text',
+          text: `Successfully updated event ${result.id}${updateText}. Updated fields: ${result.updatedFields.join(', ')}`,
+        }],
+      };
+    }
+
     // Contact tools
     case 'list_contacts': {
       const params = ListContactsInput.parse(args ?? {});
@@ -1415,6 +1687,53 @@ async function handleAppleScriptToolCall(
       const params = SearchNotesInput.parse(args);
       const result = notesTools.searchNotes(params);
       return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+    }
+
+    // Email sending tool
+    case 'send_email': {
+      if (mailSender == null) {
+        return {
+          content: [{ type: 'text', text: 'Email sending is not available' }],
+          isError: true,
+        };
+      }
+
+      const params = args as {
+        to: string[];
+        subject: string;
+        body: string;
+        body_type?: 'plain' | 'html';
+        cc?: string[];
+        bcc?: string[];
+        reply_to?: string;
+        attachments?: Array<{ path: string; name?: string }>;
+        account_id?: number;
+      };
+
+      let sendParams: import('./applescript/index.js').MailSenderSendEmailParams = {
+        to: params.to,
+        subject: params.subject,
+        body: params.body,
+        bodyType: params.body_type ?? 'plain',
+      };
+
+      if (params.cc != null) sendParams = { ...sendParams, cc: params.cc };
+      if (params.bcc != null) sendParams = { ...sendParams, bcc: params.bcc };
+      if (params.reply_to != null) sendParams = { ...sendParams, replyTo: params.reply_to };
+      if (params.attachments != null) sendParams = { ...sendParams, attachments: params.attachments };
+      if (params.account_id != null) sendParams = { ...sendParams, accountId: params.account_id };
+
+      const sent = mailSender.sendEmail(sendParams);
+
+      const result = {
+        message_id: sent.messageId,
+        sent_at: sent.sentAt,
+        status: 'sent',
+      };
+
+      return {
+        content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
+      };
     }
 
     default:
@@ -1646,7 +1965,16 @@ async function handleGraphToolCall(
 import type { FolderRow, EmailRow, EventRow, ContactRow, TaskRow } from './database/repository.js';
 import { appleTimestampToIso } from './utils/dates.js';
 
-function transformFolderRow(row: FolderRow) {
+function transformFolderRow(row: FolderRow): {
+  id: number;
+  name: string;
+  parentId: number | null;
+  specialType: number;
+  folderType: number;
+  accountId: number;
+  messageCount: number;
+  unreadCount: number;
+} {
   return {
     id: row.id,
     name: row.name ?? 'Unnamed',
@@ -1659,7 +1987,20 @@ function transformFolderRow(row: FolderRow) {
   };
 }
 
-function transformEmailRow(row: EmailRow) {
+function transformEmailRow(row: EmailRow): {
+  id: number;
+  folderId: number | null;
+  subject: string | null;
+  sender: string | null;
+  senderAddress: string | null;
+  preview: string | null;
+  isRead: boolean;
+  timeReceived: string | null;
+  timeSent: string | null;
+  hasAttachment: boolean;
+  priority: number | null;
+  flagStatus: number | null;
+} {
   return {
     id: row.id,
     folderId: row.folderId,
@@ -1702,7 +2043,11 @@ function transformEventRow(row: EventRow) {
   };
 }
 
-function transformContactRow(row: ContactRow) {
+function transformContactRow(row: ContactRow): {
+  id: number;
+  displayName: string | null;
+  sortName: string | null;
+} {
   return {
     id: row.id,
     displayName: row.displayName,
@@ -1710,7 +2055,16 @@ function transformContactRow(row: ContactRow) {
   };
 }
 
-function transformTaskRow(row: TaskRow) {
+function transformTaskRow(row: TaskRow): {
+  id: number;
+  folderId: number | null;
+  name: string | null;
+  isCompleted: boolean;
+  dueDate: string | null;
+  startDate: string | null;
+  priority: number | null;
+  hasReminder: boolean;
+} {
   return {
     id: row.id,
     folderId: row.folderId,
