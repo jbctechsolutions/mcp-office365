@@ -1,3 +1,8 @@
+/**
+ * Copyright (c) 2026 JBC Tech Solutions, LLC
+ * Licensed under the MIT License. See LICENSE file in the project root.
+ */
+
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { createTestDatabase, SAMPLE_COUNTS } from '../../fixtures/database.js';
 import { createConnection, type IConnection } from '../../../src/database/connection.js';

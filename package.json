@@ -1,12 +1,12 @@
 {
-  "name": "outlook-mcp",
-  "version": "0.1.0",
-  "description": "MCP server for read-only access to Outlook for Mac's local SQLite database",
+  "name": "mcp-outlook-mac",
+  "version": "1.0.0",
+  "description": "MCP server for Microsoft Outlook with dual backend support (AppleScript for classic Outlook, Graph API for new Outlook). Read/write access to mail, calendar, contacts, tasks, and notes.",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "bin": {
-    "outlook-mcp": "./dist/index.js"
+    "mcp-outlook-mac": "./dist/index.js"
   },
   "scripts": {
     "build": "tsc",
@@ -27,16 +27,29 @@
     "email",
     "calendar",
     "contacts",
-    "model-context-protocol"
+    "tasks",
+    "model-context-protocol",
+    "microsoft-graph",
+    "applescript",
+    "claude",
+    "anthropic"
   ],
-  "author": "",
+  "author": "JBC Tech Solutions, LLC <support@jbc.dev>",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/jbctechsolutions/outlook-mac-mcp.git"
+    "url": "https://github.com/jbctechsolutions/mcp-outlook-mac.git"
+  },
+  "homepage": "https://github.com/jbctechsolutions/mcp-outlook-mac#readme",
+  "bugs": {
+    "url": "https://github.com/jbctechsolutions/mcp-outlook-mac/issues"
+  },
+  "funding": {
+    "type": "individual",
+    "url": "https://github.com/sponsors/jbctechsolutions"
   },
   "engines": {
-    "node": ">=18.0.0"
+    "node": ">=20.0.0"
   },
   "dependencies": {
     "@azure/msal-node": "^2.6.0",

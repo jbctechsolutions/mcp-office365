@@ -1,4 +1,9 @@
 /**
+ * Copyright (c) 2026 JBC Tech Solutions, LLC
+ * Licensed under the MIT License. See LICENSE file in the project root.
+ */
+
+/**
  * Tests for Graph API authentication configuration.
  */
 
@@ -25,8 +30,8 @@ describe('graph/auth/config', () => {
 
   describe('GRAPH_SCOPES', () => {
     it('contains all required scopes', () => {
-      expect(GRAPH_SCOPES).toContain('Mail.Read');
-      expect(GRAPH_SCOPES).toContain('Calendars.Read');
+      expect(GRAPH_SCOPES).toContain('Mail.ReadWrite');
+      expect(GRAPH_SCOPES).toContain('Calendars.ReadWrite');
       expect(GRAPH_SCOPES).toContain('Contacts.Read');
       expect(GRAPH_SCOPES).toContain('Tasks.Read');
       expect(GRAPH_SCOPES).toContain('User.Read');
@@ -39,8 +44,13 @@ describe('graph/auth/config', () => {
   });
 
   describe('loadGraphConfig', () => {
-    it('throws error when default client ID not configured', () => {
-      expect(() => loadGraphConfig()).toThrow('Azure AD app not configured');
+    it('loads embedded default client ID', () => {
+      const config = loadGraphConfig();
+
+      expect(config.clientId).toBeTruthy();
+      expect(config.clientId).not.toBe('YOUR_AZURE_APP_CLIENT_ID');
+      // Verify it's a valid UUID format
+      expect(config.clientId).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i);
     });
 
     it('uses environment variable for client ID', () => {
@@ -74,8 +84,8 @@ describe('graph/auth/config', () => {
       const config = loadGraphConfig();
 
       expect(config.scopes).toEqual(expect.arrayContaining([
-        'Mail.Read',
-        'Calendars.Read',
+        'Mail.ReadWrite',
+        'Calendars.ReadWrite',
         'Contacts.Read',
         'Tasks.Read',
         'User.Read',

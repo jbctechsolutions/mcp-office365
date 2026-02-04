@@ -1,4 +1,9 @@
 /**
+ * Copyright (c) 2026 JBC Tech Solutions, LLC
+ * Licensed under the MIT License. See LICENSE file in the project root.
+ */
+
+/**
  * AppleScript module for Outlook integration.
  *
  * Provides AppleScript-based access to Microsoft Outlook for Mac,

@@ -1,4 +1,9 @@
 /**
+ * Copyright (c) 2026 JBC Tech Solutions, LLC
+ * Licensed under the MIT License. See LICENSE file in the project root.
+ */
+
+/**
  * AppleScript execution utilities.
  *
  * Provides functions to execute AppleScript commands via osascript
@@ -111,10 +116,14 @@ export function executeAppleScript(script: string, options: ExecuteOptions = {})
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     const stderr = (error as { stderr?: Buffer | string })?.stderr;
-    const stderrText = stderr instanceof Buffer ? stderr.toString('utf8') : (stderr ?? '');
+    let stderrText = '';
+    if (stderr instanceof Buffer) {
+      stderrText = stderr.toString('utf8');
+    } else if (typeof stderr === 'string') {
+      stderrText = stderr;
+    }
 
     const fullError = `${errorMessage}\n${stderrText}`.trim();
-    const errorType = categorizeError(fullError);
 
     return {
       success: false,

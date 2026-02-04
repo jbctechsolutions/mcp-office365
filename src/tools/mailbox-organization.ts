@@ -1,4 +1,9 @@
 /**
+ * Copyright (c) 2026 JBC Tech Solutions, LLC
+ * Licensed under the MIT License. See LICENSE file in the project root.
+ */
+
+/**
  * Mailbox organization MCP tools.
  *
  * Provides tools for organizing emails and folders with a two-phase
@@ -11,6 +16,7 @@ import {
   ApprovalTokenManager,
   hashEmailForApproval,
   hashFolderForApproval,
+  type ApprovalToken,
   type OperationType,
   type ValidationErrorReason,
 } from '../approval/index.js';
@@ -250,7 +256,14 @@ export type MoveFolderParams = z.infer<typeof MoveFolderInput>;
 // Preview Helpers
 // =============================================================================
 
-function emailPreview(row: EmailRow) {
+function emailPreview(row: EmailRow): {
+  id: number;
+  subject: string | null;
+  sender: string | null;
+  senderAddress: string | null;
+  folderId: number | null;
+  timeReceived: string | null;
+} {
   return {
     id: row.id,
     subject: row.subject,
@@ -261,7 +274,12 @@ function emailPreview(row: EmailRow) {
   };
 }
 
-function folderPreview(row: FolderRow) {
+function folderPreview(row: FolderRow): {
+  id: number;
+  name: string | null;
+  messageCount: number;
+  unreadCount: number;
+} {
   return {
     id: row.id,
     name: row.name,
@@ -311,7 +329,12 @@ export class MailboxOrganizationTools {
   // Prepare Methods (Destructive — Phase 1)
   // ---------------------------------------------------------------------------
 
-  async prepareDeleteEmail(params: PrepareDeleteEmailParams) {
+  async prepareDeleteEmail(params: PrepareDeleteEmailParams): Promise<{
+    token_id: string;
+    expires_at: string;
+    email: ReturnType<typeof emailPreview>;
+    action: string;
+  }> {
     const email = await this.requireEmail(params.email_id);
     const hash = hashEmailForApproval(email);
     const token = this.tokenManager.generateToken({
@@ -329,7 +352,13 @@ export class MailboxOrganizationTools {
     };
   }
 
-  async prepareMoveEmail(params: PrepareMoveEmailParams) {
+  async prepareMoveEmail(params: PrepareMoveEmailParams): Promise<{
+    token_id: string;
+    expires_at: string;
+    email: ReturnType<typeof emailPreview>;
+    destination_folder: ReturnType<typeof folderPreview>;
+    action: string;
+  }> {
     const email = await this.requireEmail(params.email_id);
     const destFolder = await this.requireFolder(params.destination_folder_id);
     const hash = hashEmailForApproval(email);
@@ -350,7 +379,12 @@ export class MailboxOrganizationTools {
     };
   }
 
-  async prepareArchiveEmail(params: PrepareArchiveEmailParams) {
+  async prepareArchiveEmail(params: PrepareArchiveEmailParams): Promise<{
+    token_id: string;
+    expires_at: string;
+    email: ReturnType<typeof emailPreview>;
+    action: string;
+  }> {
     const email = await this.requireEmail(params.email_id);
     const hash = hashEmailForApproval(email);
     const token = this.tokenManager.generateToken({
@@ -368,7 +402,12 @@ export class MailboxOrganizationTools {
     };
   }
 
-  async prepareJunkEmail(params: PrepareJunkEmailParams) {
+  async prepareJunkEmail(params: PrepareJunkEmailParams): Promise<{
+    token_id: string;
+    expires_at: string;
+    email: ReturnType<typeof emailPreview>;
+    action: string;
+  }> {
     const email = await this.requireEmail(params.email_id);
     const hash = hashEmailForApproval(email);
     const token = this.tokenManager.generateToken({
@@ -386,7 +425,12 @@ export class MailboxOrganizationTools {
     };
   }
 
-  async prepareDeleteFolder(params: PrepareDeleteFolderParams) {
+  async prepareDeleteFolder(params: PrepareDeleteFolderParams): Promise<{
+    token_id: string;
+    expires_at: string;
+    folder: ReturnType<typeof folderPreview>;
+    action: string;
+  }> {
     const folder = await this.requireFolder(params.folder_id);
     const hash = hashFolderForApproval(folder);
     const token = this.tokenManager.generateToken({
@@ -404,7 +448,12 @@ export class MailboxOrganizationTools {
     };
   }
 
-  async prepareEmptyFolder(params: PrepareEmptyFolderParams) {
+  async prepareEmptyFolder(params: PrepareEmptyFolderParams): Promise<{
+    token_id: string;
+    expires_at: string;
+    folder: ReturnType<typeof folderPreview>;
+    action: string;
+  }> {
     const folder = await this.requireFolder(params.folder_id);
     const hash = hashFolderForApproval(folder);
     const token = this.tokenManager.generateToken({
@@ -422,7 +471,11 @@ export class MailboxOrganizationTools {
     };
   }
 
-  async prepareBatchDeleteEmails(params: PrepareBatchDeleteEmailsParams) {
+  async prepareBatchDeleteEmails(params: PrepareBatchDeleteEmailsParams): Promise<{
+    tokens: Array<{ token_id: string; email: ReturnType<typeof emailPreview> }>;
+    expires_at: string | null;
+    action: string;
+  }> {
     const tokens = [];
     for (const emailId of params.email_ids) {
       const email = await this.requireEmail(emailId);
@@ -454,7 +507,12 @@ export class MailboxOrganizationTools {
     };
   }
 
-  async prepareBatchMoveEmails(params: PrepareBatchMoveEmailsParams) {
+  async prepareBatchMoveEmails(params: PrepareBatchMoveEmailsParams): Promise<{
+    tokens: Array<{ token_id: string; email: ReturnType<typeof emailPreview> }>;
+    destination_folder: ReturnType<typeof folderPreview>;
+    expires_at: string | null;
+    action: string;
+  }> {
     const destFolder = await this.requireFolder(params.destination_folder_id);
 
     const tokens = [];
@@ -494,44 +552,49 @@ export class MailboxOrganizationTools {
   // Confirm Methods (Destructive — Phase 2)
   // ---------------------------------------------------------------------------
 
-  async confirmDeleteEmail(params: ConfirmDeleteEmailParams) {
+  async confirmDeleteEmail(params: ConfirmDeleteEmailParams): Promise<{ success: boolean; message: string }> {
     await this.consumeAndVerifyEmail(params.token_id, 'delete_email', params.email_id);
     await this.repository.deleteEmail(params.email_id);
     return { success: true, message: 'Email moved to Deleted Items.' };
   }
 
-  async confirmMoveEmail(params: ConfirmMoveEmailParams) {
+  async confirmMoveEmail(params: ConfirmMoveEmailParams): Promise<{ success: boolean; message: string }> {
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
     const token = await this.consumeAndVerifyEmail(params.token_id, 'move_email', params.email_id);
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
     const destFolderId = token.metadata['destinationFolderId'] as number;
     await this.repository.moveEmail(params.email_id, destFolderId);
     return { success: true, message: 'Email moved successfully.' };
   }
 
-  async confirmArchiveEmail(params: ConfirmArchiveEmailParams) {
+  async confirmArchiveEmail(params: ConfirmArchiveEmailParams): Promise<{ success: boolean; message: string }> {
     await this.consumeAndVerifyEmail(params.token_id, 'archive_email', params.email_id);
     await this.repository.archiveEmail(params.email_id);
     return { success: true, message: 'Email moved to Archive.' };
   }
 
-  async confirmJunkEmail(params: ConfirmJunkEmailParams) {
+  async confirmJunkEmail(params: ConfirmJunkEmailParams): Promise<{ success: boolean; message: string }> {
     await this.consumeAndVerifyEmail(params.token_id, 'junk_email', params.email_id);
     await this.repository.junkEmail(params.email_id);
     return { success: true, message: 'Email moved to Junk.' };
   }
 
-  async confirmDeleteFolder(params: ConfirmDeleteFolderParams) {
+  async confirmDeleteFolder(params: ConfirmDeleteFolderParams): Promise<{ success: boolean; message: string }> {
     await this.consumeAndVerifyFolder(params.token_id, 'delete_folder', params.folder_id);
     await this.repository.deleteFolder(params.folder_id);
     return { success: true, message: 'Folder deleted.' };
   }
 
-  async confirmEmptyFolder(params: ConfirmEmptyFolderParams) {
+  async confirmEmptyFolder(params: ConfirmEmptyFolderParams): Promise<{ success: boolean; message: string }> {
     await this.consumeAndVerifyFolder(params.token_id, 'empty_folder', params.folder_id);
     await this.repository.emptyFolder(params.folder_id);
     return { success: true, message: 'Folder emptied.' };
   }
 
-  async confirmBatchOperation(params: ConfirmBatchOperationParams) {
+  async confirmBatchOperation(params: ConfirmBatchOperationParams): Promise<{
+    results: Array<{ email_id: number; success: true } | { email_id: number; success: false; error: string }>;
+    summary: { total: number; succeeded: number; failed: number };
+  }> {
     const results = [];
     for (const { token_id, email_id } of params.tokens) {
       try {
@@ -554,11 +617,13 @@ export class MailboxOrganizationTools {
           operation = 'batch_delete_emails';
         }
 
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
         const token = await this.consumeAndVerifyEmail(token_id, operation, email_id);
 
         if (operation === 'batch_delete_emails') {
           await this.repository.deleteEmail(email_id);
         } else {
+          // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
           const destFolderId = token.metadata['destinationFolderId'] as number;
           await this.repository.moveEmail(email_id, destFolderId);
         }
@@ -583,31 +648,31 @@ export class MailboxOrganizationTools {
   // Low-Risk Modifications (Single Tool)
   // ---------------------------------------------------------------------------
 
-  async markEmailRead(params: MarkEmailReadParams) {
+  async markEmailRead(params: MarkEmailReadParams): Promise<{ success: boolean; message: string }> {
     await this.requireEmail(params.email_id);
     await this.repository.markEmailRead(params.email_id, true);
     return { success: true, message: 'Email marked as read.' };
   }
 
-  async markEmailUnread(params: MarkEmailUnreadParams) {
+  async markEmailUnread(params: MarkEmailUnreadParams): Promise<{ success: boolean; message: string }> {
     await this.requireEmail(params.email_id);
     await this.repository.markEmailRead(params.email_id, false);
     return { success: true, message: 'Email marked as unread.' };
   }
 
-  async setEmailFlag(params: SetEmailFlagParams) {
+  async setEmailFlag(params: SetEmailFlagParams): Promise<{ success: boolean; message: string }> {
     await this.requireEmail(params.email_id);
     await this.repository.setEmailFlag(params.email_id, params.flag_status);
     return { success: true, message: 'Email flag updated.' };
   }
 
-  async clearEmailFlag(params: ClearEmailFlagParams) {
+  async clearEmailFlag(params: ClearEmailFlagParams): Promise<{ success: boolean; message: string }> {
     await this.requireEmail(params.email_id);
     await this.repository.setEmailFlag(params.email_id, 0);
     return { success: true, message: 'Email flag cleared.' };
   }
 
-  async setEmailCategories(params: SetEmailCategoriesParams) {
+  async setEmailCategories(params: SetEmailCategoriesParams): Promise<{ success: boolean; message: string }> {
     await this.requireEmail(params.email_id);
     await this.repository.setEmailCategories(params.email_id, params.categories);
     return { success: true, message: 'Email categories updated.' };
@@ -617,18 +682,18 @@ export class MailboxOrganizationTools {
   // Non-Destructive Operations
   // ---------------------------------------------------------------------------
 
-  async createFolder(params: CreateFolderParams) {
+  async createFolder(params: CreateFolderParams): Promise<{ success: boolean; folder: ReturnType<typeof folderPreview> }> {
     const newFolder = await this.repository.createFolder(params.name, params.parent_folder_id);
     return { success: true, folder: folderPreview(newFolder) };
   }
 
-  async renameFolder(params: RenameFolderParams) {
+  async renameFolder(params: RenameFolderParams): Promise<{ success: boolean; message: string }> {
     await this.requireFolder(params.folder_id);
     await this.repository.renameFolder(params.folder_id, params.new_name);
     return { success: true, message: `Folder renamed to "${params.new_name}".` };
   }
 
-  async moveFolder(params: MoveFolderParams) {
+  async moveFolder(params: MoveFolderParams): Promise<{ success: boolean; message: string }> {
     await this.requireFolder(params.folder_id);
     await this.requireFolder(params.destination_parent_id);
     await this.repository.moveFolder(params.folder_id, params.destination_parent_id);
@@ -663,7 +728,7 @@ export class MailboxOrganizationTools {
     tokenId: string,
     operation: OperationType,
     emailId: number
-  ) {
+  ): Promise<ApprovalToken> {
     const result = this.tokenManager.consumeToken(tokenId, operation, emailId);
     if (!result.valid) {
       throwValidationError(result.error!);

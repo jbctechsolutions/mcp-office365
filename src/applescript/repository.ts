@@ -1,4 +1,9 @@
 /**
+ * Copyright (c) 2026 JBC Tech Solutions, LLC
+ * Licensed under the MIT License. See LICENSE file in the project root.
+ */
+
+/**
  * AppleScript-based repository implementation.
  *
  * Implements IRepository using AppleScript to communicate with Outlook,
@@ -6,7 +11,6 @@
  */
 
 import type {
-  IRepository,
   IWriteableRepository,
   FolderRow,
   EmailRow,
@@ -184,7 +188,7 @@ function toNoteRow(asNote: parser.AppleScriptNoteRow): NoteRow {
  */
 export class AppleScriptRepository implements IWriteableRepository {
   // Cache for folder ID lookup
-  private folderCache: Map<number, FolderRow> = new Map();
+  private readonly folderCache: Map<number, FolderRow> = new Map();
   private folderCacheExpiry: number = 0;
   private readonly CACHE_TTL_MS = 30000; // 30 seconds
 

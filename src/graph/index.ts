@@ -1,4 +1,9 @@
 /**
+ * Copyright (c) 2026 JBC Tech Solutions, LLC
+ * Licensed under the MIT License. See LICENSE file in the project root.
+ */
+
+/**
  * Microsoft Graph API module.
  *
  * Provides an alternative backend for the Outlook MCP server that uses

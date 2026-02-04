@@ -1,4 +1,9 @@
 /**
+ * Copyright (c) 2026 JBC Tech Solutions, LLC
+ * Licensed under the MIT License. See LICENSE file in the project root.
+ */
+
+/**
  * Simple HTML to plain text converter.
  *
  * Uses regex-based approach to avoid heavy dependencies.

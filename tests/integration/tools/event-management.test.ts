@@ -1,3 +1,8 @@
+/**
+ * Copyright (c) 2026 JBC Tech Solutions, LLC
+ * Licensed under the MIT License. See LICENSE file in the project root.
+ */
+
 import { describe, test, expect } from 'vitest';
 import { createCalendarManager } from '../../../src/applescript/index.js';
 

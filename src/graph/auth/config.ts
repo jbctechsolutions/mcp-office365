@@ -1,4 +1,9 @@
 /**
+ * Copyright (c) 2026 JBC Tech Solutions, LLC
+ * Licensed under the MIT License. See LICENSE file in the project root.
+ */
+
+/**
  * Microsoft Graph API configuration.
  *
  * Contains Azure AD app registration settings for the device code flow.
@@ -8,19 +13,26 @@
 /**
  * Default client ID for the Outlook MCP Server Azure AD app.
  *
- * This is a public client application registered in Azure AD.
- * Users can override this with their own app registration if needed.
+ * This is a public client application registered in Azure AD by JBC Tech Solutions.
+ * Multi-tenant configuration supports both personal and work/school Microsoft accounts.
  *
- * TODO: Replace with actual Azure AD app client ID before publishing.
+ * Users can override this with their own app registration by setting:
+ * - OUTLOOK_MCP_CLIENT_ID environment variable
+ * - OUTLOOK_MCP_TENANT_ID environment variable (default: 'common')
+ *
+ * For setup instructions: https://github.com/jbctechsolutions/mcp-outlook-mac#custom-azure-ad-setup
  */
-const DEFAULT_CLIENT_ID = 'YOUR_AZURE_APP_CLIENT_ID';
+const DEFAULT_CLIENT_ID = '8fdcd9d3-8823-48f5-bd59-c3a779053b77';
 
 /**
- * Microsoft Graph API scopes required for read-only Outlook access.
+ * Microsoft Graph API scopes required for Outlook access.
+ *
+ * Includes read/write permissions for mail and calendars to support
+ * future implementation of email sending and event management features.
  */
 export const GRAPH_SCOPES = [
-  'Mail.Read',
-  'Calendars.Read',
+  'Mail.ReadWrite',
+  'Calendars.ReadWrite',
   'Contacts.Read',
   'Tasks.Read',
   'User.Read',

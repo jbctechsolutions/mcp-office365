@@ -1,4 +1,9 @@
 /**
+ * Copyright (c) 2026 JBC Tech Solutions, LLC
+ * Licensed under the MIT License. See LICENSE file in the project root.
+ */
+
+/**
  * Date conversion utilities for Outlook's Apple epoch timestamps.
  *
  * Outlook for Mac stores timestamps as seconds since the Apple epoch

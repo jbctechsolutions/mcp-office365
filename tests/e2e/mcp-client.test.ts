@@ -1,4 +1,9 @@
 /**
+ * Copyright (c) 2026 JBC Tech Solutions, LLC
+ * Licensed under the MIT License. See LICENSE file in the project root.
+ */
+
+/**
  * End-to-end tests for the MCP server.
  *
  * These tests verify the server can be started and communicate via MCP protocol.
@@ -41,7 +46,7 @@ describe('MCP Client E2E', () => {
       // Verify tools were returned
       expect(result.tools).toBeDefined();
       expect(Array.isArray(result.tools)).toBe(true);
-      expect(result.tools.length).toBe(44);
+      expect(result.tools.length).toBe(47);
 
       // Verify specific tools exist
       const toolNames = result.tools.map((t) => t.name);

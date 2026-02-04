@@ -1,4 +1,9 @@
 /**
+ * Copyright (c) 2026 JBC Tech Solutions, LLC
+ * Licensed under the MIT License. See LICENSE file in the project root.
+ */
+
+/**
  * Microsoft Graph API content readers.
  *
  * Implements content reader interfaces for fetching detailed content
@@ -91,7 +96,7 @@ export class GraphEmailContentReader implements IContentReader {
     this.client = client;
   }
 
-  readEmailBody(dataFilePath: string | null): string | null {
+  readEmailBody(_dataFilePath: string | null): string | null {
     // Sync method - needs async handling
     // For now, return null and rely on async version
     return null;
@@ -134,7 +139,7 @@ export class GraphEventContentReader implements IEventContentReader {
     this.client = client;
   }
 
-  readEventDetails(dataFilePath: string | null): EventDetails | null {
+  readEventDetails(_dataFilePath: string | null): EventDetails | null {
     // Sync method - needs async handling
     return null;
   }
@@ -207,7 +212,7 @@ export class GraphContactContentReader implements IContactContentReader {
     this.client = client;
   }
 
-  readContactDetails(dataFilePath: string | null): ContactDetails | null {
+  readContactDetails(_dataFilePath: string | null): ContactDetails | null {
     // Sync method - needs async handling
     return null;
   }
@@ -309,7 +314,7 @@ export class GraphTaskContentReader implements ITaskContentReader {
     this.client = client;
   }
 
-  readTaskDetails(dataFilePath: string | null): TaskDetails | null {
+  readTaskDetails(_dataFilePath: string | null): TaskDetails | null {
     // Sync method - needs async handling
     return null;
   }
@@ -354,9 +359,9 @@ export class GraphNoteContentReader implements INoteContentReader {
     return null;
   }
 
-  async readNoteDetailsAsync(_dataFilePath: string | null): Promise<NoteDetails | null> {
+  readNoteDetailsAsync(_dataFilePath: string | null): Promise<NoteDetails | null> {
     // Microsoft Graph does not support Outlook Notes
-    return null;
+    return Promise.resolve(null);
   }
 }
 

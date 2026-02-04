@@ -1,4 +1,9 @@
 /**
+ * Copyright (c) 2026 JBC Tech Solutions, LLC
+ * Licensed under the MIT License. See LICENSE file in the project root.
+ */
+
+/**
  * Microsoft Graph API client wrapper.
  *
  * Provides a typed interface to the Graph API with:
@@ -30,9 +35,11 @@ export class GraphClient {
   /**
    * Gets or creates the Graph client instance.
    */
+  // eslint-disable-next-line @typescript-eslint/require-await
   private async getClient(): Promise<Client> {
     if (this.client == null) {
       this.client = Client.init({
+        // eslint-disable-next-line @typescript-eslint/no-misused-promises
         authProvider: async (done) => {
           try {
             const token = await getAccessToken(this.deviceCodeCallback);

@@ -1,5 +1,9 @@
 #!/usr/bin/env node
 /**
+ * Copyright (c) 2026 JBC Tech Solutions, LLC
+ * Licensed under the MIT License. See LICENSE file in the project root.
+ */
+/**
  * Outlook MCP Server
  *
  * A Model Context Protocol server that provides read-only access to
@@ -2000,6 +2004,7 @@ function transformEmailRow(row: EmailRow): {
   hasAttachment: boolean;
   priority: number | null;
   flagStatus: number | null;
+  categories: readonly string[];
 } {
   return {
     id: row.id,
@@ -2030,7 +2035,16 @@ function parseEmailCategories(buffer: Buffer | null): string[] {
   }
 }
 
-function transformEventRow(row: EventRow) {
+function transformEventRow(row: EventRow): {
+  id: number;
+  folderId: number | null;
+  title: string | null;
+  startDate: string | null;
+  endDate: string | null;
+  isRecurring: boolean;
+  hasReminder: boolean;
+  attendeeCount: number | null;
+} {
   return {
     id: row.id,
     folderId: row.folderId,

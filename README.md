@@ -1,5 +1,9 @@
 # Outlook MCP Server
 
+[![npm version](https://badge.fury.io/js/mcp-outlook-mac.svg)](https://www.npmjs.com/package/mcp-outlook-mac)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Node.js Version](https://img.shields.io/node/v/mcp-outlook-mac)](https://nodejs.org)
+
 A [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) server that provides read-only access to Outlook for Mac. Access your emails, calendar events, contacts, tasks, and notes directly through MCP tools.
 
 ## Features
@@ -49,6 +53,25 @@ A [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) server that p
 
 > **Note**: Notes are only supported with the AppleScript backend. Microsoft Graph API does not provide access to Outlook Notes.
 
+## 🚀 Quick Start
+
+### Option 1: AppleScript Backend (Classic Outlook)
+```bash
+npx -y mcp-outlook-mac
+```
+Requires: Classic Outlook for Mac running
+
+### Option 2: Graph API Backend (New Outlook)
+```bash
+# Uses shared Azure AD app - works out of the box
+npx -y mcp-outlook-mac
+```
+Set `USE_GRAPH_API=1` in your MCP configuration.
+
+On first run, complete device code authentication. See [Configuration](#configuration) for details.
+
+**For production or work accounts:** See [Custom Azure AD Setup](#custom-azure-ad-setup) below.
+
 ## Known Limitations
 
 ### AppleScript Backend
@@ -79,7 +102,14 @@ Currently, write operations (event management, email sending) are only supported
 
 For these operations, use the AppleScript backend with classic Outlook for Mac.
 
-### Graph API Backend
+### Microsoft Graph API Backend
+
+**🚧 Beta Status**
+
+The Graph API backend is currently in beta. Write operations are not yet implemented:
+- ❌ Event management (create, update, delete, RSVP) - Coming soon
+- ❌ Email sending - Coming soon
+- ✅ All read operations are fully functional and stable
 
 **Notes Not Available**
 
@@ -116,25 +146,159 @@ Your authentication tokens are stored securely in `~/.outlook-mcp/tokens.json` a
 #### Required Permissions
 
 The Graph API backend requests these Microsoft Graph permissions:
-- `Mail.Read` - Read your mail
-- `Calendars.Read` - Read your calendars (will require `Calendars.ReadWrite` when Graph API event creation is added)
+- `Mail.ReadWrite` - Read and send your mail
+- `Calendars.ReadWrite` - Read and manage your calendars
 - `Contacts.Read` - Read your contacts
 - `Tasks.Read` - Read your tasks
 - `User.Read` - Read your profile
 - `offline_access` - Maintain access (for token refresh)
+
+**Note:** Write operations (email sending, event management) are configured but not yet implemented in the Graph API backend. They currently only work via the AppleScript backend.
+
+#### Security Model - Shared Azure AD App
+
+This project provides a shared Azure AD application for quick-start convenience. **Here's what you should know:**
+
+##### ✅ What the Shared App CAN Access
+
+- **Only data you explicitly consent to** during the device code authentication flow
+- **Only when you're actively using** the MCP server
+- **Tokens are stored locally** on your machine (`~/.outlook-mcp/tokens.json`)
+- **Read-only access** to mail, calendar, contacts, and tasks
+
+##### ❌ What the Shared App CANNOT Access
+
+- **Your data when you're not using the server** - tokens are only used by your local MCP instance
+- **Your password or credentials** - Microsoft handles authentication
+- **Other users' data** - each user authenticates separately with their own account
+- **Write operations** - current permissions are read-only (by design)
+
+##### 🔒 How It Works (Technical Details)
+
+```
+Your Device → Shared Azure App ID → Microsoft Authentication
+                                           ↓
+                                    Your Microsoft Account
+                                           ↓
+                                    Access Token (stored locally)
+                                           ↓
+                                    Microsoft Graph API → Your Data
+```
+
+**Key Security Points:**
+- The Azure AD **client ID is public** (not a secret) - it's just an identifier
+- **You authenticate with your own Microsoft account** - the app owner never sees your credentials
+- **Access tokens are issued to you** and stored on your machine - the app owner cannot access them
+- **Delegated permissions** mean the app can only act on your behalf when you're using it
+- **Open source code** - you can audit exactly what the server does with your data
+
+##### 🏢 For Production or Corporate Use
+
+**We recommend creating your own Azure AD app if:**
+- You're using a work/school account with conditional access policies
+- Your organization requires internal app registrations only
+- You want full control over the app lifecycle
+- You need audit logs under your tenant
+
+See [Custom Azure AD Setup](#custom-azure-ad-setup) below for instructions.
+
+##### 🤝 Trust & Transparency
+
+- ✅ **Open Source** - Full code available at [GitHub](https://github.com/jbctechsolutions/mcp-outlook-mac)
+- ✅ **Minimal Scopes** - Only requests necessary read permissions
+- ✅ **Standard Practice** - Same model used by Postman, Microsoft Graph Explorer, and many open-source tools
+- ✅ **User Control** - You can revoke access anytime in your [Microsoft account settings](https://account.microsoft.com/privacy/app-access)
+- ✅ **Override Option** - Use `OUTLOOK_MCP_CLIENT_ID` environment variable to use your own app
+
+##### ⚠️ Shared App Considerations
+
+**Potential limitations:**
+- If the shared app is revoked or deleted, you'll need to use your own app
+- All users share the app's rate limits (10,000 requests per 10 minutes - sufficient for typical use)
+- Corporate policies may block external multi-tenant apps
+
+**Risk to app owner (JBC Tech Solutions):**
+- Microsoft could revoke the app if abuse is detected (minimal risk with read-only permissions)
+- No access to your data or liability for your usage
+
+**Cost:** Using the shared app is **free for everyone** - no charges to you or the app owner.
+
+### Custom Azure AD Setup
+
+The server includes a pre-configured shared Azure AD app for quick-start testing. For production use, custom deployments, or work/school accounts with conditional access, create your own:
+
+#### 1. Register Azure AD Application
+
+1. Go to [Azure Portal](https://portal.azure.com) → **Azure Active Directory** → **App registrations** → **New registration**
+2. **Name:** `Outlook MCP Server`
+3. **Supported account types:** "Accounts in any organizational directory and personal Microsoft accounts (Multitenant)"
+4. **Redirect URI:** Leave blank
+5. Click **Register**
+6. Note the **Application (client) ID**
+
+#### 2. Configure Permissions
+
+1. Go to **API permissions** → **Add a permission** → **Microsoft Graph** → **Delegated permissions**
+2. Add these permissions:
+   - `Mail.ReadWrite` - Read and send mail
+   - `Calendars.ReadWrite` - Manage calendar events
+   - `Contacts.Read` - Read contacts
+   - `Tasks.Read` - Read tasks
+   - `User.Read` - User profile
+   - `offline_access` - Token refresh
+3. Click **Add permissions**
+
+#### 3. Enable Public Client Flow
+
+1. Go to **Authentication**
+2. **Advanced settings** → **Allow public client flows** → **Yes**
+3. Click **Save**
+
+#### 4. Configure Environment
+
+```json
+{
+  "mcpServers": {
+    "outlook-mac": {
+      "command": "npx",
+      "args": ["-y", "mcp-outlook-mac"],
+      "env": {
+        "USE_GRAPH_API": "1",
+        "OUTLOOK_MCP_CLIENT_ID": "your-client-id-here",
+        "OUTLOOK_MCP_TENANT_ID": "common"
+      }
+    }
+  }
+}
+```
+
+#### Tenant Options
+- `common` - Multi-tenant (personal, work, school accounts)
+- `organizations` - Work/school accounts only
+- `consumers` - Personal Microsoft accounts only
+- `{tenant-id}` - Specific Azure AD tenant
+
+#### Trade-offs
+
+| Approach | Pros | Cons |
+|----------|------|------|
+| **Shared App** | Zero setup, works immediately | Shared with others, may not work with conditional access |
+| **Custom App** | Full control, works with conditional access, audit logs | Requires Azure AD setup |
+
+**Cost:** Both options are **free** - Azure AD Free tier is sufficient.
 
 ## Installation
 
 ### Using npx (recommended)
 
 ```bash
-npx -y outlook-mcp
+npx -y mcp-outlook-mac
 ```
 
 ### Using npm
 
 ```bash
-npm install -g outlook-mcp
+npm install -g mcp-outlook-mac
 ```
 
 ## Configuration
@@ -353,6 +517,37 @@ src/
 └── utils/              # Utilities (dates, errors, etc.)
 ```
 
-## License
+## 🤝 Contributing
 
-MIT
+We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) for details.
+
+**Support Policy:** This is a part-time, hobby project. Response times are best-effort (typically 1-2 weeks for bug reports). See [SUPPORT.md](SUPPORT.md) for details.
+
+### Ways to Contribute
+- 🐛 Report bugs
+- ✨ Suggest features
+- 📝 Improve documentation
+- 🔀 Submit pull requests
+- 💬 Help others in [Discussions](https://github.com/jbctechsolutions/mcp-outlook-mac/discussions)
+
+### Code of Conduct
+This project adheres to our [Code of Conduct](CODE_OF_CONDUCT.md).
+
+## 💝 Support This Project
+
+If you find this project valuable, consider supporting its development:
+
+- ⭐ **Star** this repository
+- 💰 **Sponsor** via [GitHub Sponsors](https://github.com/sponsors/jbctechsolutions)
+- ☕ **Buy Me a Coffee** at [buymeacoffee.com/jbctechsolutions](https://buymeacoffee.com/jbctechsolutions)
+- 💵 **Donate** via [PayPal](https://paypal.me/jbctechsolutions)
+
+Your support helps maintain and improve this project! 🙏
+
+## 📄 License
+
+MIT License
+
+Copyright (c) 2026 JBC Tech Solutions, LLC
+
+See [LICENSE](LICENSE) file for details.

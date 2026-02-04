@@ -1,4 +1,9 @@
 /**
+ * Copyright (c) 2026 JBC Tech Solutions, LLC
+ * Licensed under the MIT License. See LICENSE file in the project root.
+ */
+
+/**
  * Calendar management operations using AppleScript.
  *
  * Provides high-level calendar operations including RSVP, deletion, and updates.

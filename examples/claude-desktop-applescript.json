@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "outlook-mac": {
+      "command": "npx",
+      "args": ["-y", "mcp-outlook-mac"],
+      "env": {
+        "OUTLOOK_PROFILE": "Main Profile"
+      }
+    }
+  }
+}
