@@ -1,0 +1,83 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+jobs:
+  release:
+    runs-on: macos-latest
+
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24.11.0'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests
+        run: npm test
+
+      - name: Run linting
+        run: npm run lint
+
+      - name: Run type checking
+        run: npm run typecheck
+
+      - name: Build project
+        run: npm run build
+
+      - name: Extract version from tag
+        id: version
+        env:
+          TAG_REF: ${{ github.ref }}
+        run: echo "VERSION=${TAG_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+
+      - name: Extract changelog for this version
+        id: changelog
+        env:
+          VERSION_NUM: ${{ steps.version.outputs.VERSION }}
+        run: |
+          # Extract changelog section for this version
+          VERSION="v${VERSION_NUM}"
+
+          # Read changelog and extract the section for this version
+          CHANGELOG=$(awk "/^## \[$VERSION\]/,/^## \[/" CHANGELOG.md | head -n -1)
+
+          # If changelog section is empty, use a default message
+          if [ -z "$CHANGELOG" ]; then
+            CHANGELOG="See [CHANGELOG.md](https://github.com/${{ github.repository }}/blob/main/CHANGELOG.md) for details."
+          fi
+
+          # Save to file for multiline content
+          echo "$CHANGELOG" > /tmp/changelog.md
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          body_path: /tmp/changelog.md
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publish to npm (optional)
+        # Uncomment to enable automatic npm publishing
+        # Make sure to add NPM_TOKEN to repository secrets
+        if: false
+        run: npm publish
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
