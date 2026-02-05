@@ -14,60 +14,52 @@ import { extractPlainText } from '../parsers/html-stripper.js';
 // Input Schemas
 // =============================================================================
 
-export const ListFoldersInput = z.object({}).strict();
+export const ListFoldersInput = z.strictObject({});
 
-export const ListEmailsInput = z
-  .object({
-    folder_id: z.number().int().positive().describe('The folder ID to list emails from'),
-    limit: z
-      .number()
-      .int()
-      .min(1)
-      .max(100)
-      .default(50)
-      .describe('Maximum number of emails to return (1-100)'),
-    offset: z.number().int().min(0).default(0).describe('Number of emails to skip'),
-    unread_only: z.boolean().default(false).describe('Only return unread emails'),
-  })
-  .strict();
+export const ListEmailsInput = z.strictObject({
+  folder_id: z.number().int().positive().describe('The folder ID to list emails from'),
+  limit: z
+    .number()
+    .int()
+    .min(1)
+    .max(100)
+    .default(50)
+    .describe('Maximum number of emails to return (1-100)'),
+  offset: z.number().int().min(0).default(0).describe('Number of emails to skip'),
+  unread_only: z.boolean().default(false).describe('Only return unread emails'),
+});
 
-export const SearchEmailsInput = z
-  .object({
-    query: z.string().min(1).describe('Search query (searches subject, sender, and preview)'),
-    folder_id: z
-      .number()
-      .int()
-      .positive()
-      .optional()
-      .describe('Optional folder ID to limit search to'),
-    limit: z
-      .number()
-      .int()
-      .min(1)
-      .max(100)
-      .default(50)
-      .describe('Maximum number of emails to return (1-100)'),
-  })
-  .strict();
+export const SearchEmailsInput = z.strictObject({
+  query: z.string().min(1).describe('Search query (searches subject, sender, and preview)'),
+  folder_id: z
+    .number()
+    .int()
+    .positive()
+    .optional()
+    .describe('Optional folder ID to limit search to'),
+  limit: z
+    .number()
+    .int()
+    .min(1)
+    .max(100)
+    .default(50)
+    .describe('Maximum number of emails to return (1-100)'),
+});
 
-export const GetEmailInput = z
-  .object({
-    email_id: z.number().int().positive().describe('The email ID to retrieve'),
-    include_body: z.boolean().default(true).describe('Include the email body in the response'),
-    strip_html: z.boolean().default(true).describe('Strip HTML tags from the body'),
-  })
-  .strict();
+export const GetEmailInput = z.strictObject({
+  email_id: z.number().int().positive().describe('The email ID to retrieve'),
+  include_body: z.boolean().default(true).describe('Include the email body in the response'),
+  strip_html: z.boolean().default(true).describe('Strip HTML tags from the body'),
+});
 
-export const GetUnreadCountInput = z
-  .object({
-    folder_id: z
-      .number()
-      .int()
-      .positive()
-      .optional()
-      .describe('Optional folder ID to get unread count for'),
-  })
-  .strict();
+export const GetUnreadCountInput = z.strictObject({
+  folder_id: z
+    .number()
+    .int()
+    .positive()
+    .optional()
+    .describe('Optional folder ID to get unread count for'),
+});
 
 // =============================================================================
 // Type Definitions

@@ -13,38 +13,32 @@ import { appleTimestampToIso } from '../utils/dates.js';
 // Input Schemas
 // =============================================================================
 
-export const ListTasksInput = z
-  .object({
-    limit: z
-      .number()
-      .int()
-      .min(1)
-      .max(100)
-      .default(50)
-      .describe('Maximum number of tasks to return (1-100)'),
-    offset: z.number().int().min(0).default(0).describe('Number of tasks to skip'),
-    include_completed: z.boolean().default(true).describe('Include completed tasks'),
-  })
-  .strict();
+export const ListTasksInput = z.strictObject({
+  limit: z
+    .number()
+    .int()
+    .min(1)
+    .max(100)
+    .default(50)
+    .describe('Maximum number of tasks to return (1-100)'),
+  offset: z.number().int().min(0).default(0).describe('Number of tasks to skip'),
+  include_completed: z.boolean().default(true).describe('Include completed tasks'),
+});
 
-export const SearchTasksInput = z
-  .object({
-    query: z.string().min(1).describe('Search query for task names'),
-    limit: z
-      .number()
-      .int()
-      .min(1)
-      .max(100)
-      .default(50)
-      .describe('Maximum number of tasks to return (1-100)'),
-  })
-  .strict();
+export const SearchTasksInput = z.strictObject({
+  query: z.string().min(1).describe('Search query for task names'),
+  limit: z
+    .number()
+    .int()
+    .min(1)
+    .max(100)
+    .default(50)
+    .describe('Maximum number of tasks to return (1-100)'),
+});
 
-export const GetTaskInput = z
-  .object({
-    task_id: z.number().int().positive().describe('The task ID to retrieve'),
-  })
-  .strict();
+export const GetTaskInput = z.strictObject({
+  task_id: z.number().int().positive().describe('The task ID to retrieve'),
+});
 
 // =============================================================================
 // Type Definitions

@@ -12,37 +12,31 @@ import type { ContactSummary, Contact, ContactTypeValue } from '../types/index.j
 // Input Schemas
 // =============================================================================
 
-export const ListContactsInput = z
-  .object({
-    limit: z
-      .number()
-      .int()
-      .min(1)
-      .max(100)
-      .default(50)
-      .describe('Maximum number of contacts to return (1-100)'),
-    offset: z.number().int().min(0).default(0).describe('Number of contacts to skip'),
-  })
-  .strict();
+export const ListContactsInput = z.strictObject({
+  limit: z
+    .number()
+    .int()
+    .min(1)
+    .max(100)
+    .default(50)
+    .describe('Maximum number of contacts to return (1-100)'),
+  offset: z.number().int().min(0).default(0).describe('Number of contacts to skip'),
+});
 
-export const SearchContactsInput = z
-  .object({
-    query: z.string().min(1).describe('Search query for contact names'),
-    limit: z
-      .number()
-      .int()
-      .min(1)
-      .max(100)
-      .default(50)
-      .describe('Maximum number of contacts to return (1-100)'),
-  })
-  .strict();
+export const SearchContactsInput = z.strictObject({
+  query: z.string().min(1).describe('Search query for contact names'),
+  limit: z
+    .number()
+    .int()
+    .min(1)
+    .max(100)
+    .default(50)
+    .describe('Maximum number of contacts to return (1-100)'),
+});
 
-export const GetContactInput = z
-  .object({
-    contact_id: z.number().int().positive().describe('The contact ID to retrieve'),
-  })
-  .strict();
+export const GetContactInput = z.strictObject({
+  contact_id: z.number().int().positive().describe('The contact ID to retrieve'),
+});
 
 // =============================================================================
 // Type Definitions

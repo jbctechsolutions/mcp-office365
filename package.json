@@ -51,15 +51,15 @@
     "url": "https://github.com/jbctechsolutions/outlook-mac-mcp/issues"
   },
   "engines": {
-    "node": ">=18.0.0"
+    "node": ">=20.0.0"
   },
   "dependencies": {
-    "@azure/msal-node": "^2.6.0",
+    "@azure/msal-node": "5.0.3",
     "@microsoft/microsoft-graph-client": "^3.0.7",
     "@modelcontextprotocol/sdk": "^1.0.0",
-    "better-sqlite3": "^11.6.0",
+    "better-sqlite3": "12.6.2",
     "isomorphic-fetch": "^3.0.0",
-    "zod": "^3.23.8"
+    "zod": "4.3.6"
   },
   "devDependencies": {
     "@microsoft/microsoft-graph-types": "^2.40.0",

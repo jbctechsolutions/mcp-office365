@@ -13,37 +13,31 @@ import { appleTimestampToIso } from '../utils/dates.js';
 // Input Schemas
 // =============================================================================
 
-export const ListNotesInput = z
-  .object({
-    limit: z
-      .number()
-      .int()
-      .min(1)
-      .max(100)
-      .default(50)
-      .describe('Maximum number of notes to return (1-100)'),
-    offset: z.number().int().min(0).default(0).describe('Number of notes to skip'),
-  })
-  .strict();
+export const ListNotesInput = z.strictObject({
+  limit: z
+    .number()
+    .int()
+    .min(1)
+    .max(100)
+    .default(50)
+    .describe('Maximum number of notes to return (1-100)'),
+  offset: z.number().int().min(0).default(0).describe('Number of notes to skip'),
+});
 
-export const GetNoteInput = z
-  .object({
-    note_id: z.number().int().positive().describe('The note ID to retrieve'),
-  })
-  .strict();
+export const GetNoteInput = z.strictObject({
+  note_id: z.number().int().positive().describe('The note ID to retrieve'),
+});
 
-export const SearchNotesInput = z
-  .object({
-    query: z.string().min(1).describe('Search query for note content'),
-    limit: z
-      .number()
-      .int()
-      .min(1)
-      .max(100)
-      .default(50)
-      .describe('Maximum number of notes to return (1-100)'),
-  })
-  .strict();
+export const SearchNotesInput = z.strictObject({
+  query: z.string().min(1).describe('Search query for note content'),
+  limit: z
+    .number()
+    .int()
+    .min(1)
+    .max(100)
+    .default(50)
+    .describe('Maximum number of notes to return (1-100)'),
+});
 
 // =============================================================================
 // Type Definitions
