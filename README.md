@@ -292,13 +292,13 @@ The server includes a pre-configured shared Azure AD app for quick-start testing
 ### Using npx (recommended)
 
 ```bash
-npx -y mcp-outlook-mac
+npx -y @jbctechsolutions/mcp-outlook-mac
 ```
 
 ### Using npm
 
 ```bash
-npm install -g mcp-outlook-mac
+npm install -g @jbctechsolutions/mcp-outlook-mac
 ```
 
 ## Configuration
@@ -313,7 +313,7 @@ Add to your Claude Desktop configuration (`~/Library/Application Support/Claude/
   "mcpServers": {
     "outlook-mac": {
       "command": "npx",
-      "args": ["-y", "outlook-mcp"]
+      "args": ["-y", "@jbctechsolutions/mcp-outlook-mac"]
     }
   }
 }
@@ -325,7 +325,7 @@ Add to your Claude Desktop configuration (`~/Library/Application Support/Claude/
   "mcpServers": {
     "outlook-mac": {
       "command": "npx",
-      "args": ["-y", "outlook-mcp"],
+      "args": ["-y", "@jbctechsolutions/mcp-outlook-mac"],
       "env": {
         "USE_GRAPH_API": "1"
       }
@@ -336,15 +336,47 @@ Add to your Claude Desktop configuration (`~/Library/Application Support/Claude/
 
 ### Claude Code
 
-Add to your Claude Code MCP settings:
+#### Option 1: Install as Plugin (Recommended)
 
-**AppleScript backend (default):**
+Add the plugin marketplace to your `~/.claude/settings.json`:
+
+```json
+{
+  "extraKnownMarketplaces": {
+    "jbctechsolutions": {
+      "source": {
+        "source": "github",
+        "repo": "jbctechsolutions/mcp-outlook-mac"
+      }
+    }
+  },
+  "enabledPlugins": {
+    "outlook-mac@jbctechsolutions": true
+  }
+}
+```
+
+#### Option 2: Manual Configuration
+
+**Project-specific** - Add `.mcp.json` to your project:
 ```json
 {
   "mcpServers": {
     "outlook-mac": {
       "command": "npx",
-      "args": ["-y", "outlook-mcp"]
+      "args": ["-y", "@jbctechsolutions/mcp-outlook-mac"]
+    }
+  }
+}
+```
+
+**Global** - Create `~/.claude/.mcp.json`:
+```json
+{
+  "mcpServers": {
+    "outlook-mac": {
+      "command": "npx",
+      "args": ["-y", "@jbctechsolutions/mcp-outlook-mac"]
     }
   }
 }
@@ -356,7 +388,7 @@ Add to your Claude Code MCP settings:
   "mcpServers": {
     "outlook-mac": {
       "command": "npx",
-      "args": ["-y", "outlook-mcp"],
+      "args": ["-y", "@jbctechsolutions/mcp-outlook-mac"],
       "env": {
         "USE_GRAPH_API": "1"
       }

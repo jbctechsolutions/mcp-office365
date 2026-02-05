@@ -13,25 +13,27 @@ import { hashStringToNumber } from '../../../src/graph/mappers/utils.js';
 
 // Mock the GraphClient
 vi.mock('../../../src/graph/client/index.js', () => ({
-  GraphClient: vi.fn().mockImplementation(() => ({
-    listMailFolders: vi.fn(),
-    getMailFolder: vi.fn(),
-    listMessages: vi.fn(),
-    listUnreadMessages: vi.fn(),
-    searchMessages: vi.fn(),
-    searchMessagesInFolder: vi.fn(),
-    getMessage: vi.fn(),
-    listCalendars: vi.fn(),
-    listEvents: vi.fn(),
-    getEvent: vi.fn(),
-    listContacts: vi.fn(),
-    searchContacts: vi.fn(),
-    getContact: vi.fn(),
-    listTaskLists: vi.fn(),
-    listAllTasks: vi.fn(),
-    searchTasks: vi.fn(),
-    getTask: vi.fn(),
-  })),
+  GraphClient: vi.fn().mockImplementation(function() {
+    return {
+      listMailFolders: vi.fn(),
+      getMailFolder: vi.fn(),
+      listMessages: vi.fn(),
+      listUnreadMessages: vi.fn(),
+      searchMessages: vi.fn(),
+      searchMessagesInFolder: vi.fn(),
+      getMessage: vi.fn(),
+      listCalendars: vi.fn(),
+      listEvents: vi.fn(),
+      getEvent: vi.fn(),
+      listContacts: vi.fn(),
+      searchContacts: vi.fn(),
+      getContact: vi.fn(),
+      listTaskLists: vi.fn(),
+      listAllTasks: vi.fn(),
+      searchTasks: vi.fn(),
+      getTask: vi.fn(),
+    };
+  }),
 }));
 
 describe('graph/repository', () => {

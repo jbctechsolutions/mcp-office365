@@ -30,7 +30,7 @@ vi.mock('node:fs', () => ({
 
 // Mock os module
 vi.mock('node:os', () => ({
-  homedir: vi.fn(() => '/mock/home'),
+  homedir: vi.fn(function() { return '/mock/home'; }),
 }));
 
 describe('graph/auth/token-cache', () => {

@@ -18,68 +18,60 @@ import { appleTimestampToIso, isoToAppleTimestamp } from '../utils/dates.js';
 // Input Schemas
 // =============================================================================
 
-export const ListCalendarsInput = z.object({}).strict();
+export const ListCalendarsInput = z.strictObject({});
 
-export const ListEventsInput = z
-  .object({
-    calendar_id: z.number().int().positive().optional().describe('Optional calendar folder ID'),
-    start_date: z.string().optional().describe('Start date filter (ISO 8601 format)'),
-    end_date: z.string().optional().describe('End date filter (ISO 8601 format)'),
-    limit: z
-      .number()
-      .int()
-      .min(1)
-      .max(100)
-      .default(50)
-      .describe('Maximum number of events to return (1-100)'),
-  })
-  .strict();
+export const ListEventsInput = z.strictObject({
+  calendar_id: z.number().int().positive().optional().describe('Optional calendar folder ID'),
+  start_date: z.string().optional().describe('Start date filter (ISO 8601 format)'),
+  end_date: z.string().optional().describe('End date filter (ISO 8601 format)'),
+  limit: z
+    .number()
+    .int()
+    .min(1)
+    .max(100)
+    .default(50)
+    .describe('Maximum number of events to return (1-100)'),
+});
 
-export const GetEventInput = z
-  .object({
-    event_id: z.number().int().positive().describe('The event ID to retrieve'),
-  })
-  .strict();
+export const GetEventInput = z.strictObject({
+  event_id: z.number().int().positive().describe('The event ID to retrieve'),
+});
 
-export const SearchEventsInput = z
-  .object({
-    query: z.string().min(1).describe('Search query for event titles'),
-    limit: z
-      .number()
-      .int()
-      .min(1)
-      .max(100)
-      .default(50)
-      .describe('Maximum number of events to return (1-100)'),
-  })
-  .strict();
+export const SearchEventsInput = z.strictObject({
+  query: z.string().min(1).describe('Search query for event titles'),
+  limit: z
+    .number()
+    .int()
+    .min(1)
+    .max(100)
+    .default(50)
+    .describe('Maximum number of events to return (1-100)'),
+});
 
-export const RespondToEventInput = z
-  .object({
-    event_id: z.number().int().positive().describe('The event ID to respond to'),
-    response: z.enum(['accept', 'decline', 'tentative']).describe('Your response to the invitation'),
-    send_response: z.boolean().default(true).describe('Whether to send response to organizer'),
-    comment: z.string().optional().describe('Optional comment to include with response'),
-  })
-  .strict();
+export const RespondToEventInput = z.strictObject({
+  event_id: z.number().int().positive().describe('The event ID to respond to'),
+  response: z.enum(['accept', 'decline', 'tentative']).describe('Your response to the invitation'),
+  send_response: z.boolean().default(true).describe('Whether to send response to organizer'),
+  comment: z.string().optional().describe('Optional comment to include with response'),
+});
 
 const DayOfWeek = z.enum([
   'sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday',
 ]);
 
 const RecurrenceEndInput = z.discriminatedUnion('type', [
-  z.object({ type: z.literal('no_end') }).strict(),
-  z.object({
+  z.strictObject({ type: z.literal('no_end') }),
+  z.strictObject({
     type: z.literal('end_date'),
     date: z.string().describe('End date in ISO 8601 format'),
-  }).strict(),
-  z.object({
+  }),
+  z.strictObject({
     type: z.literal('end_after_count'),
     count: z.number().int().min(1).max(999).describe('Number of occurrences'),
-  }).strict(),
+  }),
 ]);
 
-export const RecurrenceInput = z.object({
+export const RecurrenceInput = z.strictObject({
   frequency: z.enum(['daily', 'weekly', 'monthly', 'yearly']).describe('How often the event repeats'),
   interval: z.number().int().min(1).max(999).default(1).describe(
     'Number of frequency units between occurrences (e.g., 2 for every 2 weeks)'
@@ -97,7 +89,7 @@ export const RecurrenceInput = z.object({
     'Day of week for ordinal monthly recurrence (used with week_of_month)'
   ),
   end: RecurrenceEndInput.default({ type: 'no_end' }).describe('When the recurrence ends'),
-}).strict().superRefine((data, ctx) => {
+}).superRefine((data, ctx) => {
   if (data.frequency === 'weekly' && (data.days_of_week == null || data.days_of_week.length === 0)) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
@@ -138,22 +130,19 @@ const isoDateString = z
   .string()
   .refine((s) => !isNaN(Date.parse(s)), { message: 'Must be a valid ISO 8601 date string' });
 
-export const CreateEventInput = z
-  .object({
-    title: z.string().min(1).describe('Event title/subject'),
-    start_date: isoDateString.describe('Start date in ISO 8601 UTC format'),
-    end_date: isoDateString.describe('End date in ISO 8601 UTC format'),
-    calendar_id: z.number().int().positive().optional().describe('Optional calendar ID to create the event in'),
-    location: z.string().optional().describe('Event location'),
-    description: z.string().optional().describe('Event description/body text'),
-    is_all_day: z.boolean().optional().default(false).describe('Whether this is an all-day event'),
-    recurrence: RecurrenceInput.optional().describe('Recurrence pattern to make this a repeating event'),
-  })
-  .strict()
-  .refine(
-    (data) => new Date(data.start_date).getTime() < new Date(data.end_date).getTime(),
-    { message: 'start_date must be before end_date', path: ['start_date'] }
-  );
+export const CreateEventInput = z.strictObject({
+  title: z.string().min(1).describe('Event title/subject'),
+  start_date: isoDateString.describe('Start date in ISO 8601 UTC format'),
+  end_date: isoDateString.describe('End date in ISO 8601 UTC format'),
+  calendar_id: z.number().int().positive().optional().describe('Optional calendar ID to create the event in'),
+  location: z.string().optional().describe('Event location'),
+  description: z.string().optional().describe('Event description/body text'),
+  is_all_day: z.boolean().optional().default(false).describe('Whether this is an all-day event'),
+  recurrence: RecurrenceInput.optional().describe('Recurrence pattern to make this a repeating event'),
+}).refine(
+  (data) => new Date(data.start_date).getTime() < new Date(data.end_date).getTime(),
+  { message: 'start_date must be before end_date', path: ['start_date'] }
+);
 
 // =============================================================================
 // Type Definitions

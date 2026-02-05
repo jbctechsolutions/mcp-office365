@@ -32,197 +32,151 @@ import { appleTimestampToIso } from '../utils/dates.js';
 // Input Schemas — Destructive Operations (Two-Phase)
 // =============================================================================
 
-export const PrepareDeleteEmailInput = z
-  .object({
-    email_id: z.number().int().positive().describe('The email ID to delete'),
-  })
-  .strict();
+export const PrepareDeleteEmailInput = z.strictObject({
+  email_id: z.number().int().positive().describe('The email ID to delete'),
+});
 
-export const ConfirmDeleteEmailInput = z
-  .object({
-    token_id: z.string().uuid().describe('The approval token from prepare_delete_email'),
-    email_id: z.number().int().positive().describe('The email ID to delete'),
-  })
-  .strict();
+export const ConfirmDeleteEmailInput = z.strictObject({
+  token_id: z.uuid().describe('The approval token from prepare_delete_email'),
+  email_id: z.number().int().positive().describe('The email ID to delete'),
+});
 
-export const PrepareMoveEmailInput = z
-  .object({
-    email_id: z.number().int().positive().describe('The email ID to move'),
-    destination_folder_id: z.number().int().positive().describe('The destination folder ID'),
-  })
-  .strict();
+export const PrepareMoveEmailInput = z.strictObject({
+  email_id: z.number().int().positive().describe('The email ID to move'),
+  destination_folder_id: z.number().int().positive().describe('The destination folder ID'),
+});
 
-export const ConfirmMoveEmailInput = z
-  .object({
-    token_id: z.string().uuid().describe('The approval token from prepare_move_email'),
-    email_id: z.number().int().positive().describe('The email ID to move'),
-  })
-  .strict();
+export const ConfirmMoveEmailInput = z.strictObject({
+  token_id: z.uuid().describe('The approval token from prepare_move_email'),
+  email_id: z.number().int().positive().describe('The email ID to move'),
+});
 
-export const PrepareArchiveEmailInput = z
-  .object({
-    email_id: z.number().int().positive().describe('The email ID to archive'),
-  })
-  .strict();
+export const PrepareArchiveEmailInput = z.strictObject({
+  email_id: z.number().int().positive().describe('The email ID to archive'),
+});
 
-export const ConfirmArchiveEmailInput = z
-  .object({
-    token_id: z.string().uuid().describe('The approval token from prepare_archive_email'),
-    email_id: z.number().int().positive().describe('The email ID to archive'),
-  })
-  .strict();
+export const ConfirmArchiveEmailInput = z.strictObject({
+  token_id: z.uuid().describe('The approval token from prepare_archive_email'),
+  email_id: z.number().int().positive().describe('The email ID to archive'),
+});
 
-export const PrepareJunkEmailInput = z
-  .object({
-    email_id: z.number().int().positive().describe('The email ID to mark as junk'),
-  })
-  .strict();
+export const PrepareJunkEmailInput = z.strictObject({
+  email_id: z.number().int().positive().describe('The email ID to mark as junk'),
+});
 
-export const ConfirmJunkEmailInput = z
-  .object({
-    token_id: z.string().uuid().describe('The approval token from prepare_junk_email'),
-    email_id: z.number().int().positive().describe('The email ID to mark as junk'),
-  })
-  .strict();
+export const ConfirmJunkEmailInput = z.strictObject({
+  token_id: z.uuid().describe('The approval token from prepare_junk_email'),
+  email_id: z.number().int().positive().describe('The email ID to mark as junk'),
+});
 
-export const PrepareDeleteFolderInput = z
-  .object({
-    folder_id: z.number().int().positive().describe('The folder ID to delete'),
-  })
-  .strict();
+export const PrepareDeleteFolderInput = z.strictObject({
+  folder_id: z.number().int().positive().describe('The folder ID to delete'),
+});
 
-export const ConfirmDeleteFolderInput = z
-  .object({
-    token_id: z.string().uuid().describe('The approval token from prepare_delete_folder'),
-    folder_id: z.number().int().positive().describe('The folder ID to delete'),
-  })
-  .strict();
+export const ConfirmDeleteFolderInput = z.strictObject({
+  token_id: z.uuid().describe('The approval token from prepare_delete_folder'),
+  folder_id: z.number().int().positive().describe('The folder ID to delete'),
+});
 
-export const PrepareEmptyFolderInput = z
-  .object({
-    folder_id: z.number().int().positive().describe('The folder ID to empty'),
-  })
-  .strict();
+export const PrepareEmptyFolderInput = z.strictObject({
+  folder_id: z.number().int().positive().describe('The folder ID to empty'),
+});
 
-export const ConfirmEmptyFolderInput = z
-  .object({
-    token_id: z.string().uuid().describe('The approval token from prepare_empty_folder'),
-    folder_id: z.number().int().positive().describe('The folder ID to empty'),
-  })
-  .strict();
+export const ConfirmEmptyFolderInput = z.strictObject({
+  token_id: z.uuid().describe('The approval token from prepare_empty_folder'),
+  folder_id: z.number().int().positive().describe('The folder ID to empty'),
+});
 
-export const PrepareBatchDeleteEmailsInput = z
-  .object({
-    email_ids: z
-      .array(z.number().int().positive())
-      .min(1)
-      .max(50)
-      .describe('The email IDs to delete (max 50)'),
-  })
-  .strict();
+export const PrepareBatchDeleteEmailsInput = z.strictObject({
+  email_ids: z
+    .array(z.number().int().positive())
+    .min(1)
+    .max(50)
+    .describe('The email IDs to delete (max 50)'),
+});
 
-export const PrepareBatchMoveEmailsInput = z
-  .object({
-    email_ids: z
-      .array(z.number().int().positive())
-      .min(1)
-      .max(50)
-      .describe('The email IDs to move (max 50)'),
-    destination_folder_id: z.number().int().positive().describe('The destination folder ID'),
-  })
-  .strict();
+export const PrepareBatchMoveEmailsInput = z.strictObject({
+  email_ids: z
+    .array(z.number().int().positive())
+    .min(1)
+    .max(50)
+    .describe('The email IDs to move (max 50)'),
+  destination_folder_id: z.number().int().positive().describe('The destination folder ID'),
+});
 
-export const ConfirmBatchOperationInput = z
-  .object({
-    tokens: z
-      .array(
-        z.object({
-          token_id: z.string().uuid().describe('The approval token'),
-          email_id: z.number().int().positive().describe('The email ID'),
-        })
-      )
-      .min(1)
-      .max(50)
-      .describe('Array of token/email pairs to confirm'),
-  })
-  .strict();
+export const ConfirmBatchOperationInput = z.strictObject({
+  tokens: z
+    .array(
+      z.object({
+        token_id: z.uuid().describe('The approval token'),
+        email_id: z.number().int().positive().describe('The email ID'),
+      })
+    )
+    .min(1)
+    .max(50)
+    .describe('Array of token/email pairs to confirm'),
+});
 
 // =============================================================================
 // Input Schemas — Low-Risk Modifications (Single Tool)
 // =============================================================================
 
-export const MarkEmailReadInput = z
-  .object({
-    email_id: z.number().int().positive().describe('The email ID to mark as read'),
-  })
-  .strict();
+export const MarkEmailReadInput = z.strictObject({
+  email_id: z.number().int().positive().describe('The email ID to mark as read'),
+});
 
-export const MarkEmailUnreadInput = z
-  .object({
-    email_id: z.number().int().positive().describe('The email ID to mark as unread'),
-  })
-  .strict();
+export const MarkEmailUnreadInput = z.strictObject({
+  email_id: z.number().int().positive().describe('The email ID to mark as unread'),
+});
 
-export const SetEmailFlagInput = z
-  .object({
-    email_id: z.number().int().positive().describe('The email ID to flag'),
-    flag_status: z
-      .number()
-      .int()
-      .min(0)
-      .max(2)
-      .describe('Flag status: 0=not flagged, 1=flagged, 2=completed'),
-  })
-  .strict();
+export const SetEmailFlagInput = z.strictObject({
+  email_id: z.number().int().positive().describe('The email ID to flag'),
+  flag_status: z
+    .number()
+    .int()
+    .min(0)
+    .max(2)
+    .describe('Flag status: 0=not flagged, 1=flagged, 2=completed'),
+});
 
-export const ClearEmailFlagInput = z
-  .object({
-    email_id: z.number().int().positive().describe('The email ID to clear the flag from'),
-  })
-  .strict();
+export const ClearEmailFlagInput = z.strictObject({
+  email_id: z.number().int().positive().describe('The email ID to clear the flag from'),
+});
 
-export const SetEmailCategoriesInput = z
-  .object({
-    email_id: z.number().int().positive().describe('The email ID'),
-    categories: z
-      .array(z.string().min(1))
-      .describe('Categories to set (replaces existing). Use empty array to clear.'),
-  })
-  .strict();
+export const SetEmailCategoriesInput = z.strictObject({
+  email_id: z.number().int().positive().describe('The email ID'),
+  categories: z
+    .array(z.string().min(1))
+    .describe('Categories to set (replaces existing). Use empty array to clear.'),
+});
 
 // =============================================================================
 // Input Schemas — Non-Destructive Operations
 // =============================================================================
 
-export const CreateFolderInput = z
-  .object({
-    name: z.string().min(1).max(255).describe('Name for the new folder'),
-    parent_folder_id: z
-      .number()
-      .int()
-      .positive()
-      .optional()
-      .describe('Optional parent folder ID (creates top-level if omitted)'),
-  })
-  .strict();
+export const CreateFolderInput = z.strictObject({
+  name: z.string().min(1).max(255).describe('Name for the new folder'),
+  parent_folder_id: z
+    .number()
+    .int()
+    .positive()
+    .optional()
+    .describe('Optional parent folder ID (creates top-level if omitted)'),
+});
 
-export const RenameFolderInput = z
-  .object({
-    folder_id: z.number().int().positive().describe('The folder ID to rename'),
-    new_name: z.string().min(1).max(255).describe('The new folder name'),
-  })
-  .strict();
+export const RenameFolderInput = z.strictObject({
+  folder_id: z.number().int().positive().describe('The folder ID to rename'),
+  new_name: z.string().min(1).max(255).describe('The new folder name'),
+});
 
-export const MoveFolderInput = z
-  .object({
-    folder_id: z.number().int().positive().describe('The folder ID to move'),
-    destination_parent_id: z
-      .number()
-      .int()
-      .positive()
-      .describe('The destination parent folder ID'),
-  })
-  .strict();
+export const MoveFolderInput = z.strictObject({
+  folder_id: z.number().int().positive().describe('The folder ID to move'),
+  destination_parent_id: z
+    .number()
+    .int()
+    .positive()
+    .describe('The destination parent folder ID'),
+});
 
 // =============================================================================
 // Type Exports

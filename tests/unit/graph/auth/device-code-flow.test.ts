@@ -27,7 +27,7 @@ const mockMsalInstance = {
 };
 
 vi.mock('@azure/msal-node', () => ({
-  PublicClientApplication: vi.fn(() => mockMsalInstance),
+  PublicClientApplication: vi.fn(function() { return mockMsalInstance; }),
 }));
 
 // Mock config module

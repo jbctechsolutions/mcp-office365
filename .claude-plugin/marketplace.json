@@ -1,0 +1,25 @@
+{
+  "name": "jbctechsolutions-mcp-servers",
+  "displayName": "JBC Tech Solutions MCP Servers",
+  "version": "1.0.0",
+  "description": "Official MCP servers from JBC Tech Solutions",
+  "plugins": [
+    {
+      "id": "outlook-mac",
+      "name": "Outlook for Mac",
+      "description": "Access Outlook for Mac data - emails, calendar, contacts, and tasks through the Model Context Protocol",
+      "version": "1.0.0",
+      "author": "JBC Tech Solutions, LLC",
+      "license": "MIT",
+      "homepage": "https://github.com/jbctechsolutions/mcp-outlook-mac",
+      "repository": {
+        "type": "git",
+        "url": "https://github.com/jbctechsolutions/mcp-outlook-mac.git"
+      },
+      "source": {
+        "type": "directory",
+        "path": ".."
+      }
+    }
+  ]
+}

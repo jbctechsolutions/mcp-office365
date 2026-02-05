@@ -25,12 +25,14 @@ import { GraphClient } from '../../../src/graph/client/index.js';
 
 // Mock the GraphClient
 vi.mock('../../../src/graph/client/index.js', () => ({
-  GraphClient: vi.fn().mockImplementation(() => ({
-    getMessage: vi.fn(),
-    getEvent: vi.fn(),
-    getContact: vi.fn(),
-    getTask: vi.fn(),
-  })),
+  GraphClient: vi.fn().mockImplementation(function() {
+    return {
+      getMessage: vi.fn(),
+      getEvent: vi.fn(),
+      getContact: vi.fn(),
+      getTask: vi.fn(),
+    };
+  }),
 }));
 
 describe('graph/content-readers', () => {

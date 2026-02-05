@@ -1,13 +1,24 @@
 {
-  "name": "mcp-outlook-mac",
+  "name": "@jbctechsolutions/mcp-outlook-mac",
   "version": "1.0.0",
   "description": "MCP server for Microsoft Outlook with dual backend support (AppleScript for classic Outlook, Graph API for new Outlook). Read/write access to mail, calendar, contacts, tasks, and notes.",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
   "bin": {
     "mcp-outlook-mac": "./dist/index.js"
   },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
   "scripts": {
     "build": "tsc",
     "start": "node dist/index.js",
@@ -52,12 +63,12 @@
     "node": ">=20.0.0"
   },
   "dependencies": {
-    "@azure/msal-node": "^2.6.0",
+    "@azure/msal-node": "5.0.3",
     "@microsoft/microsoft-graph-client": "^3.0.7",
     "@modelcontextprotocol/sdk": "^1.0.0",
-    "better-sqlite3": "^11.6.0",
+    "better-sqlite3": "12.6.2",
     "isomorphic-fetch": "^3.0.0",
-    "zod": "^3.23.8"
+    "zod": "4.3.6"
   },
   "devDependencies": {
     "@microsoft/microsoft-graph-types": "^2.40.0",
@@ -65,9 +76,9 @@
     "@types/node": "^22.10.2",
     "@typescript-eslint/eslint-plugin": "^7.18.0",
     "@typescript-eslint/parser": "^7.18.0",
-    "@vitest/coverage-v8": "^2.1.8",
+    "@vitest/coverage-v8": "4.0.18",
     "eslint": "^8.57.1",
     "typescript": "^5.7.2",
-    "vitest": "^2.1.8"
+    "vitest": "4.0.18"
   }
 }
