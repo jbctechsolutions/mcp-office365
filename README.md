@@ -128,13 +128,13 @@ The Graph API backend requests these Microsoft Graph permissions:
 ### Using npx (recommended)
 
 ```bash
-npx -y outlook-mcp
+npx -y @jbctechsolutions/mcp-outlook-mac
 ```
 
 ### Using npm
 
 ```bash
-npm install -g outlook-mcp
+npm install -g @jbctechsolutions/mcp-outlook-mac
 ```
 
 ## Configuration
@@ -149,7 +149,7 @@ Add to your Claude Desktop configuration (`~/Library/Application Support/Claude/
   "mcpServers": {
     "outlook-mac": {
       "command": "npx",
-      "args": ["-y", "outlook-mcp"]
+      "args": ["-y", "@jbctechsolutions/mcp-outlook-mac"]
     }
   }
 }
@@ -161,7 +161,7 @@ Add to your Claude Desktop configuration (`~/Library/Application Support/Claude/
   "mcpServers": {
     "outlook-mac": {
       "command": "npx",
-      "args": ["-y", "outlook-mcp"],
+      "args": ["-y", "@jbctechsolutions/mcp-outlook-mac"],
       "env": {
         "USE_GRAPH_API": "1"
       }
@@ -180,7 +180,7 @@ Add to your Claude Code MCP settings:
   "mcpServers": {
     "outlook-mac": {
       "command": "npx",
-      "args": ["-y", "outlook-mcp"]
+      "args": ["-y", "@jbctechsolutions/mcp-outlook-mac"]
     }
   }
 }
@@ -192,7 +192,7 @@ Add to your Claude Code MCP settings:
   "mcpServers": {
     "outlook-mac": {
       "command": "npx",
-      "args": ["-y", "outlook-mcp"],
+      "args": ["-y", "@jbctechsolutions/mcp-outlook-mac"],
       "env": {
         "USE_GRAPH_API": "1"
       }
