@@ -1,4 +1,9 @@
 /**
+ * Copyright (c) 2026 JBC Tech Solutions, LLC
+ * Licensed under the MIT License. See LICENSE file in the project root.
+ */
+
+/**
  * Parser for AppleScript output.
  *
  * Converts delimiter-based AppleScript output into typed objects

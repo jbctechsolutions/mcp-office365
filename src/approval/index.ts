@@ -1,4 +1,9 @@
 /**
+ * Copyright (c) 2026 JBC Tech Solutions, LLC
+ * Licensed under the MIT License. See LICENSE file in the project root.
+ */
+
+/**
  * Approval token system for safe destructive operations.
  *
  * Re-exports all approval types, hashing, and token management.

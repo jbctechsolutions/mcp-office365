@@ -1,4 +1,9 @@
 /**
+ * Copyright (c) 2026 JBC Tech Solutions, LLC
+ * Licensed under the MIT License. See LICENSE file in the project root.
+ */
+
+/**
  * Calendar write operations using AppleScript.
  *
  * Follows the IAccountRepository pattern: a separate interface for

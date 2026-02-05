@@ -1,4 +1,9 @@
 /**
+ * Copyright (c) 2026 JBC Tech Solutions, LLC
+ * Licensed under the MIT License. See LICENSE file in the project root.
+ */
+
+/**
  * In-memory cache for Graph API responses.
  *
  * Provides TTL-based caching to reduce API calls and improve performance.
@@ -126,7 +131,7 @@ export function createCacheKey(method: string, ...params: unknown[]): string {
 /**
  * Invalidates cache entries matching a prefix.
  */
-export function invalidateByPrefix(cache: ResponseCache, prefix: string): void {
+export function invalidateByPrefix(cache: ResponseCache, _prefix: string): void {
   // Note: This requires access to internal cache structure
   // For now, just clear the whole cache when invalidating
   cache.clear();

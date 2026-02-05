@@ -1,4 +1,9 @@
 /**
+ * Copyright (c) 2026 JBC Tech Solutions, LLC
+ * Licensed under the MIT License. See LICENSE file in the project root.
+ */
+
+/**
  * SQL query definitions for Outlook database.
  *
  * All queries are read-only SELECT statements.

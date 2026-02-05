@@ -1,4 +1,9 @@
 /**
+ * Copyright (c) 2026 JBC Tech Solutions, LLC
+ * Licensed under the MIT License. See LICENSE file in the project root.
+ */
+
+/**
  * MSAL token cache plugin for persistent token storage.
  *
  * Stores tokens in ~/.outlook-mcp/tokens.json for persistence
@@ -37,6 +42,7 @@ export class FileTokenCachePlugin implements ICachePlugin {
    * Called by MSAL before accessing the cache.
    * Loads the cache from disk into MSAL's in-memory cache.
    */
+  // eslint-disable-next-line @typescript-eslint/require-await
   async beforeCacheAccess(context: TokenCacheContext): Promise<void> {
     try {
       if (existsSync(TOKEN_CACHE_FILE)) {
@@ -52,6 +58,7 @@ export class FileTokenCachePlugin implements ICachePlugin {
    * Called by MSAL after modifying the cache.
    * Persists the cache to disk.
    */
+  // eslint-disable-next-line @typescript-eslint/require-await
   async afterCacheAccess(context: TokenCacheContext): Promise<void> {
     if (context.cacheHasChanged) {
       try {

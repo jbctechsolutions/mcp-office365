@@ -1,4 +1,9 @@
 /**
+ * Copyright (c) 2026 JBC Tech Solutions, LLC
+ * Licensed under the MIT License. See LICENSE file in the project root.
+ */
+
+/**
  * OLK15 binary file parser.
  *
  * Parses Outlook for Mac's proprietary binary content files.

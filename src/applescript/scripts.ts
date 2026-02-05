@@ -1,4 +1,9 @@
 /**
+ * Copyright (c) 2026 JBC Tech Solutions, LLC
+ * Licensed under the MIT License. See LICENSE file in the project root.
+ */
+
+/**
  * AppleScript template strings for Outlook operations.
  *
  * All scripts output data in a delimiter-based format for reliable parsing:

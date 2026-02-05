@@ -1,4 +1,9 @@
 /**
+ * Copyright (c) 2026 JBC Tech Solutions, LLC
+ * Licensed under the MIT License. See LICENSE file in the project root.
+ */
+
+/**
  * Microsoft Authentication Library (MSAL) device code flow implementation.
  *
  * Uses the device code flow for authentication, which is ideal for CLI tools:
@@ -68,7 +73,7 @@ export type DeviceCodeCallback = (userCode: string, verificationUri: string, mes
  * Default callback that outputs to stderr.
  * stderr is used because stdout is reserved for MCP JSON-RPC communication.
  */
-const defaultDeviceCodeCallback: DeviceCodeCallback = (userCode, verificationUri, message) => {
+const defaultDeviceCodeCallback: DeviceCodeCallback = (userCode, verificationUri, _message) => {
   console.error('\n' + '='.repeat(60));
   console.error('Microsoft Graph API Authentication Required');
   console.error('='.repeat(60));

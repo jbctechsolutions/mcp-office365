@@ -1,4 +1,9 @@
 /**
+ * Copyright (c) 2026 JBC Tech Solutions, LLC
+ * Licensed under the MIT License. See LICENSE file in the project root.
+ */
+
+/**
  * End-to-end tests for the MCP server.
  *
  * These tests verify the server can be started and communicate via MCP protocol.

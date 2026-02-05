@@ -1,4 +1,9 @@
 /**
+ * Copyright (c) 2026 JBC Tech Solutions, LLC
+ * Licensed under the MIT License. See LICENSE file in the project root.
+ */
+
+/**
  * Microsoft Graph API repository implementation.
  *
  * Implements the IRepository interface using Microsoft Graph API
@@ -7,7 +12,6 @@
 
 import type {
   IRepository,
-  IWriteableRepository,
   FolderRow,
   EmailRow,
   EventRow,
@@ -82,7 +86,7 @@ export class GraphRepository implements IRepository {
     return folders.map(mapMailFolderToRow);
   }
 
-  getFolder(id: number): FolderRow | undefined {
+  getFolder(_id: number): FolderRow | undefined {
     throw new Error('Use getFolderAsync() for Graph repository');
   }
 
@@ -107,7 +111,7 @@ export class GraphRepository implements IRepository {
   // Emails
   // ===========================================================================
 
-  listEmails(folderId: number, limit: number, offset: number): EmailRow[] {
+  listEmails(_folderId: number, _limit: number, _offset: number): EmailRow[] {
     throw new Error('Use listEmailsAsync() for Graph repository');
   }
 
@@ -140,7 +144,7 @@ export class GraphRepository implements IRepository {
     return messages.map((m) => mapMessageToEmailRow(m, folderId));
   }
 
-  listUnreadEmails(folderId: number, limit: number, offset: number): EmailRow[] {
+  listUnreadEmails(_folderId: number, _limit: number, _offset: number): EmailRow[] {
     throw new Error('Use listUnreadEmailsAsync() for Graph repository');
   }
 
@@ -171,7 +175,7 @@ export class GraphRepository implements IRepository {
     return messages.map((m) => mapMessageToEmailRow(m, folderId));
   }
 
-  searchEmails(query: string, limit: number): EmailRow[] {
+  searchEmails(_query: string, _limit: number): EmailRow[] {
     throw new Error('Use searchEmailsAsync() for Graph repository');
   }
 
@@ -188,7 +192,7 @@ export class GraphRepository implements IRepository {
     return messages.map((m) => mapMessageToEmailRow(m));
   }
 
-  searchEmailsInFolder(folderId: number, query: string, limit: number): EmailRow[] {
+  searchEmailsInFolder(_folderId: number, _query: string, _limit: number): EmailRow[] {
     throw new Error('Use searchEmailsInFolderAsync() for Graph repository');
   }
 
@@ -219,7 +223,7 @@ export class GraphRepository implements IRepository {
     return messages.map((m) => mapMessageToEmailRow(m, folderId));
   }
 
-  getEmail(id: number): EmailRow | undefined {
+  getEmail(_id: number): EmailRow | undefined {
     throw new Error('Use getEmailAsync() for Graph repository');
   }
 
@@ -242,7 +246,7 @@ export class GraphRepository implements IRepository {
     return folders.reduce((sum, f) => sum + (f.unreadItemCount ?? 0), 0);
   }
 
-  getUnreadCountByFolder(folderId: number): number {
+  getUnreadCountByFolder(_folderId: number): number {
     throw new Error('Use getUnreadCountByFolderAsync() for Graph repository');
   }
 
@@ -283,7 +287,7 @@ export class GraphRepository implements IRepository {
     return calendars.map(mapCalendarToFolderRow);
   }
 
-  listEvents(limit: number): EventRow[] {
+  listEvents(_limit: number): EventRow[] {
     throw new Error('Use listEventsAsync() for Graph repository');
   }
 
@@ -300,7 +304,7 @@ export class GraphRepository implements IRepository {
     return events.map((e) => mapEventToEventRow(e));
   }
 
-  listEventsByFolder(folderId: number, limit: number): EventRow[] {
+  listEventsByFolder(_folderId: number, _limit: number): EventRow[] {
     throw new Error('Use listEventsByFolderAsync() for Graph repository');
   }
 
@@ -322,7 +326,7 @@ export class GraphRepository implements IRepository {
     return events.map((e) => mapEventToEventRow(e, graphCalendarId));
   }
 
-  listEventsByDateRange(startDate: number, endDate: number, limit: number): EventRow[] {
+  listEventsByDateRange(_startDate: number, _endDate: number, _limit: number): EventRow[] {
     throw new Error('Use listEventsByDateRangeAsync() for Graph repository');
   }
 
@@ -342,7 +346,7 @@ export class GraphRepository implements IRepository {
     return events.map((e) => mapEventToEventRow(e));
   }
 
-  getEvent(id: number): EventRow | undefined {
+  getEvent(_id: number): EventRow | undefined {
     throw new Error('Use getEventAsync() for Graph repository');
   }
 
@@ -360,7 +364,7 @@ export class GraphRepository implements IRepository {
   // Contacts
   // ===========================================================================
 
-  listContacts(limit: number, offset: number): ContactRow[] {
+  listContacts(_limit: number, _offset: number): ContactRow[] {
     throw new Error('Use listContactsAsync() for Graph repository');
   }
 
@@ -377,7 +381,7 @@ export class GraphRepository implements IRepository {
     return contacts.map(mapContactToContactRow);
   }
 
-  searchContacts(query: string, limit: number): ContactRow[] {
+  searchContacts(_query: string, _limit: number): ContactRow[] {
     throw new Error('Use searchContactsAsync() for Graph repository');
   }
 
@@ -394,7 +398,7 @@ export class GraphRepository implements IRepository {
     return contacts.map(mapContactToContactRow);
   }
 
-  getContact(id: number): ContactRow | undefined {
+  getContact(_id: number): ContactRow | undefined {
     throw new Error('Use getContactAsync() for Graph repository');
   }
 
@@ -412,7 +416,7 @@ export class GraphRepository implements IRepository {
   // Tasks
   // ===========================================================================
 
-  listTasks(limit: number, offset: number): TaskRow[] {
+  listTasks(_limit: number, _offset: number): TaskRow[] {
     throw new Error('Use listTasksAsync() for Graph repository');
   }
 
@@ -429,7 +433,7 @@ export class GraphRepository implements IRepository {
     return tasks.map(mapTaskToTaskRow);
   }
 
-  listIncompleteTasks(limit: number, offset: number): TaskRow[] {
+  listIncompleteTasks(_limit: number, _offset: number): TaskRow[] {
     throw new Error('Use listIncompleteTasksAsync() for Graph repository');
   }
 
@@ -446,7 +450,7 @@ export class GraphRepository implements IRepository {
     return tasks.map(mapTaskToTaskRow);
   }
 
-  searchTasks(query: string, limit: number): TaskRow[] {
+  searchTasks(_query: string, _limit: number): TaskRow[] {
     throw new Error('Use searchTasksAsync() for Graph repository');
   }
 
@@ -463,7 +467,7 @@ export class GraphRepository implements IRepository {
     return tasks.map(mapTaskToTaskRow);
   }
 
-  getTask(id: number): TaskRow | undefined {
+  getTask(_id: number): TaskRow | undefined {
     throw new Error('Use getTaskAsync() for Graph repository');
   }
 
@@ -485,24 +489,24 @@ export class GraphRepository implements IRepository {
   // Notes (NOT SUPPORTED)
   // ===========================================================================
 
-  listNotes(limit: number, offset: number): NoteRow[] {
+  listNotes(_limit: number, _offset: number): NoteRow[] {
     // Microsoft Graph does not have an API for Outlook Notes
     return [];
   }
 
-  async listNotesAsync(limit: number, offset: number): Promise<NoteRow[]> {
+  listNotesAsync(_limit: number, _offset: number): Promise<NoteRow[]> {
     // Microsoft Graph does not have an API for Outlook Notes
-    return [];
+    return Promise.resolve([]);
   }
 
-  getNote(id: number): NoteRow | undefined {
+  getNote(_id: number): NoteRow | undefined {
     // Microsoft Graph does not have an API for Outlook Notes
     return undefined;
   }
 
-  async getNoteAsync(id: number): Promise<NoteRow | undefined> {
+  getNoteAsync(_id: number): Promise<NoteRow | undefined> {
     // Microsoft Graph does not have an API for Outlook Notes
-    return undefined;
+    return Promise.resolve(undefined);
   }
 
   // ===========================================================================

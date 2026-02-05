@@ -1,4 +1,9 @@
 /**
+ * Copyright (c) 2026 JBC Tech Solutions, LLC
+ * Licensed under the MIT License. See LICENSE file in the project root.
+ */
+
+/**
  * Adapter that bridges GraphRepository's xxxAsync() methods
  * to the IMailboxRepository interface.
  */
