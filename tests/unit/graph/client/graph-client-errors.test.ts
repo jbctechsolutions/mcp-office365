@@ -31,7 +31,7 @@ const mockGraphClient = {
 
 vi.mock('@microsoft/microsoft-graph-client', () => ({
   Client: {
-    init: vi.fn(() => mockGraphClient),
+    init: vi.fn(function() { return mockGraphClient; }),
   },
 }));
 
