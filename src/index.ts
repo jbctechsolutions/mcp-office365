@@ -2000,6 +2000,7 @@ function transformEmailRow(row: EmailRow): {
   hasAttachment: boolean;
   priority: number | null;
   flagStatus: number | null;
+  categories: string[];
 } {
   return {
     id: row.id,

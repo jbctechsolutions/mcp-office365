@@ -1,13 +1,24 @@
 {
-  "name": "outlook-mcp",
+  "name": "@jbctechsolutions/mcp-outlook-mac",
   "version": "0.1.0",
   "description": "MCP server for read-only access to Outlook for Mac's local SQLite database",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
-  "bin": {
-    "outlook-mcp": "./dist/index.js"
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
   },
+  "bin": {
+    "mcp-outlook-mac": "./dist/index.js"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
   "scripts": {
     "build": "tsc",
     "start": "node dist/index.js",
@@ -29,11 +40,15 @@
     "contacts",
     "model-context-protocol"
   ],
-  "author": "",
+  "author": "JBC Tech Solutions, LLC",
   "license": "MIT",
   "repository": {
     "type": "git",
     "url": "https://github.com/jbctechsolutions/outlook-mac-mcp.git"
+  },
+  "homepage": "https://github.com/jbctechsolutions/outlook-mac-mcp#readme",
+  "bugs": {
+    "url": "https://github.com/jbctechsolutions/outlook-mac-mcp/issues"
   },
   "engines": {
     "node": ">=18.0.0"
