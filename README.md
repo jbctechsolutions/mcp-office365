@@ -172,9 +172,41 @@ Add to your Claude Desktop configuration (`~/Library/Application Support/Claude/
 
 ### Claude Code
 
-Add to your Claude Code MCP settings:
+#### Option 1: Install as Plugin (Recommended)
 
-**AppleScript backend (default):**
+Add the plugin marketplace to your `~/.claude/settings.json`:
+
+```json
+{
+  "extraKnownMarketplaces": {
+    "jbctechsolutions": {
+      "source": {
+        "source": "github",
+        "repo": "jbctechsolutions/mcp-outlook-mac"
+      }
+    }
+  },
+  "enabledPlugins": {
+    "outlook-mac@jbctechsolutions": true
+  }
+}
+```
+
+#### Option 2: Manual Configuration
+
+**Project-specific** - Add `.mcp.json` to your project:
+```json
+{
+  "mcpServers": {
+    "outlook-mac": {
+      "command": "npx",
+      "args": ["-y", "@jbctechsolutions/mcp-outlook-mac"]
+    }
+  }
+}
+```
+
+**Global** - Create `~/.claude/.mcp.json`:
 ```json
 {
   "mcpServers": {

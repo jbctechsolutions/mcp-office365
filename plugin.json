@@ -1,0 +1,22 @@
+{
+  "name": "outlook-mac",
+  "displayName": "Outlook for Mac",
+  "version": "1.0.0",
+  "description": "Access Outlook for Mac data - emails, calendar, contacts, and tasks through the Model Context Protocol",
+  "author": "JBC Tech Solutions, LLC",
+  "license": "MIT",
+  "homepage": "https://github.com/jbctechsolutions/mcp-outlook-mac",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jbctechsolutions/mcp-outlook-mac.git"
+  },
+  "keywords": [
+    "mcp",
+    "outlook",
+    "macos",
+    "email",
+    "calendar",
+    "contacts",
+    "model-context-protocol"
+  ]
+}
