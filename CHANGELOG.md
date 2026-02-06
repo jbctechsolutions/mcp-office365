@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.3] - 2026-02-06
+
+### Fixed
+- **npx/Symlink Execution**: Fixed server not responding when run via npx or npm bin symlinks
+  - Improved `isMainModule` check to handle symlinks, npx, and various execution contexts
+  - Server now correctly initializes in all execution environments
+
 ## [1.0.2] - 2026-02-06
 
 ### Changed

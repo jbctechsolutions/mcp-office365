@@ -2118,11 +2118,16 @@ async function main(): Promise<void> {
 }
 
 // Run if this is the main module (not imported for testing)
+// Check multiple conditions to handle direct execution, symlinks, and npx
 const isMainModule =
   import.meta.url === `file://${process.argv[1]}` ||
-  (process.argv[1]?.endsWith('dist/index.js') === true);
+  process.argv[1]?.endsWith('dist/index.js') === true ||
+  process.argv[1]?.includes('mcp-outlook-mac') === true ||
+  // When run via npx or bin, process.argv[1] might be undefined or a symlink
+  process.argv[1] === undefined ||
+  import.meta.url.endsWith('/dist/index.js');
 
-if (isMainModule === true) {
+if (isMainModule) {
   main().catch((error) => {
     console.error('Fatal error:', error);
     process.exit(1);
