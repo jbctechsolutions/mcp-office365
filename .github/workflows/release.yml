@@ -11,6 +11,7 @@ jobs:
 
     permissions:
       contents: write
+      id-token: write
 
     steps:
       - name: Checkout code
@@ -83,4 +84,6 @@ jobs:
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        # Note: npm publishing is handled by publish.yml when this release is created
+
+      - name: Publish to npm
+        run: npm publish --provenance --access public
