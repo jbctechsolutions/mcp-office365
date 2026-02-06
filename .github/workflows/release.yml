@@ -64,7 +64,7 @@ jobs:
           VERSION="v${VERSION_NUM}"
 
           # Read changelog and extract the section for this version
-          CHANGELOG=$(awk "/^## \[$VERSION\]/,/^## \[/" CHANGELOG.md | head -n -1)
+          CHANGELOG=$(awk "/^## \[$VERSION\]/,/^## \[/" CHANGELOG.md | sed '$d')
 
           # If changelog section is empty, use a default message
           if [ -z "$CHANGELOG" ]; then
