@@ -53,5 +53,15 @@ jobs:
       - name: Build
         run: npm run build
 
+      - name: Verify bin file is executable
+        run: |
+          if [ ! -x dist/index.js ]; then
+            echo "Error: dist/index.js is not executable"
+            ls -la dist/index.js
+            exit 1
+          fi
+          echo "✓ dist/index.js is executable"
+          ls -la dist/index.js
+
       - name: Publish to npm
         run: npm publish --provenance --access public

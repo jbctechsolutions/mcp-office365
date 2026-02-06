@@ -1,6 +1,6 @@
 {
   "name": "@jbctechsolutions/mcp-outlook-mac",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "MCP server for Microsoft Outlook with dual backend support (AppleScript for classic Outlook, Graph API for new Outlook). Read/write access to mail, calendar, contacts, tasks, and notes.",
   "type": "module",
   "main": "./dist/index.js",
@@ -20,7 +20,7 @@
     "LICENSE"
   ],
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && chmod +x dist/index.js",
     "start": "node dist/index.js",
     "dev": "tsc --watch",
     "test": "vitest run",
