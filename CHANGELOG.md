@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.1] - 2026-02-06
+
+### Fixed
+- **npx Installation**: Fixed bin file not being executable when installed via npx
+  - Added `chmod +x dist/index.js` to build script
+  - Added executable verification step to CI/CD workflows
+  - TypeScript compiler doesn't preserve executable permissions, now explicitly set after build
+
 ## [1.0.0] - 2026-02-03
 
 ### Added
