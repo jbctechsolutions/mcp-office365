@@ -303,6 +303,35 @@ describe('searchMessages', () => {
     const script = searchMessages('test', null, 10);
     expect(script).not.toContain('of mail folder id');
   });
+
+  it('does not use address of sender in WHERE clause', () => {
+    const script = searchMessages('test', null, 10);
+    // The WHERE clause should only filter by subject, not sender
+    expect(script).toContain('whose subject contains');
+    expect(script).not.toMatch(/whose.*address of sender/);
+  });
+
+  it('includes sender scan phase with try/catch protection', () => {
+    const script = searchMessages('test', null, 10);
+    // Phase 2 should scan messages and access sender safely
+    expect(script).toContain('Phase 2');
+    expect(script).toContain('if mSender contains');
+    // Sender access must be inside try/catch
+    expect(script).toMatch(/try\s+set mSender to address of sender of m\s+end try/);
+  });
+
+  it('includes deduplication via matchedIds', () => {
+    const script = searchMessages('test', null, 10);
+    expect(script).toContain('set matchedIds to {}');
+    expect(script).toContain('matchedIds does not contain mId');
+  });
+
+  it('applies sender scan limit', () => {
+    const script = searchMessages('test', null, 10);
+    expect(script).toContain('scanLimit');
+    // Should cap at SENDER_SCAN_LIMIT (500)
+    expect(script).toContain('500');
+  });
 });
 
 describe('getMessage', () => {
