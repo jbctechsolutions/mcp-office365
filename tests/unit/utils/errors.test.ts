@@ -23,6 +23,8 @@ import {
   GraphPermissionDeniedError,
   GraphError,
   AttachmentNotFoundError,
+  AttachmentTooLargeError,
+  AttachmentSaveError,
   MailSendError,
   RecurringEventError,
   isOutlookMcpError,
@@ -371,6 +373,43 @@ describe('errors', () => {
 
     it('extends OutlookMcpError', () => {
       const error = new RecurringEventError('Test message');
+      expect(error).toBeInstanceOf(OutlookMcpError);
+      expect(error).toBeInstanceOf(Error);
+    });
+  });
+
+  // =========================================================================
+  // Attachment Errors
+  // =========================================================================
+
+  describe('AttachmentTooLargeError', () => {
+    it('has code ATTACHMENT_TOO_LARGE and message includes size info', () => {
+      const error = new AttachmentTooLargeError('large-file.zip', 52_428_800, 25_165_824);
+      expect(error.code).toBe(ErrorCode.ATTACHMENT_TOO_LARGE);
+      expect(error.message).toContain('large-file.zip');
+      expect(error.message).toContain('50MB');
+      expect(error.message).toContain('24MB');
+      expect(error.name).toBe('AttachmentTooLargeError');
+    });
+
+    it('extends OutlookMcpError', () => {
+      const error = new AttachmentTooLargeError('file.zip', 1000000, 500000);
+      expect(error).toBeInstanceOf(OutlookMcpError);
+      expect(error).toBeInstanceOf(Error);
+    });
+  });
+
+  describe('AttachmentSaveError', () => {
+    it('has code ATTACHMENT_SAVE_ERROR and message includes name and reason', () => {
+      const error = new AttachmentSaveError('report.pdf', 'Disk full');
+      expect(error.code).toBe(ErrorCode.ATTACHMENT_SAVE_ERROR);
+      expect(error.message).toContain('report.pdf');
+      expect(error.message).toContain('Disk full');
+      expect(error.name).toBe('AttachmentSaveError');
+    });
+
+    it('extends OutlookMcpError', () => {
+      const error = new AttachmentSaveError('file.txt', 'Permission denied');
       expect(error).toBeInstanceOf(OutlookMcpError);
       expect(error).toBeInstanceOf(Error);
     });

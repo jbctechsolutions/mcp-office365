@@ -9,11 +9,17 @@
  * Provides tools for listing folders, emails, and searching.
  */
 
+import { existsSync } from 'fs';
+import { dirname } from 'path';
 import { z } from 'zod';
 import type { IRepository, EmailRow, FolderRow } from '../database/repository.js';
-import type { Folder, EmailSummary, Email, PriorityValue, FlagStatusValue } from '../types/index.js';
+import type { Folder, EmailSummary, Email, AttachmentInfo, PriorityValue, FlagStatusValue } from '../types/index.js';
+import { MAX_ATTACHMENT_DOWNLOAD_SIZE } from '../types/mail.js';
+import type { IAttachmentReader } from '../applescript/content-readers.js';
+import type { SaveAttachmentResult } from '../applescript/parser.js';
 import { appleTimestampToIso } from '../utils/dates.js';
 import { extractPlainText } from '../parsers/html-stripper.js';
+import { NotFoundError, ValidationError, AttachmentTooLargeError, AttachmentSaveError } from '../utils/errors.js';
 
 // =============================================================================
 // Input Schemas
@@ -66,6 +72,16 @@ export const GetUnreadCountInput = z.strictObject({
     .describe('Optional folder ID to get unread count for'),
 });
 
+export const ListAttachmentsInput = z.strictObject({
+  email_id: z.number().int().positive().describe('The email ID to list attachments for'),
+});
+
+export const DownloadAttachmentInput = z.strictObject({
+  email_id: z.number().int().positive().describe('The email ID containing the attachment'),
+  attachment_index: z.number().int().positive().describe('The 1-based index of the attachment (from list_attachments)'),
+  save_path: z.string().min(1).describe('Absolute file path where the attachment should be saved'),
+});
+
 // =============================================================================
 // Type Definitions
 // =============================================================================
@@ -75,6 +91,8 @@ export type ListEmailsParams = z.infer<typeof ListEmailsInput>;
 export type SearchEmailsParams = z.infer<typeof SearchEmailsInput>;
 export type GetEmailParams = z.infer<typeof GetEmailInput>;
 export type GetUnreadCountParams = z.infer<typeof GetUnreadCountInput>;
+export type ListAttachmentsParams = z.infer<typeof ListAttachmentsInput>;
+export type DownloadAttachmentParams = z.infer<typeof DownloadAttachmentInput>;
 
 // =============================================================================
 // Transformers
@@ -200,7 +218,8 @@ export const nullContentReader: IContentReader = {
 export class MailTools {
   constructor(
     private readonly repository: IRepository,
-    private readonly contentReader: IContentReader = nullContentReader
+    private readonly contentReader: IContentReader = nullContentReader,
+    private readonly attachmentReader?: IAttachmentReader
   ) {}
 
   /**
@@ -241,7 +260,7 @@ export class MailTools {
   /**
    * Gets a single email by ID with optional body content.
    */
-  getEmail(params: GetEmailParams): Email | null {
+  getEmail(params: GetEmailParams): (Email & { attachments: AttachmentInfo[] }) | null {
     const { email_id, include_body, strip_html } = params;
 
     const row = this.repository.getEmail(email_id);
@@ -255,7 +274,16 @@ export class MailTools {
       body = this.contentReader.readEmailBody(row.dataFilePath);
     }
 
-    return transformEmail(row, body, strip_html);
+    // Get attachment metadata if available
+    let attachments: AttachmentInfo[] = [];
+    if (this.attachmentReader != null && row.hasAttachment === 1) {
+      attachments = this.attachmentReader.listAttachments(email_id);
+    }
+
+    return {
+      ...transformEmail(row, body, strip_html),
+      attachments,
+    };
   }
 
   /**
@@ -271,6 +299,85 @@ export class MailTools {
 
     return { count };
   }
+
+  /**
+   * Lists attachment metadata for an email.
+   */
+  listAttachments(params: ListAttachmentsParams): AttachmentInfo[] {
+    if (this.attachmentReader == null) {
+      return [];
+    }
+
+    const { email_id } = params;
+
+    const row = this.repository.getEmail(email_id);
+    if (row == null) {
+      throw new NotFoundError('Email', email_id);
+    }
+
+    return this.attachmentReader.listAttachments(email_id);
+  }
+
+  /**
+   * Downloads/saves an attachment to disk.
+   */
+  downloadAttachment(params: DownloadAttachmentParams): {
+    name: string;
+    savedTo: string;
+    size: number;
+  } {
+    if (this.attachmentReader == null) {
+      throw new ValidationError('Attachment reader not available');
+    }
+
+    const { email_id, attachment_index, save_path } = params;
+
+    const row = this.repository.getEmail(email_id);
+    if (row == null) {
+      throw new NotFoundError('Email', email_id);
+    }
+
+    // Validate save path directory exists
+    const dir = dirname(save_path);
+    if (!existsSync(dir)) {
+      throw new ValidationError(`Directory does not exist: ${dir}`);
+    }
+
+    // Get attachment list to validate index and check size
+    const attachments = this.attachmentReader.listAttachments(email_id);
+    const attachment = attachments.find(a => a.index === attachment_index);
+
+    if (attachment == null) {
+      throw new NotFoundError('Attachment', attachment_index);
+    }
+
+    if (attachment.size > MAX_ATTACHMENT_DOWNLOAD_SIZE) {
+      throw new AttachmentTooLargeError(
+        attachment.name,
+        attachment.size,
+        MAX_ATTACHMENT_DOWNLOAD_SIZE
+      );
+    }
+
+    const result: SaveAttachmentResult = this.attachmentReader.saveAttachment(
+      email_id,
+      attachment_index,
+      save_path
+    );
+
+    if (!result.success) {
+      throw new AttachmentSaveError(
+        attachment.name,
+        result.error ?? 'Unknown error'
+      );
+    }
+
+    return {
+      name: result.name ?? attachment.name,
+      savedTo: result.savedTo ?? save_path,
+      size: result.fileSize ?? attachment.size,
+    };
+  }
 }
 
 /**
@@ -278,7 +385,8 @@ export class MailTools {
  */
 export function createMailTools(
   repository: IRepository,
-  contentReader: IContentReader = nullContentReader
+  contentReader: IContentReader = nullContentReader,
+  attachmentReader?: IAttachmentReader
 ): MailTools {
-  return new MailTools(repository, contentReader);
+  return new MailTools(repository, contentReader, attachmentReader);
 }

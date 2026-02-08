@@ -19,6 +19,8 @@ import {
   searchMessages,
   getMessage,
   getUnreadCount,
+  listAttachments,
+  saveAttachment,
   listEvents,
   getEvent,
   searchEvents,
@@ -724,5 +726,79 @@ describe('emptyMailFolder', () => {
     expect(script).toContain('mail folder id 42');
     expect(script).toContain('messages of targetFolder');
     expect(script).toContain('deleted items');
+  });
+});
+
+// =============================================================================
+// Attachment Scripts
+// =============================================================================
+
+describe('listAttachments', () => {
+  it('generates AppleScript referencing the correct message id', () => {
+    const script = listAttachments(123);
+    expect(script).toContain('message id 123');
+  });
+
+  it('iterates attachments of m and collects name, file size, content type', () => {
+    const script = listAttachments(123);
+    expect(script).toContain('attachments of m');
+    expect(script).toContain('name of a');
+    expect(script).toContain('file size of a');
+    expect(script).toContain('content type of a');
+  });
+});
+
+describe('saveAttachment', () => {
+  it('generates save command with item index and POSIX file', () => {
+    const script = saveAttachment(123, 2, '/tmp/doc.pdf');
+    expect(script).toContain('message id 123');
+    expect(script).toContain('item 2');
+    expect(script).toContain('POSIX file "/tmp/doc.pdf"');
+    expect(script).toContain('save a in');
+  });
+
+  it('escapes paths with special characters', () => {
+    const script = saveAttachment(123, 1, '/tmp/My "Documents"/file (1).pdf');
+    expect(script).toContain('POSIX file');
+    // The path should be present (escaped) in the output
+    expect(script).toContain('My');
+    expect(script).toContain('Documents');
+    expect(script).toContain('file');
+  });
+});
+
+// =============================================================================
+// sendEmail with inlineImages
+// =============================================================================
+
+describe('sendEmail with inlineImages', () => {
+  it('generates content id assignment for inline images', () => {
+    const script = sendEmail({
+      to: ['test@example.com'],
+      subject: 'Test',
+      body: '<p>Hello</p>',
+      bodyType: 'html',
+      inlineImages: [
+        { path: '/path/to/logo.png', contentId: 'logo123' },
+      ],
+    });
+
+    expect(script).toContain('content id');
+    expect(script).toContain('logo123');
+    expect(script).toContain('POSIX file "/path/to/logo.png"');
+    expect(script).toContain('make new attachment');
+  });
+});
+
+// =============================================================================
+// getMessage with attachmentDetails
+// =============================================================================
+
+describe('getMessage with attachmentDetails', () => {
+  it('includes attachmentDetails field in output', () => {
+    const script = getMessage(456);
+    expect(script).toContain('message id 456');
+    expect(script).toContain('attachmentDetails{{=}}');
+    expect(script).toContain('attachDetailList');
   });
 });

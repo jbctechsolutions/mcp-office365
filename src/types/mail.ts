@@ -94,6 +94,26 @@ export interface Email extends EmailSummary {
 }
 
 /**
+ * Attachment metadata for an email.
+ */
+export interface AttachmentInfo {
+  /** 1-based index (matches AppleScript attachment ordering). */
+  readonly index: number;
+  /** Filename of the attachment. */
+  readonly name: string;
+  /** File size in bytes. */
+  readonly size: number;
+  /** MIME content type (e.g., "application/pdf"). */
+  readonly contentType: string;
+}
+
+/** Maximum attachment size for download (25MB). */
+export const MAX_ATTACHMENT_DOWNLOAD_SIZE = 25 * 1024 * 1024;
+
+/** Maximum total attachment size for sending (25MB). */
+export const MAX_TOTAL_ATTACHMENT_SIZE = 25 * 1024 * 1024;
+
+/**
  * Unread count result.
  */
 export interface UnreadCount {

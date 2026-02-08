@@ -20,6 +20,7 @@ export {
   type Folder,
   type EmailSummary,
   type Email,
+  type AttachmentInfo,
   type UnreadCount,
 } from './mail.js';
 

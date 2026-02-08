@@ -48,6 +48,8 @@ export {
   parseDeleteEventResult,
   parseUpdateEventResult,
   parseSendEmailResult,
+  parseAttachments,
+  parseSaveAttachmentResult,
   type AppleScriptFolderRow,
   type AppleScriptEmailRow,
   type AppleScriptCalendarRow,
@@ -57,10 +59,12 @@ export {
   type AppleScriptNoteRow,
   type AppleScriptAccountRow,
   type AppleScriptFolderWithAccountRow,
+  type AppleScriptAttachmentRow,
   type RespondToEventResult,
   type DeleteEventResult,
   type UpdateEventResult,
   type SendEmailResult,
+  type SaveAttachmentResult,
 } from './parser.js';
 
 // Repository
@@ -104,6 +108,7 @@ export {
   AppleScriptContactContentReader,
   AppleScriptTaskContentReader,
   AppleScriptNoteContentReader,
+  AppleScriptAttachmentReader,
   createAppleScriptContentReaders,
   createEmailPath,
   createEventPath,
@@ -116,6 +121,7 @@ export {
   TASK_PATH_PREFIX,
   NOTE_PATH_PREFIX,
   type AppleScriptContentReaders,
+  type IAttachmentReader,
 } from './content-readers.js';
 
 // Mail Sender
@@ -126,4 +132,5 @@ export {
   type SendEmailParams as MailSenderSendEmailParams,
   type SentEmail,
   type Attachment,
+  type InlineImage,
 } from './mail-sender.js';

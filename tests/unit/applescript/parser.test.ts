@@ -26,6 +26,8 @@ import {
   parseDeleteEventResult,
   parseUpdateEventResult,
   parseSendEmailResult,
+  parseAttachments,
+  parseSaveAttachmentResult,
 } from '../../../src/applescript/parser.js';
 import { DELIMITERS } from '../../../src/applescript/scripts.js';
 
@@ -368,6 +370,109 @@ describe('AppleScript Parser', () => {
     it('should handle missing record', () => {
       const result = parseSendEmailResult('invalid');
       expect(result).toBeNull();
+    });
+  });
+
+  // ===========================================================================
+  // Attachment Parsers
+  // ===========================================================================
+
+  describe('parseAttachments', () => {
+    it('should parse multiple attachment records', () => {
+      const output =
+        `${DELIMITERS.RECORD}index${DELIMITERS.EQUALS}1${DELIMITERS.FIELD}name${DELIMITERS.EQUALS}report.pdf${DELIMITERS.FIELD}fileSize${DELIMITERS.EQUALS}102400${DELIMITERS.FIELD}contentType${DELIMITERS.EQUALS}application/pdf` +
+        `${DELIMITERS.RECORD}index${DELIMITERS.EQUALS}2${DELIMITERS.FIELD}name${DELIMITERS.EQUALS}image.png${DELIMITERS.FIELD}fileSize${DELIMITERS.EQUALS}51200${DELIMITERS.FIELD}contentType${DELIMITERS.EQUALS}image/png`;
+      const result = parseAttachments(output);
+
+      expect(result).toHaveLength(2);
+      expect(result[0]).toEqual({
+        index: 1,
+        name: 'report.pdf',
+        fileSize: 102400,
+        contentType: 'application/pdf',
+      });
+      expect(result[1]).toEqual({
+        index: 2,
+        name: 'image.png',
+        fileSize: 51200,
+        contentType: 'image/png',
+      });
+    });
+
+    it('should handle empty output', () => {
+      expect(parseAttachments('')).toEqual([]);
+      expect(parseAttachments('   ')).toEqual([]);
+    });
+
+    it('should default to application/octet-stream for missing contentType', () => {
+      const output = `${DELIMITERS.RECORD}index${DELIMITERS.EQUALS}1${DELIMITERS.FIELD}name${DELIMITERS.EQUALS}file.bin${DELIMITERS.FIELD}fileSize${DELIMITERS.EQUALS}1024`;
+      const result = parseAttachments(output);
+
+      expect(result).toHaveLength(1);
+      expect(result[0]!.contentType).toBe('application/octet-stream');
+    });
+
+    it('should default to 0 for missing fileSize', () => {
+      const output = `${DELIMITERS.RECORD}index${DELIMITERS.EQUALS}1${DELIMITERS.FIELD}name${DELIMITERS.EQUALS}file.txt${DELIMITERS.FIELD}contentType${DELIMITERS.EQUALS}text/plain`;
+      const result = parseAttachments(output);
+
+      expect(result).toHaveLength(1);
+      expect(result[0]!.fileSize).toBe(0);
+    });
+  });
+
+  describe('parseSaveAttachmentResult', () => {
+    it('should parse success result', () => {
+      const output = `${DELIMITERS.RECORD}success${DELIMITERS.EQUALS}true${DELIMITERS.FIELD}name${DELIMITERS.EQUALS}report.pdf${DELIMITERS.FIELD}savedTo${DELIMITERS.EQUALS}/tmp/report.pdf${DELIMITERS.FIELD}fileSize${DELIMITERS.EQUALS}102400`;
+      const result = parseSaveAttachmentResult(output);
+
+      expect(result).toEqual({
+        success: true,
+        name: 'report.pdf',
+        savedTo: '/tmp/report.pdf',
+        fileSize: 102400,
+      });
+    });
+
+    it('should parse failure result', () => {
+      const output = `${DELIMITERS.RECORD}success${DELIMITERS.EQUALS}false${DELIMITERS.FIELD}error${DELIMITERS.EQUALS}Permission denied`;
+      const result = parseSaveAttachmentResult(output);
+
+      expect(result).toEqual({
+        success: false,
+        error: 'Permission denied',
+      });
+    });
+
+    it('should return null for empty output', () => {
+      expect(parseSaveAttachmentResult('')).toBeNull();
+      expect(parseSaveAttachmentResult('   ')).toBeNull();
+    });
+  });
+
+  // ===========================================================================
+  // parseEmail with attachmentDetails
+  // ===========================================================================
+
+  describe('parseEmail with attachmentDetails', () => {
+    it('should include attachmentDetails array', () => {
+      const output = `${DELIMITERS.RECORD}id${DELIMITERS.EQUALS}1${DELIMITERS.FIELD}subject${DELIMITERS.EQUALS}Test${DELIMITERS.FIELD}attachmentDetails${DELIMITERS.EQUALS}1|report.pdf|102400|application/pdf,2|image.png|51200|image/png`;
+      const result = parseEmail(output);
+
+      expect(result).not.toBeNull();
+      expect(result!.attachmentDetails).toHaveLength(2);
+      expect(result!.attachmentDetails[0]).toEqual({
+        index: 1,
+        name: 'report.pdf',
+        fileSize: 102400,
+        contentType: 'application/pdf',
+      });
+      expect(result!.attachmentDetails[1]).toEqual({
+        index: 2,
+        name: 'image.png',
+        fileSize: 51200,
+        contentType: 'image/png',
+      });
     });
   });
 });

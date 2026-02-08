@@ -18,6 +18,13 @@ export interface Attachment {
   readonly name?: string;
 }
 
+export interface InlineImage {
+  /** Absolute file path to the image. */
+  readonly path: string;
+  /** Content ID for referencing in HTML body (without "cid:" prefix). */
+  readonly contentId: string;
+}
+
 export interface SendEmailParams {
   readonly to: readonly string[];
   readonly subject: string;
@@ -27,6 +34,7 @@ export interface SendEmailParams {
   readonly bcc?: readonly string[];
   readonly replyTo?: string;
   readonly attachments?: readonly Attachment[];
+  readonly inlineImages?: readonly InlineImage[];
   readonly accountId?: number;
 }
 
@@ -50,6 +58,15 @@ export class AppleScriptMailSender implements IMailSender {
       }
     }
 
+    // Validate inline images exist
+    if (params.inlineImages != null) {
+      for (const image of params.inlineImages) {
+        if (!existsSync(image.path)) {
+          throw new AttachmentNotFoundError(image.path);
+        }
+      }
+    }
+
     let scriptParams: scripts.SendEmailParams = {
       to: params.to,
       subject: params.subject,
@@ -61,6 +78,7 @@ export class AppleScriptMailSender implements IMailSender {
     if (params.bcc != null) scriptParams = { ...scriptParams, bcc: params.bcc };
     if (params.replyTo != null) scriptParams = { ...scriptParams, replyTo: params.replyTo };
     if (params.attachments != null) scriptParams = { ...scriptParams, attachments: params.attachments };
+    if (params.inlineImages != null) scriptParams = { ...scriptParams, inlineImages: params.inlineImages };
     if (params.accountId != null) scriptParams = { ...scriptParams, accountId: params.accountId };
 
     const script = scripts.sendEmail(scriptParams);

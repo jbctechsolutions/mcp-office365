@@ -31,6 +31,13 @@ export interface AppleScriptFolderRow {
   readonly unreadCount: number;
 }
 
+export interface AppleScriptAttachmentRow {
+  readonly index: number;
+  readonly name: string;
+  readonly fileSize: number;
+  readonly contentType: string;
+}
+
 export interface AppleScriptEmailRow {
   readonly id: number;
   readonly folderId: number | null;
@@ -48,6 +55,7 @@ export interface AppleScriptEmailRow {
   readonly plainContent: string | null;
   readonly hasHtml: boolean;
   readonly attachments: string[];
+  readonly attachmentDetails: AppleScriptAttachmentRow[];
 }
 
 export interface AppleScriptCalendarRow {
@@ -125,6 +133,14 @@ export interface RespondToEventResult {
 export interface DeleteEventResult {
   readonly success: boolean;
   readonly eventId?: number;
+  readonly error?: string;
+}
+
+export interface SaveAttachmentResult {
+  readonly success: boolean;
+  readonly name?: string;
+  readonly savedTo?: string;
+  readonly fileSize?: number;
   readonly error?: string;
 }
 
@@ -227,6 +243,27 @@ function parseList(value: string | undefined): string[] {
 }
 
 /**
+ * Parses the attachmentDetails field from getMessage output.
+ * Format: "index|name|size|contentType,index|name|size|contentType,..."
+ */
+function parseAttachmentDetails(value: string | undefined): AppleScriptAttachmentRow[] {
+  if (value === undefined || value === '' || value === DELIMITERS.NULL) {
+    return [];
+  }
+
+  const items = value.split(',').filter((s) => s.length > 0);
+  return items.map((item) => {
+    const parts = item.split('|');
+    return {
+      index: parseInt(parts[0] ?? '0', 10) || 0,
+      name: parts[1] ?? '',
+      fileSize: parseInt(parts[2] ?? '0', 10) || 0,
+      contentType: parts[3] ?? 'application/octet-stream',
+    };
+  });
+}
+
+/**
  * Parses an attendee list (format: "email|name,email|name").
  */
 function parseAttendees(value: string | undefined): Array<{ email: string; name: string }> {
@@ -288,6 +325,7 @@ export function parseEmails(output: string): AppleScriptEmailRow[] {
     plainContent: parseString(r['plainContent']),
     hasHtml: parseBoolean(r['hasHtml']),
     attachments: parseList(r['attachments']),
+    attachmentDetails: parseAttachmentDetails(r['attachmentDetails']),
   }));
 }
 
@@ -605,6 +643,50 @@ export function parseSendEmailResult(output: string): SendEmailResult | null {
       success: true,
       messageId: record['messageId'] ?? '',
       sentAt: record['sentAt'] ?? '',
+    };
+  } else {
+    return {
+      success: false,
+      error: record['error'] ?? 'Unknown error',
+    };
+  }
+}
+
+// =============================================================================
+// Attachment Parsers
+// =============================================================================
+
+/**
+ * Parses attachment list output from AppleScript.
+ */
+export function parseAttachments(output: string): AppleScriptAttachmentRow[] {
+  const records = parseRawOutput(output);
+  return records.map((r) => ({
+    index: parseNumber(r['index']),
+    name: r['name'] ?? '',
+    fileSize: parseNumber(r['fileSize']),
+    contentType: r['contentType'] ?? 'application/octet-stream',
+  }));
+}
+
+/**
+ * Parses the result of a save-attachment operation.
+ */
+export function parseSaveAttachmentResult(output: string): SaveAttachmentResult | null {
+  const records = parseRawOutput(output);
+  if (records.length === 0) return null;
+
+  const record = records[0];
+  if (!record) return null;
+
+  const success = record['success'] === 'true';
+
+  if (success) {
+    return {
+      success: true,
+      name: record['name'] ?? '',
+      savedTo: record['savedTo'] ?? '',
+      fileSize: parseNumber(record['fileSize']),
     };
   } else {
     return {
