@@ -113,7 +113,18 @@ end tell
 }
 
 /**
+ * Maximum number of messages to scan for sender-address matches.
+ * Keeps execution within the 30s AppleScript timeout.
+ */
+const SENDER_SCAN_LIMIT = 500;
+
+/**
  * Searches messages by query.
+ *
+ * Uses a two-phase approach to avoid crashes on emails with unresolvable sender
+ * addresses (the AppleScript WHERE clause cannot use try/catch):
+ *   Phase 1 — subject matches via a safe WHERE clause
+ *   Phase 2 — sender matches via a loop with try/catch protection
  */
 export function searchMessages(query: string, folderId: number | null, limit: number): string {
   const escapedQuery = escapeForAppleScript(query);
@@ -122,15 +133,17 @@ export function searchMessages(query: string, folderId: number | null, limit: nu
   return `
 tell application "Microsoft Outlook"
   set output to ""
-  set searchResults to (messages ${folderClause} whose subject contains "${escapedQuery}" or (address of sender) contains "${escapedQuery}")
-  set resultCount to count of searchResults
+  set matchedIds to {}
+  set resultCount to 0
   set maxResults to ${limit}
-  if resultCount < maxResults then set maxResults to resultCount
 
-  repeat with i from 1 to maxResults
+  -- Phase 1: Subject matches (safe WHERE clause)
+  set subjectMatches to (messages ${folderClause} whose subject contains "${escapedQuery}")
+  repeat with m in subjectMatches
+    if resultCount ≥ maxResults then exit repeat
     try
-      set m to item i of searchResults
       set mId to id of m
+      set end of matchedIds to mId
       set mSubject to subject of m
       set mSender to ""
       try
@@ -153,10 +166,54 @@ tell application "Microsoft Outlook"
           set mPreview to plain text content of m
         end try
       end try
-
       set output to output & "{{RECORD}}id{{=}}" & mId & "{{FIELD}}subject{{=}}" & mSubject & "{{FIELD}}senderEmail{{=}}" & mSender & "{{FIELD}}senderName{{=}}" & mSenderName & "{{FIELD}}dateReceived{{=}}" & mDate & "{{FIELD}}isRead{{=}}" & mRead & "{{FIELD}}preview{{=}}" & mPreview
+      set resultCount to resultCount + 1
     end try
   end repeat
+
+  -- Phase 2: Sender matches (loop with try/catch for safety)
+  if resultCount < maxResults then
+    set allMsgs to messages ${folderClause}
+    set scanLimit to count of allMsgs
+    if scanLimit > ${SENDER_SCAN_LIMIT} then set scanLimit to ${SENDER_SCAN_LIMIT}
+    repeat with i from 1 to scanLimit
+      if resultCount ≥ maxResults then exit repeat
+      try
+        set m to item i of allMsgs
+        set mId to id of m
+        if matchedIds does not contain mId then
+          set mSender to ""
+          try
+            set mSender to address of sender of m
+          end try
+          if mSender contains "${escapedQuery}" then
+            set end of matchedIds to mId
+            set mSubject to subject of m
+            set mSenderName to ""
+            try
+              set mSenderName to name of sender of m
+            end try
+            set mDate to ""
+            try
+              set mDate to time received of m as «class isot» as string
+            end try
+            set mRead to is read of m
+            set mPreview to ""
+            try
+              set mPreview to text 1 thru 200 of plain text content of m
+            on error
+              try
+                set mPreview to plain text content of m
+              end try
+            end try
+            set output to output & "{{RECORD}}id{{=}}" & mId & "{{FIELD}}subject{{=}}" & mSubject & "{{FIELD}}senderEmail{{=}}" & mSender & "{{FIELD}}senderName{{=}}" & mSenderName & "{{FIELD}}dateReceived{{=}}" & mDate & "{{FIELD}}isRead{{=}}" & mRead & "{{FIELD}}preview{{=}}" & mPreview
+            set resultCount to resultCount + 1
+          end if
+        end if
+      end try
+    end repeat
+  end if
+
   return output
 end tell
 `;
