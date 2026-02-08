@@ -27,6 +27,8 @@ export const ErrorCode = {
   GRAPH_PERMISSION_DENIED: 'GRAPH_PERMISSION_DENIED',
   GRAPH_ERROR: 'GRAPH_ERROR',
   ATTACHMENT_NOT_FOUND: 'ATTACHMENT_NOT_FOUND',
+  ATTACHMENT_TOO_LARGE: 'ATTACHMENT_TOO_LARGE',
+  ATTACHMENT_SAVE_ERROR: 'ATTACHMENT_SAVE_ERROR',
   MAIL_SEND_ERROR: 'MAIL_SEND_ERROR',
   RECURRING_EVENT_ERROR: 'RECURRING_EVENT_ERROR',
   APPROVAL_EXPIRED: 'APPROVAL_EXPIRED',
@@ -285,6 +287,31 @@ export class AttachmentNotFoundError extends OutlookMcpError {
 
   constructor(path: string) {
     super(`Attachment file not found: ${path}. Please check the file path exists.`);
+  }
+}
+
+/**
+ * Thrown when an attachment exceeds the size limit.
+ */
+export class AttachmentTooLargeError extends OutlookMcpError {
+  readonly code = ErrorCode.ATTACHMENT_TOO_LARGE;
+
+  constructor(name: string, sizeBytes: number, maxBytes: number) {
+    super(
+      `Attachment "${name}" is ${Math.round(sizeBytes / 1024 / 1024)}MB ` +
+        `which exceeds the maximum size of ${Math.round(maxBytes / 1024 / 1024)}MB.`
+    );
+  }
+}
+
+/**
+ * Thrown when saving an attachment to disk fails.
+ */
+export class AttachmentSaveError extends OutlookMcpError {
+  readonly code = ErrorCode.ATTACHMENT_SAVE_ERROR;
+
+  constructor(name: string, reason: string) {
+    super(`Failed to save attachment "${name}": ${reason}`);
   }
 }
 

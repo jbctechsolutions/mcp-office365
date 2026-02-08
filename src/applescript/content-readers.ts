@@ -19,7 +19,10 @@ import type { IEventContentReader, EventDetails } from '../tools/calendar.js';
 import type { IContactContentReader, ContactDetails } from '../tools/contacts.js';
 import type { ITaskContentReader, TaskDetails } from '../tools/tasks.js';
 import type { INoteContentReader, NoteDetails } from '../tools/notes.js';
-import { executeAppleScript } from './executor.js';
+import type { AttachmentInfo } from '../types/mail.js';
+import type { SaveAttachmentResult } from './parser.js';
+import { executeAppleScript, executeAppleScriptOrThrow } from './executor.js';
+import { AppleScriptError } from '../utils/errors.js';
 import * as scripts from './scripts.js';
 import * as parser from './parser.js';
 
@@ -344,6 +347,55 @@ export class AppleScriptNoteContentReader implements INoteContentReader {
 }
 
 // =============================================================================
+// Attachment Reader
+// =============================================================================
+
+/**
+ * Interface for reading attachment metadata and saving attachments.
+ */
+export interface IAttachmentReader {
+  listAttachments(emailId: number): AttachmentInfo[];
+  saveAttachment(emailId: number, attachmentIndex: number, savePath: string): SaveAttachmentResult;
+}
+
+/**
+ * AppleScript-based attachment reader.
+ */
+export class AppleScriptAttachmentReader implements IAttachmentReader {
+  listAttachments(emailId: number): AttachmentInfo[] {
+    try {
+      const script = scripts.listAttachments(emailId);
+      const result = executeAppleScript(script);
+      if (!result.success) {
+        return [];
+      }
+
+      const rows = parser.parseAttachments(result.output);
+      return rows.map((r) => ({
+        index: r.index,
+        name: r.name,
+        size: r.fileSize,
+        contentType: r.contentType,
+      }));
+    } catch {
+      return [];
+    }
+  }
+
+  saveAttachment(emailId: number, attachmentIndex: number, savePath: string): SaveAttachmentResult {
+    const script = scripts.saveAttachment(emailId, attachmentIndex, savePath);
+    const output = executeAppleScriptOrThrow(script);
+    const result = parser.parseSaveAttachmentResult(output);
+
+    if (result == null) {
+      throw new AppleScriptError('Failed to parse save attachment response');
+    }
+
+    return result;
+  }
+}
+
+// =============================================================================
 // Factory Functions
 // =============================================================================
 
@@ -356,6 +408,7 @@ export interface AppleScriptContentReaders {
   readonly contact: IContactContentReader;
   readonly task: ITaskContentReader;
   readonly note: INoteContentReader;
+  readonly attachment: IAttachmentReader;
 }
 
 /**
@@ -368,5 +421,6 @@ export function createAppleScriptContentReaders(): AppleScriptContentReaders {
     contact: new AppleScriptContactContentReader(),
     task: new AppleScriptTaskContentReader(),
     note: new AppleScriptNoteContentReader(),
+    attachment: new AppleScriptAttachmentReader(),
   };
 }

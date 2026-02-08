@@ -55,6 +55,8 @@ import {
   SearchEmailsInput,
   GetEmailInput,
   GetUnreadCountInput,
+  ListAttachmentsInput,
+  DownloadAttachmentInput,
   ListCalendarsInput,
   ListEventsInput,
   GetEventInput,
@@ -236,6 +238,43 @@ const TOOLS: Tool[] = [
         },
       },
       required: [],
+    },
+  },
+  // Attachment tools
+  {
+    name: 'list_attachments',
+    description: 'List attachment metadata (name, size, type) for an email',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        email_id: {
+          type: 'number',
+          description: 'The email ID to list attachments for',
+        },
+      },
+      required: ['email_id'],
+    },
+  },
+  {
+    name: 'download_attachment',
+    description: 'Download/save an email attachment to a file on disk. Returns the saved file path and size.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        email_id: {
+          type: 'number',
+          description: 'The email ID containing the attachment',
+        },
+        attachment_index: {
+          type: 'number',
+          description: 'The 1-based index of the attachment (from list_attachments)',
+        },
+        save_path: {
+          type: 'string',
+          description: 'Absolute file path where the attachment should be saved',
+        },
+      },
+      required: ['email_id', 'attachment_index', 'save_path'],
     },
   },
   // Calendar tools
@@ -1009,6 +1048,24 @@ const TOOLS: Tool[] = [
           },
           description: 'File attachments',
         },
+        inline_images: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              path: {
+                type: 'string',
+                description: 'Absolute file path to the image',
+              },
+              content_id: {
+                type: 'string',
+                description: 'Content ID for referencing in HTML body (use in <img src="cid:content_id">)',
+              },
+            },
+            required: ['path', 'content_id'],
+          },
+          description: 'Inline images to embed in HTML body (reference via cid: in img tags)',
+        },
         account_id: {
           type: 'number',
           description: 'Account to send from (optional)',
@@ -1074,7 +1131,7 @@ export function createServer(): Server {
     const contentReaders = createAppleScriptContentReaders();
 
     accountRepository = createAccountRepository();
-    mailTools = createMailTools(repository, contentReaders.email);
+    mailTools = createMailTools(repository, contentReaders.email, contentReaders.attachment);
     calendarTools = createCalendarTools(repository, contentReaders.event);
     contactsTools = createContactsTools(repository, contentReaders.contact);
     tasksTools = createTasksTools(repository, contentReaders.task);
@@ -1448,6 +1505,19 @@ async function handleAppleScriptToolCall(
       return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
     }
 
+    // Attachment tools
+    case 'list_attachments': {
+      const params = ListAttachmentsInput.parse(args);
+      const result = mailTools.listAttachments(params);
+      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+    }
+
+    case 'download_attachment': {
+      const params = DownloadAttachmentInput.parse(args);
+      const result = mailTools.downloadAttachment(params);
+      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+    }
+
     // Calendar tools
     case 'list_calendars': {
       const params = ListCalendarsInput.parse(args ?? {});
@@ -1711,6 +1781,7 @@ async function handleAppleScriptToolCall(
         bcc?: string[];
         reply_to?: string;
         attachments?: Array<{ path: string; name?: string }>;
+        inline_images?: Array<{ path: string; content_id: string }>;
         account_id?: number;
       };
 
@@ -1725,6 +1796,15 @@ async function handleAppleScriptToolCall(
       if (params.bcc != null) sendParams = { ...sendParams, bcc: params.bcc };
       if (params.reply_to != null) sendParams = { ...sendParams, replyTo: params.reply_to };
       if (params.attachments != null) sendParams = { ...sendParams, attachments: params.attachments };
+      if (params.inline_images != null) {
+        sendParams = {
+          ...sendParams,
+          inlineImages: params.inline_images.map(img => ({
+            path: img.path,
+            contentId: img.content_id,
+          })),
+        };
+      }
       if (params.account_id != null) sendParams = { ...sendParams, accountId: params.account_id };
 
       const sent = mailSender.sendEmail(sendParams);
@@ -1816,6 +1896,21 @@ async function handleGraphToolCall(
           : await repository.getUnreadCountAsync();
         const result = { total: count };
         return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+      }
+
+      // Attachment tools (Graph API stubs)
+      case 'list_attachments': {
+        return {
+          content: [{ type: 'text', text: 'Attachment listing is not yet supported with the Graph API backend' }],
+          isError: true,
+        };
+      }
+
+      case 'download_attachment': {
+        return {
+          content: [{ type: 'text', text: 'Attachment download is not yet supported with the Graph API backend' }],
+          isError: true,
+        };
       }
 
       // Calendar tools

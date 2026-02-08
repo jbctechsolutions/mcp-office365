@@ -284,13 +284,26 @@ tell application "Microsoft Outlook"
 
   -- Get attachments
   set attachList to ""
+  set attachDetailList to ""
   try
+    set idx to 1
     repeat with a in attachments of m
-      set attachList to attachList & (name of a) & ","
+      set aName to name of a
+      set attachList to attachList & aName & ","
+      set aSize to 0
+      try
+        set aSize to file size of a
+      end try
+      set aType to ""
+      try
+        set aType to content type of a
+      end try
+      set attachDetailList to attachDetailList & idx & "|" & aName & "|" & aSize & "|" & aType & ","
+      set idx to idx + 1
     end repeat
   end try
 
-  return "{{RECORD}}id{{=}}" & mId & "{{FIELD}}subject{{=}}" & mSubject & "{{FIELD}}senderEmail{{=}}" & mSender & "{{FIELD}}senderName{{=}}" & mSenderName & "{{FIELD}}dateReceived{{=}}" & mDateReceived & "{{FIELD}}dateSent{{=}}" & mDateSent & "{{FIELD}}isRead{{=}}" & mRead & "{{FIELD}}priority{{=}}" & mPriority & "{{FIELD}}htmlContent{{=}}" & mHtml & "{{FIELD}}plainContent{{=}}" & mPlain & "{{FIELD}}hasHtml{{=}}" & mHasHtml & "{{FIELD}}folderId{{=}}" & mFolderId & "{{FIELD}}toRecipients{{=}}" & toList & "{{FIELD}}ccRecipients{{=}}" & ccList & "{{FIELD}}attachments{{=}}" & attachList
+  return "{{RECORD}}id{{=}}" & mId & "{{FIELD}}subject{{=}}" & mSubject & "{{FIELD}}senderEmail{{=}}" & mSender & "{{FIELD}}senderName{{=}}" & mSenderName & "{{FIELD}}dateReceived{{=}}" & mDateReceived & "{{FIELD}}dateSent{{=}}" & mDateSent & "{{FIELD}}isRead{{=}}" & mRead & "{{FIELD}}priority{{=}}" & mPriority & "{{FIELD}}htmlContent{{=}}" & mHtml & "{{FIELD}}plainContent{{=}}" & mPlain & "{{FIELD}}hasHtml{{=}}" & mHasHtml & "{{FIELD}}folderId{{=}}" & mFolderId & "{{FIELD}}toRecipients{{=}}" & toList & "{{FIELD}}ccRecipients{{=}}" & ccList & "{{FIELD}}attachments{{=}}" & attachList & "{{FIELD}}attachmentDetails{{=}}" & attachDetailList
 end tell
 `;
 }
@@ -303,6 +316,70 @@ export function getUnreadCount(folderId: number): string {
 tell application "Microsoft Outlook"
   set f to mail folder id ${folderId}
   return unread count of f
+end tell
+`;
+}
+
+// =============================================================================
+// Attachment Scripts
+// =============================================================================
+
+/**
+ * Lists attachment metadata for a message.
+ */
+export function listAttachments(messageId: number): string {
+  return `
+tell application "Microsoft Outlook"
+  set m to message id ${messageId}
+  set output to ""
+  set attachList to attachments of m
+  set idx to 1
+  repeat with a in attachList
+    try
+      set aName to name of a
+      set aSize to 0
+      try
+        set aSize to file size of a
+      end try
+      set aType to ""
+      try
+        set aType to content type of a
+      end try
+      set output to output & "{{RECORD}}index{{=}}" & idx & "{{FIELD}}name{{=}}" & aName & "{{FIELD}}fileSize{{=}}" & aSize & "{{FIELD}}contentType{{=}}" & aType
+    end try
+    set idx to idx + 1
+  end repeat
+  return output
+end tell
+`;
+}
+
+/**
+ * Saves an attachment from a message to a file path.
+ * Uses 1-based attachment index.
+ */
+export function saveAttachment(messageId: number, attachmentIndex: number, savePath: string): string {
+  const escapedPath = escapeForAppleScript(savePath);
+  return `
+tell application "Microsoft Outlook"
+  try
+    set m to message id ${messageId}
+    set attachList to attachments of m
+    set attachCount to count of attachList
+    if ${attachmentIndex} > attachCount then
+      return "{{RECORD}}success{{=}}false{{FIELD}}error{{=}}Attachment index ${attachmentIndex} out of range (message has " & attachCount & " attachments)"
+    end if
+    set a to item ${attachmentIndex} of attachList
+    set aName to name of a
+    set aSize to 0
+    try
+      set aSize to file size of a
+    end try
+    save a in POSIX file "${escapedPath}"
+    return "{{RECORD}}success{{=}}true{{FIELD}}name{{=}}" & aName & "{{FIELD}}savedTo{{=}}${escapedPath}" & "{{FIELD}}fileSize{{=}}" & aSize
+  on error errMsg
+    return "{{RECORD}}success{{=}}false{{FIELD}}error{{=}}" & errMsg
+  end try
 end tell
 `;
 }
@@ -1480,6 +1557,7 @@ export interface SendEmailParams {
   readonly bcc?: readonly string[];
   readonly replyTo?: string;
   readonly attachments?: readonly { path: string; name?: string }[];
+  readonly inlineImages?: readonly { path: string; contentId: string }[];
   readonly accountId?: number;
 }
 
@@ -1487,7 +1565,7 @@ export interface SendEmailParams {
  * Sends an email with optional CC, BCC, attachments, and account selection.
  */
 export function sendEmail(params: SendEmailParams): string {
-  const { to, subject, body, bodyType, cc, bcc, replyTo, attachments, accountId } = params;
+  const { to, subject, body, bodyType, cc, bcc, replyTo, attachments, inlineImages, accountId } = params;
 
   const escapedSubject = escapeForAppleScript(subject);
   const escapedBody = escapeForAppleScript(body);
@@ -1522,6 +1600,15 @@ export function sendEmail(params: SendEmailParams): string {
       ).join('\n')
     : '';
 
+  const inlineImageStatements = inlineImages != null && inlineImages.length > 0
+    ? inlineImages.map((img, i) =>
+        `    set inlineAttach${i} to make new attachment at newMessage with properties {file:(POSIX file "${img.path}")}\n` +
+        `    try\n` +
+        `      set content id of inlineAttach${i} to "${img.contentId}"\n` +
+        `    end try`
+      ).join('\n')
+    : '';
+
   const accountStatement = accountId != null
     ? `    set sending account of newMessage to account id ${accountId}`
     : '';
@@ -1537,6 +1624,7 @@ ${bccRecipients}
 ${replyToStatement}
 ${accountStatement}
 ${attachmentStatements}
+${inlineImageStatements}
 
     send newMessage
 

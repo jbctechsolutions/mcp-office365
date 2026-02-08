@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-02-08
+
+### Added
+- **Attachment Listing**: New `list_attachments` tool to retrieve attachment metadata (name, size, content type) for any email
+- **Attachment Downloading**: New `download_attachment` tool to save email attachments to local disk
+- **Inline Image Support**: `send_email` now supports `inline_images` parameter for embedding images in HTML email bodies via content IDs
+- **Attachment Metadata in Emails**: `get_email` now includes `attachments` array with full metadata when the email has attachments
+- **Attachment Error Handling**: New `AttachmentTooLargeError` and `AttachmentSaveError` error classes with 25 MB size limit enforcement
+
+### Changed
+- Enhanced AppleScript `getMessage` to return detailed attachment metadata (index, name, size, content type)
+- Extended `Email` interface with optional `attachments: AttachmentInfo[]` field
+- Updated `send_email` tool schema to accept `inline_images` array
+
 ## [1.0.3] - 2026-02-06
 
 ### Fixed
@@ -104,5 +118,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-[Unreleased]: https://github.com/jbctechsolutions/mcp-outlook-mac/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/jbctechsolutions/mcp-outlook-mac/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/jbctechsolutions/mcp-outlook-mac/compare/v1.0.3...v1.1.0
+[1.0.3]: https://github.com/jbctechsolutions/mcp-outlook-mac/compare/v1.0.2...v1.0.3
+[1.0.2]: https://github.com/jbctechsolutions/mcp-outlook-mac/compare/v1.0.1...v1.0.2
+[1.0.1]: https://github.com/jbctechsolutions/mcp-outlook-mac/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/jbctechsolutions/mcp-outlook-mac/releases/tag/v1.0.0

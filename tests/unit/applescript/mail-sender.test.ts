@@ -218,5 +218,69 @@ describe('AppleScriptMailSender', () => {
       expect(script).toContain('user2@example.com');
       expect(script).toContain('user3@example.com');
     });
+
+    // =========================================================================
+    // Inline Images
+    // =========================================================================
+
+    it('validates inline image files exist before sending', () => {
+      mockedExistsSync.mockReturnValue(true);
+      mockedExecute.mockReturnValue(
+        '{{RECORD}}success{{=}}true{{FIELD}}messageId{{=}}66666{{FIELD}}sentAt{{=}}2024-01-15T11:05:00Z'
+      );
+
+      sender.sendEmail({
+        to: ['test@example.com'],
+        subject: 'Test',
+        body: '<p>Hello</p>',
+        bodyType: 'html',
+        inlineImages: [
+          { path: '/path/to/logo.png', contentId: 'logo123' },
+        ],
+      });
+
+      expect(mockedExistsSync).toHaveBeenCalledWith('/path/to/logo.png');
+    });
+
+    it('throws AttachmentNotFoundError for missing inline image files', () => {
+      mockedExistsSync.mockReturnValue(false);
+
+      expect(() => {
+        sender.sendEmail({
+          to: ['test@example.com'],
+          subject: 'Test',
+          body: '<p>Hello</p>',
+          bodyType: 'html',
+          inlineImages: [
+            { path: '/nonexistent/logo.png', contentId: 'logo123' },
+          ],
+        });
+      }).toThrow(AttachmentNotFoundError);
+
+      expect(mockedExecute).not.toHaveBeenCalled();
+      expect(mockedExistsSync).toHaveBeenCalledWith('/nonexistent/logo.png');
+    });
+
+    it('includes content id in generated script for inline images', () => {
+      mockedExistsSync.mockReturnValue(true);
+      mockedExecute.mockReturnValue(
+        '{{RECORD}}success{{=}}true{{FIELD}}messageId{{=}}77777{{FIELD}}sentAt{{=}}2024-01-15T11:10:00Z'
+      );
+
+      sender.sendEmail({
+        to: ['test@example.com'],
+        subject: 'Test',
+        body: '<p><img src="cid:logo123"></p>',
+        bodyType: 'html',
+        inlineImages: [
+          { path: '/path/to/logo.png', contentId: 'logo123' },
+        ],
+      });
+
+      const script = mockedExecute.mock.calls[0]![0];
+      expect(script).toContain('content id');
+      expect(script).toContain('logo123');
+      expect(script).toContain('POSIX file "/path/to/logo.png"');
+    });
   });
 });

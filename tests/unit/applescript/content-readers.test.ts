@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 vi.mock('../../../src/applescript/executor.js', () => ({
   executeAppleScript: vi.fn(),
+  executeAppleScriptOrThrow: vi.fn(),
 }));
 
 vi.mock('../../../src/applescript/scripts.js', () => ({
@@ -10,6 +11,8 @@ vi.mock('../../../src/applescript/scripts.js', () => ({
   getContact: vi.fn(() => 'mock-contact-script'),
   getTask: vi.fn(() => 'mock-task-script'),
   getNote: vi.fn(() => 'mock-note-script'),
+  listAttachments: vi.fn(() => 'mock-list-attachments-script'),
+  saveAttachment: vi.fn(() => 'mock-save-attachment-script'),
 }));
 
 vi.mock('../../../src/applescript/parser.js', () => ({
@@ -18,6 +21,8 @@ vi.mock('../../../src/applescript/parser.js', () => ({
   parseContact: vi.fn(),
   parseTask: vi.fn(),
   parseNote: vi.fn(),
+  parseAttachments: vi.fn(),
+  parseSaveAttachmentResult: vi.fn(),
 }));
 
 import {
@@ -31,17 +36,21 @@ import {
   AppleScriptContactContentReader,
   AppleScriptTaskContentReader,
   AppleScriptNoteContentReader,
+  AppleScriptAttachmentReader,
   createAppleScriptContentReaders,
 } from '../../../src/applescript/content-readers.js';
-import { executeAppleScript } from '../../../src/applescript/executor.js';
+import { executeAppleScript, executeAppleScriptOrThrow } from '../../../src/applescript/executor.js';
 import * as parser from '../../../src/applescript/parser.js';
 
 const mockedExecute = vi.mocked(executeAppleScript);
+const mockedExecuteOrThrow = vi.mocked(executeAppleScriptOrThrow);
 const mockedParseEmail = vi.mocked(parser.parseEmail);
 const mockedParseEvent = vi.mocked(parser.parseEvent);
 const mockedParseContact = vi.mocked(parser.parseContact);
 const mockedParseTask = vi.mocked(parser.parseTask);
 const mockedParseNote = vi.mocked(parser.parseNote);
+const mockedParseAttachments = vi.mocked(parser.parseAttachments);
+const mockedParseSaveAttachmentResult = vi.mocked(parser.parseSaveAttachmentResult);
 
 // =============================================================================
 // Path Helpers
@@ -321,5 +330,86 @@ describe('createAppleScriptContentReaders', () => {
     expect(readers.contact).toBeInstanceOf(AppleScriptContactContentReader);
     expect(readers.task).toBeInstanceOf(AppleScriptTaskContentReader);
     expect(readers.note).toBeInstanceOf(AppleScriptNoteContentReader);
+  });
+
+  it('includes attachment reader', () => {
+    const readers = createAppleScriptContentReaders();
+    expect(readers.attachment).toBeInstanceOf(AppleScriptAttachmentReader);
+  });
+});
+
+// =============================================================================
+// Attachment Reader
+// =============================================================================
+
+describe('AppleScriptAttachmentReader', () => {
+  let reader: AppleScriptAttachmentReader;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    reader = new AppleScriptAttachmentReader();
+  });
+
+  describe('listAttachments', () => {
+    it('returns correct AttachmentInfo[] when AppleScript succeeds', () => {
+      mockedExecute.mockReturnValue({ success: true, output: 'raw-attachments' });
+      mockedParseAttachments.mockReturnValue([
+        { index: 1, name: 'report.pdf', fileSize: 102400, contentType: 'application/pdf' },
+        { index: 2, name: 'image.png', fileSize: 51200, contentType: 'image/png' },
+      ]);
+
+      const result = reader.listAttachments(123);
+
+      expect(result).toHaveLength(2);
+      expect(result[0]).toEqual({
+        index: 1,
+        name: 'report.pdf',
+        size: 102400,
+        contentType: 'application/pdf',
+      });
+      expect(result[1]).toEqual({
+        index: 2,
+        name: 'image.png',
+        size: 51200,
+        contentType: 'image/png',
+      });
+    });
+
+    it('returns empty array when AppleScript fails', () => {
+      mockedExecute.mockReturnValue({ success: false, output: '', error: 'failed' });
+
+      const result = reader.listAttachments(123);
+      expect(result).toEqual([]);
+    });
+  });
+
+  describe('saveAttachment', () => {
+    it('returns success result', () => {
+      mockedExecuteOrThrow.mockReturnValue('raw-save-output');
+      mockedParseSaveAttachmentResult.mockReturnValue({
+        success: true,
+        name: 'report.pdf',
+        savedTo: '/tmp/report.pdf',
+        fileSize: 102400,
+      });
+
+      const result = reader.saveAttachment(123, 1, '/tmp/report.pdf');
+
+      expect(result).toEqual({
+        success: true,
+        name: 'report.pdf',
+        savedTo: '/tmp/report.pdf',
+        fileSize: 102400,
+      });
+    });
+
+    it('throws on null parse result', () => {
+      mockedExecuteOrThrow.mockReturnValue('invalid-output');
+      mockedParseSaveAttachmentResult.mockReturnValue(null);
+
+      expect(() => {
+        reader.saveAttachment(123, 1, '/tmp/report.pdf');
+      }).toThrow('Failed to parse save attachment response');
+    });
   });
 });
