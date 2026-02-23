@@ -7,7 +7,7 @@
  * Tests for Graph mapper utility functions.
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeAll } from 'vitest';
 import {
   hashStringToNumber,
   isoToTimestamp,
@@ -325,6 +325,60 @@ describe('graph/mappers/utils', () => {
       // Unix timestamp 0 = 1970-01-01T00:00:00Z (not 2001-01-01)
       const result = unixTimestampToIso(0);
       expect(result).toBe('1970-01-01T00:00:00.000Z');
+    });
+  });
+
+  describe('unixTimestampToLocalIso', () => {
+    // Function imported dynamically to allow RED phase (function doesn't exist yet)
+    type LocalIsoFn = (ts: number | null | undefined) => string | null;
+    let fn: LocalIsoFn;
+
+    beforeAll(async () => {
+      const mod = await import('../../../../src/graph/mappers/utils.js') as Record<string, unknown>;
+      if (typeof mod.unixTimestampToLocalIso !== 'function') {
+        throw new Error('unixTimestampToLocalIso is not exported from utils.ts');
+      }
+      fn = mod.unixTimestampToLocalIso as LocalIsoFn;
+    });
+
+    it('returns a string with timezone offset (not Z)', () => {
+      const result = fn(1771858800);
+      expect(result).toBeTypeOf('string');
+      // Should NOT end with Z — should have offset like +00:00 or -05:00
+      expect(result).not.toMatch(/Z$/);
+      expect(result).toMatch(/[+-]\d{2}:\d{2}$/);
+    });
+
+    it('produces the correct UTC point in time', () => {
+      // 1771858800 = 2026-02-23T15:00:00Z
+      const result = fn(1771858800)!;
+      // Parsing the result back should give the same instant
+      const parsed = new Date(result);
+      expect(parsed.getTime()).toBe(1771858800 * 1000);
+    });
+
+    it('returns null for null input', () => {
+      expect(fn(null)).toBeNull();
+    });
+
+    it('returns null for undefined input', () => {
+      expect(fn(undefined)).toBeNull();
+    });
+
+    it('includes date and time components', () => {
+      const result = fn(1771858800)!;
+      // Should match ISO-like format: YYYY-MM-DDTHH:MM:SS.sss±HH:MM
+      expect(result).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}[+-]\d{2}:\d{2}$/);
+    });
+
+    it('does not add Apple epoch offset', () => {
+      // Unix timestamp 0 = 1970-01-01T00:00:00Z — in local time this is
+      // Dec 31, 1969 for negative UTC offsets or Jan 1, 1970 for non-negative
+      const result = fn(0)!;
+      const parsed = new Date(result);
+      expect(parsed.getTime()).toBe(0);
+      // The year should be 1969 or 1970, NOT 2001 (Apple epoch)
+      expect(result).toMatch(/^19(69|70)-/);
     });
   });
 

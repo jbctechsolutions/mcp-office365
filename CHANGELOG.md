@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [v1.1.7] - 2026-02-23
+
+### Fixed
+- **Graph API email/task timestamps**: Fixed `timeReceived`, `timeSent`, `dueDate`, and `startDate` showing dates 31 years in the future (2057 instead of 2026) due to Apple epoch offset being applied to Graph API Unix timestamps.
+- **All Graph API timestamps now in local timezone**: Replaced UTC (`Z` suffix) with local timezone offset (e.g. `-05:00`) across events, emails, and tasks for human-readable dates.
+
+### Added
+- `unixTimestampToLocalIso()` utility function that converts Unix timestamps to ISO 8601 strings with local timezone offset.
+
 ## [v1.1.6] - 2026-02-23
 
 ### Fixed

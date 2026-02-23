@@ -28,6 +28,7 @@ export {
   isoToTimestamp,
   dateTimeTimeZoneToTimestamp,
   unixTimestampToIso,
+  unixTimestampToLocalIso,
   importanceToPriority,
   flagStatusToNumber,
   extractEmailAddress,

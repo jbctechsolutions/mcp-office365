@@ -151,7 +151,7 @@ export function formatRecipientAddresses(
 }
 
 /**
- * Converts a Unix timestamp (seconds since 1970) to an ISO 8601 string.
+ * Converts a Unix timestamp (seconds since 1970) to an ISO 8601 string in UTC.
  *
  * Unlike appleTimestampToIso (which adds the Apple epoch offset),
  * this treats the input as a standard Unix timestamp.
@@ -164,6 +164,38 @@ export function unixTimestampToIso(
   }
 
   return new Date(timestamp * 1000).toISOString();
+}
+
+/**
+ * Converts a Unix timestamp (seconds since 1970) to an ISO 8601 string
+ * in the system's local timezone with offset (e.g. "2026-02-23T10:00:00.000-05:00").
+ *
+ * This makes dates human-readable at a glance while remaining unambiguous.
+ */
+export function unixTimestampToLocalIso(
+  timestamp: number | null | undefined
+): string | null {
+  if (timestamp == null) {
+    return null;
+  }
+
+  const date = new Date(timestamp * 1000);
+  const offsetMinutes = date.getTimezoneOffset();
+  const sign = offsetMinutes <= 0 ? '+' : '-';
+  const absOffset = Math.abs(offsetMinutes);
+  const offsetHours = String(Math.floor(absOffset / 60)).padStart(2, '0');
+  const offsetMins = String(absOffset % 60).padStart(2, '0');
+
+  // Build local date components
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  const hours = String(date.getHours()).padStart(2, '0');
+  const minutes = String(date.getMinutes()).padStart(2, '0');
+  const seconds = String(date.getSeconds()).padStart(2, '0');
+  const ms = String(date.getMilliseconds()).padStart(3, '0');
+
+  return `${year}-${month}-${day}T${hours}:${minutes}:${seconds}.${ms}${sign}${offsetHours}:${offsetMins}`;
 }
 
 /**

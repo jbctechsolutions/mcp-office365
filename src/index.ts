@@ -2082,8 +2082,7 @@ async function handleGraphToolCall(
 // =============================================================================
 
 import type { FolderRow, EmailRow, EventRow, ContactRow, TaskRow } from './database/repository.js';
-import { appleTimestampToIso } from './utils/dates.js';
-import { unixTimestampToIso } from './graph/mappers/utils.js';
+import { unixTimestampToLocalIso } from './graph/mappers/utils.js';
 
 function transformFolderRow(row: FolderRow): {
   id: number;
@@ -2130,8 +2129,8 @@ function transformEmailRow(row: EmailRow): {
     senderAddress: row.senderAddress,
     preview: row.preview,
     isRead: row.isRead === 1,
-    timeReceived: row.timeReceived != null ? appleTimestampToIso(row.timeReceived) : null,
-    timeSent: row.timeSent != null ? appleTimestampToIso(row.timeSent) : null,
+    timeReceived: unixTimestampToLocalIso(row.timeReceived),
+    timeSent: unixTimestampToLocalIso(row.timeSent),
     hasAttachment: row.hasAttachment === 1,
     priority: row.priority,
     flagStatus: row.flagStatus,
@@ -2169,8 +2168,8 @@ function transformGraphEventRow(row: EventRow): {
     id: row.id,
     folderId: row.folderId,
     title: row.subject ?? null,
-    startDate: unixTimestampToIso(row.startDate),
-    endDate: unixTimestampToIso(row.endDate),
+    startDate: unixTimestampToLocalIso(row.startDate),
+    endDate: unixTimestampToLocalIso(row.endDate),
     isRecurring: row.isRecurring === 1,
     hasReminder: row.hasReminder === 1,
     attendeeCount: row.attendeeCount,
@@ -2204,8 +2203,8 @@ function transformTaskRow(row: TaskRow): {
     folderId: row.folderId,
     name: row.name,
     isCompleted: row.isCompleted === 1,
-    dueDate: row.dueDate != null ? appleTimestampToIso(row.dueDate) : null,
-    startDate: row.startDate != null ? appleTimestampToIso(row.startDate) : null,
+    dueDate: unixTimestampToLocalIso(row.dueDate),
+    startDate: unixTimestampToLocalIso(row.startDate),
     priority: row.priority,
     hasReminder: row.hasReminder === 1,
   };
