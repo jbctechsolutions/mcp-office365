@@ -330,13 +330,21 @@ const TOOLS: Tool[] = [
   },
   {
     name: 'search_events',
-    description: 'Search events by title',
+    description: 'Search events by title and/or date range across all calendars',
     inputSchema: {
       type: 'object',
       properties: {
         query: {
           type: 'string',
-          description: 'Search query',
+          description: 'Search query for event titles',
+        },
+        start_date: {
+          type: 'string',
+          description: 'Start date filter in ISO 8601 format (events starting on or after this date)',
+        },
+        end_date: {
+          type: 'string',
+          description: 'End date filter in ISO 8601 format (events ending on or before this date)',
         },
         limit: {
           type: 'number',
@@ -344,7 +352,7 @@ const TOOLS: Tool[] = [
           default: 50,
         },
       },
-      required: ['query'],
+      required: [],
     },
   },
   {
@@ -1952,10 +1960,22 @@ async function handleGraphToolCall(
         const params = SearchEventsInput.parse(args);
         // Graph doesn't have direct event search, so we filter client-side
         const allEvents = await repository.listEventsAsync(1000);
-        const queryLower = params.query.toLowerCase();
-        const events = allEvents.filter((e) =>
-          transformEventRow(e).title?.toLowerCase().includes(queryLower)
-        );
+        const events = allEvents.filter((e) => {
+          const row = transformEventRow(e);
+          // Filter by title if query provided
+          if (params.query != null) {
+            const title = row.title?.toLowerCase() ?? '';
+            if (!title.includes(params.query.toLowerCase())) return false;
+          }
+          // Filter by date range if provided
+          if (params.start_date != null && row.startDate != null) {
+            if (new Date(row.startDate) < new Date(params.start_date)) return false;
+          }
+          if (params.end_date != null && row.endDate != null) {
+            if (new Date(row.endDate) > new Date(params.end_date)) return false;
+          }
+          return true;
+        });
         const result = { events: events.slice(0, params.limit).map(transformEventRow) };
         return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
       }

@@ -38,7 +38,9 @@ export const GetEventInput = z.strictObject({
 });
 
 export const SearchEventsInput = z.strictObject({
-  query: z.string().min(1).describe('Search query for event titles'),
+  query: z.string().min(1).optional().describe('Search query for event titles'),
+  start_date: z.string().optional().describe('Start date filter (ISO 8601 format) - events starting on or after this date'),
+  end_date: z.string().optional().describe('End date filter (ISO 8601 format) - events ending on or before this date'),
   limit: z
     .number()
     .int()
@@ -46,7 +48,10 @@ export const SearchEventsInput = z.strictObject({
     .max(100)
     .default(50)
     .describe('Maximum number of events to return (1-100)'),
-});
+}).refine(
+  (data) => data.query != null || data.start_date != null || data.end_date != null,
+  { message: 'At least one of query, start_date, or end_date must be provided' }
+);
 
 export const RespondToEventInput = z.strictObject({
   event_id: z.number().int().positive().describe('The event ID to respond to'),
@@ -317,29 +322,22 @@ export class CalendarTools {
   }
 
   /**
-   * Searches events by title (requires content reader).
-   * Note: Basic implementation - returns all events since title is in content files.
+   * Searches events by title and/or date range.
    */
   searchEvents(params: SearchEventsParams): EventSummary[] {
-    const { query, limit } = params;
-    const queryLower = query.toLowerCase();
+    const { query, start_date, end_date, limit } = params;
 
-    // Get all events and filter by title (from content reader)
-    const rows = this.repository.listEvents(limit * 2); // Fetch more to filter
-    const results: EventSummary[] = [];
+    const rows = this.repository.searchEvents(
+      query ?? null,
+      start_date ?? null,
+      end_date ?? null,
+      limit
+    );
 
-    for (const row of rows) {
-      if (results.length >= limit) break;
-
+    return rows.map((row) => {
       const details = this.contentReader.readEventDetails(row.dataFilePath);
-      const title = details?.title ?? '';
-
-      if (title.toLowerCase().includes(queryLower)) {
-        results.push(transformEventSummary(row, title));
-      }
-    }
-
-    return results;
+      return transformEventSummary(row, details?.title ?? null);
+    });
   }
 }
 

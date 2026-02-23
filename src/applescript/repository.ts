@@ -50,6 +50,31 @@ function priorityToNumber(priority: string): number {
 }
 
 // =============================================================================
+// Date Conversion
+// =============================================================================
+
+/**
+ * Parses an ISO 8601 date string into individual UTC components
+ * for locale-safe AppleScript date construction.
+ */
+function isoToDateComponents(isoString: string): {
+  year: number;
+  month: number;
+  day: number;
+  hours: number;
+  minutes: number;
+} {
+  const date = new Date(isoString);
+  return {
+    year: date.getUTCFullYear(),
+    month: date.getUTCMonth() + 1,
+    day: date.getUTCDate(),
+    hours: date.getUTCHours(),
+    minutes: date.getUTCMinutes(),
+  };
+}
+
+// =============================================================================
 // Row Converters
 // =============================================================================
 
@@ -310,6 +335,14 @@ export class AppleScriptRepository implements IWriteableRepository {
         return e.startDate >= startDate && e.startDate <= endDate;
       })
       .slice(0, limit);
+  }
+
+  searchEvents(query: string | null, startDate: string | null, endDate: string | null, limit: number): EventRow[] {
+    const startComponents = startDate != null ? isoToDateComponents(startDate) : null;
+    const endComponents = endDate != null ? isoToDateComponents(endDate) : null;
+    const script = scripts.searchEvents(query, startComponents, endComponents, limit);
+    const output = executeAppleScriptOrThrow(script);
+    return parser.parseEvents(output).map(toEventRow);
   }
 
   getEvent(id: number): EventRow | undefined {

@@ -11,6 +11,7 @@
 
 import type { IConnection } from './connection.js';
 import * as queries from './queries.js';
+import { isoToAppleTimestamp } from '../utils/dates.js';
 
 // =============================================================================
 // Row Types (raw database rows)
@@ -123,6 +124,7 @@ export interface IRepository {
   listEvents(limit: number): EventRow[];
   listEventsByFolder(folderId: number, limit: number): EventRow[];
   listEventsByDateRange(startDate: number, endDate: number, limit: number): EventRow[];
+  searchEvents(query: string | null, startDate: string | null, endDate: string | null, limit: number): EventRow[];
   getEvent(id: number): EventRow | undefined;
 
   // Contacts
@@ -320,6 +322,19 @@ export class OutlookRepository implements IRepository {
       const stmt = db.prepare(queries.LIST_EVENTS_BY_DATE_RANGE);
       return stmt.all(startDate, endDate, limit) as EventRow[];
     });
+  }
+
+  searchEvents(query: string | null, startDate: string | null, endDate: string | null, limit: number): EventRow[] {
+    // SQLite doesn't have event titles in the database, so we can only filter by date range here.
+    // Title filtering must be done at a higher layer using content readers.
+    if (startDate != null && endDate != null) {
+      const startTs = isoToAppleTimestamp(startDate);
+      const endTs = isoToAppleTimestamp(endDate);
+      if (startTs != null && endTs != null) {
+        return this.listEventsByDateRange(startTs, endTs, limit);
+      }
+    }
+    return this.listEvents(limit);
   }
 
   getEvent(id: number): EventRow | undefined {

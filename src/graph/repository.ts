@@ -326,6 +326,40 @@ export class GraphRepository implements IRepository {
     return events.map((e) => mapEventToEventRow(e, graphCalendarId));
   }
 
+  searchEvents(_query: string | null, _startDate: string | null, _endDate: string | null, _limit: number): EventRow[] {
+    throw new Error('Use searchEventsAsync() for Graph repository');
+  }
+
+  async searchEventsAsync(query: string | null, startDate: string | null, endDate: string | null, limit: number): Promise<EventRow[]> {
+    // Graph doesn't have direct event search, so we filter client-side
+    const start = startDate != null ? new Date(startDate) : undefined;
+    const end = endDate != null ? new Date(endDate) : undefined;
+
+    const events = await this.client.listEvents(1000, undefined, start, end);
+
+    for (const event of events) {
+      if (event.id != null) {
+        const numericId = hashStringToNumber(event.id);
+        this.idCache.events.set(numericId, event.id);
+      }
+    }
+
+    let rows = events.map((e) => mapEventToEventRow(e));
+
+    // Filter by title client-side if query provided
+    if (query != null) {
+      const queryLower = query.toLowerCase();
+      rows = rows.filter((row) => {
+        // EventRow doesn't have title, so we need to check the original event
+        const originalEvent = events.find((e) => e.id != null && hashStringToNumber(e.id) === row.id);
+        const subject = originalEvent?.subject?.toLowerCase() ?? '';
+        return subject.includes(queryLower);
+      });
+    }
+
+    return rows.slice(0, limit);
+  }
+
   listEventsByDateRange(_startDate: number, _endDate: number, _limit: number): EventRow[] {
     throw new Error('Use listEventsByDateRangeAsync() for Graph repository');
   }

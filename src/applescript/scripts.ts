@@ -504,15 +504,75 @@ end tell
 }
 
 /**
- * Searches events by query.
+ * Date components for AppleScript date construction.
  */
-export function searchEvents(query: string, limit: number): string {
-  const escapedQuery = escapeForAppleScript(query);
+export interface DateComponents {
+  readonly year: number;
+  readonly month: number;
+  readonly day: number;
+  readonly hours: number;
+  readonly minutes: number;
+}
+
+/**
+ * Searches events by query and/or date range.
+ * At least one of query or date range must be provided.
+ */
+export function searchEvents(
+  query: string | null,
+  startDate: DateComponents | null,
+  endDate: DateComponents | null,
+  limit: number
+): string {
+  // Build date variable declarations
+  let dateSetup = '';
+  if (startDate != null) {
+    dateSetup += `
+  set theStartDate to current date
+  set day of theStartDate to 1
+  set year of theStartDate to ${startDate.year}
+  set month of theStartDate to ${startDate.month}
+  set day of theStartDate to ${startDate.day}
+  set hours of theStartDate to ${startDate.hours}
+  set minutes of theStartDate to ${startDate.minutes}
+  set seconds of theStartDate to 0
+`;
+  }
+  if (endDate != null) {
+    dateSetup += `
+  set theEndDate to current date
+  set day of theEndDate to 1
+  set year of theEndDate to ${endDate.year}
+  set month of theEndDate to ${endDate.month}
+  set day of theEndDate to ${endDate.day}
+  set hours of theEndDate to ${endDate.hours}
+  set minutes of theEndDate to ${endDate.minutes}
+  set seconds of theEndDate to 0
+`;
+  }
+
+  // Build whose clause conditions
+  const conditions: string[] = [];
+  if (query != null) {
+    const escapedQuery = escapeForAppleScript(query);
+    conditions.push(`subject contains "${escapedQuery}"`);
+  }
+  if (startDate != null) {
+    conditions.push('start time ≥ theStartDate');
+  }
+  if (endDate != null) {
+    conditions.push('end time ≤ theEndDate');
+  }
+
+  const whoseClause = conditions.length > 0
+    ? ` whose ${conditions.join(' and ')}`
+    : '';
 
   return `
 tell application "Microsoft Outlook"
   set output to ""
-  set searchResults to (calendar events whose subject contains "${escapedQuery}")
+${dateSetup}
+  set searchResults to (calendar events${whoseClause})
   set resultCount to count of searchResults
   set maxResults to ${limit}
   if resultCount < maxResults then set maxResults to resultCount
