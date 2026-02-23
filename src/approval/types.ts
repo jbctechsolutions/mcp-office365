@@ -25,12 +25,19 @@ export type OperationType =
   | 'delete_folder'
   | 'empty_folder'
   | 'batch_delete_emails'
-  | 'batch_move_emails';
+  | 'batch_move_emails'
+  | 'send_draft'
+  | 'send_email'
+  | 'reply_email'
+  | 'forward_email'
+  | 'delete_event'
+  | 'delete_contact'
+  | 'delete_task';
 
 /**
  * Target resource types.
  */
-export type TargetType = 'email' | 'folder';
+export type TargetType = 'email' | 'folder' | 'event' | 'contact' | 'task';
 
 // =============================================================================
 // Token Types

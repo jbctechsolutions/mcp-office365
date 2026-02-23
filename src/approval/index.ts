@@ -17,6 +17,16 @@ export {
   type ValidationResult,
 } from './types.js';
 
-export { hashEmailForApproval, hashFolderForApproval } from './hash.js';
+export {
+  hashEmailForApproval,
+  hashFolderForApproval,
+  hashDraftForSend,
+  hashDirectSendForApproval,
+  hashReplyForApproval,
+  hashForwardForApproval,
+  hashEventForApproval,
+  hashContactForApproval,
+  hashTaskForApproval,
+} from './hash.js';
 
 export { ApprovalTokenManager } from './token-manager.js';
