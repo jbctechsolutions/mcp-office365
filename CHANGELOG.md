@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [v1.1.5] - 2026-02-23
+
+### Added
+- **Graph API contract tests**: Added 46 tests verifying every API call uses correct URLs, HTTP methods, request bodies, query parameters, well-known folder names, and OData operators against the Microsoft Graph v1.0 documentation.
+
 ## [v1.1.4] - 2026-02-23
 
 ### Fixed
