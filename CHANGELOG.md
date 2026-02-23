@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [v1.1.4] - 2026-02-23
+
+### Fixed
+- **Graph API Event queries**: Fixed invalid `isRecurrence` property in `$select` strings causing `GRAPH_ERROR` when listing or fetching events. Changed to correct property name `recurrence`.
+
+### Added
+- **Graph API field validation tests**: Added 19 contract tests verifying all `$select` fields across every Graph API endpoint match valid Microsoft Graph v1.0 property names.
+
 ## [1.1.0] - 2026-02-08
 
 ### Added

@@ -286,7 +286,7 @@ export class GraphClient {
           startDateTime: startDate.toISOString(),
           endDateTime: endDate.toISOString(),
         })
-        .select('id,subject,start,end,location,isAllDay,organizer,attendees,body,isRecurrence,iCalUId')
+        .select('id,subject,start,end,location,isAllDay,organizer,attendees,body,recurrence,iCalUId')
         .orderby('start/dateTime')
         .top(limit)
         .get() as PageCollection;
@@ -301,7 +301,7 @@ export class GraphClient {
 
     const response = await client
       .api(baseUrl)
-      .select('id,subject,start,end,location,isAllDay,organizer,attendees,body,isRecurrence,iCalUId')
+      .select('id,subject,start,end,location,isAllDay,organizer,attendees,body,recurrence,iCalUId')
       .orderby('start/dateTime')
       .top(limit)
       .get() as PageCollection;
@@ -318,7 +318,7 @@ export class GraphClient {
     try {
       return await client
         .api(`/me/events/${eventId}`)
-        .select('id,subject,start,end,location,isAllDay,organizer,attendees,body,isRecurrence,iCalUId')
+        .select('id,subject,start,end,location,isAllDay,organizer,attendees,body,recurrence,iCalUId')
         .get() as MicrosoftGraph.Event;
     } catch {
       return null;
