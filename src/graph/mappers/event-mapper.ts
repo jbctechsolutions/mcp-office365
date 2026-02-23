@@ -32,6 +32,7 @@ export function mapEventToEventRow(
   return {
     id: hashStringToNumber(eventId),
     folderId: calendarId != null ? hashStringToNumber(calendarId) : 0,
+    subject: event.subject ?? null,
     startDate: dateTimeTimeZoneToTimestamp(start),
     endDate: dateTimeTimeZoneToTimestamp(end),
     isRecurring: event.recurrence != null ? 1 : 0,

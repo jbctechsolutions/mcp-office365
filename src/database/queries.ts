@@ -229,6 +229,7 @@ export const LIST_EVENTS = `
 SELECT
   Record_RecordID as id,
   Record_FolderID as folderId,
+  NULL as subject,
   Calendar_StartDateUTC as startDate,
   Calendar_EndDateUTC as endDate,
   Calendar_IsRecurring as isRecurring,
@@ -245,6 +246,7 @@ export const LIST_EVENTS_BY_FOLDER = `
 SELECT
   Record_RecordID as id,
   Record_FolderID as folderId,
+  NULL as subject,
   Calendar_StartDateUTC as startDate,
   Calendar_EndDateUTC as endDate,
   Calendar_IsRecurring as isRecurring,
@@ -262,6 +264,7 @@ export const LIST_EVENTS_BY_DATE_RANGE = `
 SELECT
   Record_RecordID as id,
   Record_FolderID as folderId,
+  NULL as subject,
   Calendar_StartDateUTC as startDate,
   Calendar_EndDateUTC as endDate,
   Calendar_IsRecurring as isRecurring,
@@ -282,6 +285,7 @@ export const GET_EVENT = `
 SELECT
   Record_RecordID as id,
   Record_FolderID as folderId,
+  NULL as subject,
   Calendar_StartDateUTC as startDate,
   Calendar_EndDateUTC as endDate,
   Calendar_IsRecurring as isRecurring,

@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [v1.1.6] - 2026-02-23
+
+### Fixed
+- **Graph API event titles**: Events now display correct titles from `event.subject` instead of `null`. Added `subject` field to `EventRow` interface and populated it in all backends (Graph mapper, AppleScript adapter, SQL queries).
+- **Graph API event dates**: Events now show correct dates (2026) instead of dates 31 years in the future (2057). Created `transformGraphEventRow()` with `unixTimestampToIso()` to avoid applying the Apple epoch offset to Graph API Unix timestamps.
+
+### Added
+- `unixTimestampToIso()` utility function for converting Unix timestamps to ISO strings without Apple epoch adjustment.
+- 7 new unit tests covering event subject mapping and Unix timestamp conversion.
+
 ## [v1.1.5] - 2026-02-23
 
 ### Added

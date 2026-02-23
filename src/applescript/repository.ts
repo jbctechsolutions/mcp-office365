@@ -146,6 +146,7 @@ function toEventRow(asEvent: parser.AppleScriptEventRow): EventRow {
   return {
     id: asEvent.id,
     folderId: asEvent.calendarId ?? 0,
+    subject: asEvent.subject ?? null,
     startDate: isoToAppleTimestamp(asEvent.startTime),
     endDate: isoToAppleTimestamp(asEvent.endTime),
     isRecurring: asEvent.isRecurring ? 1 : 0,

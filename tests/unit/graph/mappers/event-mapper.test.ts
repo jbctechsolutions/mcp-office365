@@ -195,5 +195,46 @@ describe('graph/mappers/event-mapper', () => {
 
       expect(result.recurrenceId).toBeNull();
     });
+
+    it('includes subject from event', () => {
+      const event: MicrosoftGraph.Event = {
+        id: 'event-123',
+        subject: 'Team Standup',
+      };
+
+      const result = mapEventToEventRow(event);
+
+      expect(result.subject).toBe('Team Standup');
+    });
+
+    it('sets subject to null when event has no subject', () => {
+      const event: MicrosoftGraph.Event = {
+        id: 'event-123',
+        subject: undefined,
+      };
+
+      const result = mapEventToEventRow(event);
+
+      expect(result.subject).toBeNull();
+    });
+
+    it('stores startDate as Unix timestamp (not Apple timestamp)', () => {
+      // Graph API returns dateTime without Z suffix, with separate timeZone
+      // "2024-06-15T10:00:00.0000000" in UTC = Unix timestamp 1718442000
+      const event: MicrosoftGraph.Event = {
+        id: 'event-123',
+        start: { dateTime: '2024-06-15T10:00:00.0000000', timeZone: 'UTC' },
+      };
+
+      const result = mapEventToEventRow(event);
+
+      // dateTimeTimeZoneToTimestamp returns Unix seconds since 1970
+      // The value should be a reasonable Unix timestamp (year 2024 range)
+      // NOT an Apple timestamp (which would be ~31 years less)
+      expect(result.startDate).toBeTypeOf('number');
+      // Year 2024 Unix timestamps are around 1.7 billion
+      expect(result.startDate!).toBeGreaterThan(1_700_000_000);
+      expect(result.startDate!).toBeLessThan(1_800_000_000);
+    });
   });
 });

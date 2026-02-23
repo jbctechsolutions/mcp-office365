@@ -1940,7 +1940,7 @@ async function handleGraphToolCall(
         } else {
           events = await repository.listEventsAsync(params.limit);
         }
-        const result = { events: events.map(transformEventRow) };
+        const result = { events: events.map(transformGraphEventRow) };
         return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
       }
 
@@ -1952,7 +1952,7 @@ async function handleGraphToolCall(
         }
 
         const details = await contentReaders.event.readEventDetailsAsync(event.dataFilePath);
-        const result = { ...transformEventRow(event), ...details };
+        const result = { ...transformGraphEventRow(event), ...details };
         return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
       }
 
@@ -1961,7 +1961,7 @@ async function handleGraphToolCall(
         // Graph doesn't have direct event search, so we filter client-side
         const allEvents = await repository.listEventsAsync(1000);
         const events = allEvents.filter((e) => {
-          const row = transformEventRow(e);
+          const row = transformGraphEventRow(e);
           // Filter by title if query provided
           if (params.query != null) {
             const title = row.title?.toLowerCase() ?? '';
@@ -1976,7 +1976,7 @@ async function handleGraphToolCall(
           }
           return true;
         });
-        const result = { events: events.slice(0, params.limit).map(transformEventRow) };
+        const result = { events: events.slice(0, params.limit).map(transformGraphEventRow) };
         return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
       }
 
@@ -2083,6 +2083,7 @@ async function handleGraphToolCall(
 
 import type { FolderRow, EmailRow, EventRow, ContactRow, TaskRow } from './database/repository.js';
 import { appleTimestampToIso } from './utils/dates.js';
+import { unixTimestampToIso } from './graph/mappers/utils.js';
 
 function transformFolderRow(row: FolderRow): {
   id: number;
@@ -2150,7 +2151,11 @@ function parseEmailCategories(buffer: Buffer | null): string[] {
   }
 }
 
-function transformEventRow(row: EventRow): {
+/**
+ * Transforms an EventRow from the Graph backend.
+ * Uses Unix timestamps (not Apple epoch) and includes subject from EventRow.
+ */
+function transformGraphEventRow(row: EventRow): {
   id: number;
   folderId: number | null;
   title: string | null;
@@ -2163,9 +2168,9 @@ function transformEventRow(row: EventRow): {
   return {
     id: row.id,
     folderId: row.folderId,
-    title: null as string | null, // Will be filled from content reader
-    startDate: row.startDate != null ? appleTimestampToIso(row.startDate) : null,
-    endDate: row.endDate != null ? appleTimestampToIso(row.endDate) : null,
+    title: row.subject ?? null,
+    startDate: unixTimestampToIso(row.startDate),
+    endDate: unixTimestampToIso(row.endDate),
     isRecurring: row.isRecurring === 1,
     hasReminder: row.hasReminder === 1,
     attendeeCount: row.attendeeCount,

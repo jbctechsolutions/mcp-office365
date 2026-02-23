@@ -55,6 +55,7 @@ export interface EmailRow {
 export interface EventRow {
   readonly id: number;
   readonly folderId: number;
+  readonly subject: string | null;
   readonly startDate: number | null;
   readonly endDate: number | null;
   readonly isRecurring: number;

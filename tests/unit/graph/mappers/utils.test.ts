@@ -12,6 +12,7 @@ import {
   hashStringToNumber,
   isoToTimestamp,
   dateTimeTimeZoneToTimestamp,
+  unixTimestampToIso,
   importanceToPriority,
   flagStatusToNumber,
   extractEmailAddress,
@@ -302,6 +303,28 @@ describe('graph/mappers/utils', () => {
         { emailAddress: { address: 'b@example.com' } },
       ];
       expect(formatRecipientAddresses(recipients)).toBe('a@example.com, b@example.com');
+    });
+  });
+
+  describe('unixTimestampToIso', () => {
+    it('converts Unix timestamp to ISO string', () => {
+      // 2026-02-23T15:00:00.000Z = 1771858800 seconds
+      const result = unixTimestampToIso(1771858800);
+      expect(result).toBe('2026-02-23T15:00:00.000Z');
+    });
+
+    it('returns null for null input', () => {
+      expect(unixTimestampToIso(null)).toBeNull();
+    });
+
+    it('returns null for undefined input', () => {
+      expect(unixTimestampToIso(undefined)).toBeNull();
+    });
+
+    it('does not add Apple epoch offset', () => {
+      // Unix timestamp 0 = 1970-01-01T00:00:00Z (not 2001-01-01)
+      const result = unixTimestampToIso(0);
+      expect(result).toBe('1970-01-01T00:00:00.000Z');
     });
   });
 

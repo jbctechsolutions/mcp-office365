@@ -27,6 +27,7 @@ export {
   hashStringToNumber,
   isoToTimestamp,
   dateTimeTimeZoneToTimestamp,
+  unixTimestampToIso,
   importanceToPriority,
   flagStatusToNumber,
   extractEmailAddress,

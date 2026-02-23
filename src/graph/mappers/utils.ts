@@ -151,6 +151,22 @@ export function formatRecipientAddresses(
 }
 
 /**
+ * Converts a Unix timestamp (seconds since 1970) to an ISO 8601 string.
+ *
+ * Unlike appleTimestampToIso (which adds the Apple epoch offset),
+ * this treats the input as a standard Unix timestamp.
+ */
+export function unixTimestampToIso(
+  timestamp: number | null | undefined
+): string | null {
+  if (timestamp == null) {
+    return null;
+  }
+
+  return new Date(timestamp * 1000).toISOString();
+}
+
+/**
  * Creates a Graph content path from an entity type and ID.
  */
 export function createGraphContentPath(type: string, id: string): string {
