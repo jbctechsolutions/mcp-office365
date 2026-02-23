@@ -32,8 +32,8 @@ describe('graph/auth/config', () => {
     it('contains all required scopes', () => {
       expect(GRAPH_SCOPES).toContain('Mail.ReadWrite');
       expect(GRAPH_SCOPES).toContain('Calendars.ReadWrite');
-      expect(GRAPH_SCOPES).toContain('Contacts.Read');
-      expect(GRAPH_SCOPES).toContain('Tasks.Read');
+      expect(GRAPH_SCOPES).toContain('Contacts.ReadWrite');
+      expect(GRAPH_SCOPES).toContain('Tasks.ReadWrite');
       expect(GRAPH_SCOPES).toContain('User.Read');
       expect(GRAPH_SCOPES).toContain('offline_access');
     });
@@ -86,8 +86,8 @@ describe('graph/auth/config', () => {
       expect(config.scopes).toEqual(expect.arrayContaining([
         'Mail.ReadWrite',
         'Calendars.ReadWrite',
-        'Contacts.Read',
-        'Tasks.Read',
+        'Contacts.ReadWrite',
+        'Tasks.ReadWrite',
         'User.Read',
         'offline_access',
       ]));
