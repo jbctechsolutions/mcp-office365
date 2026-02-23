@@ -33,8 +33,8 @@ const DEFAULT_CLIENT_ID = '8fdcd9d3-8823-48f5-bd59-c3a779053b77';
 export const GRAPH_SCOPES = [
   'Mail.ReadWrite',
   'Calendars.ReadWrite',
-  'Contacts.Read',
-  'Tasks.Read',
+  'Contacts.ReadWrite',
+  'Tasks.ReadWrite',
   'User.Read',
   'offline_access',
 ] as const;
