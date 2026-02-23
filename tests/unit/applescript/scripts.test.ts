@@ -382,9 +382,9 @@ describe('getEvent', () => {
 
 describe('searchEvents', () => {
   it('generates search script with query', () => {
-    const script = searchEvents('standup', 10);
+    const script = searchEvents('standup', null, null, 10);
     expect(script).toContain('standup');
-    expect(script).toContain('set maxResults to 10');
+    expect(script).toContain('set resultCount to count of searchResults');
   });
 });
 
