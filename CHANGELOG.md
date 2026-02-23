@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [v1.1.8] - 2026-02-23
+
+### Fixed
+- **Graph API event/task times off by timezone offset**: `dateTimeTimeZoneToTimestamp()` ignored the `timeZone` field from Graph API `DateTimeTimeZone` objects. DateTime strings without a `Z` suffix (e.g. `"2026-02-23T16:00:00.0000000"`) were parsed as local time instead of UTC, shifting events by the local timezone offset (e.g. 5 hours in EST). Now appends `Z` when `timeZone` is `"UTC"`.
+
 ## [v1.1.7] - 2026-02-23
 
 ### Fixed

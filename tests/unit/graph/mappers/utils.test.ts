@@ -104,6 +104,20 @@ describe('graph/mappers/utils', () => {
       expect(dateTimeTimeZoneToTimestamp(dt)).toBeNull();
     });
 
+    it('treats dateTime as UTC when timeZone is UTC', () => {
+      // Graph API returns { dateTime: "2026-02-23T16:00:00.0000000", timeZone: "UTC" }
+      // 2026-02-23T16:00:00Z = 1771869600 Unix seconds
+      const dt = { dateTime: '2026-02-23T16:00:00.0000000', timeZone: 'UTC' };
+      const result = dateTimeTimeZoneToTimestamp(dt);
+      expect(result).toBe(1771862400);
+    });
+
+    it('treats dateTime as UTC when timeZone is Etc/GMT', () => {
+      const dt = { dateTime: '2026-02-23T16:00:00.0000000', timeZone: 'Etc/GMT' };
+      const result = dateTimeTimeZoneToTimestamp(dt);
+      expect(result).toBe(1771862400);
+    });
+
     it('handles object without timeZone', () => {
       const dt = { dateTime: '2024-01-15T10:30:00' };
       const result = dateTimeTimeZoneToTimestamp(dt);

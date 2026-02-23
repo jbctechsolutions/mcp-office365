@@ -48,7 +48,17 @@ export function isoToTimestamp(isoDate: string | null | undefined): number | nul
 }
 
 /**
+ * UTC-equivalent timezone identifiers from the Graph API.
+ * Graph may return "UTC", "Etc/GMT", or similar values.
+ */
+const UTC_TIMEZONES = new Set(['utc', 'etc/gmt', 'etc/gmt+0', 'etc/gmt-0', 'gmt']);
+
+/**
  * Parses a Graph DateTimeTimeZone object to a Unix timestamp.
+ *
+ * Graph API returns datetime strings WITHOUT a Z suffix (e.g. "2026-02-23T16:00:00.0000000")
+ * alongside a separate timeZone field (e.g. "UTC"). JavaScript's Date constructor treats
+ * strings without Z or offset as local time, so we must append Z when the timezone is UTC.
  */
 export function dateTimeTimeZoneToTimestamp(
   dt: { dateTime?: string; timeZone?: string } | null | undefined
@@ -58,9 +68,16 @@ export function dateTimeTimeZoneToTimestamp(
   }
 
   try {
-    // Graph API returns dates in the specified timezone
-    // For simplicity, we parse as-is (usually UTC or local)
-    const date = new Date(dt.dateTime);
+    let dateStr = dt.dateTime;
+
+    // If the timeZone indicates UTC and the string doesn't already have an offset,
+    // append Z so Date parses it as UTC rather than local time.
+    const tz = dt.timeZone?.toLowerCase();
+    if (tz != null && UTC_TIMEZONES.has(tz) && !/[Zz]$|[+-]\d{2}:\d{2}$/.test(dateStr)) {
+      dateStr += 'Z';
+    }
+
+    const date = new Date(dateStr);
     if (isNaN(date.getTime())) {
       return null;
     }
