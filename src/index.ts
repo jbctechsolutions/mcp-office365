@@ -1316,6 +1316,11 @@ const TOOLS: Tool[] = [
           default: 'text',
           description: 'Body content type (default: text)',
         },
+        include_signature: {
+          type: 'boolean',
+          default: true,
+          description: 'Include email signature (default: true)',
+        },
         attachments: {
           type: 'array',
           description: 'File attachments',
@@ -1457,6 +1462,11 @@ const TOOLS: Tool[] = [
           default: 'text',
           description: 'Body content type (default: text)',
         },
+        include_signature: {
+          type: 'boolean',
+          default: true,
+          description: 'Include email signature (default: true)',
+        },
         attachments: {
           type: 'array',
           description: 'File attachments',
@@ -1553,6 +1563,11 @@ const TOOLS: Tool[] = [
         message_id: { type: 'number', description: 'The message ID to reply to' },
         comment: { type: 'string', description: 'Initial reply body text' },
         reply_all: { type: 'boolean', default: false, description: 'Reply to all recipients (default: false)' },
+        include_signature: {
+          type: 'boolean',
+          default: true,
+          description: 'Include email signature (default: true)',
+        },
       },
       required: ['message_id'],
     },
@@ -1570,6 +1585,11 @@ const TOOLS: Tool[] = [
           description: 'Forward recipients (can also add later via update_draft)',
         },
         comment: { type: 'string', description: 'Initial forward body text' },
+        include_signature: {
+          type: 'boolean',
+          default: true,
+          description: 'Include email signature (default: true)',
+        },
       },
       required: ['message_id'],
     },
