@@ -938,6 +938,68 @@ export class GraphRepository implements IRepository {
     return { numericId, graphId };
   }
 
+  // ---------------------------------------------------------------------------
+  // Calendar Scheduling
+  // ---------------------------------------------------------------------------
+
+  async getScheduleAsync(params: {
+    emailAddresses: string[];
+    startTime: string;
+    endTime: string;
+    availabilityViewInterval?: number;
+  }): Promise<unknown[]> {
+    return await this.client.getSchedule({
+      schedules: params.emailAddresses,
+      startTime: { dateTime: params.startTime, timeZone: 'UTC' },
+      endTime: { dateTime: params.endTime, timeZone: 'UTC' },
+      availabilityViewInterval: params.availabilityViewInterval ?? 30,
+    });
+  }
+
+  async findMeetingTimesAsync(params: {
+    attendees: string[];
+    durationMinutes: number;
+    startTime?: string;
+    endTime?: string;
+    maxCandidates?: number;
+  }): Promise<unknown> {
+    const hours = Math.floor(params.durationMinutes / 60);
+    const minutes = params.durationMinutes % 60;
+    const meetingDuration = `PT${hours}H${minutes}M`;
+
+    const attendees = params.attendees.map(addr => ({
+      emailAddress: { address: addr },
+      type: 'required' as const,
+    }));
+
+    const request: {
+      attendees: Array<{ emailAddress: { address: string }; type: string }>;
+      meetingDuration: string;
+      maxCandidates: number;
+      timeConstraint?: {
+        timeslots: Array<{
+          start: { dateTime: string; timeZone: string };
+          end: { dateTime: string; timeZone: string };
+        }>;
+      };
+    } = {
+      attendees,
+      meetingDuration,
+      maxCandidates: params.maxCandidates ?? 5,
+    };
+
+    if (params.startTime != null && params.endTime != null) {
+      request.timeConstraint = {
+        timeslots: [{
+          start: { dateTime: params.startTime, timeZone: 'UTC' },
+          end: { dateTime: params.endTime, timeZone: 'UTC' },
+        }],
+      };
+    }
+
+    return await this.client.findMeetingTimes(request);
+  }
+
   // ===========================================================================
   // Attachment Operations (Async)
   // ===========================================================================
