@@ -20,6 +20,26 @@ import {
   getTokenCacheFile,
 } from './graph/index.js';
 
+export interface CliCommand {
+  command: 'auth';
+  flags: string[];
+}
+
+/**
+ * Parses CLI arguments to determine if a subcommand was invoked.
+ * Returns null if no subcommand (normal MCP server mode).
+ */
+export function parseCliCommand(args: string[]): CliCommand | null {
+  if (args.length === 0) return null;
+
+  const command = args[0];
+  if (command === 'auth') {
+    return { command: 'auth', flags: args.slice(1) };
+  }
+
+  return null;
+}
+
 type PrintFn = (message: string) => void;
 
 /**

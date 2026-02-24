@@ -45,6 +45,7 @@ import {
   type GraphRepository,
   type GraphContentReaders,
 } from './graph/index.js';
+import { parseCliCommand, handleAuthCommand } from './cli.js';
 import { createMailTools } from './tools/mail.js';
 import { createCalendarTools } from './tools/calendar.js';
 import { createContactsTools } from './tools/contacts.js';
@@ -3374,9 +3375,15 @@ function stripHtml(html: string): string {
 // =============================================================================
 
 async function main(): Promise<void> {
+  // Check for CLI subcommands before starting MCP server
+  const cliCommand = parseCliCommand(process.argv.slice(2));
+  if (cliCommand != null) {
+    const exitCode = await handleAuthCommand(cliCommand.flags);
+    process.exit(exitCode);
+  }
+
   const server = createServer();
   const transport = new StdioServerTransport();
-
   await server.connect(transport);
 }
 

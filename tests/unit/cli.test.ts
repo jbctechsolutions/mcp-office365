@@ -28,7 +28,7 @@ vi.mock('../../src/graph/index.js', () => ({
   getTokenCacheFile: mockGetTokenCacheFile,
 }));
 
-import { handleAuthCommand } from '../../src/cli.js';
+import { handleAuthCommand, parseCliCommand } from '../../src/cli.js';
 
 describe('CLI Auth', () => {
   beforeEach(() => {
@@ -103,5 +103,27 @@ describe('CLI Auth', () => {
 
       expect(exit).toBe(1);
     });
+  });
+});
+
+describe('parseCliCommand', () => {
+  it('returns null for no args (MCP server mode)', () => {
+    expect(parseCliCommand([])).toBeNull();
+  });
+
+  it('returns auth command with no flags', () => {
+    expect(parseCliCommand(['auth'])).toEqual({ command: 'auth', flags: [] });
+  });
+
+  it('returns auth command with --status flag', () => {
+    expect(parseCliCommand(['auth', '--status'])).toEqual({ command: 'auth', flags: ['--status'] });
+  });
+
+  it('returns auth command with --logout flag', () => {
+    expect(parseCliCommand(['auth', '--logout'])).toEqual({ command: 'auth', flags: ['--logout'] });
+  });
+
+  it('returns null for unknown commands', () => {
+    expect(parseCliCommand(['unknown'])).toBeNull();
   });
 });
