@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [v1.2.0] - 2026-02-23
+
+### Added
+- **Graph API write operations**: 34 new tools (38 → 72 total) across 5 categories:
+  - **Mail send/draft tools**: Create, update, and send drafts; reply, reply-all, and forward messages with two-phase approval for send operations
+  - **Attachment tools**: List, download, and upload attachments with automatic integration into draft creation and email sending workflows
+  - **Calendar write tools**: Create, update, and delete events; respond to invitations (accept/decline/tentative) with two-phase approval for destructive operations
+  - **Contact write tools**: Create, update, and delete contacts with full field mapping (name, email, phone, address) and two-phase delete approval
+  - **Task write tools**: Create, update, complete, and delete tasks; create task lists with two-phase delete approval
+- All write operations use the existing approval token pattern with TOCTOU hash protection for destructive operations
+- 700+ new tests (1338 total) with Graph API test coverage improved to 88%
+
 ## [v1.1.8] - 2026-02-23
 
 ### Fixed
