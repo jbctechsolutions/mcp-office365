@@ -76,6 +76,8 @@ function createMockRepository(): IMailSendRepository {
     sendMailAsync: vi.fn(),
     replyMessageAsync: vi.fn(),
     forwardMessageAsync: vi.fn(),
+    replyAsDraftAsync: vi.fn(),
+    forwardAsDraftAsync: vi.fn(),
     getGraphClient: vi.fn().mockReturnValue(mockGraphClient),
   };
 }
@@ -552,6 +554,85 @@ describe('MailSendTools', () => {
       });
 
       expect(repo.forwardMessageAsync).toHaveBeenCalledWith(1, ['dave@example.com'], undefined);
+    });
+  });
+
+  // ===========================================================================
+  // Draft Reply/Forward (Non-Destructive)
+  // ===========================================================================
+
+  describe('replyAsDraft', () => {
+    it('creates a reply draft and returns draft info', async () => {
+      (repo.replyAsDraftAsync as ReturnType<typeof vi.fn>).mockResolvedValue({
+        numericId: 101,
+        graphId: 'draft-reply-graph-101',
+      });
+
+      const result = await tools.replyAsDraft({
+        message_id: 42,
+        reply_all: false,
+      });
+
+      expect(repo.replyAsDraftAsync).toHaveBeenCalledWith(42, false, undefined);
+      expect(result).toEqual({
+        success: true,
+        draft_id: 101,
+        message: 'Reply draft created. Use update_draft to edit, then send_draft or prepare_send_email to send.',
+      });
+    });
+
+    it('passes comment and reply_all to repository', async () => {
+      (repo.replyAsDraftAsync as ReturnType<typeof vi.fn>).mockResolvedValue({
+        numericId: 102,
+        graphId: 'draft-ra-graph-102',
+      });
+
+      await tools.replyAsDraft({
+        message_id: 42,
+        comment: 'Thanks!',
+        reply_all: true,
+      });
+
+      expect(repo.replyAsDraftAsync).toHaveBeenCalledWith(42, true, 'Thanks!');
+    });
+  });
+
+  describe('forwardAsDraft', () => {
+    it('creates a forward draft and returns draft info', async () => {
+      (repo.forwardAsDraftAsync as ReturnType<typeof vi.fn>).mockResolvedValue({
+        numericId: 201,
+        graphId: 'draft-fwd-graph-201',
+      });
+
+      const result = await tools.forwardAsDraft({
+        message_id: 42,
+      });
+
+      expect(repo.forwardAsDraftAsync).toHaveBeenCalledWith(42, undefined, undefined);
+      expect(result).toEqual({
+        success: true,
+        draft_id: 201,
+        message: 'Forward draft created. Use update_draft to edit, then send_draft or prepare_send_email to send.',
+      });
+    });
+
+    it('passes recipients and comment to repository', async () => {
+      (repo.forwardAsDraftAsync as ReturnType<typeof vi.fn>).mockResolvedValue({
+        numericId: 202,
+        graphId: 'draft-fwd-graph-202',
+      });
+
+      await tools.forwardAsDraft({
+        message_id: 42,
+        to_recipients: ['alice@example.com'],
+        comment: 'FYI',
+      });
+
+      expect(repo.forwardAsDraftAsync).toHaveBeenCalledWith(
+        42,
+        ['alice@example.com'],
+        'FYI'
+      );
     });
   });
 

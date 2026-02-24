@@ -71,6 +71,8 @@ export interface IMailSendRepository {
   }): Promise<void>;
   replyMessageAsync(messageId: number, comment: string, replyAll: boolean): Promise<void>;
   forwardMessageAsync(messageId: number, toRecipients: string[], comment?: string): Promise<void>;
+  replyAsDraftAsync(messageId: number, replyAll?: boolean, comment?: string): Promise<CreateDraftResult>;
+  forwardAsDraftAsync(messageId: number, toRecipients?: string[], comment?: string): Promise<CreateDraftResult>;
   /** Returns the Graph client for direct API operations (e.g., attachment uploads). */
   getGraphClient(): GraphClient;
 }
@@ -164,6 +166,22 @@ export const ConfirmForwardEmailInput = z.strictObject({
 });
 
 // =============================================================================
+// Input Schemas -- Draft Reply/Forward (Non-Destructive)
+// =============================================================================
+
+export const ReplyAsDraftInput = z.strictObject({
+  message_id: z.number().int().positive().describe('The message ID to reply to'),
+  comment: z.string().optional().describe('Initial reply body text'),
+  reply_all: z.boolean().default(false).describe('Reply to all recipients (default: false)'),
+});
+
+export const ForwardAsDraftInput = z.strictObject({
+  message_id: z.number().int().positive().describe('The message ID to forward'),
+  to_recipients: z.array(z.string().email()).optional().describe('Forward recipients'),
+  comment: z.string().optional().describe('Initial forward body text'),
+});
+
+// =============================================================================
 // Type Exports
 // =============================================================================
 
@@ -178,6 +196,8 @@ export type PrepareReplyEmailParams = z.infer<typeof PrepareReplyEmailInput>;
 export type ConfirmReplyEmailParams = z.infer<typeof ConfirmReplyEmailInput>;
 export type PrepareForwardEmailParams = z.infer<typeof PrepareForwardEmailInput>;
 export type ConfirmForwardEmailParams = z.infer<typeof ConfirmForwardEmailInput>;
+export type ReplyAsDraftParams = z.infer<typeof ReplyAsDraftInput>;
+export type ForwardAsDraftParams = z.infer<typeof ForwardAsDraftInput>;
 
 // =============================================================================
 // Preview Helpers
@@ -524,6 +544,44 @@ export class MailSendTools {
 
     await this.repository.forwardMessageAsync(params.message_id, metadata.toRecipients, metadata.comment);
     return { success: true, message: 'Email forwarded successfully.' };
+  }
+
+  // ---------------------------------------------------------------------------
+  // Non-Destructive Draft Reply/Forward
+  // ---------------------------------------------------------------------------
+
+  async replyAsDraft(params: z.infer<typeof ReplyAsDraftInput>): Promise<{
+    success: boolean;
+    draft_id: number;
+    message: string;
+  }> {
+    const { numericId } = await this.repository.replyAsDraftAsync(
+      params.message_id,
+      params.reply_all,
+      params.comment,
+    );
+    return {
+      success: true,
+      draft_id: numericId,
+      message: 'Reply draft created. Use update_draft to edit, then send_draft or prepare_send_email to send.',
+    };
+  }
+
+  async forwardAsDraft(params: z.infer<typeof ForwardAsDraftInput>): Promise<{
+    success: boolean;
+    draft_id: number;
+    message: string;
+  }> {
+    const { numericId } = await this.repository.forwardAsDraftAsync(
+      params.message_id,
+      params.to_recipients,
+      params.comment,
+    );
+    return {
+      success: true,
+      draft_id: numericId,
+      message: 'Forward draft created. Use update_draft to edit, then send_draft or prepare_send_email to send.',
+    };
   }
 
   // ---------------------------------------------------------------------------
