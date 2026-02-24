@@ -1,0 +1,103 @@
+/**
+ * Copyright (c) 2026 JBC Tech Solutions, LLC
+ * Licensed under the MIT License. See LICENSE file in the project root.
+ */
+
+/**
+ * CLI command handlers for standalone authentication management.
+ *
+ * Usage:
+ *   npx @jbctechsolutions/mcp-outlook-mac auth           # Authenticate
+ *   npx @jbctechsolutions/mcp-outlook-mac auth --status   # Check status
+ *   npx @jbctechsolutions/mcp-outlook-mac auth --logout   # Sign out
+ */
+
+import {
+  getAccessToken,
+  isAuthenticated,
+  getAccount,
+  signOut,
+  getTokenCacheFile,
+} from './graph/index.js';
+
+type PrintFn = (message: string) => void;
+
+/**
+ * Handles the `auth` CLI subcommand.
+ *
+ * @param flags - CLI flags after "auth" (e.g., ["--status"])
+ * @param print - Output function (defaults to console.log)
+ * @returns Exit code (0 = success, 1 = failure)
+ */
+export async function handleAuthCommand(
+  flags: string[] = [],
+  print: PrintFn = console.log,
+): Promise<number> {
+  if (flags.includes('--status')) {
+    return await handleStatus(print);
+  }
+
+  if (flags.includes('--logout')) {
+    return await handleLogout(print);
+  }
+
+  return await handleAuth(print);
+}
+
+async function handleAuth(print: PrintFn): Promise<number> {
+  print('');
+  print('Microsoft Graph API Authentication');
+  print('='.repeat(40));
+  print('');
+
+  try {
+    await getAccessToken();
+    const account = await getAccount();
+    const username = account?.username ?? 'unknown';
+
+    print('');
+    print(`Authenticated as ${username}`);
+    print(`Tokens saved to ${getTokenCacheFile()}`);
+    print('You can now configure the MCP server in your client.');
+    return 0;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    print('');
+    print(`Authentication failed: ${message}`);
+    return 1;
+  }
+}
+
+async function handleStatus(print: PrintFn): Promise<number> {
+  try {
+    const authenticated = await isAuthenticated();
+
+    if (authenticated) {
+      const account = await getAccount();
+      const username = account?.username ?? 'unknown';
+      print(`Authenticated as ${username}`);
+      print(`Token cache: ${getTokenCacheFile()}`);
+      return 0;
+    }
+
+    print('Not authenticated');
+    print('Run: npx @jbctechsolutions/mcp-outlook-mac auth');
+    return 1;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    print(`Error checking status: ${message}`);
+    return 1;
+  }
+}
+
+async function handleLogout(print: PrintFn): Promise<number> {
+  try {
+    await signOut();
+    print('Signed out successfully');
+    return 0;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    print(`Sign out failed: ${message}`);
+    return 1;
+  }
+}
