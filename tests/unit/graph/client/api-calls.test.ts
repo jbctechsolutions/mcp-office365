@@ -132,6 +132,9 @@ const VALID_ENDPOINT_PATTERNS = [
   /^\/me\/messages\/[^/]+\/reply$/,
   /^\/me\/messages\/[^/]+\/replyAll$/,
   /^\/me\/messages\/[^/]+\/forward$/,
+  /^\/me\/messages\/[^/]+\/createReply$/,
+  /^\/me\/messages\/[^/]+\/createReplyAll$/,
+  /^\/me\/messages\/[^/]+\/createForward$/,
   /^\/me\/sendMail$/,
   /^\/me\/mailFolders\/[^/]+\/messages$/,
   // Calendars
@@ -690,6 +693,51 @@ describe('Graph API endpoint and method validation', () => {
   });
 
   // =========================================================================
+  // Reply/Forward as draft endpoints
+  // =========================================================================
+
+  describe('Reply/Forward as draft endpoints', () => {
+    it('createReplyDraft POSTs to /me/messages/{id}/createReply', async () => {
+      const mockDraft = { id: 'draft-1', subject: 'RE: Test' };
+      setupMock(mockDraft);
+
+      const result = await client.createReplyDraft('msg-1');
+
+      expect(apiCalls).toHaveLength(1);
+      expect(apiCalls[0].url).toBe('/me/messages/msg-1/createReply');
+      expect(apiCalls[0].method).toBe('post');
+      expect(apiCalls[0].body).toBeNull();
+      expect(result).toEqual(mockDraft);
+    });
+
+    it('createReplyAllDraft POSTs to /me/messages/{id}/createReplyAll', async () => {
+      const mockDraft = { id: 'draft-2', subject: 'RE: Test' };
+      setupMock(mockDraft);
+
+      const result = await client.createReplyAllDraft('msg-1');
+
+      expect(apiCalls).toHaveLength(1);
+      expect(apiCalls[0].url).toBe('/me/messages/msg-1/createReplyAll');
+      expect(apiCalls[0].method).toBe('post');
+      expect(apiCalls[0].body).toBeNull();
+      expect(result).toEqual(mockDraft);
+    });
+
+    it('createForwardDraft POSTs to /me/messages/{id}/createForward', async () => {
+      const mockDraft = { id: 'draft-3', subject: 'FW: Test' };
+      setupMock(mockDraft);
+
+      const result = await client.createForwardDraft('msg-1');
+
+      expect(apiCalls).toHaveLength(1);
+      expect(apiCalls[0].url).toBe('/me/messages/msg-1/createForward');
+      expect(apiCalls[0].method).toBe('post');
+      expect(apiCalls[0].body).toBeNull();
+      expect(result).toEqual(mockDraft);
+    });
+  });
+
+  // =========================================================================
   // Attachment operations
   // =========================================================================
 
@@ -1058,6 +1106,16 @@ describe('Graph API endpoint and method validation', () => {
       await client.replyMessage('m1', 'comment', true);
       await client.forwardMessage('m1', [{ emailAddress: { address: 'a@b.com' } }], 'fwd');
 
+      // Exercise reply/forward as draft methods
+      setupMock({ id: 'reply-draft', subject: 'RE: Test' });
+      await client.createReplyDraft('m1');
+
+      setupMock({ id: 'replyall-draft', subject: 'RE: Test' });
+      await client.createReplyAllDraft('m1');
+
+      setupMock({ id: 'forward-draft', subject: 'FW: Test' });
+      await client.createForwardDraft('m1');
+
       // Exercise attachment methods
       setupMock({ value: [] });
       await client.listAttachments('m1');
@@ -1298,6 +1356,48 @@ describe('Graph API endpoint and method validation', () => {
       apiCalls.length = 0;
 
       await client.forwardMessage('msg-1', [{ emailAddress: { address: 'fwd@example.com' } }]);
+      apiCalls.length = 0;
+
+      setupMock();
+      await client.listMessages('f1');
+
+      expect(apiCalls.filter(c => c.method === 'get').length).toBeGreaterThan(0);
+    });
+
+    it('createReplyDraft clears cache', async () => {
+      await client.listMessages('f1');
+      apiCalls.length = 0;
+
+      setupMock({ id: 'draft-1', subject: 'RE: Test' });
+      await client.createReplyDraft('msg-1');
+      apiCalls.length = 0;
+
+      setupMock();
+      await client.listMessages('f1');
+
+      expect(apiCalls.filter(c => c.method === 'get').length).toBeGreaterThan(0);
+    });
+
+    it('createReplyAllDraft clears cache', async () => {
+      await client.listMessages('f1');
+      apiCalls.length = 0;
+
+      setupMock({ id: 'draft-2', subject: 'RE: Test' });
+      await client.createReplyAllDraft('msg-1');
+      apiCalls.length = 0;
+
+      setupMock();
+      await client.listMessages('f1');
+
+      expect(apiCalls.filter(c => c.method === 'get').length).toBeGreaterThan(0);
+    });
+
+    it('createForwardDraft clears cache', async () => {
+      await client.listMessages('f1');
+      apiCalls.length = 0;
+
+      setupMock({ id: 'draft-3', subject: 'FW: Test' });
+      await client.createForwardDraft('msg-1');
       apiCalls.length = 0;
 
       setupMock();

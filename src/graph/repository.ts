@@ -863,6 +863,82 @@ export class GraphRepository implements IRepository {
   }
 
   // ===========================================================================
+  // Reply/Forward as Draft Operations (Async)
+  // ===========================================================================
+
+  /**
+   * Creates a reply (or reply-all) draft for a message.
+   *
+   * Looks up the Graph string ID from idCache.messages, creates the draft
+   * via the client, caches the new draft ID, and optionally updates the body.
+   *
+   * @returns The numeric and graph IDs of the new draft.
+   */
+  async replyAsDraftAsync(
+    messageId: number,
+    replyAll = false,
+    comment?: string,
+  ): Promise<{ numericId: number; graphId: string }> {
+    const graphMessageId = this.idCache.messages.get(messageId);
+    if (graphMessageId == null) throw new Error(`Message ID ${messageId} not found in cache`);
+
+    const draft = replyAll
+      ? await this.client.createReplyAllDraft(graphMessageId)
+      : await this.client.createReplyDraft(graphMessageId);
+
+    const graphId = draft.id!;
+    const numericId = hashStringToNumber(graphId);
+    this.idCache.messages.set(numericId, graphId);
+
+    if (comment != null) {
+      await this.client.updateDraft(graphId, {
+        body: { contentType: 'text', content: comment },
+      });
+    }
+
+    return { numericId, graphId };
+  }
+
+  /**
+   * Creates a forward draft for a message.
+   *
+   * Looks up the Graph string ID from idCache.messages, creates the draft
+   * via the client, caches the new draft ID, and optionally updates the
+   * recipients and body.
+   *
+   * @returns The numeric and graph IDs of the new draft.
+   */
+  async forwardAsDraftAsync(
+    messageId: number,
+    toRecipients?: string[],
+    comment?: string,
+  ): Promise<{ numericId: number; graphId: string }> {
+    const graphMessageId = this.idCache.messages.get(messageId);
+    if (graphMessageId == null) throw new Error(`Message ID ${messageId} not found in cache`);
+
+    const draft = await this.client.createForwardDraft(graphMessageId);
+
+    const graphId = draft.id!;
+    const numericId = hashStringToNumber(graphId);
+    this.idCache.messages.set(numericId, graphId);
+
+    const updates: Record<string, unknown> = {};
+    if (toRecipients != null && toRecipients.length > 0) {
+      updates.toRecipients = toRecipients.map(addr => ({
+        emailAddress: { address: addr },
+      }));
+    }
+    if (comment != null) {
+      updates.body = { contentType: 'text', content: comment };
+    }
+    if (Object.keys(updates).length > 0) {
+      await this.client.updateDraft(graphId, updates);
+    }
+
+    return { numericId, graphId };
+  }
+
+  // ===========================================================================
   // Attachment Operations (Async)
   // ===========================================================================
 

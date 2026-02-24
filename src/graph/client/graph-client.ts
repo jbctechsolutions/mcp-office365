@@ -833,6 +833,42 @@ export class GraphClient {
     this.cache.clear();
   }
 
+  /**
+   * Creates a reply draft for a message.
+   */
+  async createReplyDraft(messageId: string): Promise<MicrosoftGraph.Message> {
+    const client = await this.getClient();
+    const result = await client
+      .api(`/me/messages/${messageId}/createReply`)
+      .post(null) as MicrosoftGraph.Message;
+    this.cache.clear();
+    return result;
+  }
+
+  /**
+   * Creates a reply-all draft for a message.
+   */
+  async createReplyAllDraft(messageId: string): Promise<MicrosoftGraph.Message> {
+    const client = await this.getClient();
+    const result = await client
+      .api(`/me/messages/${messageId}/createReplyAll`)
+      .post(null) as MicrosoftGraph.Message;
+    this.cache.clear();
+    return result;
+  }
+
+  /**
+   * Creates a forward draft for a message.
+   */
+  async createForwardDraft(messageId: string): Promise<MicrosoftGraph.Message> {
+    const client = await this.getClient();
+    const result = await client
+      .api(`/me/messages/${messageId}/createForward`)
+      .post(null) as MicrosoftGraph.Message;
+    this.cache.clear();
+    return result;
+  }
+
   // ===========================================================================
   // Attachment Operations
   // ===========================================================================

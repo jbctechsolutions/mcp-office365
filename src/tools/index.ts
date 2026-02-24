@@ -143,6 +143,8 @@ export {
   ConfirmReplyEmailInput,
   PrepareForwardEmailInput,
   ConfirmForwardEmailInput,
+  ReplyAsDraftInput,
+  ForwardAsDraftInput,
   type IMailSendRepository,
   type CreateDraftResult,
   type CreateDraftParams,
@@ -156,4 +158,6 @@ export {
   type ConfirmReplyEmailParams,
   type PrepareForwardEmailParams,
   type ConfirmForwardEmailParams,
+  type ReplyAsDraftParams,
+  type ForwardAsDraftParams,
 } from './mail-send.js';
