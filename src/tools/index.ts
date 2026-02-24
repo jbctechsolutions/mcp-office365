@@ -161,3 +161,6 @@ export {
   type ReplyAsDraftParams,
   type ForwardAsDraftParams,
 } from './mail-send.js';
+
+// Scheduling tools
+export * from './scheduling.js';
