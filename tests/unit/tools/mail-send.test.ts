@@ -138,6 +138,7 @@ describe('MailSendTools', () => {
     vi.mocked(readSignature).mockClear();
     vi.mocked(writeSignature).mockClear();
     vi.mocked(appendSignature).mockClear();
+    vi.mocked(appendSignature).mockImplementation((body) => body);
   });
 
   // ===========================================================================
@@ -791,6 +792,77 @@ describe('MailSendTools', () => {
       const result = await tools.getSignature();
 
       expect(result).toEqual({ has_signature: false, message: 'No signature is set. Use set_signature to create one.' });
+    });
+  });
+
+  // ===========================================================================
+  // Signature Auto-Append
+  // ===========================================================================
+
+  describe('signature auto-append', () => {
+    it('appends signature to body in createDraft when include_signature is true', async () => {
+      vi.mocked(appendSignature).mockReturnValue('Hello<br><br><p>-- Joel</p>');
+      (repo.createDraftAsync as ReturnType<typeof vi.fn>).mockResolvedValue({ numericId: 42, graphId: 'AAA' });
+
+      await tools.createDraft({
+        subject: 'Test', body: 'Hello', body_type: 'html',
+        include_signature: true,
+      });
+
+      expect(appendSignature).toHaveBeenCalledWith('Hello', 'html', true);
+      expect(repo.createDraftAsync).toHaveBeenCalledWith(
+        expect.objectContaining({ body: 'Hello<br><br><p>-- Joel</p>' })
+      );
+    });
+
+    it('does not append signature when include_signature is false', async () => {
+      vi.mocked(appendSignature).mockReturnValue('Hello');
+      (repo.createDraftAsync as ReturnType<typeof vi.fn>).mockResolvedValue({ numericId: 42, graphId: 'AAA' });
+
+      await tools.createDraft({
+        subject: 'Test', body: 'Hello', body_type: 'text',
+        include_signature: false,
+      });
+
+      expect(appendSignature).toHaveBeenCalledWith('Hello', 'text', false);
+    });
+
+    it('defaults include_signature to true in createDraft', async () => {
+      vi.mocked(appendSignature).mockReturnValue('Hello');
+      (repo.createDraftAsync as ReturnType<typeof vi.fn>).mockResolvedValue({ numericId: 42, graphId: 'AAA' });
+
+      await tools.createDraft({ subject: 'Test', body: 'Hello', body_type: 'text' });
+
+      expect(appendSignature).toHaveBeenCalledWith('Hello', 'text', true);
+    });
+
+    it('appends signature in prepareSendEmail', () => {
+      vi.mocked(appendSignature).mockReturnValue('Hi<br><br><sig>');
+
+      tools.prepareSendEmail({
+        to: ['bob@example.com'], subject: 'Test', body: 'Hi', body_type: 'html',
+        include_signature: true,
+      });
+
+      expect(appendSignature).toHaveBeenCalledWith('Hi', 'html', true);
+    });
+
+    it('appends signature in replyAsDraft', async () => {
+      vi.mocked(appendSignature).mockReturnValue('reply text with sig');
+      (repo.replyAsDraftAsync as ReturnType<typeof vi.fn>).mockResolvedValue({ numericId: 10, graphId: 'BBB' });
+
+      await tools.replyAsDraft({ message_id: 1, comment: 'reply text', include_signature: true });
+
+      expect(appendSignature).toHaveBeenCalledWith('reply text', 'text', true);
+    });
+
+    it('appends signature in forwardAsDraft', async () => {
+      vi.mocked(appendSignature).mockReturnValue('fwd comment with sig');
+      (repo.forwardAsDraftAsync as ReturnType<typeof vi.fn>).mockResolvedValue({ numericId: 11, graphId: 'CCC' });
+
+      await tools.forwardAsDraft({ message_id: 1, comment: 'fwd comment', include_signature: true });
+
+      expect(appendSignature).toHaveBeenCalledWith('fwd comment', 'text', true);
     });
   });
 
