@@ -8,13 +8,13 @@ A [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) server that p
 
 ## Features
 
-- **72 tools** - Full read/write access to mail, calendar, contacts, and tasks
+- **74 tools** - Full read/write access to mail, calendar, contacts, and tasks
 - **Two backends** - AppleScript for classic Outlook, Microsoft Graph API for new Outlook
 - **Two-phase approval** - Destructive operations (delete, send) require explicit confirmation
 - **Works offline** - AppleScript backend requires no network (Graph API requires internet)
 - **Fast and reliable** - Direct communication with Outlook or Microsoft servers
 
-### Available Tools (72)
+### Available Tools (74)
 
 **Accounts (1)**
 - `list_accounts` - List all configured Outlook accounts
@@ -26,7 +26,7 @@ A [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) server that p
 - `get_email` - Get full email details including body
 - `get_unread_count` - Get unread email count
 
-**Mail - Sending & Drafts (12)** *(Graph API)*
+**Mail - Sending & Drafts (14)** *(Graph API)*
 - `send_email` - Send an email with attachments and HTML support
 - `create_draft` - Create a new draft email
 - `update_draft` - Update an existing draft
@@ -35,6 +35,8 @@ A [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) server that p
 - `prepare_send_email` / `confirm_send_email` - Compose and send (two-phase)
 - `prepare_reply_email` / `confirm_reply_email` - Reply to a message (two-phase)
 - `prepare_forward_email` / `confirm_forward_email` - Forward a message (two-phase)
+- `reply_as_draft` - Create a reply (or reply-all) as an editable draft
+- `forward_as_draft` - Create a forward as an editable draft
 
 **Attachments (2)**
 - `list_attachments` - List attachment metadata for an email

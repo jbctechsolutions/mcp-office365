@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [v1.3.0] - 2026-02-24
+
+### Added
+- **Graph API onboarding flow**: First-time users are now guided through authentication automatically
+  - **Inline auth on first tool call**: When unauthenticated, the server triggers Microsoft's device code flow automatically instead of returning an error
+  - **CLI `auth` subcommand**: `npx @jbctechsolutions/mcp-outlook-mac auth` for standalone pre-authentication, `--status` to check auth state, `--logout` to sign out
+  - **Auth mutex**: Concurrent tool calls during authentication safely coalesce into a single auth flow
+- **Reply/forward as draft tools**: 2 new tools (72 → 74 total)
+  - `reply_as_draft` — Create a reply (or reply-all) as an editable draft
+  - `forward_as_draft` — Create a forward as an editable draft
+  - Both return a `draft_id` for use with existing `update_draft` and `prepare_send_draft` tools
+
 ## [v1.2.1] - 2026-02-24
 
 ### Changed
@@ -174,7 +186,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-[Unreleased]: https://github.com/jbctechsolutions/mcp-outlook-mac/compare/v1.2.1...HEAD
+[Unreleased]: https://github.com/jbctechsolutions/mcp-outlook-mac/compare/v1.3.0...HEAD
+[v1.3.0]: https://github.com/jbctechsolutions/mcp-outlook-mac/compare/v1.2.1...v1.3.0
 [v1.2.1]: https://github.com/jbctechsolutions/mcp-outlook-mac/compare/v1.2.0...v1.2.1
 [v1.2.0]: https://github.com/jbctechsolutions/mcp-outlook-mac/compare/v1.1.8...v1.2.0
 [v1.1.8]: https://github.com/jbctechsolutions/mcp-outlook-mac/compare/v1.1.7...v1.1.8
