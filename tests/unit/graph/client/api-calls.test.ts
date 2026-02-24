@@ -149,6 +149,10 @@ const VALID_ENDPOINT_PATTERNS = [
   /^\/me\/todo\/lists$/,
   /^\/me\/todo\/lists\/[^/]+\/tasks$/,
   /^\/me\/todo\/lists\/[^/]+\/tasks\/[^/]+$/,
+  // Attachments
+  /^\/me\/messages\/[^/]+\/attachments$/,
+  /^\/me\/messages\/[^/]+\/attachments\/[^/]+$/,
+  /^\/me\/messages\/[^/]+\/attachments\/createUploadSession$/,
   // Pagination (nextLink URLs from Graph)
   /^https:\/\/graph\.microsoft\.com\//,
 ];
@@ -637,6 +641,65 @@ describe('Graph API endpoint and method validation', () => {
   });
 
   // =========================================================================
+  // Attachment operations
+  // =========================================================================
+
+  describe('Attachment operation endpoints and bodies', () => {
+    it('listAttachments GETs /me/messages/{id}/attachments with $select', async () => {
+      await client.listAttachments('msg-1');
+
+      expect(apiCalls).toHaveLength(1);
+      expect(apiCalls[0].url).toBe('/me/messages/msg-1/attachments');
+      expect(apiCalls[0].method).toBe('get');
+      expect(apiCalls[0].selectFields).toBe('id,name,size,contentType,isInline');
+    });
+
+    it('getAttachment GETs /me/messages/{id}/attachments/{attachmentId}', async () => {
+      setupMock({ id: 'att-1', name: 'file.pdf', contentBytes: 'base64data' });
+      await client.getAttachment('msg-1', 'att-1');
+
+      expect(apiCalls).toHaveLength(1);
+      expect(apiCalls[0].url).toBe('/me/messages/msg-1/attachments/att-1');
+      expect(apiCalls[0].method).toBe('get');
+    });
+
+    it('addAttachment POSTs to /me/messages/{id}/attachments with attachment body', async () => {
+      const attachment = {
+        '@odata.type': '#microsoft.graph.fileAttachment',
+        name: 'file.txt',
+        contentBytes: 'SGVsbG8gV29ybGQ=',
+        contentType: 'text/plain',
+      };
+      setupMock({ id: 'att-new', name: 'file.txt' });
+
+      await client.addAttachment('msg-1', attachment);
+
+      expect(apiCalls).toHaveLength(1);
+      expect(apiCalls[0].url).toBe('/me/messages/msg-1/attachments');
+      expect(apiCalls[0].method).toBe('post');
+      expect(apiCalls[0].body).toEqual(attachment);
+    });
+
+    it('createUploadSession POSTs to /me/messages/{id}/attachments/createUploadSession', async () => {
+      const body = {
+        AttachmentItem: {
+          attachmentType: 'file',
+          name: 'largefile.zip',
+          size: 5000000,
+        },
+      };
+      setupMock({ uploadUrl: 'https://upload.example.com/session123' });
+
+      await client.createUploadSession('msg-1', body);
+
+      expect(apiCalls).toHaveLength(1);
+      expect(apiCalls[0].url).toBe('/me/messages/msg-1/attachments/createUploadSession');
+      expect(apiCalls[0].method).toBe('post');
+      expect(apiCalls[0].body).toEqual(body);
+    });
+  });
+
+  // =========================================================================
   // Well-known folder name validation
   // =========================================================================
 
@@ -760,6 +823,19 @@ describe('Graph API endpoint and method validation', () => {
       await client.replyMessage('m1', 'comment', false);
       await client.replyMessage('m1', 'comment', true);
       await client.forwardMessage('m1', [{ emailAddress: { address: 'a@b.com' } }], 'fwd');
+
+      // Exercise attachment methods
+      setupMock({ value: [] });
+      await client.listAttachments('m1');
+
+      setupMock({ id: 'att-1', name: 'file.pdf', contentBytes: 'data' });
+      await client.getAttachment('m1', 'att-1');
+
+      setupMock({ id: 'att-new', name: 'file.txt' });
+      await client.addAttachment('m1', { '@odata.type': '#microsoft.graph.fileAttachment', name: 'file.txt', contentBytes: 'data' });
+
+      setupMock({ uploadUrl: 'https://upload.example.com/session' });
+      await client.createUploadSession('m1', { AttachmentItem: { attachmentType: 'file', name: 'big.zip', size: 5000000 } });
 
       // Verify all captured URLs
       for (const call of apiCalls) {
@@ -955,6 +1031,24 @@ describe('Graph API endpoint and method validation', () => {
       apiCalls.length = 0;
 
       await client.forwardMessage('msg-1', [{ emailAddress: { address: 'fwd@example.com' } }]);
+      apiCalls.length = 0;
+
+      setupMock();
+      await client.listMessages('f1');
+
+      expect(apiCalls.filter(c => c.method === 'get').length).toBeGreaterThan(0);
+    });
+
+    it('addAttachment clears cache', async () => {
+      await client.listMessages('f1');
+      apiCalls.length = 0;
+
+      setupMock({ id: 'att-new', name: 'file.txt' });
+      await client.addAttachment('msg-1', {
+        '@odata.type': '#microsoft.graph.fileAttachment',
+        name: 'file.txt',
+        contentBytes: 'SGVsbG8=',
+      });
       apiCalls.length = 0;
 
       setupMock();

@@ -728,6 +728,57 @@ export class GraphClient {
   }
 
   // ===========================================================================
+  // Attachment Operations
+  // ===========================================================================
+
+  /**
+   * Lists attachments on a message.
+   */
+  async listAttachments(messageId: string): Promise<MicrosoftGraph.Attachment[]> {
+    const client = await this.getClient();
+
+    const response = await client
+      .api(`/me/messages/${messageId}/attachments`)
+      .select('id,name,size,contentType,isInline')
+      .get() as PageCollection;
+
+    return response.value as MicrosoftGraph.Attachment[];
+  }
+
+  /**
+   * Gets a specific attachment with full content (including contentBytes).
+   */
+  async getAttachment(messageId: string, attachmentId: string): Promise<MicrosoftGraph.FileAttachment> {
+    const client = await this.getClient();
+
+    return await client
+      .api(`/me/messages/${messageId}/attachments/${attachmentId}`)
+      .get() as MicrosoftGraph.FileAttachment;
+  }
+
+  /**
+   * Adds an inline base64 attachment to a message (<= 3MB).
+   */
+  async addAttachment(messageId: string, attachment: Record<string, unknown>): Promise<MicrosoftGraph.Attachment> {
+    const client = await this.getClient();
+    const result = await client
+      .api(`/me/messages/${messageId}/attachments`)
+      .post(attachment) as MicrosoftGraph.Attachment;
+    this.cache.clear();
+    return result;
+  }
+
+  /**
+   * Creates an upload session for large file attachments (> 3MB).
+   */
+  async createUploadSession(messageId: string, body: Record<string, unknown>): Promise<{ uploadUrl: string }> {
+    const client = await this.getClient();
+    return await client
+      .api(`/me/messages/${messageId}/attachments/createUploadSession`)
+      .post(body) as { uploadUrl: string };
+  }
+
+  // ===========================================================================
   // Tasks (Microsoft To Do) - continued
   // ===========================================================================
 
