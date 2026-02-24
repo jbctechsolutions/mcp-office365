@@ -1536,20 +1536,20 @@ const TOOLS: Tool[] = [
   },
   {
     name: 'reply_as_draft',
-    description: 'Create a reply (or reply-all) as an editable draft. Returns a draft_id for use with update_draft and send_draft.',
+    description: 'Create a reply (or reply-all) as an editable draft. Returns a draft_id for use with update_draft and prepare_send_draft.',
     inputSchema: {
       type: 'object' as const,
       properties: {
         message_id: { type: 'number', description: 'The message ID to reply to' },
         comment: { type: 'string', description: 'Initial reply body text' },
-        reply_all: { type: 'boolean', description: 'Reply to all recipients (default: false)' },
+        reply_all: { type: 'boolean', default: false, description: 'Reply to all recipients (default: false)' },
       },
       required: ['message_id'],
     },
   },
   {
     name: 'forward_as_draft',
-    description: 'Create a forward as an editable draft. Returns a draft_id for use with update_draft and send_draft.',
+    description: 'Create a forward as an editable draft. Returns a draft_id for use with update_draft and prepare_send_draft.',
     inputSchema: {
       type: 'object' as const,
       properties: {

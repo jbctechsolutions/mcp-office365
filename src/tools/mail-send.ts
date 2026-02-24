@@ -563,7 +563,7 @@ export class MailSendTools {
     return {
       success: true,
       draft_id: numericId,
-      message: 'Reply draft created. Use update_draft to edit, then send_draft or prepare_send_email to send.',
+      message: 'Reply draft created. Use update_draft to edit, then prepare_send_draft or prepare_send_email to send.',
     };
   }
 
@@ -580,7 +580,7 @@ export class MailSendTools {
     return {
       success: true,
       draft_id: numericId,
-      message: 'Forward draft created. Use update_draft to edit, then send_draft or prepare_send_email to send.',
+      message: 'Forward draft created. Use update_draft to edit, then prepare_send_draft or prepare_send_email to send.',
     };
   }
 

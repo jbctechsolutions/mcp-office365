@@ -577,7 +577,7 @@ describe('MailSendTools', () => {
       expect(result).toEqual({
         success: true,
         draft_id: 101,
-        message: 'Reply draft created. Use update_draft to edit, then send_draft or prepare_send_email to send.',
+        message: 'Reply draft created. Use update_draft to edit, then prepare_send_draft or prepare_send_email to send.',
       });
     });
 
@@ -612,7 +612,7 @@ describe('MailSendTools', () => {
       expect(result).toEqual({
         success: true,
         draft_id: 201,
-        message: 'Forward draft created. Use update_draft to edit, then send_draft or prepare_send_email to send.',
+        message: 'Forward draft created. Use update_draft to edit, then prepare_send_draft or prepare_send_email to send.',
       });
     });
 
