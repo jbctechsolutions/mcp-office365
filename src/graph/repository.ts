@@ -915,6 +915,130 @@ export class GraphRepository implements IRepository {
 
     return downloadAttachment(this.client, cached.messageId, cached.attachmentId);
   }
+
+  // ===========================================================================
+  // Calendar Write Operations (Async)
+  // ===========================================================================
+
+  /**
+   * Creates a new calendar event.
+   *
+   * Builds a Graph API event object from the given params, calls
+   * client.createEvent(), adds the result to idCache.events, and
+   * returns the numeric ID.
+   */
+  async createEventAsync(params: {
+    subject: string;
+    start: string;
+    end: string;
+    timezone?: string;
+    location?: string;
+    body?: string;
+    bodyType?: 'text' | 'html';
+    attendees?: Array<{ email: string; name?: string; type?: 'required' | 'optional' }>;
+    isAllDay?: boolean;
+    recurrence?: {
+      pattern: {
+        type: 'daily' | 'weekly' | 'monthly' | 'yearly';
+        interval: number;
+        daysOfWeek?: string[];
+      };
+      range: {
+        type: 'endDate' | 'noEnd' | 'numbered';
+        startDate: string;
+        endDate?: string;
+        numberOfOccurrences?: number;
+      };
+    };
+    calendarId?: number;
+  }): Promise<number> {
+    const tz = params.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
+
+    const graphEvent: Record<string, unknown> = {
+      subject: params.subject,
+      start: { dateTime: params.start, timeZone: tz },
+      end: { dateTime: params.end, timeZone: tz },
+    };
+
+    if (params.isAllDay === true) {
+      graphEvent.isAllDay = true;
+    }
+
+    if (params.location != null) {
+      graphEvent.location = { displayName: params.location };
+    }
+
+    if (params.body != null) {
+      graphEvent.body = {
+        contentType: params.bodyType ?? 'text',
+        content: params.body,
+      };
+    }
+
+    if (params.attendees != null && params.attendees.length > 0) {
+      graphEvent.attendees = params.attendees.map((a) => ({
+        emailAddress: { address: a.email, name: a.name },
+        type: a.type ?? 'required',
+      }));
+    }
+
+    if (params.recurrence != null) {
+      graphEvent.recurrence = params.recurrence;
+    }
+
+    const graphCalendarId = params.calendarId != null
+      ? this.idCache.folders.get(params.calendarId)
+      : undefined;
+
+    const created = await this.client.createEvent(graphEvent, graphCalendarId);
+    const graphId = created.id!;
+    const numericId = hashStringToNumber(graphId);
+    this.idCache.events.set(numericId, graphId);
+    return numericId;
+  }
+
+  /**
+   * Updates an existing calendar event.
+   *
+   * Looks up the Graph string ID from idCache.events, then calls
+   * client.updateEvent(). Throws if the event is not cached.
+   */
+  async updateEventAsync(eventId: number, updates: Record<string, unknown>): Promise<void> {
+    const graphId = this.idCache.events.get(eventId);
+    if (graphId == null) throw new Error(`Event ID ${eventId} not found in cache`);
+    await this.client.updateEvent(graphId, updates);
+  }
+
+  /**
+   * Deletes a calendar event.
+   *
+   * Looks up the Graph string ID from idCache.events, calls
+   * client.deleteEvent(), and removes the entry from idCache.
+   * Throws if the event is not cached.
+   */
+  async deleteEventAsync(eventId: number): Promise<void> {
+    const graphId = this.idCache.events.get(eventId);
+    if (graphId == null) throw new Error(`Event ID ${eventId} not found in cache`);
+    await this.client.deleteEvent(graphId);
+    this.idCache.events.delete(eventId);
+  }
+
+  /**
+   * Responds to a calendar event invitation.
+   *
+   * Looks up the Graph string ID from idCache.events, then calls
+   * client.respondToEvent(). Throws if the event is not cached.
+   */
+  async respondToEventAsync(
+    eventId: number,
+    response: 'accept' | 'decline' | 'tentative',
+    sendResponse: boolean,
+    comment?: string
+  ): Promise<void> {
+    const graphId = this.idCache.events.get(eventId);
+    if (graphId == null) throw new Error(`Event ID ${eventId} not found in cache`);
+    await this.client.respondToEvent(graphId, response, sendResponse, comment);
+  }
 }
 
 /**

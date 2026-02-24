@@ -21,6 +21,7 @@ import {
   ListToolsRequestSchema,
   type Tool,
 } from '@modelcontextprotocol/sdk/types.js';
+import { z } from 'zod';
 
 import {
   createAppleScriptRepository,
@@ -108,7 +109,7 @@ import {
   PrepareForwardEmailInput,
   ConfirmForwardEmailInput,
 } from './tools/index.js';
-import { ApprovalTokenManager } from './approval/index.js';
+import { ApprovalTokenManager, hashEventForApproval } from './approval/index.js';
 import type { CreateEventResult } from './tools/index.js';
 import {
   wrapError,
@@ -541,6 +542,29 @@ const TOOLS: Tool[] = [
         },
       },
       required: ['event_id'],
+    },
+  },
+  {
+    name: 'prepare_delete_event',
+    description: 'Prepare to delete a calendar event. Returns a preview and approval token. Call confirm_delete_event to execute.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        event_id: { type: 'number', description: 'The event ID to delete' },
+      },
+      required: ['event_id'],
+    },
+  },
+  {
+    name: 'confirm_delete_event',
+    description: 'Confirm deletion of a calendar event using a token from prepare_delete_event',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        token_id: { type: 'string', description: 'The approval token from prepare_delete_event' },
+        event_id: { type: 'number', description: 'The event ID to delete' },
+      },
+      required: ['token_id', 'event_id'],
     },
   },
   // Contact tools
@@ -1478,7 +1502,7 @@ export function createServer(): Server {
 
       // Graph API mode - handle async operations directly
       if (useGraphApi && graphRepository != null) {
-        return await handleGraphToolCall(name, args, graphRepository, graphContentReaders!, orgTools!, sendTools!);
+        return await handleGraphToolCall(name, args, graphRepository, graphContentReaders!, orgTools!, sendTools!, tokenManager);
       }
 
       // AppleScript mode - use sync tool interfaces
@@ -2197,6 +2221,87 @@ async function handleAppleScriptToolCall(
 }
 
 // =============================================================================
+// Calendar Write — Zod Schemas (Graph API)
+// =============================================================================
+
+const GraphCreateEventInput = z.strictObject({
+  title: z.string().min(1),
+  start_date: z.string().refine((s) => !isNaN(Date.parse(s)), { message: 'Must be a valid ISO 8601 date string' }),
+  end_date: z.string().refine((s) => !isNaN(Date.parse(s)), { message: 'Must be a valid ISO 8601 date string' }),
+  calendar_id: z.number().int().positive().optional(),
+  location: z.string().optional(),
+  description: z.string().optional(),
+  is_all_day: z.boolean().optional().default(false),
+  attendees: z.array(z.object({
+    email: z.string().email(),
+    name: z.string().optional(),
+    type: z.enum(['required', 'optional']).optional(),
+  })).optional(),
+  recurrence: z.object({
+    pattern: z.object({
+      type: z.enum(['daily', 'weekly', 'monthly', 'yearly']),
+      interval: z.number().int().positive(),
+      daysOfWeek: z.array(z.string()).optional(),
+    }),
+    range: z.object({
+      type: z.enum(['endDate', 'noEnd', 'numbered']),
+      startDate: z.string(),
+      endDate: z.string().optional(),
+      numberOfOccurrences: z.number().int().positive().optional(),
+    }),
+  }).optional(),
+}).refine(
+  (data) => new Date(data.start_date).getTime() < new Date(data.end_date).getTime(),
+  { message: 'start_date must be before end_date', path: ['start_date'] }
+);
+
+const UpdateEventInput = z.strictObject({
+  event_id: z.number().int().positive(),
+  subject: z.string().optional(),
+  start: z.string().optional(),
+  end: z.string().optional(),
+  timezone: z.string().optional(),
+  location: z.string().optional(),
+  body: z.string().optional(),
+  body_type: z.enum(['text', 'html']).optional(),
+  attendees: z.array(z.object({
+    email: z.string().email(),
+    name: z.string().optional(),
+    type: z.enum(['required', 'optional']).optional(),
+  })).optional(),
+  is_all_day: z.boolean().optional(),
+  recurrence: z.object({
+    pattern: z.object({
+      type: z.enum(['daily', 'weekly', 'monthly', 'yearly']),
+      interval: z.number().int().positive(),
+      daysOfWeek: z.array(z.string()).optional(),
+    }),
+    range: z.object({
+      type: z.enum(['endDate', 'noEnd', 'numbered']),
+      startDate: z.string(),
+      endDate: z.string().optional(),
+      numberOfOccurrences: z.number().int().positive().optional(),
+    }),
+  }).optional(),
+});
+
+const RespondToEventGraphInput = z.strictObject({
+  event_id: z.number().int().positive(),
+  response: z.enum(['accept', 'decline', 'tentative']),
+  send_response: z.boolean().default(true),
+  comment: z.string().optional(),
+});
+
+const PrepareDeleteEventInput = z.strictObject({
+  event_id: z.number().int().positive(),
+});
+
+const ConfirmDeleteEventInput = z.strictObject({
+  token_id: z.uuid(),
+  event_id: z.number().int().positive(),
+});
+
+// =============================================================================
 // Graph API Tool Handler
 // =============================================================================
 
@@ -2206,7 +2311,8 @@ async function handleGraphToolCall(
   repository: GraphRepository,
   contentReaders: GraphContentReaders,
   orgTools: ReturnType<typeof createMailboxOrganizationTools>,
-  sendTools: ReturnType<typeof createMailSendTools>
+  sendTools: ReturnType<typeof createMailSendTools>,
+  tokenManager: ApprovalTokenManager
 ): Promise<ToolResult> {
   // Handle mailbox organization tools (shared between backends)
   const orgResult = await handleOrgToolCall(name, args, orgTools);
@@ -2345,9 +2451,182 @@ async function handleGraphToolCall(
       }
 
       case 'create_event': {
+        const params = GraphCreateEventInput.parse(args);
+        const createParams: Parameters<typeof repository.createEventAsync>[0] = {
+          subject: params.title,
+          start: params.start_date,
+          end: params.end_date,
+        };
+        if (params.location != null) createParams.location = params.location;
+        if (params.description != null) createParams.body = params.description;
+        createParams.bodyType = 'text';
+        if (params.is_all_day) createParams.isAllDay = params.is_all_day;
+        if (params.attendees != null) {
+          createParams.attendees = params.attendees.map((a) => {
+            const att: { email: string; name?: string; type?: 'required' | 'optional' } = { email: a.email };
+            if (a.name != null) att.name = a.name;
+            if (a.type != null) att.type = a.type;
+            return att;
+          });
+        }
+        if (params.recurrence != null) {
+          const rec = params.recurrence;
+          const pattern: { type: 'daily' | 'weekly' | 'monthly' | 'yearly'; interval: number; daysOfWeek?: string[] } = {
+            type: rec.pattern.type,
+            interval: rec.pattern.interval,
+          };
+          if (rec.pattern.daysOfWeek != null) pattern.daysOfWeek = rec.pattern.daysOfWeek;
+          const range: { type: 'endDate' | 'noEnd' | 'numbered'; startDate: string; endDate?: string; numberOfOccurrences?: number } = {
+            type: rec.range.type,
+            startDate: rec.range.startDate,
+          };
+          if (rec.range.endDate != null) range.endDate = rec.range.endDate;
+          if (rec.range.numberOfOccurrences != null) range.numberOfOccurrences = rec.range.numberOfOccurrences;
+          createParams.recurrence = { pattern, range };
+        }
+        if (params.calendar_id != null) createParams.calendarId = params.calendar_id;
+        const numericId = await repository.createEventAsync(createParams);
+
+        const result: CreateEventResult = {
+          id: numericId,
+          title: params.title,
+          start_date: params.start_date,
+          end_date: params.end_date,
+          calendar_id: params.calendar_id ?? null,
+          location: params.location ?? null,
+          description: params.description ?? null,
+          is_all_day: params.is_all_day,
+          is_recurring: params.recurrence != null,
+        };
+        return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+      }
+
+      case 'update_event': {
+        const params = UpdateEventInput.parse(args);
+        const updates: Record<string, unknown> = {};
+        const tz = params.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
+
+        if (params.subject != null) updates.subject = params.subject;
+        if (params.start != null) updates.start = { dateTime: params.start, timeZone: tz };
+        if (params.end != null) updates.end = { dateTime: params.end, timeZone: tz };
+        if (params.location != null) updates.location = { displayName: params.location };
+        if (params.body != null) {
+          updates.body = {
+            contentType: params.body_type ?? 'text',
+            content: params.body,
+          };
+        }
+        if (params.is_all_day != null) updates.isAllDay = params.is_all_day;
+        if (params.attendees != null) {
+          updates.attendees = params.attendees.map((a) => ({
+            emailAddress: { address: a.email, name: a.name },
+            type: a.type ?? 'required',
+          }));
+        }
+        if (params.recurrence != null) updates.recurrence = params.recurrence;
+
+        await repository.updateEventAsync(params.event_id, updates);
         return {
-          content: [{ type: 'text', text: 'Event creation is not yet supported via Microsoft Graph API' }],
-          isError: true,
+          content: [{ type: 'text', text: `Successfully updated event ${params.event_id}` }],
+        };
+      }
+
+      case 'respond_to_event': {
+        const params = RespondToEventGraphInput.parse(args);
+        await repository.respondToEventAsync(
+          params.event_id,
+          params.response,
+          params.send_response,
+          params.comment
+        );
+        const responseText = params.response === 'accept'
+          ? 'accepted'
+          : params.response === 'decline'
+          ? 'declined'
+          : 'tentatively accepted';
+        return {
+          content: [{ type: 'text', text: `Successfully ${responseText} event ${params.event_id}` }],
+        };
+      }
+
+      case 'delete_event': {
+        // For Graph API, direct delete_event is also supported (for AppleScript compatibility)
+        const params = PrepareDeleteEventInput.parse(args);
+        await repository.deleteEventAsync(params.event_id);
+        return {
+          content: [{ type: 'text', text: `Successfully deleted event ${params.event_id}` }],
+        };
+      }
+
+      case 'prepare_delete_event': {
+        const params = PrepareDeleteEventInput.parse(args);
+        const event = await repository.getEventAsync(params.event_id);
+        if (event == null) {
+          return { content: [{ type: 'text', text: 'Event not found' }], isError: true };
+        }
+
+        const graphId = repository.getGraphId('event', params.event_id);
+        const graphEvent = graphId != null ? await repository.getClient().getEvent(graphId) : null;
+        const hash = hashEventForApproval({
+          id: params.event_id,
+          subject: graphEvent?.subject ?? null,
+          startDateTime: graphEvent?.start?.dateTime ?? null,
+        });
+
+        const token = tokenManager.generateToken({
+          operation: 'delete_event',
+          targetType: 'event',
+          targetId: params.event_id,
+          targetHash: hash,
+        });
+
+        const result = {
+          token_id: token.tokenId,
+          expires_at: new Date(token.expiresAt).toISOString(),
+          event: transformGraphEventRow(event),
+          action: 'This event will be permanently deleted.',
+        };
+        return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+      }
+
+      case 'confirm_delete_event': {
+        const params = ConfirmDeleteEventInput.parse(args);
+
+        // Re-fetch the event and compute fresh hash for comparison
+        const graphId = repository.getGraphId('event', params.event_id);
+        const graphEvent = graphId != null ? await repository.getClient().getEvent(graphId) : null;
+        const currentHash = hashEventForApproval({
+          id: params.event_id,
+          subject: graphEvent?.subject ?? null,
+          startDateTime: graphEvent?.start?.dateTime ?? null,
+        });
+
+        const validation = tokenManager.consumeToken(params.token_id, 'delete_event', params.event_id);
+        if (!validation.valid) {
+          const errorMessages: Record<string, string> = {
+            NOT_FOUND: 'Token not found or already used',
+            EXPIRED: 'Token has expired. Please call prepare_delete_event again.',
+            OPERATION_MISMATCH: 'Token was not generated for delete_event',
+            TARGET_MISMATCH: 'Token was generated for a different event',
+            ALREADY_CONSUMED: 'Token has already been used',
+          };
+          return {
+            content: [{ type: 'text', text: errorMessages[validation.error ?? ''] ?? 'Invalid token' }],
+            isError: true,
+          };
+        }
+
+        // Check that the event hasn't changed since prepare
+        if (validation.token!.targetHash !== currentHash) {
+          return {
+            content: [{ type: 'text', text: 'Event has changed since prepare was called. Please call prepare_delete_event again.' }],
+            isError: true,
+          };
+        }
+
+        await repository.deleteEventAsync(params.event_id);
+        return {
+          content: [{ type: 'text', text: `Successfully deleted event ${params.event_id}` }],
         };
       }
 
