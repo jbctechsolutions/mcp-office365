@@ -75,8 +75,8 @@ export class SchedulingTools {
     return await this.repository.findMeetingTimesAsync({
       attendees: parsed.attendees,
       durationMinutes: parsed.duration_minutes,
-      startTime: parsed.start_time,
-      endTime: parsed.end_time,
+      ...(parsed.start_time !== undefined && { startTime: parsed.start_time }),
+      ...(parsed.end_time !== undefined && { endTime: parsed.end_time }),
       maxCandidates: parsed.max_candidates,
     });
   }
