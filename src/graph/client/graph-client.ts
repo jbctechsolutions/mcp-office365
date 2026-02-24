@@ -869,6 +869,44 @@ export class GraphClient {
     return result;
   }
 
+  // ---------------------------------------------------------------------------
+  // Calendar Scheduling
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Gets the free/busy schedule for one or more people.
+   * POST /me/calendar/getSchedule
+   */
+  async getSchedule(params: {
+    schedules: string[];
+    startTime: { dateTime: string; timeZone: string };
+    endTime: { dateTime: string; timeZone: string };
+    availabilityViewInterval?: number;
+  }): Promise<unknown[]> {
+    const client = await this.getClient();
+    const response = await client.api('/me/calendar/getSchedule').post(params) as { value: unknown[] };
+    return response.value;
+  }
+
+  /**
+   * Suggests meeting times for a set of attendees.
+   * POST /me/findMeetingTimes
+   */
+  async findMeetingTimes(params: {
+    attendees: Array<{ emailAddress: { address: string }; type: string }>;
+    meetingDuration: string;
+    timeConstraint?: {
+      timeslots: Array<{
+        start: { dateTime: string; timeZone: string };
+        end: { dateTime: string; timeZone: string };
+      }>;
+    };
+    maxCandidates?: number;
+  }): Promise<unknown> {
+    const client = await this.getClient();
+    return await client.api('/me/findMeetingTimes').post(params);
+  }
+
   // ===========================================================================
   // Attachment Operations
   // ===========================================================================
