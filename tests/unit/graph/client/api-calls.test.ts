@@ -128,6 +128,11 @@ const VALID_ENDPOINT_PATTERNS = [
   /^\/me\/messages$/,
   /^\/me\/messages\/[^/]+$/,
   /^\/me\/messages\/[^/]+\/move$/,
+  /^\/me\/messages\/[^/]+\/send$/,
+  /^\/me\/messages\/[^/]+\/reply$/,
+  /^\/me\/messages\/[^/]+\/replyAll$/,
+  /^\/me\/messages\/[^/]+\/forward$/,
+  /^\/me\/sendMail$/,
   /^\/me\/mailFolders\/[^/]+\/messages$/,
   // Calendars
   /^\/me\/calendars$/,
@@ -529,6 +534,109 @@ describe('Graph API endpoint and method validation', () => {
   });
 
   // =========================================================================
+  // Draft & Send operations
+  // =========================================================================
+
+  describe('Draft & Send operation endpoints and bodies', () => {
+    it('createDraft POSTs to /me/messages with isDraft and message fields', async () => {
+      const draftMessage = {
+        subject: 'Test Draft',
+        body: { contentType: 'text' as const, content: 'Hello' },
+        toRecipients: [{ emailAddress: { address: 'user@example.com' } }],
+        ccRecipients: [],
+        bccRecipients: [],
+        isDraft: true,
+      };
+      setupMock({ id: 'draft-1', subject: 'Test Draft', isDraft: true });
+
+      await client.createDraft(draftMessage);
+
+      expect(apiCalls).toHaveLength(1);
+      expect(apiCalls[0].url).toBe('/me/messages');
+      expect(apiCalls[0].method).toBe('post');
+      expect(apiCalls[0].body).toEqual(draftMessage);
+    });
+
+    it('updateDraft PATCHes /me/messages/{id} with updates', async () => {
+      const updates = { subject: 'Updated Subject', body: { contentType: 'html', content: '<p>Updated</p>' } };
+      setupMock({ id: 'draft-1', subject: 'Updated Subject' });
+
+      await client.updateDraft('draft-1', updates);
+
+      expect(apiCalls).toHaveLength(1);
+      expect(apiCalls[0].url).toBe('/me/messages/draft-1');
+      expect(apiCalls[0].method).toBe('patch');
+      expect(apiCalls[0].body).toEqual(updates);
+    });
+
+    it('sendDraft POSTs to /me/messages/{id}/send with null body', async () => {
+      await client.sendDraft('draft-1');
+
+      expect(apiCalls).toHaveLength(1);
+      expect(apiCalls[0].url).toBe('/me/messages/draft-1/send');
+      expect(apiCalls[0].method).toBe('post');
+      expect(apiCalls[0].body).toBeNull();
+    });
+
+    it('sendMail POSTs to /me/sendMail with message object', async () => {
+      const message = {
+        subject: 'Direct Send',
+        body: { contentType: 'text' as const, content: 'Hello' },
+        toRecipients: [{ emailAddress: { address: 'user@example.com' } }],
+        ccRecipients: [],
+        bccRecipients: [],
+      };
+
+      await client.sendMail(message);
+
+      expect(apiCalls).toHaveLength(1);
+      expect(apiCalls[0].url).toBe('/me/sendMail');
+      expect(apiCalls[0].method).toBe('post');
+      expect(apiCalls[0].body).toEqual({ message });
+    });
+
+    it('replyMessage POSTs to /me/messages/{id}/reply with comment', async () => {
+      await client.replyMessage('msg-1', 'Thanks for the update', false);
+
+      expect(apiCalls).toHaveLength(1);
+      expect(apiCalls[0].url).toBe('/me/messages/msg-1/reply');
+      expect(apiCalls[0].method).toBe('post');
+      expect(apiCalls[0].body).toEqual({ comment: 'Thanks for the update' });
+    });
+
+    it('replyMessage with replyAll POSTs to /me/messages/{id}/replyAll', async () => {
+      await client.replyMessage('msg-1', 'Reply to all', true);
+
+      expect(apiCalls).toHaveLength(1);
+      expect(apiCalls[0].url).toBe('/me/messages/msg-1/replyAll');
+      expect(apiCalls[0].method).toBe('post');
+      expect(apiCalls[0].body).toEqual({ comment: 'Reply to all' });
+    });
+
+    it('forwardMessage POSTs to /me/messages/{id}/forward with toRecipients and comment', async () => {
+      const toRecipients = [{ emailAddress: { address: 'forward@example.com' } }];
+
+      await client.forwardMessage('msg-1', toRecipients, 'Please review');
+
+      expect(apiCalls).toHaveLength(1);
+      expect(apiCalls[0].url).toBe('/me/messages/msg-1/forward');
+      expect(apiCalls[0].method).toBe('post');
+      expect(apiCalls[0].body).toEqual({ toRecipients, comment: 'Please review' });
+    });
+
+    it('forwardMessage without comment sends only toRecipients', async () => {
+      const toRecipients = [{ emailAddress: { address: 'forward@example.com' } }];
+
+      await client.forwardMessage('msg-1', toRecipients);
+
+      expect(apiCalls).toHaveLength(1);
+      expect(apiCalls[0].url).toBe('/me/messages/msg-1/forward');
+      expect(apiCalls[0].method).toBe('post');
+      expect(apiCalls[0].body).toEqual({ toRecipients });
+    });
+  });
+
+  // =========================================================================
   // Well-known folder name validation
   // =========================================================================
 
@@ -629,6 +737,29 @@ describe('Graph API endpoint and method validation', () => {
       await client.deleteMailFolder('f1');
       await client.renameMailFolder('f1', 'Name');
       await client.moveMailFolder('f1', 'p1');
+
+      // Exercise draft & send methods
+      setupMock({ id: 'draft-1', subject: 'Draft', isDraft: true });
+      await client.createDraft({
+        subject: 'Draft',
+        body: { contentType: 'text', content: 'Body' },
+        toRecipients: [],
+        isDraft: true,
+      });
+
+      setupMock({ id: 'draft-1', subject: 'Updated' });
+      await client.updateDraft('draft-1', { subject: 'Updated' });
+
+      setupMock();
+      await client.sendDraft('draft-1');
+      await client.sendMail({
+        subject: 'Send',
+        body: { contentType: 'text', content: 'Body' },
+        toRecipients: [{ emailAddress: { address: 'a@b.com' } }],
+      });
+      await client.replyMessage('m1', 'comment', false);
+      await client.replyMessage('m1', 'comment', true);
+      await client.forwardMessage('m1', [{ emailAddress: { address: 'a@b.com' } }], 'fwd');
 
       // Verify all captured URLs
       for (const call of apiCalls) {
@@ -741,6 +872,95 @@ describe('Graph API endpoint and method validation', () => {
 
       const getCalls = apiCalls.filter(c => c.method === 'get' && c.url === '/me/mailFolders');
       expect(getCalls.length).toBeGreaterThan(0);
+    });
+
+    it('createDraft clears cache', async () => {
+      await client.listMessages('f1');
+      apiCalls.length = 0;
+
+      setupMock({ id: 'draft-1', subject: 'Test', isDraft: true });
+      await client.createDraft({
+        subject: 'Test',
+        body: { contentType: 'text', content: 'Hello' },
+        toRecipients: [],
+        isDraft: true,
+      });
+      apiCalls.length = 0;
+
+      setupMock();
+      await client.listMessages('f1');
+
+      expect(apiCalls.filter(c => c.method === 'get').length).toBeGreaterThan(0);
+    });
+
+    it('updateDraft clears cache', async () => {
+      await client.listMessages('f1');
+      apiCalls.length = 0;
+
+      setupMock({ id: 'draft-1', subject: 'Updated' });
+      await client.updateDraft('draft-1', { subject: 'Updated' });
+      apiCalls.length = 0;
+
+      setupMock();
+      await client.listMessages('f1');
+
+      expect(apiCalls.filter(c => c.method === 'get').length).toBeGreaterThan(0);
+    });
+
+    it('sendDraft clears cache', async () => {
+      await client.listMessages('f1');
+      apiCalls.length = 0;
+
+      await client.sendDraft('draft-1');
+      apiCalls.length = 0;
+
+      setupMock();
+      await client.listMessages('f1');
+
+      expect(apiCalls.filter(c => c.method === 'get').length).toBeGreaterThan(0);
+    });
+
+    it('sendMail clears cache', async () => {
+      await client.listMessages('f1');
+      apiCalls.length = 0;
+
+      await client.sendMail({
+        subject: 'Test',
+        body: { contentType: 'text', content: 'Hello' },
+        toRecipients: [{ emailAddress: { address: 'user@example.com' } }],
+      });
+      apiCalls.length = 0;
+
+      setupMock();
+      await client.listMessages('f1');
+
+      expect(apiCalls.filter(c => c.method === 'get').length).toBeGreaterThan(0);
+    });
+
+    it('replyMessage clears cache', async () => {
+      await client.listMessages('f1');
+      apiCalls.length = 0;
+
+      await client.replyMessage('msg-1', 'Thanks', false);
+      apiCalls.length = 0;
+
+      setupMock();
+      await client.listMessages('f1');
+
+      expect(apiCalls.filter(c => c.method === 'get').length).toBeGreaterThan(0);
+    });
+
+    it('forwardMessage clears cache', async () => {
+      await client.listMessages('f1');
+      apiCalls.length = 0;
+
+      await client.forwardMessage('msg-1', [{ emailAddress: { address: 'fwd@example.com' } }]);
+      apiCalls.length = 0;
+
+      setupMock();
+      await client.listMessages('f1');
+
+      expect(apiCalls.filter(c => c.method === 'get').length).toBeGreaterThan(0);
     });
   });
 });

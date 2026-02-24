@@ -634,6 +634,100 @@ export class GraphClient {
   }
 
   // ===========================================================================
+  // Draft & Send Operations
+  // ===========================================================================
+
+  /**
+   * Creates a new draft message.
+   */
+  async createDraft(message: {
+    subject: string;
+    body: MicrosoftGraph.ItemBody;
+    toRecipients?: MicrosoftGraph.Recipient[];
+    ccRecipients?: MicrosoftGraph.Recipient[];
+    bccRecipients?: MicrosoftGraph.Recipient[];
+    isDraft?: boolean;
+  }): Promise<MicrosoftGraph.Message> {
+    const client = await this.getClient();
+    const result = await client
+      .api('/me/messages')
+      .post(message) as MicrosoftGraph.Message;
+    this.cache.clear();
+    return result;
+  }
+
+  /**
+   * Updates an existing draft message.
+   */
+  async updateDraft(messageId: string, updates: Record<string, unknown>): Promise<MicrosoftGraph.Message> {
+    const client = await this.getClient();
+    const result = await client
+      .api(`/me/messages/${messageId}`)
+      .patch(updates) as MicrosoftGraph.Message;
+    this.cache.clear();
+    return result;
+  }
+
+  /**
+   * Sends an existing draft message.
+   */
+  async sendDraft(messageId: string): Promise<void> {
+    const client = await this.getClient();
+    await client
+      .api(`/me/messages/${messageId}/send`)
+      .post(null);
+    this.cache.clear();
+  }
+
+  /**
+   * Sends a new email directly without creating a draft.
+   */
+  async sendMail(message: {
+    subject: string;
+    body: MicrosoftGraph.ItemBody;
+    toRecipients: MicrosoftGraph.Recipient[];
+    ccRecipients?: MicrosoftGraph.Recipient[];
+    bccRecipients?: MicrosoftGraph.Recipient[];
+  }): Promise<void> {
+    const client = await this.getClient();
+    await client
+      .api('/me/sendMail')
+      .post({ message });
+    this.cache.clear();
+  }
+
+  /**
+   * Replies to a message, or replies to all recipients.
+   */
+  async replyMessage(messageId: string, comment: string, replyAll: boolean): Promise<void> {
+    const client = await this.getClient();
+    const action = replyAll ? 'replyAll' : 'reply';
+    await client
+      .api(`/me/messages/${messageId}/${action}`)
+      .post({ comment });
+    this.cache.clear();
+  }
+
+  /**
+   * Forwards a message to specified recipients.
+   */
+  async forwardMessage(
+    messageId: string,
+    toRecipients: MicrosoftGraph.Recipient[],
+    comment?: string
+  ): Promise<void> {
+    const client = await this.getClient();
+    const body: { toRecipients: MicrosoftGraph.Recipient[]; comment?: string } = { toRecipients };
+    if (comment != null) {
+      body.comment = comment;
+    }
+    await client
+      .api(`/me/messages/${messageId}/forward`)
+      .post(body);
+    this.cache.clear();
+  }
+
+  // ===========================================================================
   // Tasks (Microsoft To Do) - continued
   // ===========================================================================
 
