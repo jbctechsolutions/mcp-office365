@@ -133,6 +133,11 @@ describe('MailSendTools', () => {
     // Reset attachment mocks
     vi.mocked(uploadAttachment).mockClear();
     vi.mocked(mockGraphClient.sendDraft).mockClear();
+
+    // Reset signature mocks
+    vi.mocked(readSignature).mockClear();
+    vi.mocked(writeSignature).mockClear();
+    vi.mocked(appendSignature).mockClear();
   });
 
   // ===========================================================================
