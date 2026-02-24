@@ -45,7 +45,7 @@ export function readSignature(): string | null {
 
 /**
  * Writes a signature to disk.
- * If content_type is 'text', wraps in <pre> tag for HTML storage.
+ * If contentType is 'text', wraps in <pre> tag for HTML storage.
  */
 export function writeSignature(content: string, contentType: 'html' | 'text' = 'html'): void {
   ensureDir();
