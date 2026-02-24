@@ -861,10 +861,10 @@ describe('graph/repository', () => {
           bccRecipients: [{ emailAddress: { address: 'charlie@example.com' } }],
         });
 
-        expect(result).toBe(hashStringToNumber('draft-1'));
+        expect(result).toEqual({ numericId: hashStringToNumber('draft-1'), graphId: 'draft-1' });
 
         // Verify cached
-        const graphId = repository.getGraphId('message', result);
+        const graphId = repository.getGraphId('message', result.numericId);
         expect(graphId).toBe('draft-1');
       });
 
@@ -889,7 +889,7 @@ describe('graph/repository', () => {
           bccRecipients: [],
         });
 
-        expect(result).toBe(hashStringToNumber('draft-2'));
+        expect(result).toEqual({ numericId: hashStringToNumber('draft-2'), graphId: 'draft-2' });
       });
     });
 

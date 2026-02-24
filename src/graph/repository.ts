@@ -558,6 +558,13 @@ export class GraphRepository implements IRepository {
   }
 
   /**
+   * Returns the Graph client (satisfies IMailSendRepository).
+   */
+  getGraphClient(): GraphClient {
+    return this.client;
+  }
+
+  /**
    * Gets the Graph string ID from a numeric ID.
    */
   getGraphId(type: 'folder' | 'message' | 'event' | 'contact', numericId: number): string | undefined {
@@ -735,7 +742,7 @@ export class GraphRepository implements IRepository {
     to?: string[];
     cc?: string[];
     bcc?: string[];
-  }): Promise<number> {
+  }): Promise<{ numericId: number; graphId: string }> {
     const toRecipients = (params.to ?? []).map(addr => ({
       emailAddress: { address: addr },
     }));
@@ -754,9 +761,10 @@ export class GraphRepository implements IRepository {
       bccRecipients,
     });
 
-    const numericId = hashStringToNumber(draft.id!);
-    this.idCache.messages.set(numericId, draft.id!);
-    return numericId;
+    const graphId = draft.id!;
+    const numericId = hashStringToNumber(graphId);
+    this.idCache.messages.set(numericId, graphId);
+    return { numericId, graphId };
   }
 
   /**

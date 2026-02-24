@@ -1132,6 +1132,19 @@ const TOOLS: Tool[] = [
           default: 'text',
           description: 'Body content type (default: text)',
         },
+        attachments: {
+          type: 'array',
+          description: 'File attachments',
+          items: {
+            type: 'object',
+            properties: {
+              file_path: { type: 'string', description: 'Absolute path to the file' },
+              name: { type: 'string', description: 'Override filename' },
+              content_type: { type: 'string', description: 'Override MIME type' },
+            },
+            required: ['file_path'],
+          },
+        },
       },
       required: ['subject', 'body'],
     },
@@ -1259,6 +1272,19 @@ const TOOLS: Tool[] = [
           enum: ['text', 'html'],
           default: 'text',
           description: 'Body content type (default: text)',
+        },
+        attachments: {
+          type: 'array',
+          description: 'File attachments',
+          items: {
+            type: 'object',
+            properties: {
+              file_path: { type: 'string', description: 'Absolute path to the file' },
+              name: { type: 'string', description: 'Override filename' },
+              content_type: { type: 'string', description: 'Override MIME type' },
+            },
+            required: ['file_path'],
+          },
         },
       },
       required: ['to', 'subject', 'body'],

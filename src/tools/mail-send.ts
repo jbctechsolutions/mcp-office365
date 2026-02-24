@@ -28,6 +28,8 @@ import {
   TargetChangedError,
   NotFoundError,
 } from '../utils/errors.js';
+import type { GraphClient } from '../graph/client/index.js';
+import { uploadAttachment } from '../graph/attachments.js';
 
 // =============================================================================
 // Repository Interface
@@ -38,6 +40,14 @@ import {
  *
  * Matches the async methods on GraphRepository.
  */
+/**
+ * Result of creating a draft, containing both the numeric and Graph IDs.
+ */
+export interface CreateDraftResult {
+  numericId: number;
+  graphId: string;
+}
+
 export interface IMailSendRepository {
   getEmailAsync(id: number): Promise<EmailRow | undefined>;
   createDraftAsync(params: {
@@ -47,7 +57,7 @@ export interface IMailSendRepository {
     to?: string[];
     cc?: string[];
     bcc?: string[];
-  }): Promise<number>;
+  }): Promise<CreateDraftResult>;
   updateDraftAsync(draftId: number, updates: Record<string, unknown>): Promise<void>;
   listDraftsAsync(limit: number, offset: number): Promise<EmailRow[]>;
   sendDraftAsync(draftId: number): Promise<void>;
@@ -61,11 +71,19 @@ export interface IMailSendRepository {
   }): Promise<void>;
   replyMessageAsync(messageId: number, comment: string, replyAll: boolean): Promise<void>;
   forwardMessageAsync(messageId: number, toRecipients: string[], comment?: string): Promise<void>;
+  /** Returns the Graph client for direct API operations (e.g., attachment uploads). */
+  getGraphClient(): GraphClient;
 }
 
 // =============================================================================
 // Input Schemas -- Non-Destructive Operations
 // =============================================================================
+
+const AttachmentInput = z.strictObject({
+  file_path: z.string().describe('Absolute path to the file to attach'),
+  name: z.string().optional().describe('Override filename'),
+  content_type: z.string().optional().describe('Override MIME type'),
+});
 
 export const CreateDraftInput = z.strictObject({
   to: z.array(z.string().email()).optional().describe('To recipients'),
@@ -74,6 +92,7 @@ export const CreateDraftInput = z.strictObject({
   subject: z.string().describe('Email subject'),
   body: z.string().describe('Email body'),
   body_type: z.enum(['text', 'html']).default('text').describe('Body content type'),
+  attachments: z.array(AttachmentInput).optional().describe('File attachments'),
 });
 
 export const UpdateDraftInput = z.strictObject({
@@ -113,6 +132,7 @@ export const PrepareSendEmailInput = z.strictObject({
   subject: z.string().describe('Email subject'),
   body: z.string().describe('Email body'),
   body_type: z.enum(['text', 'html']).default('text').describe('Body content type'),
+  attachments: z.array(AttachmentInput).optional().describe('File attachments'),
 });
 
 export const ConfirmSendEmailInput = z.strictObject({
@@ -241,7 +261,7 @@ export class MailSendTools {
   // ---------------------------------------------------------------------------
 
   async createDraft(params: CreateDraftParams): Promise<{ success: boolean; draft_id: number }> {
-    const draftId = await this.repository.createDraftAsync({
+    const { numericId, graphId } = await this.repository.createDraftAsync({
       subject: params.subject,
       body: params.body,
       bodyType: params.body_type,
@@ -249,7 +269,15 @@ export class MailSendTools {
       ...(params.cc != null ? { cc: params.cc } : {}),
       ...(params.bcc != null ? { bcc: params.bcc } : {}),
     });
-    return { success: true, draft_id: draftId };
+
+    if (params.attachments != null && params.attachments.length > 0) {
+      const graphClient = this.repository.getGraphClient();
+      for (const att of params.attachments) {
+        await uploadAttachment(graphClient, graphId, att.file_path, att.name, att.content_type);
+      }
+    }
+
+    return { success: true, draft_id: numericId };
   }
 
   async updateDraft(params: UpdateDraftParams): Promise<{ success: boolean; message: string }> {
@@ -336,6 +364,7 @@ export class MailSendTools {
         to: params.to,
         cc: params.cc,
         bcc: params.bcc,
+        attachments: params.attachments,
       },
     });
 
@@ -439,16 +468,36 @@ export class MailSendTools {
       to: string[];
       cc?: string[];
       bcc?: string[];
+      attachments?: Array<{ file_path: string; name?: string; content_type?: string }>;
     };
 
-    await this.repository.sendMailAsync({
-      subject: metadata.subject,
-      body: metadata.body,
-      bodyType: metadata.bodyType,
-      to: metadata.to,
-      ...(metadata.cc != null ? { cc: metadata.cc } : {}),
-      ...(metadata.bcc != null ? { bcc: metadata.bcc } : {}),
-    });
+    if (metadata.attachments != null && metadata.attachments.length > 0) {
+      // When attachments are present, create a draft, upload attachments, then send it
+      const { graphId } = await this.repository.createDraftAsync({
+        subject: metadata.subject,
+        body: metadata.body,
+        bodyType: metadata.bodyType,
+        to: metadata.to,
+        ...(metadata.cc != null ? { cc: metadata.cc } : {}),
+        ...(metadata.bcc != null ? { bcc: metadata.bcc } : {}),
+      });
+
+      const graphClient = this.repository.getGraphClient();
+      for (const att of metadata.attachments) {
+        await uploadAttachment(graphClient, graphId, att.file_path, att.name, att.content_type);
+      }
+
+      await graphClient.sendDraft(graphId);
+    } else {
+      await this.repository.sendMailAsync({
+        subject: metadata.subject,
+        body: metadata.body,
+        bodyType: metadata.bodyType,
+        to: metadata.to,
+        ...(metadata.cc != null ? { cc: metadata.cc } : {}),
+        ...(metadata.bcc != null ? { bcc: metadata.bcc } : {}),
+      });
+    }
 
     return { success: true, message: 'Email sent successfully.' };
   }

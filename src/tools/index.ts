@@ -144,6 +144,7 @@ export {
   PrepareForwardEmailInput,
   ConfirmForwardEmailInput,
   type IMailSendRepository,
+  type CreateDraftResult,
   type CreateDraftParams,
   type UpdateDraftParams,
   type ListDraftsParams,

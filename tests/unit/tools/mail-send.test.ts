@@ -18,6 +18,13 @@ import {
   TargetChangedError,
 } from '../../../src/utils/errors.js';
 
+// Mock the attachments module
+vi.mock('../../../src/graph/attachments.js', () => ({
+  uploadAttachment: vi.fn().mockResolvedValue(undefined),
+}));
+
+import { uploadAttachment } from '../../../src/graph/attachments.js';
+
 // =============================================================================
 // Test Fixtures
 // =============================================================================
@@ -53,6 +60,12 @@ function makeEmailRow(overrides: Partial<EmailRow> = {}): EmailRow {
 // Mock Repository
 // =============================================================================
 
+const mockGraphClient = {
+  sendDraft: vi.fn().mockResolvedValue(undefined),
+  addAttachment: vi.fn().mockResolvedValue(undefined),
+  createUploadSession: vi.fn(),
+} as unknown as ReturnType<IMailSendRepository['getGraphClient']>;
+
 function createMockRepository(): IMailSendRepository {
   return {
     getEmailAsync: vi.fn(),
@@ -63,6 +76,7 @@ function createMockRepository(): IMailSendRepository {
     sendMailAsync: vi.fn(),
     replyMessageAsync: vi.fn(),
     forwardMessageAsync: vi.fn(),
+    getGraphClient: vi.fn().mockReturnValue(mockGraphClient),
   };
 }
 
@@ -98,6 +112,10 @@ describe('MailSendTools', () => {
       if (id === 5) return testDraft;
       return undefined;
     });
+
+    // Reset attachment mocks
+    vi.mocked(uploadAttachment).mockClear();
+    vi.mocked(mockGraphClient.sendDraft).mockClear();
   });
 
   // ===========================================================================
@@ -106,7 +124,7 @@ describe('MailSendTools', () => {
 
   describe('createDraft', () => {
     it('creates a draft and returns the draft_id', async () => {
-      (repo.createDraftAsync as ReturnType<typeof vi.fn>).mockResolvedValue(42);
+      (repo.createDraftAsync as ReturnType<typeof vi.fn>).mockResolvedValue({ numericId: 42, graphId: 'AAA-graph-42' });
 
       const result = await tools.createDraft({
         subject: 'Hello',
@@ -127,7 +145,7 @@ describe('MailSendTools', () => {
     });
 
     it('passes cc and bcc when provided', async () => {
-      (repo.createDraftAsync as ReturnType<typeof vi.fn>).mockResolvedValue(43);
+      (repo.createDraftAsync as ReturnType<typeof vi.fn>).mockResolvedValue({ numericId: 43, graphId: 'AAA-graph-43' });
 
       await tools.createDraft({
         subject: 'Hello',
@@ -146,6 +164,44 @@ describe('MailSendTools', () => {
         cc: ['carol@example.com'],
         bcc: ['dave@example.com'],
       });
+    });
+
+    it('uploads attachments after creating draft when provided', async () => {
+      (repo.createDraftAsync as ReturnType<typeof vi.fn>).mockResolvedValue({ numericId: 44, graphId: 'AAA-graph-44' });
+      vi.mocked(uploadAttachment).mockResolvedValue(undefined);
+
+      const result = await tools.createDraft({
+        subject: 'With Attachment',
+        body: 'See attached',
+        body_type: 'text',
+        to: ['bob@example.com'],
+        attachments: [
+          { file_path: '/tmp/report.pdf' },
+          { file_path: '/tmp/photo.jpg', name: 'vacation.jpg', content_type: 'image/jpeg' },
+        ],
+      });
+
+      expect(result).toEqual({ success: true, draft_id: 44 });
+      expect(uploadAttachment).toHaveBeenCalledTimes(2);
+      expect(uploadAttachment).toHaveBeenCalledWith(
+        mockGraphClient, 'AAA-graph-44', '/tmp/report.pdf', undefined, undefined
+      );
+      expect(uploadAttachment).toHaveBeenCalledWith(
+        mockGraphClient, 'AAA-graph-44', '/tmp/photo.jpg', 'vacation.jpg', 'image/jpeg'
+      );
+    });
+
+    it('does not call uploadAttachment when no attachments provided', async () => {
+      (repo.createDraftAsync as ReturnType<typeof vi.fn>).mockResolvedValue({ numericId: 45, graphId: 'AAA-graph-45' });
+      vi.mocked(uploadAttachment).mockClear();
+
+      await tools.createDraft({
+        subject: 'No Attachment',
+        body: 'Just text',
+        body_type: 'text',
+      });
+
+      expect(uploadAttachment).not.toHaveBeenCalled();
     });
   });
 
@@ -323,6 +379,60 @@ describe('MailSendTools', () => {
         cc: ['carol@example.com'],
         bcc: ['dave@example.com'],
       });
+    });
+
+    it('confirmSendEmail with attachments creates draft, uploads, and sends draft', async () => {
+      (repo.createDraftAsync as ReturnType<typeof vi.fn>).mockResolvedValue({ numericId: 50, graphId: 'AAA-graph-50' });
+      vi.mocked(uploadAttachment).mockResolvedValue(undefined);
+
+      const prepared = await tools.prepareSendEmail({
+        ...sendParams,
+        attachments: [
+          { file_path: '/tmp/doc.pdf', name: 'document.pdf' },
+        ],
+      });
+
+      const result = await tools.confirmSendEmail({
+        token_id: prepared.token_id,
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.message).toContain('sent');
+
+      // Should NOT call sendMailAsync (used the draft path instead)
+      expect(repo.sendMailAsync).not.toHaveBeenCalled();
+
+      // Should create a draft
+      expect(repo.createDraftAsync).toHaveBeenCalledWith({
+        subject: 'Direct Send',
+        body: 'Hello from direct send',
+        bodyType: 'text',
+        to: ['bob@example.com'],
+        cc: undefined,
+        bcc: undefined,
+      });
+
+      // Should upload the attachment
+      expect(uploadAttachment).toHaveBeenCalledWith(
+        mockGraphClient, 'AAA-graph-50', '/tmp/doc.pdf', 'document.pdf', undefined
+      );
+
+      // Should send the draft via GraphClient
+      expect(mockGraphClient.sendDraft).toHaveBeenCalledWith('AAA-graph-50');
+    });
+
+    it('confirmSendEmail without attachments calls sendMailAsync directly', async () => {
+      const prepared = await tools.prepareSendEmail(sendParams);
+
+      const result = await tools.confirmSendEmail({
+        token_id: prepared.token_id,
+      });
+
+      expect(result.success).toBe(true);
+      expect(repo.sendMailAsync).toHaveBeenCalled();
+      expect(repo.createDraftAsync).not.toHaveBeenCalled();
+      expect(uploadAttachment).not.toHaveBeenCalled();
+      expect(mockGraphClient.sendDraft).not.toHaveBeenCalled();
     });
   });
 
