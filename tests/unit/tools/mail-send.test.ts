@@ -831,7 +831,8 @@ describe('MailSendTools', () => {
       vi.mocked(appendSignature).mockReturnValue('Hello');
       (repo.createDraftAsync as ReturnType<typeof vi.fn>).mockResolvedValue({ numericId: 42, graphId: 'AAA' });
 
-      await tools.createDraft({ subject: 'Test', body: 'Hello', body_type: 'text' });
+      // Test input simulates Zod parsing which applies the default
+      await tools.createDraft({ subject: 'Test', body: 'Hello', body_type: 'text', include_signature: true });
 
       expect(appendSignature).toHaveBeenCalledWith('Hello', 'text', true);
     });

@@ -293,7 +293,7 @@ export class MailSendTools {
   // ---------------------------------------------------------------------------
 
   async createDraft(params: CreateDraftParams): Promise<{ success: boolean; draft_id: number }> {
-    const body = appendSignature(params.body, params.body_type, params.include_signature ?? true);
+    const body = appendSignature(params.body, params.body_type, params.include_signature);
     const { numericId, graphId } = await this.repository.createDraftAsync({
       subject: params.subject,
       body,
@@ -569,6 +569,7 @@ export class MailSendTools {
     draft_id: number;
     message: string;
   }> {
+    // Reply comments are always plain text (no body_type field)
     const comment = params.comment != null
       ? appendSignature(params.comment, 'text', params.include_signature)
       : params.comment;
@@ -589,6 +590,7 @@ export class MailSendTools {
     draft_id: number;
     message: string;
   }> {
+    // Forward comments are always plain text (no body_type field)
     const comment = params.comment != null
       ? appendSignature(params.comment, 'text', params.include_signature)
       : params.comment;
