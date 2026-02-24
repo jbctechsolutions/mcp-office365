@@ -28,7 +28,7 @@ vi.mock('../../src/graph/index.js', () => ({
   getTokenCacheFile: mockGetTokenCacheFile,
 }));
 
-import { handleAuthCommand, parseCliCommand } from '../../src/cli.js';
+import { handleAuthCommand, parseCliCommand, createAuthMutex } from '../../src/cli.js';
 
 describe('CLI Auth', () => {
   beforeEach(() => {
@@ -125,5 +125,43 @@ describe('parseCliCommand', () => {
 
   it('returns null for unknown commands', () => {
     expect(parseCliCommand(['unknown'])).toBeNull();
+  });
+});
+
+describe('createAuthMutex', () => {
+  it('only runs the auth function once for concurrent calls', async () => {
+    const authFn = vi.fn().mockResolvedValue(undefined);
+    const mutex = createAuthMutex(authFn);
+
+    // Call 3 times concurrently
+    const results = await Promise.all([mutex(), mutex(), mutex()]);
+
+    expect(authFn).toHaveBeenCalledOnce();
+    expect(results).toEqual([undefined, undefined, undefined]);
+  });
+
+  it('propagates errors to all waiters', async () => {
+    const authFn = vi.fn().mockRejectedValue(new Error('Auth failed'));
+    const mutex = createAuthMutex(authFn);
+
+    const results = await Promise.allSettled([mutex(), mutex(), mutex()]);
+
+    expect(authFn).toHaveBeenCalledOnce();
+    expect(results.every(r => r.status === 'rejected')).toBe(true);
+  });
+
+  it('allows retry after failure', async () => {
+    const authFn = vi.fn()
+      .mockRejectedValueOnce(new Error('First attempt failed'))
+      .mockResolvedValueOnce(undefined);
+    const mutex = createAuthMutex(authFn);
+
+    // First call fails
+    await expect(mutex()).rejects.toThrow('First attempt failed');
+
+    // Second call succeeds (new attempt)
+    await expect(mutex()).resolves.toBeUndefined();
+
+    expect(authFn).toHaveBeenCalledTimes(2);
   });
 });

@@ -121,3 +121,24 @@ async function handleLogout(print: PrintFn): Promise<number> {
     return 1;
   }
 }
+
+/**
+ * Creates a mutex that ensures only one auth flow runs at a time.
+ * Concurrent callers wait for the in-progress auth to complete.
+ * After completion (success or failure), the mutex resets for future calls.
+ */
+export function createAuthMutex<T>(fn: () => Promise<T>): () => Promise<T> {
+  let pending: Promise<T> | null = null;
+
+  return () => {
+    if (pending != null) {
+      return pending;
+    }
+
+    pending = fn().finally(() => {
+      pending = null;
+    });
+
+    return pending;
+  };
+}
