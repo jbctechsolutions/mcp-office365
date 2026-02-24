@@ -108,7 +108,7 @@ Set `USE_GRAPH_API=1` in your MCP configuration.
 
 **Pre-authenticate (optional):**
 ```bash
-npx -y @jbctechsolutions/mcp-outlook-mac auth
+npx @jbctechsolutions/mcp-outlook-mac auth
 ```
 
 Or just configure the server — it will prompt for authentication on first use.
