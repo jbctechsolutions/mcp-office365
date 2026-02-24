@@ -108,6 +108,8 @@ import {
   ConfirmReplyEmailInput,
   PrepareForwardEmailInput,
   ConfirmForwardEmailInput,
+  ReplyAsDraftInput,
+  ForwardAsDraftInput,
 } from './tools/index.js';
 import { ApprovalTokenManager, hashEventForApproval, hashContactForApproval, hashTaskForApproval } from './approval/index.js';
 import type { CreateEventResult } from './tools/index.js';
@@ -1532,6 +1534,36 @@ const TOOLS: Tool[] = [
       required: ['token_id', 'message_id'],
     },
   },
+  {
+    name: 'reply_as_draft',
+    description: 'Create a reply (or reply-all) as an editable draft. Returns a draft_id for use with update_draft and send_draft.',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        message_id: { type: 'number', description: 'The message ID to reply to' },
+        comment: { type: 'string', description: 'Initial reply body text' },
+        reply_all: { type: 'boolean', description: 'Reply to all recipients (default: false)' },
+      },
+      required: ['message_id'],
+    },
+  },
+  {
+    name: 'forward_as_draft',
+    description: 'Create a forward as an editable draft. Returns a draft_id for use with update_draft and send_draft.',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        message_id: { type: 'number', description: 'The message ID to forward' },
+        to_recipients: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Forward recipients (can also add later via update_draft)',
+        },
+        comment: { type: 'string', description: 'Initial forward body text' },
+      },
+      required: ['message_id'],
+    },
+  },
 ];
 
 // =============================================================================
@@ -1934,6 +1966,18 @@ async function handleSendToolCall(
     case 'confirm_forward_email': {
       const params = ConfirmForwardEmailInput.parse(args);
       const result = await sendTools.confirmForwardEmail(params);
+      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+    }
+
+    // Draft Reply/Forward
+    case 'reply_as_draft': {
+      const params = ReplyAsDraftInput.parse(args);
+      const result = await sendTools.replyAsDraft(params);
+      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+    }
+    case 'forward_as_draft': {
+      const params = ForwardAsDraftInput.parse(args);
+      const result = await sendTools.forwardAsDraft(params);
       return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
     }
 
