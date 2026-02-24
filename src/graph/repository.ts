@@ -714,6 +714,136 @@ export class GraphRepository implements IRepository {
     if (graphId == null) throw new Error(`Folder ID ${folderId} not found in cache`);
     await this.client.emptyMailFolder(graphId);
   }
+
+  // ===========================================================================
+  // Draft & Send Operations (Async)
+  // ===========================================================================
+
+  /**
+   * Creates a new draft message.
+   *
+   * Converts email address strings to Recipient objects, calls the Graph client,
+   * adds the returned draft to idCache.messages, and returns its numeric ID.
+   */
+  async createDraftAsync(params: {
+    subject: string;
+    body: string;
+    bodyType: 'text' | 'html';
+    to?: string[];
+    cc?: string[];
+    bcc?: string[];
+  }): Promise<number> {
+    const toRecipients = (params.to ?? []).map(addr => ({
+      emailAddress: { address: addr },
+    }));
+    const ccRecipients = (params.cc ?? []).map(addr => ({
+      emailAddress: { address: addr },
+    }));
+    const bccRecipients = (params.bcc ?? []).map(addr => ({
+      emailAddress: { address: addr },
+    }));
+
+    const draft = await this.client.createDraft({
+      subject: params.subject,
+      body: { contentType: params.bodyType, content: params.body },
+      toRecipients,
+      ccRecipients,
+      bccRecipients,
+    });
+
+    const numericId = hashStringToNumber(draft.id!);
+    this.idCache.messages.set(numericId, draft.id!);
+    return numericId;
+  }
+
+  /**
+   * Updates an existing draft message.
+   *
+   * Looks up the Graph string ID from idCache.messages, then calls the client.
+   */
+  async updateDraftAsync(draftId: number, updates: Record<string, unknown>): Promise<void> {
+    const graphId = this.idCache.messages.get(draftId);
+    if (graphId == null) throw new Error(`Message ID ${draftId} not found in cache`);
+    await this.client.updateDraft(graphId, updates);
+  }
+
+  /**
+   * Lists draft messages.
+   *
+   * Uses the well-known 'drafts' folder name directly with the Graph API.
+   */
+  async listDraftsAsync(limit: number, offset: number): Promise<EmailRow[]> {
+    return this.listEmailsWithGraphId('drafts', limit, offset);
+  }
+
+  /**
+   * Sends an existing draft message.
+   *
+   * Looks up the Graph string ID from idCache.messages, then calls the client.
+   */
+  async sendDraftAsync(draftId: number): Promise<void> {
+    const graphId = this.idCache.messages.get(draftId);
+    if (graphId == null) throw new Error(`Message ID ${draftId} not found in cache`);
+    await this.client.sendDraft(graphId);
+  }
+
+  /**
+   * Sends a new email directly without creating a draft first.
+   *
+   * Converts email address strings to Recipient objects and calls the client.
+   */
+  async sendMailAsync(params: {
+    subject: string;
+    body: string;
+    bodyType: 'text' | 'html';
+    to: string[];
+    cc?: string[];
+    bcc?: string[];
+  }): Promise<void> {
+    const toRecipients = params.to.map(addr => ({
+      emailAddress: { address: addr },
+    }));
+    const ccRecipients = (params.cc ?? []).map(addr => ({
+      emailAddress: { address: addr },
+    }));
+    const bccRecipients = (params.bcc ?? []).map(addr => ({
+      emailAddress: { address: addr },
+    }));
+
+    await this.client.sendMail({
+      subject: params.subject,
+      body: { contentType: params.bodyType, content: params.body },
+      toRecipients,
+      ccRecipients,
+      bccRecipients,
+    });
+  }
+
+  /**
+   * Replies to a message (or replies all).
+   *
+   * Looks up the Graph string ID from idCache.messages, then calls the client.
+   */
+  async replyMessageAsync(messageId: number, comment: string, replyAll: boolean): Promise<void> {
+    const graphId = this.idCache.messages.get(messageId);
+    if (graphId == null) throw new Error(`Message ID ${messageId} not found in cache`);
+    await this.client.replyMessage(graphId, comment, replyAll);
+  }
+
+  /**
+   * Forwards a message to specified recipients.
+   *
+   * Looks up the Graph string ID from idCache.messages, converts recipient
+   * email strings to Recipient objects, then calls the client.
+   */
+  async forwardMessageAsync(messageId: number, toRecipients: string[], comment?: string): Promise<void> {
+    const graphId = this.idCache.messages.get(messageId);
+    if (graphId == null) throw new Error(`Message ID ${messageId} not found in cache`);
+    const recipients = toRecipients.map(addr => ({
+      emailAddress: { address: addr },
+    }));
+    await this.client.forwardMessage(graphId, recipients, comment);
+  }
 }
 
 /**

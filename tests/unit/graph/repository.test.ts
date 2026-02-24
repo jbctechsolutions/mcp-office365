@@ -32,6 +32,24 @@ vi.mock('../../../src/graph/client/index.js', () => ({
       listAllTasks: vi.fn(),
       searchTasks: vi.fn(),
       getTask: vi.fn(),
+      // Write operations
+      moveMessage: vi.fn(),
+      deleteMessage: vi.fn(),
+      archiveMessage: vi.fn(),
+      junkMessage: vi.fn(),
+      updateMessage: vi.fn(),
+      createMailFolder: vi.fn(),
+      deleteMailFolder: vi.fn(),
+      renameMailFolder: vi.fn(),
+      moveMailFolder: vi.fn(),
+      emptyMailFolder: vi.fn(),
+      // Draft & send operations
+      createDraft: vi.fn(),
+      updateDraft: vi.fn(),
+      sendDraft: vi.fn(),
+      sendMail: vi.fn(),
+      replyMessage: vi.fn(),
+      forwardMessage: vi.fn(),
     };
   }),
 }));
@@ -729,6 +747,376 @@ describe('graph/repository', () => {
       it('returns undefined', async () => {
         const result = await repository.getNoteAsync(123);
         expect(result).toBeUndefined();
+      });
+    });
+  });
+
+  describe('Write Operations (Async)', () => {
+    describe('moveEmailAsync', () => {
+      it('moves message using cached IDs', async () => {
+        // Populate caches
+        mockClient.listMailFolders.mockResolvedValue([
+          { id: 'folder-dest', displayName: 'Archive' },
+        ]);
+        await repository.listFoldersAsync();
+
+        mockClient.searchMessages.mockResolvedValue([
+          { id: 'msg-1', subject: 'Test' },
+        ]);
+        await repository.searchEmailsAsync('Test', 50);
+
+        mockClient.moveMessage.mockResolvedValue(undefined);
+
+        await repository.moveEmailAsync(
+          hashStringToNumber('msg-1'),
+          hashStringToNumber('folder-dest')
+        );
+
+        expect(mockClient.moveMessage).toHaveBeenCalledWith('msg-1', 'folder-dest');
+      });
+
+      it('throws when message ID not in cache', async () => {
+        await expect(repository.moveEmailAsync(99999, 88888)).rejects.toThrow(
+          'Message ID 99999 not found in cache'
+        );
+      });
+
+      it('throws when folder ID not in cache', async () => {
+        // Populate message cache only
+        mockClient.searchMessages.mockResolvedValue([
+          { id: 'msg-1', subject: 'Test' },
+        ]);
+        await repository.searchEmailsAsync('Test', 50);
+
+        await expect(
+          repository.moveEmailAsync(hashStringToNumber('msg-1'), 99999)
+        ).rejects.toThrow('Folder ID 99999 not found in cache');
+      });
+    });
+
+    describe('deleteEmailAsync', () => {
+      it('deletes message using cached ID', async () => {
+        mockClient.searchMessages.mockResolvedValue([
+          { id: 'msg-1', subject: 'Test' },
+        ]);
+        await repository.searchEmailsAsync('Test', 50);
+
+        mockClient.deleteMessage.mockResolvedValue(undefined);
+
+        await repository.deleteEmailAsync(hashStringToNumber('msg-1'));
+
+        expect(mockClient.deleteMessage).toHaveBeenCalledWith('msg-1');
+      });
+
+      it('throws when message ID not in cache', async () => {
+        await expect(repository.deleteEmailAsync(99999)).rejects.toThrow(
+          'Message ID 99999 not found in cache'
+        );
+      });
+    });
+
+    describe('createFolderAsync', () => {
+      it('creates folder and caches the result', async () => {
+        mockClient.createMailFolder.mockResolvedValue({
+          id: 'new-folder-id',
+          displayName: 'New Folder',
+          totalItemCount: 0,
+          unreadItemCount: 0,
+        });
+
+        const result = await repository.createFolderAsync('New Folder');
+
+        expect(result.name).toBe('New Folder');
+        expect(mockClient.createMailFolder).toHaveBeenCalledWith('New Folder', undefined);
+        // Verify it was cached
+        const graphId = repository.getGraphId('folder', hashStringToNumber('new-folder-id'));
+        expect(graphId).toBe('new-folder-id');
+      });
+    });
+  });
+
+  describe('Draft & Send Operations (Async)', () => {
+    describe('createDraftAsync', () => {
+      it('creates a draft with to, cc, bcc recipients and caches the result', async () => {
+        mockClient.createDraft.mockResolvedValue({
+          id: 'draft-1',
+          subject: 'Test Draft',
+          isDraft: true,
+        });
+
+        const result = await repository.createDraftAsync({
+          subject: 'Test Draft',
+          body: 'Hello world',
+          bodyType: 'text',
+          to: ['alice@example.com'],
+          cc: ['bob@example.com'],
+          bcc: ['charlie@example.com'],
+        });
+
+        expect(mockClient.createDraft).toHaveBeenCalledWith({
+          subject: 'Test Draft',
+          body: { contentType: 'text', content: 'Hello world' },
+          toRecipients: [{ emailAddress: { address: 'alice@example.com' } }],
+          ccRecipients: [{ emailAddress: { address: 'bob@example.com' } }],
+          bccRecipients: [{ emailAddress: { address: 'charlie@example.com' } }],
+        });
+
+        expect(result).toBe(hashStringToNumber('draft-1'));
+
+        // Verify cached
+        const graphId = repository.getGraphId('message', result);
+        expect(graphId).toBe('draft-1');
+      });
+
+      it('creates a draft with no optional recipients', async () => {
+        mockClient.createDraft.mockResolvedValue({
+          id: 'draft-2',
+          subject: 'No Recipients',
+          isDraft: true,
+        });
+
+        const result = await repository.createDraftAsync({
+          subject: 'No Recipients',
+          body: '<p>Hello</p>',
+          bodyType: 'html',
+        });
+
+        expect(mockClient.createDraft).toHaveBeenCalledWith({
+          subject: 'No Recipients',
+          body: { contentType: 'html', content: '<p>Hello</p>' },
+          toRecipients: [],
+          ccRecipients: [],
+          bccRecipients: [],
+        });
+
+        expect(result).toBe(hashStringToNumber('draft-2'));
+      });
+    });
+
+    describe('updateDraftAsync', () => {
+      it('updates draft using cached ID', async () => {
+        // Populate message cache
+        mockClient.searchMessages.mockResolvedValue([
+          { id: 'draft-1', subject: 'Old Subject' },
+        ]);
+        await repository.searchEmailsAsync('Old', 50);
+
+        mockClient.updateDraft.mockResolvedValue({
+          id: 'draft-1',
+          subject: 'New Subject',
+        });
+
+        await repository.updateDraftAsync(hashStringToNumber('draft-1'), {
+          subject: 'New Subject',
+        });
+
+        expect(mockClient.updateDraft).toHaveBeenCalledWith('draft-1', {
+          subject: 'New Subject',
+        });
+      });
+
+      it('throws when draft ID not in cache', async () => {
+        await expect(
+          repository.updateDraftAsync(99999, { subject: 'New' })
+        ).rejects.toThrow('Message ID 99999 not found in cache');
+      });
+    });
+
+    describe('listDraftsAsync', () => {
+      it('lists drafts using the drafts well-known folder name', async () => {
+        mockClient.listMessages.mockResolvedValue([
+          { id: 'draft-1', subject: 'Draft 1', isDraft: true },
+          { id: 'draft-2', subject: 'Draft 2', isDraft: true },
+        ]);
+
+        const result = await repository.listDraftsAsync(50, 0);
+
+        expect(result).toHaveLength(2);
+        expect(result[0].subject).toBe('Draft 1');
+        expect(result[1].subject).toBe('Draft 2');
+        expect(mockClient.listMessages).toHaveBeenCalledWith('drafts', 50, 0);
+      });
+
+      it('caches draft message IDs', async () => {
+        mockClient.listMessages.mockResolvedValue([
+          { id: 'draft-1', subject: 'Draft 1' },
+        ]);
+
+        await repository.listDraftsAsync(50, 0);
+
+        const graphId = repository.getGraphId('message', hashStringToNumber('draft-1'));
+        expect(graphId).toBe('draft-1');
+      });
+    });
+
+    describe('sendDraftAsync', () => {
+      it('sends draft using cached ID', async () => {
+        // Populate message cache
+        mockClient.searchMessages.mockResolvedValue([
+          { id: 'draft-1', subject: 'Ready to Send' },
+        ]);
+        await repository.searchEmailsAsync('Ready', 50);
+
+        mockClient.sendDraft.mockResolvedValue(undefined);
+
+        await repository.sendDraftAsync(hashStringToNumber('draft-1'));
+
+        expect(mockClient.sendDraft).toHaveBeenCalledWith('draft-1');
+      });
+
+      it('throws when draft ID not in cache', async () => {
+        await expect(repository.sendDraftAsync(99999)).rejects.toThrow(
+          'Message ID 99999 not found in cache'
+        );
+      });
+    });
+
+    describe('sendMailAsync', () => {
+      it('sends mail with all recipient types', async () => {
+        mockClient.sendMail.mockResolvedValue(undefined);
+
+        await repository.sendMailAsync({
+          subject: 'Direct Send',
+          body: 'Hello',
+          bodyType: 'text',
+          to: ['alice@example.com', 'bob@example.com'],
+          cc: ['carol@example.com'],
+          bcc: ['dave@example.com'],
+        });
+
+        expect(mockClient.sendMail).toHaveBeenCalledWith({
+          subject: 'Direct Send',
+          body: { contentType: 'text', content: 'Hello' },
+          toRecipients: [
+            { emailAddress: { address: 'alice@example.com' } },
+            { emailAddress: { address: 'bob@example.com' } },
+          ],
+          ccRecipients: [{ emailAddress: { address: 'carol@example.com' } }],
+          bccRecipients: [{ emailAddress: { address: 'dave@example.com' } }],
+        });
+      });
+
+      it('sends mail with only required fields', async () => {
+        mockClient.sendMail.mockResolvedValue(undefined);
+
+        await repository.sendMailAsync({
+          subject: 'Simple',
+          body: '<p>Hi</p>',
+          bodyType: 'html',
+          to: ['alice@example.com'],
+        });
+
+        expect(mockClient.sendMail).toHaveBeenCalledWith({
+          subject: 'Simple',
+          body: { contentType: 'html', content: '<p>Hi</p>' },
+          toRecipients: [{ emailAddress: { address: 'alice@example.com' } }],
+          ccRecipients: [],
+          bccRecipients: [],
+        });
+      });
+    });
+
+    describe('replyMessageAsync', () => {
+      it('replies to a message using cached ID', async () => {
+        // Populate message cache
+        mockClient.searchMessages.mockResolvedValue([
+          { id: 'msg-1', subject: 'Original' },
+        ]);
+        await repository.searchEmailsAsync('Original', 50);
+
+        mockClient.replyMessage.mockResolvedValue(undefined);
+
+        await repository.replyMessageAsync(
+          hashStringToNumber('msg-1'),
+          'Thanks for the info!',
+          false
+        );
+
+        expect(mockClient.replyMessage).toHaveBeenCalledWith(
+          'msg-1',
+          'Thanks for the info!',
+          false
+        );
+      });
+
+      it('replies all to a message', async () => {
+        mockClient.searchMessages.mockResolvedValue([
+          { id: 'msg-1', subject: 'Team Email' },
+        ]);
+        await repository.searchEmailsAsync('Team', 50);
+
+        mockClient.replyMessage.mockResolvedValue(undefined);
+
+        await repository.replyMessageAsync(
+          hashStringToNumber('msg-1'),
+          'Sounds good!',
+          true
+        );
+
+        expect(mockClient.replyMessage).toHaveBeenCalledWith(
+          'msg-1',
+          'Sounds good!',
+          true
+        );
+      });
+
+      it('throws when message ID not in cache', async () => {
+        await expect(
+          repository.replyMessageAsync(99999, 'Hello', false)
+        ).rejects.toThrow('Message ID 99999 not found in cache');
+      });
+    });
+
+    describe('forwardMessageAsync', () => {
+      it('forwards a message with recipients and comment', async () => {
+        // Populate message cache
+        mockClient.searchMessages.mockResolvedValue([
+          { id: 'msg-1', subject: 'FYI' },
+        ]);
+        await repository.searchEmailsAsync('FYI', 50);
+
+        mockClient.forwardMessage.mockResolvedValue(undefined);
+
+        await repository.forwardMessageAsync(
+          hashStringToNumber('msg-1'),
+          ['recipient@example.com', 'other@example.com'],
+          'Please review'
+        );
+
+        expect(mockClient.forwardMessage).toHaveBeenCalledWith(
+          'msg-1',
+          [
+            { emailAddress: { address: 'recipient@example.com' } },
+            { emailAddress: { address: 'other@example.com' } },
+          ],
+          'Please review'
+        );
+      });
+
+      it('forwards a message without comment', async () => {
+        mockClient.searchMessages.mockResolvedValue([
+          { id: 'msg-1', subject: 'FYI' },
+        ]);
+        await repository.searchEmailsAsync('FYI', 50);
+
+        mockClient.forwardMessage.mockResolvedValue(undefined);
+
+        await repository.forwardMessageAsync(
+          hashStringToNumber('msg-1'),
+          ['recipient@example.com']
+        );
+
+        expect(mockClient.forwardMessage).toHaveBeenCalledWith(
+          'msg-1',
+          [{ emailAddress: { address: 'recipient@example.com' } }],
+          undefined
+        );
+      });
+
+      it('throws when message ID not in cache', async () => {
+        await expect(
+          repository.forwardMessageAsync(99999, ['a@b.com'])
+        ).rejects.toThrow('Message ID 99999 not found in cache');
       });
     });
   });
