@@ -2245,19 +2245,18 @@ async function handleGraphToolCall(
         return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
       }
 
-      // Attachment tools (Graph API stubs)
+      // Attachment tools
       case 'list_attachments': {
-        return {
-          content: [{ type: 'text', text: 'Attachment listing is not yet supported with the Graph API backend' }],
-          isError: true,
-        };
+        const params = ListAttachmentsInput.parse(args);
+        const attachments = await repository.listAttachmentsAsync(params.email_id);
+        const result = { attachments };
+        return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
       }
 
       case 'download_attachment': {
-        return {
-          content: [{ type: 'text', text: 'Attachment download is not yet supported with the Graph API backend' }],
-          isError: true,
-        };
+        const params = DownloadAttachmentInput.parse(args);
+        const result = await repository.downloadAttachmentAsync(params.attachment_index);
+        return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
       }
 
       // Calendar tools

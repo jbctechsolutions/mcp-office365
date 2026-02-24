@@ -30,6 +30,7 @@ import {
   hashStringToNumber,
 } from './mappers/index.js';
 import type { DeviceCodeCallback } from './auth/index.js';
+import { downloadAttachment } from './attachments.js';
 
 /**
  * Cache for mapping numeric IDs back to Graph string IDs.
@@ -40,6 +41,7 @@ interface IdCache {
   events: Map<number, string>;
   contacts: Map<number, string>;
   tasks: Map<number, { taskListId: string; taskId: string }>;
+  attachments: Map<number, { messageId: string; attachmentId: string }>;
 }
 
 /**
@@ -55,6 +57,7 @@ export class GraphRepository implements IRepository {
     events: new Map(),
     contacts: new Map(),
     tasks: new Map(),
+    attachments: new Map(),
   };
 
   constructor(deviceCodeCallback?: DeviceCodeCallback) {
@@ -843,6 +846,66 @@ export class GraphRepository implements IRepository {
       emailAddress: { address: addr },
     }));
     await this.client.forwardMessage(graphId, recipients, comment);
+  }
+
+  // ===========================================================================
+  // Attachment Operations (Async)
+  // ===========================================================================
+
+  /**
+   * Lists attachments for a given email.
+   *
+   * Looks up the Graph message ID from idCache.messages, calls
+   * client.listAttachments, hashes each attachment ID to a numeric key,
+   * and caches it in idCache.attachments with { messageId, attachmentId }.
+   *
+   * @returns Array of attachment metadata objects.
+   */
+  async listAttachmentsAsync(emailId: number): Promise<Array<{
+    id: number;
+    name: string;
+    size: number;
+    contentType: string;
+    isInline: boolean;
+  }>> {
+    const graphMessageId = this.idCache.messages.get(emailId);
+    if (graphMessageId == null) throw new Error(`Message ID ${emailId} not found in cache`);
+
+    const attachments = await this.client.listAttachments(graphMessageId);
+
+    return attachments.map((att) => {
+      const attId = att.id ?? '';
+      const numericId = hashStringToNumber(attId);
+      this.idCache.attachments.set(numericId, {
+        messageId: graphMessageId,
+        attachmentId: attId,
+      });
+      return {
+        id: numericId,
+        name: att.name ?? '',
+        size: att.size ?? 0,
+        contentType: att.contentType ?? 'application/octet-stream',
+        isInline: (att as { isInline?: boolean }).isInline ?? false,
+      };
+    });
+  }
+
+  /**
+   * Downloads an attachment for a given email.
+   *
+   * Looks up { messageId, attachmentId } from idCache.attachments,
+   * then delegates to the downloadAttachment helper which fetches
+   * the content and writes it to disk.
+   *
+   * @returns Metadata about the downloaded file including its local path.
+   */
+  async downloadAttachmentAsync(
+    attachmentId: number,
+  ): Promise<{ filePath: string; name: string; size: number; contentType: string }> {
+    const cached = this.idCache.attachments.get(attachmentId);
+    if (cached == null) throw new Error(`Attachment ID ${attachmentId} not found in cache. Call list_attachments first.`);
+
+    return downloadAttachment(this.client, cached.messageId, cached.attachmentId);
   }
 }
 
