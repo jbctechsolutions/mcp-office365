@@ -326,6 +326,74 @@ export class GraphClient {
   }
 
   // ===========================================================================
+  // Calendar Write Operations
+  // ===========================================================================
+
+  /**
+   * Creates a new calendar event.
+   */
+  async createEvent(
+    event: Record<string, unknown>,
+    calendarId?: string
+  ): Promise<MicrosoftGraph.Event> {
+    const client = await this.getClient();
+    const url = calendarId != null
+      ? `/me/calendars/${calendarId}/events`
+      : '/me/events';
+
+    const result = await client
+      .api(url)
+      .post(event) as MicrosoftGraph.Event;
+    this.cache.clear();
+    return result;
+  }
+
+  /**
+   * Updates an existing calendar event.
+   */
+  async updateEvent(eventId: string, updates: Record<string, unknown>): Promise<void> {
+    const client = await this.getClient();
+    await client
+      .api(`/me/events/${eventId}`)
+      .patch(updates);
+    this.cache.clear();
+  }
+
+  /**
+   * Deletes a calendar event.
+   */
+  async deleteEvent(eventId: string): Promise<void> {
+    const client = await this.getClient();
+    await client
+      .api(`/me/events/${eventId}`)
+      .delete();
+    this.cache.clear();
+  }
+
+  /**
+   * Responds to a calendar event invitation.
+   */
+  async respondToEvent(
+    eventId: string,
+    response: 'accept' | 'decline' | 'tentative',
+    sendResponse: boolean,
+    comment?: string
+  ): Promise<void> {
+    const client = await this.getClient();
+    const actionMap: Record<string, string> = {
+      accept: 'accept',
+      decline: 'decline',
+      tentative: 'tentativelyAccept',
+    };
+    const action = actionMap[response];
+
+    await client
+      .api(`/me/events/${eventId}/${action}`)
+      .post({ sendResponse, comment: comment ?? '' });
+    this.cache.clear();
+  }
+
+  // ===========================================================================
   // Contacts
   // ===========================================================================
 
@@ -384,6 +452,44 @@ export class GraphClient {
     } catch {
       return null;
     }
+  }
+
+  // ===========================================================================
+  // Contact Write Operations
+  // ===========================================================================
+
+  /**
+   * Creates a new contact.
+   */
+  async createContact(contact: Record<string, unknown>): Promise<MicrosoftGraph.Contact> {
+    const client = await this.getClient();
+    const result = await client
+      .api('/me/contacts')
+      .post(contact) as MicrosoftGraph.Contact;
+    this.cache.clear();
+    return result;
+  }
+
+  /**
+   * Updates an existing contact.
+   */
+  async updateContact(contactId: string, updates: Record<string, unknown>): Promise<void> {
+    const client = await this.getClient();
+    await client
+      .api(`/me/contacts/${contactId}`)
+      .patch(updates);
+    this.cache.clear();
+  }
+
+  /**
+   * Deletes a contact.
+   */
+  async deleteContact(contactId: string): Promise<void> {
+    const client = await this.getClient();
+    await client
+      .api(`/me/contacts/${contactId}`)
+      .delete();
+    this.cache.clear();
   }
 
   // ===========================================================================
@@ -634,6 +740,151 @@ export class GraphClient {
   }
 
   // ===========================================================================
+  // Draft & Send Operations
+  // ===========================================================================
+
+  /**
+   * Creates a new draft message.
+   */
+  async createDraft(message: {
+    subject: string;
+    body: MicrosoftGraph.ItemBody;
+    toRecipients?: MicrosoftGraph.Recipient[];
+    ccRecipients?: MicrosoftGraph.Recipient[];
+    bccRecipients?: MicrosoftGraph.Recipient[];
+    isDraft?: boolean;
+  }): Promise<MicrosoftGraph.Message> {
+    const client = await this.getClient();
+    const result = await client
+      .api('/me/messages')
+      .post(message) as MicrosoftGraph.Message;
+    this.cache.clear();
+    return result;
+  }
+
+  /**
+   * Updates an existing draft message.
+   */
+  async updateDraft(messageId: string, updates: Record<string, unknown>): Promise<MicrosoftGraph.Message> {
+    const client = await this.getClient();
+    const result = await client
+      .api(`/me/messages/${messageId}`)
+      .patch(updates) as MicrosoftGraph.Message;
+    this.cache.clear();
+    return result;
+  }
+
+  /**
+   * Sends an existing draft message.
+   */
+  async sendDraft(messageId: string): Promise<void> {
+    const client = await this.getClient();
+    await client
+      .api(`/me/messages/${messageId}/send`)
+      .post(null);
+    this.cache.clear();
+  }
+
+  /**
+   * Sends a new email directly without creating a draft.
+   */
+  async sendMail(message: {
+    subject: string;
+    body: MicrosoftGraph.ItemBody;
+    toRecipients: MicrosoftGraph.Recipient[];
+    ccRecipients?: MicrosoftGraph.Recipient[];
+    bccRecipients?: MicrosoftGraph.Recipient[];
+  }): Promise<void> {
+    const client = await this.getClient();
+    await client
+      .api('/me/sendMail')
+      .post({ message });
+    this.cache.clear();
+  }
+
+  /**
+   * Replies to a message, or replies to all recipients.
+   */
+  async replyMessage(messageId: string, comment: string, replyAll: boolean): Promise<void> {
+    const client = await this.getClient();
+    const action = replyAll ? 'replyAll' : 'reply';
+    await client
+      .api(`/me/messages/${messageId}/${action}`)
+      .post({ comment });
+    this.cache.clear();
+  }
+
+  /**
+   * Forwards a message to specified recipients.
+   */
+  async forwardMessage(
+    messageId: string,
+    toRecipients: MicrosoftGraph.Recipient[],
+    comment?: string
+  ): Promise<void> {
+    const client = await this.getClient();
+    const body: { toRecipients: MicrosoftGraph.Recipient[]; comment?: string } = { toRecipients };
+    if (comment != null) {
+      body.comment = comment;
+    }
+    await client
+      .api(`/me/messages/${messageId}/forward`)
+      .post(body);
+    this.cache.clear();
+  }
+
+  // ===========================================================================
+  // Attachment Operations
+  // ===========================================================================
+
+  /**
+   * Lists attachments on a message.
+   */
+  async listAttachments(messageId: string): Promise<MicrosoftGraph.Attachment[]> {
+    const client = await this.getClient();
+
+    const response = await client
+      .api(`/me/messages/${messageId}/attachments`)
+      .select('id,name,size,contentType,isInline')
+      .get() as PageCollection;
+
+    return response.value as MicrosoftGraph.Attachment[];
+  }
+
+  /**
+   * Gets a specific attachment with full content (including contentBytes).
+   */
+  async getAttachment(messageId: string, attachmentId: string): Promise<MicrosoftGraph.FileAttachment> {
+    const client = await this.getClient();
+
+    return await client
+      .api(`/me/messages/${messageId}/attachments/${attachmentId}`)
+      .get() as MicrosoftGraph.FileAttachment;
+  }
+
+  /**
+   * Adds an inline base64 attachment to a message (<= 3MB).
+   */
+  async addAttachment(messageId: string, attachment: Record<string, unknown>): Promise<MicrosoftGraph.Attachment> {
+    const client = await this.getClient();
+    const result = await client
+      .api(`/me/messages/${messageId}/attachments`)
+      .post(attachment) as MicrosoftGraph.Attachment;
+    this.cache.clear();
+    return result;
+  }
+
+  /**
+   * Creates an upload session for large file attachments (> 3MB).
+   */
+  async createUploadSession(messageId: string, body: Record<string, unknown>): Promise<{ uploadUrl: string }> {
+    const client = await this.getClient();
+    return await client
+      .api(`/me/messages/${messageId}/attachments/createUploadSession`)
+      .post(body) as { uploadUrl: string };
+  }
+
+  // ===========================================================================
   // Tasks (Microsoft To Do) - continued
   // ===========================================================================
 
@@ -649,6 +900,64 @@ export class GraphClient {
     );
 
     return matched.slice(0, limit);
+  }
+
+  // ===========================================================================
+  // Task Write Operations
+  // ===========================================================================
+
+  /**
+   * Creates a new task in a task list.
+   */
+  async createTask(
+    taskListId: string,
+    task: Record<string, unknown>
+  ): Promise<MicrosoftGraph.TodoTask> {
+    const client = await this.getClient();
+    const result = await client
+      .api(`/me/todo/lists/${taskListId}/tasks`)
+      .post(task) as MicrosoftGraph.TodoTask;
+    this.cache.clear();
+    return result;
+  }
+
+  /**
+   * Updates an existing task.
+   */
+  async updateTask(
+    taskListId: string,
+    taskId: string,
+    updates: Record<string, unknown>
+  ): Promise<MicrosoftGraph.TodoTask> {
+    const client = await this.getClient();
+    const result = await client
+      .api(`/me/todo/lists/${taskListId}/tasks/${taskId}`)
+      .patch(updates) as MicrosoftGraph.TodoTask;
+    this.cache.clear();
+    return result;
+  }
+
+  /**
+   * Deletes a task.
+   */
+  async deleteTask(taskListId: string, taskId: string): Promise<void> {
+    const client = await this.getClient();
+    await client
+      .api(`/me/todo/lists/${taskListId}/tasks/${taskId}`)
+      .delete();
+    this.cache.clear();
+  }
+
+  /**
+   * Creates a new task list.
+   */
+  async createTaskList(displayName: string): Promise<MicrosoftGraph.TodoTaskList> {
+    const client = await this.getClient();
+    const result = await client
+      .api('/me/todo/lists')
+      .post({ displayName }) as MicrosoftGraph.TodoTaskList;
+    this.cache.clear();
+    return result;
   }
 }
 

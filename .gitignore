@@ -16,3 +16,6 @@ node_modules/
 
 # Test coverage reports
 coverage/
+
+# Git worktrees
+.worktrees/

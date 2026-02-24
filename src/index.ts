@@ -21,6 +21,7 @@ import {
   ListToolsRequestSchema,
   type Tool,
 } from '@modelcontextprotocol/sdk/types.js';
+import { z } from 'zod';
 
 import {
   createAppleScriptRepository,
@@ -50,6 +51,7 @@ import { createContactsTools } from './tools/contacts.js';
 import { createTasksTools } from './tools/tasks.js';
 import { createNotesTools } from './tools/notes.js';
 import { createMailboxOrganizationTools } from './tools/mailbox-organization.js';
+import { createMailSendTools } from './tools/mail-send.js';
 import {
   ListEmailsInput,
   SearchEmailsInput,
@@ -95,8 +97,19 @@ import {
   CreateFolderInput,
   RenameFolderInput,
   MoveFolderInput,
+  CreateDraftInput,
+  UpdateDraftInput,
+  ListDraftsInput,
+  PrepareSendDraftInput,
+  ConfirmSendDraftInput,
+  PrepareSendEmailInput,
+  ConfirmSendEmailInput,
+  PrepareReplyEmailInput,
+  ConfirmReplyEmailInput,
+  PrepareForwardEmailInput,
+  ConfirmForwardEmailInput,
 } from './tools/index.js';
-import { ApprovalTokenManager } from './approval/index.js';
+import { ApprovalTokenManager, hashEventForApproval, hashContactForApproval, hashTaskForApproval } from './approval/index.js';
 import type { CreateEventResult } from './tools/index.js';
 import {
   wrapError,
@@ -531,6 +544,29 @@ const TOOLS: Tool[] = [
       required: ['event_id'],
     },
   },
+  {
+    name: 'prepare_delete_event',
+    description: 'Prepare to delete a calendar event. Returns a preview and approval token. Call confirm_delete_event to execute.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        event_id: { type: 'number', description: 'The event ID to delete' },
+      },
+      required: ['event_id'],
+    },
+  },
+  {
+    name: 'confirm_delete_event',
+    description: 'Confirm deletion of a calendar event using a token from prepare_delete_event',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        token_id: { type: 'string', description: 'The approval token from prepare_delete_event' },
+        event_id: { type: 'number', description: 'The event ID to delete' },
+      },
+      required: ['token_id', 'event_id'],
+    },
+  },
   // Contact tools
   {
     name: 'list_contacts',
@@ -583,6 +619,74 @@ const TOOLS: Tool[] = [
         },
       },
       required: ['contact_id'],
+    },
+  },
+  {
+    name: 'create_contact',
+    description: 'Create a new contact in Outlook. All fields are optional but at least one should be provided.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        given_name: { type: 'string', description: 'First name' },
+        surname: { type: 'string', description: 'Last name' },
+        email: { type: 'string', description: 'Email address' },
+        phone: { type: 'string', description: 'Business phone number' },
+        mobile_phone: { type: 'string', description: 'Mobile phone number' },
+        company: { type: 'string', description: 'Company name' },
+        job_title: { type: 'string', description: 'Job title' },
+        street_address: { type: 'string', description: 'Street address' },
+        city: { type: 'string', description: 'City' },
+        state: { type: 'string', description: 'State or province' },
+        postal_code: { type: 'string', description: 'Postal/ZIP code' },
+        country: { type: 'string', description: 'Country or region' },
+      },
+      required: [],
+    },
+  },
+  {
+    name: 'update_contact',
+    description: 'Update an existing contact. Only specified fields will be updated.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        contact_id: { type: 'number', description: 'The contact ID to update' },
+        given_name: { type: 'string', description: 'First name' },
+        surname: { type: 'string', description: 'Last name' },
+        email: { type: 'string', description: 'Email address' },
+        phone: { type: 'string', description: 'Business phone number' },
+        mobile_phone: { type: 'string', description: 'Mobile phone number' },
+        company: { type: 'string', description: 'Company name' },
+        job_title: { type: 'string', description: 'Job title' },
+        street_address: { type: 'string', description: 'Street address' },
+        city: { type: 'string', description: 'City' },
+        state: { type: 'string', description: 'State or province' },
+        postal_code: { type: 'string', description: 'Postal/ZIP code' },
+        country: { type: 'string', description: 'Country or region' },
+      },
+      required: ['contact_id'],
+    },
+  },
+  {
+    name: 'prepare_delete_contact',
+    description: 'Prepare to delete a contact. Returns a preview and approval token. Call confirm_delete_contact to execute.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        contact_id: { type: 'number', description: 'The contact ID to delete' },
+      },
+      required: ['contact_id'],
+    },
+  },
+  {
+    name: 'confirm_delete_contact',
+    description: 'Confirm deletion of a contact using a token from prepare_delete_contact',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        token_id: { type: 'string', description: 'The approval token from prepare_delete_contact' },
+        contact_id: { type: 'number', description: 'The contact ID to delete' },
+      },
+      required: ['token_id', 'contact_id'],
     },
   },
   // Task tools
@@ -642,6 +746,86 @@ const TOOLS: Tool[] = [
         },
       },
       required: ['task_id'],
+    },
+  },
+  {
+    name: 'create_task',
+    description: 'Create a new task in a task list',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        title: { type: 'string', description: 'Task title' },
+        task_list_id: { type: 'number', description: 'The task list ID to create the task in' },
+        body: { type: 'string', description: 'Task body/notes' },
+        body_type: { type: 'string', enum: ['text', 'html'], default: 'text', description: 'Body content type' },
+        due_date: { type: 'string', description: 'Due date (ISO 8601 format)' },
+        importance: { type: 'string', enum: ['low', 'normal', 'high'], description: 'Task importance' },
+        reminder_date: { type: 'string', description: 'Reminder date (ISO 8601 format)' },
+      },
+      required: ['title', 'task_list_id'],
+    },
+  },
+  {
+    name: 'update_task',
+    description: 'Update an existing task. Only specified fields will be updated.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        task_id: { type: 'number', description: 'The task ID to update' },
+        title: { type: 'string', description: 'New task title' },
+        body: { type: 'string', description: 'New task body/notes' },
+        body_type: { type: 'string', enum: ['text', 'html'], description: 'Body content type' },
+        due_date: { type: 'string', description: 'New due date (ISO 8601 format)' },
+        importance: { type: 'string', enum: ['low', 'normal', 'high'], description: 'Task importance' },
+        reminder_date: { type: 'string', description: 'Reminder date (ISO 8601 format)' },
+        status: { type: 'string', enum: ['notStarted', 'inProgress', 'completed', 'waitingOnOthers', 'deferred'], description: 'Task status' },
+      },
+      required: ['task_id'],
+    },
+  },
+  {
+    name: 'complete_task',
+    description: 'Mark a task as completed',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        task_id: { type: 'number', description: 'The task ID to complete' },
+      },
+      required: ['task_id'],
+    },
+  },
+  {
+    name: 'create_task_list',
+    description: 'Create a new task list',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        display_name: { type: 'string', description: 'Name for the new task list' },
+      },
+      required: ['display_name'],
+    },
+  },
+  {
+    name: 'prepare_delete_task',
+    description: 'Prepare to delete a task. Returns a preview and approval token. Call confirm_delete_task to execute.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        task_id: { type: 'number', description: 'The task ID to delete' },
+      },
+      required: ['task_id'],
+    },
+  },
+  {
+    name: 'confirm_delete_task',
+    description: 'Confirm deletion of a task using a token from prepare_delete_task',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        token_id: { type: 'string', description: 'The approval token from prepare_delete_task' },
+        task_id: { type: 'number', description: 'The task ID to delete' },
+      },
+      required: ['token_id', 'task_id'],
     },
   },
   // Note tools
@@ -1082,6 +1266,272 @@ const TOOLS: Tool[] = [
       required: ['to', 'subject', 'body'],
     },
   },
+  // =========================================================================
+  // Mail Send — Draft Management (Non-Destructive, Graph API only)
+  // =========================================================================
+  {
+    name: 'create_draft',
+    description: 'Create a draft email that can be edited and sent later',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        to: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'To recipients (email addresses)',
+        },
+        cc: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'CC recipients (email addresses)',
+        },
+        bcc: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'BCC recipients (email addresses)',
+        },
+        subject: {
+          type: 'string',
+          description: 'Email subject',
+        },
+        body: {
+          type: 'string',
+          description: 'Email body',
+        },
+        body_type: {
+          type: 'string',
+          enum: ['text', 'html'],
+          default: 'text',
+          description: 'Body content type (default: text)',
+        },
+        attachments: {
+          type: 'array',
+          description: 'File attachments',
+          items: {
+            type: 'object',
+            properties: {
+              file_path: { type: 'string', description: 'Absolute path to the file' },
+              name: { type: 'string', description: 'Override filename' },
+              content_type: { type: 'string', description: 'Override MIME type' },
+            },
+            required: ['file_path'],
+          },
+        },
+      },
+      required: ['subject', 'body'],
+    },
+  },
+  {
+    name: 'update_draft',
+    description: 'Update an existing draft email',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        draft_id: {
+          type: 'number',
+          description: 'The draft ID to update',
+        },
+        to: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'To recipients (email addresses)',
+        },
+        cc: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'CC recipients (email addresses)',
+        },
+        bcc: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'BCC recipients (email addresses)',
+        },
+        subject: {
+          type: 'string',
+          description: 'Email subject',
+        },
+        body: {
+          type: 'string',
+          description: 'Email body',
+        },
+        body_type: {
+          type: 'string',
+          enum: ['text', 'html'],
+          description: 'Body content type',
+        },
+      },
+      required: ['draft_id'],
+    },
+  },
+  {
+    name: 'list_drafts',
+    description: 'List all draft emails',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        limit: {
+          type: 'number',
+          description: 'Maximum number of drafts to return (1-100, default 50)',
+          default: 50,
+        },
+        offset: {
+          type: 'number',
+          description: 'Number of drafts to skip (default 0)',
+          default: 0,
+        },
+      },
+      required: [],
+    },
+  },
+  // =========================================================================
+  // Mail Send — Two-Phase Approval (Graph API only)
+  // =========================================================================
+  {
+    name: 'prepare_send_draft',
+    description: 'Prepare to send a draft email. Returns a preview and approval token.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        draft_id: { type: 'number', description: 'The draft ID to send' },
+      },
+      required: ['draft_id'],
+    },
+  },
+  {
+    name: 'confirm_send_draft',
+    description: 'Confirm and send a draft email using the approval token.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        token_id: { type: 'string', description: 'Approval token from prepare_send_draft' },
+        draft_id: { type: 'number', description: 'The draft ID to send' },
+      },
+      required: ['token_id', 'draft_id'],
+    },
+  },
+  {
+    name: 'prepare_send_email',
+    description: 'Prepare to send an email immediately. Returns a preview and approval token.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        to: {
+          type: 'array',
+          items: { type: 'string' },
+          minItems: 1,
+          description: 'To recipients (email addresses)',
+        },
+        cc: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'CC recipients (email addresses)',
+        },
+        bcc: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'BCC recipients (email addresses)',
+        },
+        subject: {
+          type: 'string',
+          description: 'Email subject',
+        },
+        body: {
+          type: 'string',
+          description: 'Email body',
+        },
+        body_type: {
+          type: 'string',
+          enum: ['text', 'html'],
+          default: 'text',
+          description: 'Body content type (default: text)',
+        },
+        attachments: {
+          type: 'array',
+          description: 'File attachments',
+          items: {
+            type: 'object',
+            properties: {
+              file_path: { type: 'string', description: 'Absolute path to the file' },
+              name: { type: 'string', description: 'Override filename' },
+              content_type: { type: 'string', description: 'Override MIME type' },
+            },
+            required: ['file_path'],
+          },
+        },
+      },
+      required: ['to', 'subject', 'body'],
+    },
+  },
+  {
+    name: 'confirm_send_email',
+    description: 'Confirm and send an email using the approval token.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        token_id: { type: 'string', description: 'Approval token from prepare_send_email' },
+      },
+      required: ['token_id'],
+    },
+  },
+  {
+    name: 'prepare_reply_email',
+    description: 'Prepare to reply to an email. Returns a preview and approval token.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        message_id: { type: 'number', description: 'The message ID to reply to' },
+        comment: { type: 'string', description: 'Reply body' },
+        reply_all: {
+          type: 'boolean',
+          default: true,
+          description: 'Reply to all recipients (default true)',
+        },
+      },
+      required: ['message_id', 'comment'],
+    },
+  },
+  {
+    name: 'confirm_reply_email',
+    description: 'Confirm and reply to an email using the approval token.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        token_id: { type: 'string', description: 'Approval token from prepare_reply_email' },
+        message_id: { type: 'number', description: 'The message ID being replied to' },
+      },
+      required: ['token_id', 'message_id'],
+    },
+  },
+  {
+    name: 'prepare_forward_email',
+    description: 'Prepare to forward an email. Returns a preview and approval token.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        message_id: { type: 'number', description: 'The message ID to forward' },
+        to_recipients: {
+          type: 'array',
+          items: { type: 'string' },
+          minItems: 1,
+          description: 'Forward to recipients (email addresses)',
+        },
+        comment: { type: 'string', description: 'Optional comment to include' },
+      },
+      required: ['message_id', 'to_recipients'],
+    },
+  },
+  {
+    name: 'confirm_forward_email',
+    description: 'Confirm and forward an email using the approval token.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        token_id: { type: 'string', description: 'Approval token from prepare_forward_email' },
+        message_id: { type: 'number', description: 'The message ID being forwarded' },
+      },
+      required: ['token_id', 'message_id'],
+    },
+  },
 ];
 
 // =============================================================================
@@ -1119,6 +1569,7 @@ export function createServer(): Server {
   let tasksTools: ReturnType<typeof createTasksTools> | null = null;
   let notesTools: ReturnType<typeof createNotesTools> | null = null;
   let orgTools: ReturnType<typeof createMailboxOrganizationTools> | null = null;
+  let sendTools: ReturnType<typeof createMailSendTools> | null = null;
   let calendarWriter: ICalendarWriter | null = null;
   let calendarManager: ICalendarManager | null = null;
   let mailSender: IMailSender | null = null;
@@ -1167,6 +1618,7 @@ export function createServer(): Server {
 
     const adapter = new GraphMailboxAdapter(graphRepository);
     orgTools = createMailboxOrganizationTools(adapter, tokenManager);
+    sendTools = createMailSendTools(graphRepository, tokenManager);
 
     initialized = true;
   }
@@ -1198,7 +1650,7 @@ export function createServer(): Server {
 
       // Graph API mode - handle async operations directly
       if (useGraphApi && graphRepository != null) {
-        return await handleGraphToolCall(name, args, graphRepository, graphContentReaders!, orgTools!);
+        return await handleGraphToolCall(name, args, graphRepository, graphContentReaders!, orgTools!, sendTools!, tokenManager);
       }
 
       // AppleScript mode - use sync tool interfaces
@@ -1402,6 +1854,86 @@ async function handleOrgToolCall(
     case 'move_folder': {
       const params = MoveFolderInput.parse(args);
       const result = await orgTools.moveFolder(params);
+      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+    }
+
+    default:
+      return null;
+  }
+}
+
+// =============================================================================
+// Mail Send Tool Handler (Graph API only)
+// =============================================================================
+
+async function handleSendToolCall(
+  name: string,
+  args: unknown,
+  sendTools: ReturnType<typeof createMailSendTools>
+): Promise<ToolResult | null> {
+  switch (name) {
+    // Non-Destructive — Draft Management
+    case 'create_draft': {
+      const params = CreateDraftInput.parse(args);
+      const result = await sendTools.createDraft(params);
+      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+    }
+    case 'update_draft': {
+      const params = UpdateDraftInput.parse(args);
+      const result = await sendTools.updateDraft(params);
+      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+    }
+    case 'list_drafts': {
+      const params = ListDraftsInput.parse(args ?? {});
+      const result = await sendTools.listDrafts(params);
+      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+    }
+
+    // Two-Phase — Send Draft
+    case 'prepare_send_draft': {
+      const params = PrepareSendDraftInput.parse(args);
+      const result = await sendTools.prepareSendDraft(params);
+      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+    }
+    case 'confirm_send_draft': {
+      const params = ConfirmSendDraftInput.parse(args);
+      const result = await sendTools.confirmSendDraft(params);
+      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+    }
+
+    // Two-Phase — Send Email (Direct)
+    case 'prepare_send_email': {
+      const params = PrepareSendEmailInput.parse(args);
+      const result = sendTools.prepareSendEmail(params);
+      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+    }
+    case 'confirm_send_email': {
+      const params = ConfirmSendEmailInput.parse(args);
+      const result = await sendTools.confirmSendEmail(params);
+      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+    }
+
+    // Two-Phase — Reply Email
+    case 'prepare_reply_email': {
+      const params = PrepareReplyEmailInput.parse(args);
+      const result = await sendTools.prepareReplyEmail(params);
+      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+    }
+    case 'confirm_reply_email': {
+      const params = ConfirmReplyEmailInput.parse(args);
+      const result = await sendTools.confirmReplyEmail(params);
+      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+    }
+
+    // Two-Phase — Forward Email
+    case 'prepare_forward_email': {
+      const params = PrepareForwardEmailInput.parse(args);
+      const result = await sendTools.prepareForwardEmail(params);
+      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+    }
+    case 'confirm_forward_email': {
+      const params = ConfirmForwardEmailInput.parse(args);
+      const result = await sendTools.confirmForwardEmail(params);
       return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
     }
 
@@ -1837,6 +2369,173 @@ async function handleAppleScriptToolCall(
 }
 
 // =============================================================================
+// Calendar Write — Zod Schemas (Graph API)
+// =============================================================================
+
+const GraphCreateEventInput = z.strictObject({
+  title: z.string().min(1),
+  start_date: z.string().refine((s) => !isNaN(Date.parse(s)), { message: 'Must be a valid ISO 8601 date string' }),
+  end_date: z.string().refine((s) => !isNaN(Date.parse(s)), { message: 'Must be a valid ISO 8601 date string' }),
+  calendar_id: z.number().int().positive().optional(),
+  location: z.string().optional(),
+  description: z.string().optional(),
+  is_all_day: z.boolean().optional().default(false),
+  attendees: z.array(z.object({
+    email: z.string().email(),
+    name: z.string().optional(),
+    type: z.enum(['required', 'optional']).optional(),
+  })).optional(),
+  recurrence: z.object({
+    pattern: z.object({
+      type: z.enum(['daily', 'weekly', 'monthly', 'yearly']),
+      interval: z.number().int().positive(),
+      daysOfWeek: z.array(z.string()).optional(),
+    }),
+    range: z.object({
+      type: z.enum(['endDate', 'noEnd', 'numbered']),
+      startDate: z.string(),
+      endDate: z.string().optional(),
+      numberOfOccurrences: z.number().int().positive().optional(),
+    }),
+  }).optional(),
+}).refine(
+  (data) => new Date(data.start_date).getTime() < new Date(data.end_date).getTime(),
+  { message: 'start_date must be before end_date', path: ['start_date'] }
+);
+
+const UpdateEventInput = z.strictObject({
+  event_id: z.number().int().positive(),
+  subject: z.string().optional(),
+  start: z.string().optional(),
+  end: z.string().optional(),
+  timezone: z.string().optional(),
+  location: z.string().optional(),
+  body: z.string().optional(),
+  body_type: z.enum(['text', 'html']).optional(),
+  attendees: z.array(z.object({
+    email: z.string().email(),
+    name: z.string().optional(),
+    type: z.enum(['required', 'optional']).optional(),
+  })).optional(),
+  is_all_day: z.boolean().optional(),
+  recurrence: z.object({
+    pattern: z.object({
+      type: z.enum(['daily', 'weekly', 'monthly', 'yearly']),
+      interval: z.number().int().positive(),
+      daysOfWeek: z.array(z.string()).optional(),
+    }),
+    range: z.object({
+      type: z.enum(['endDate', 'noEnd', 'numbered']),
+      startDate: z.string(),
+      endDate: z.string().optional(),
+      numberOfOccurrences: z.number().int().positive().optional(),
+    }),
+  }).optional(),
+});
+
+const RespondToEventGraphInput = z.strictObject({
+  event_id: z.number().int().positive(),
+  response: z.enum(['accept', 'decline', 'tentative']),
+  send_response: z.boolean().default(true),
+  comment: z.string().optional(),
+});
+
+const PrepareDeleteEventInput = z.strictObject({
+  event_id: z.number().int().positive(),
+});
+
+const ConfirmDeleteEventInput = z.strictObject({
+  token_id: z.uuid(),
+  event_id: z.number().int().positive(),
+});
+
+// =============================================================================
+// Contact Write — Zod Schemas (Graph API)
+// =============================================================================
+
+const CreateContactGraphInput = z.strictObject({
+  given_name: z.string().optional(),
+  surname: z.string().optional(),
+  email: z.string().email().optional(),
+  phone: z.string().optional(),
+  mobile_phone: z.string().optional(),
+  company: z.string().optional(),
+  job_title: z.string().optional(),
+  street_address: z.string().optional(),
+  city: z.string().optional(),
+  state: z.string().optional(),
+  postal_code: z.string().optional(),
+  country: z.string().optional(),
+});
+
+const UpdateContactGraphInput = z.strictObject({
+  contact_id: z.number().int().positive(),
+  given_name: z.string().optional(),
+  surname: z.string().optional(),
+  email: z.string().email().optional(),
+  phone: z.string().optional(),
+  mobile_phone: z.string().optional(),
+  company: z.string().optional(),
+  job_title: z.string().optional(),
+  street_address: z.string().optional(),
+  city: z.string().optional(),
+  state: z.string().optional(),
+  postal_code: z.string().optional(),
+  country: z.string().optional(),
+});
+
+const PrepareDeleteContactInput = z.strictObject({
+  contact_id: z.number().int().positive(),
+});
+
+const ConfirmDeleteContactInput = z.strictObject({
+  token_id: z.uuid(),
+  contact_id: z.number().int().positive(),
+});
+
+// =============================================================================
+// Task Write — Zod Schemas (Graph API)
+// =============================================================================
+
+const CreateTaskGraphInput = z.strictObject({
+  title: z.string().min(1),
+  task_list_id: z.number().int().positive(),
+  body: z.string().optional(),
+  body_type: z.enum(['text', 'html']).optional(),
+  due_date: z.string().optional(),
+  importance: z.enum(['low', 'normal', 'high']).optional(),
+  reminder_date: z.string().optional(),
+});
+
+const UpdateTaskGraphInput = z.strictObject({
+  task_id: z.number().int().positive(),
+  title: z.string().optional(),
+  body: z.string().optional(),
+  body_type: z.enum(['text', 'html']).optional(),
+  due_date: z.string().optional(),
+  importance: z.enum(['low', 'normal', 'high']).optional(),
+  reminder_date: z.string().optional(),
+  status: z.enum(['notStarted', 'inProgress', 'completed', 'waitingOnOthers', 'deferred']).optional(),
+});
+
+const CompleteTaskGraphInput = z.strictObject({
+  task_id: z.number().int().positive(),
+});
+
+const CreateTaskListGraphInput = z.strictObject({
+  display_name: z.string().min(1),
+});
+
+const PrepareDeleteTaskInput = z.strictObject({
+  task_id: z.number().int().positive(),
+});
+
+const ConfirmDeleteTaskInput = z.strictObject({
+  token_id: z.uuid(),
+  task_id: z.number().int().positive(),
+});
+
+// =============================================================================
 // Graph API Tool Handler
 // =============================================================================
 
@@ -1845,11 +2544,17 @@ async function handleGraphToolCall(
   args: unknown,
   repository: GraphRepository,
   contentReaders: GraphContentReaders,
-  orgTools: ReturnType<typeof createMailboxOrganizationTools>
+  orgTools: ReturnType<typeof createMailboxOrganizationTools>,
+  sendTools: ReturnType<typeof createMailSendTools>,
+  tokenManager: ApprovalTokenManager
 ): Promise<ToolResult> {
   // Handle mailbox organization tools (shared between backends)
   const orgResult = await handleOrgToolCall(name, args, orgTools);
   if (orgResult != null) return orgResult;
+
+  // Handle mail send tools (Graph API only)
+  const sendResult = await handleSendToolCall(name, args, sendTools);
+  if (sendResult != null) return sendResult;
 
   try {
     switch (name) {
@@ -1906,19 +2611,18 @@ async function handleGraphToolCall(
         return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
       }
 
-      // Attachment tools (Graph API stubs)
+      // Attachment tools
       case 'list_attachments': {
-        return {
-          content: [{ type: 'text', text: 'Attachment listing is not yet supported with the Graph API backend' }],
-          isError: true,
-        };
+        const params = ListAttachmentsInput.parse(args);
+        const attachments = await repository.listAttachmentsAsync(params.email_id);
+        const result = { attachments };
+        return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
       }
 
       case 'download_attachment': {
-        return {
-          content: [{ type: 'text', text: 'Attachment download is not yet supported with the Graph API backend' }],
-          isError: true,
-        };
+        const params = DownloadAttachmentInput.parse(args);
+        const result = await repository.downloadAttachmentAsync(params.attachment_index);
+        return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
       }
 
       // Calendar tools
@@ -1981,9 +2685,182 @@ async function handleGraphToolCall(
       }
 
       case 'create_event': {
+        const params = GraphCreateEventInput.parse(args);
+        const createParams: Parameters<typeof repository.createEventAsync>[0] = {
+          subject: params.title,
+          start: params.start_date,
+          end: params.end_date,
+        };
+        if (params.location != null) createParams.location = params.location;
+        if (params.description != null) createParams.body = params.description;
+        createParams.bodyType = 'text';
+        if (params.is_all_day) createParams.isAllDay = params.is_all_day;
+        if (params.attendees != null) {
+          createParams.attendees = params.attendees.map((a) => {
+            const att: { email: string; name?: string; type?: 'required' | 'optional' } = { email: a.email };
+            if (a.name != null) att.name = a.name;
+            if (a.type != null) att.type = a.type;
+            return att;
+          });
+        }
+        if (params.recurrence != null) {
+          const rec = params.recurrence;
+          const pattern: { type: 'daily' | 'weekly' | 'monthly' | 'yearly'; interval: number; daysOfWeek?: string[] } = {
+            type: rec.pattern.type,
+            interval: rec.pattern.interval,
+          };
+          if (rec.pattern.daysOfWeek != null) pattern.daysOfWeek = rec.pattern.daysOfWeek;
+          const range: { type: 'endDate' | 'noEnd' | 'numbered'; startDate: string; endDate?: string; numberOfOccurrences?: number } = {
+            type: rec.range.type,
+            startDate: rec.range.startDate,
+          };
+          if (rec.range.endDate != null) range.endDate = rec.range.endDate;
+          if (rec.range.numberOfOccurrences != null) range.numberOfOccurrences = rec.range.numberOfOccurrences;
+          createParams.recurrence = { pattern, range };
+        }
+        if (params.calendar_id != null) createParams.calendarId = params.calendar_id;
+        const numericId = await repository.createEventAsync(createParams);
+
+        const result: CreateEventResult = {
+          id: numericId,
+          title: params.title,
+          start_date: params.start_date,
+          end_date: params.end_date,
+          calendar_id: params.calendar_id ?? null,
+          location: params.location ?? null,
+          description: params.description ?? null,
+          is_all_day: params.is_all_day,
+          is_recurring: params.recurrence != null,
+        };
+        return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+      }
+
+      case 'update_event': {
+        const params = UpdateEventInput.parse(args);
+        const updates: Record<string, unknown> = {};
+        const tz = params.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
+
+        if (params.subject != null) updates.subject = params.subject;
+        if (params.start != null) updates.start = { dateTime: params.start, timeZone: tz };
+        if (params.end != null) updates.end = { dateTime: params.end, timeZone: tz };
+        if (params.location != null) updates.location = { displayName: params.location };
+        if (params.body != null) {
+          updates.body = {
+            contentType: params.body_type ?? 'text',
+            content: params.body,
+          };
+        }
+        if (params.is_all_day != null) updates.isAllDay = params.is_all_day;
+        if (params.attendees != null) {
+          updates.attendees = params.attendees.map((a) => ({
+            emailAddress: { address: a.email, name: a.name },
+            type: a.type ?? 'required',
+          }));
+        }
+        if (params.recurrence != null) updates.recurrence = params.recurrence;
+
+        await repository.updateEventAsync(params.event_id, updates);
         return {
-          content: [{ type: 'text', text: 'Event creation is not yet supported via Microsoft Graph API' }],
-          isError: true,
+          content: [{ type: 'text', text: `Successfully updated event ${params.event_id}` }],
+        };
+      }
+
+      case 'respond_to_event': {
+        const params = RespondToEventGraphInput.parse(args);
+        await repository.respondToEventAsync(
+          params.event_id,
+          params.response,
+          params.send_response,
+          params.comment
+        );
+        const responseText = params.response === 'accept'
+          ? 'accepted'
+          : params.response === 'decline'
+          ? 'declined'
+          : 'tentatively accepted';
+        return {
+          content: [{ type: 'text', text: `Successfully ${responseText} event ${params.event_id}` }],
+        };
+      }
+
+      case 'delete_event': {
+        // For Graph API, direct delete_event is also supported (for AppleScript compatibility)
+        const params = PrepareDeleteEventInput.parse(args);
+        await repository.deleteEventAsync(params.event_id);
+        return {
+          content: [{ type: 'text', text: `Successfully deleted event ${params.event_id}` }],
+        };
+      }
+
+      case 'prepare_delete_event': {
+        const params = PrepareDeleteEventInput.parse(args);
+        const event = await repository.getEventAsync(params.event_id);
+        if (event == null) {
+          return { content: [{ type: 'text', text: 'Event not found' }], isError: true };
+        }
+
+        const graphId = repository.getGraphId('event', params.event_id);
+        const graphEvent = graphId != null ? await repository.getClient().getEvent(graphId) : null;
+        const hash = hashEventForApproval({
+          id: params.event_id,
+          subject: graphEvent?.subject ?? null,
+          startDateTime: graphEvent?.start?.dateTime ?? null,
+        });
+
+        const token = tokenManager.generateToken({
+          operation: 'delete_event',
+          targetType: 'event',
+          targetId: params.event_id,
+          targetHash: hash,
+        });
+
+        const result = {
+          token_id: token.tokenId,
+          expires_at: new Date(token.expiresAt).toISOString(),
+          event: transformGraphEventRow(event),
+          action: 'This event will be permanently deleted.',
+        };
+        return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+      }
+
+      case 'confirm_delete_event': {
+        const params = ConfirmDeleteEventInput.parse(args);
+
+        // Re-fetch the event and compute fresh hash for comparison
+        const graphId = repository.getGraphId('event', params.event_id);
+        const graphEvent = graphId != null ? await repository.getClient().getEvent(graphId) : null;
+        const currentHash = hashEventForApproval({
+          id: params.event_id,
+          subject: graphEvent?.subject ?? null,
+          startDateTime: graphEvent?.start?.dateTime ?? null,
+        });
+
+        const validation = tokenManager.consumeToken(params.token_id, 'delete_event', params.event_id);
+        if (!validation.valid) {
+          const errorMessages: Record<string, string> = {
+            NOT_FOUND: 'Token not found or already used',
+            EXPIRED: 'Token has expired. Please call prepare_delete_event again.',
+            OPERATION_MISMATCH: 'Token was not generated for delete_event',
+            TARGET_MISMATCH: 'Token was generated for a different event',
+            ALREADY_CONSUMED: 'Token has already been used',
+          };
+          return {
+            content: [{ type: 'text', text: errorMessages[validation.error ?? ''] ?? 'Invalid token' }],
+            isError: true,
+          };
+        }
+
+        // Check that the event hasn't changed since prepare
+        if (validation.token!.targetHash !== currentHash) {
+          return {
+            content: [{ type: 'text', text: 'Event has changed since prepare was called. Please call prepare_delete_event again.' }],
+            isError: true,
+          };
+        }
+
+        await repository.deleteEventAsync(params.event_id);
+        return {
+          content: [{ type: 'text', text: `Successfully deleted event ${params.event_id}` }],
         };
       }
 
@@ -2014,6 +2891,127 @@ async function handleGraphToolCall(
         return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
       }
 
+      case 'create_contact': {
+        const params = CreateContactGraphInput.parse(args);
+        const numericId = await repository.createContactAsync({
+          ...(params.given_name != null ? { given_name: params.given_name } : {}),
+          ...(params.surname != null ? { surname: params.surname } : {}),
+          ...(params.email != null ? { email: params.email } : {}),
+          ...(params.phone != null ? { phone: params.phone } : {}),
+          ...(params.mobile_phone != null ? { mobile_phone: params.mobile_phone } : {}),
+          ...(params.company != null ? { company: params.company } : {}),
+          ...(params.job_title != null ? { job_title: params.job_title } : {}),
+          ...(params.street_address != null ? { street_address: params.street_address } : {}),
+          ...(params.city != null ? { city: params.city } : {}),
+          ...(params.state != null ? { state: params.state } : {}),
+          ...(params.postal_code != null ? { postal_code: params.postal_code } : {}),
+          ...(params.country != null ? { country: params.country } : {}),
+        });
+        const result = {
+          id: numericId,
+          given_name: params.given_name ?? null,
+          surname: params.surname ?? null,
+          email: params.email ?? null,
+          status: 'created',
+        };
+        return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+      }
+
+      case 'update_contact': {
+        const params = UpdateContactGraphInput.parse(args);
+        const updates: Record<string, unknown> = {};
+        if (params.given_name != null) updates.givenName = params.given_name;
+        if (params.surname != null) updates.surname = params.surname;
+        if (params.email != null) updates.emailAddresses = [{ address: params.email }];
+        if (params.phone != null) updates.businessPhones = [params.phone];
+        if (params.mobile_phone != null) updates.mobilePhone = params.mobile_phone;
+        if (params.company != null) updates.companyName = params.company;
+        if (params.job_title != null) updates.jobTitle = params.job_title;
+        if (params.street_address != null || params.city != null || params.state != null || params.postal_code != null || params.country != null) {
+          const address: Record<string, string> = {};
+          if (params.street_address != null) address.street = params.street_address;
+          if (params.city != null) address.city = params.city;
+          if (params.state != null) address.state = params.state;
+          if (params.postal_code != null) address.postalCode = params.postal_code;
+          if (params.country != null) address.countryOrRegion = params.country;
+          updates.businessAddress = address;
+        }
+        await repository.updateContactAsync(params.contact_id, updates);
+        return {
+          content: [{ type: 'text', text: `Successfully updated contact ${params.contact_id}` }],
+        };
+      }
+
+      case 'prepare_delete_contact': {
+        const params = PrepareDeleteContactInput.parse(args);
+        const contact = await repository.getContactAsync(params.contact_id);
+        if (contact == null) {
+          return { content: [{ type: 'text', text: 'Contact not found' }], isError: true };
+        }
+
+        const graphId = repository.getGraphId('contact', params.contact_id);
+        const graphContact = graphId != null ? await repository.getClient().getContact(graphId) : null;
+        const hash = hashContactForApproval({
+          id: params.contact_id,
+          displayName: graphContact?.displayName ?? null,
+          emailAddress: graphContact?.emailAddresses?.[0]?.address ?? null,
+        });
+
+        const token = tokenManager.generateToken({
+          operation: 'delete_contact',
+          targetType: 'contact',
+          targetId: params.contact_id,
+          targetHash: hash,
+        });
+
+        const result = {
+          token_id: token.tokenId,
+          expires_at: new Date(token.expiresAt).toISOString(),
+          contact: transformContactRow(contact),
+          action: 'This contact will be permanently deleted.',
+        };
+        return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+      }
+
+      case 'confirm_delete_contact': {
+        const params = ConfirmDeleteContactInput.parse(args);
+
+        const graphId = repository.getGraphId('contact', params.contact_id);
+        const graphContact = graphId != null ? await repository.getClient().getContact(graphId) : null;
+        const currentHash = hashContactForApproval({
+          id: params.contact_id,
+          displayName: graphContact?.displayName ?? null,
+          emailAddress: graphContact?.emailAddresses?.[0]?.address ?? null,
+        });
+
+        const validation = tokenManager.consumeToken(params.token_id, 'delete_contact', params.contact_id);
+        if (!validation.valid) {
+          const errorMessages: Record<string, string> = {
+            NOT_FOUND: 'Token not found or already used',
+            EXPIRED: 'Token has expired. Please call prepare_delete_contact again.',
+            OPERATION_MISMATCH: 'Token was not generated for delete_contact',
+            TARGET_MISMATCH: 'Token was generated for a different contact',
+            ALREADY_CONSUMED: 'Token has already been used',
+          };
+          return {
+            content: [{ type: 'text', text: errorMessages[validation.error ?? ''] ?? 'Invalid token' }],
+            isError: true,
+          };
+        }
+
+        if (validation.token!.targetHash !== currentHash) {
+          return {
+            content: [{ type: 'text', text: 'Contact has changed since prepare was called. Please call prepare_delete_contact again.' }],
+            isError: true,
+          };
+        }
+
+        await repository.deleteContactAsync(params.contact_id);
+        return {
+          content: [{ type: 'text', text: `Successfully deleted contact ${params.contact_id}` }],
+        };
+      }
+
       // Task tools
       case 'list_tasks': {
         const params = ListTasksInput.parse(args ?? {});
@@ -2041,6 +3039,152 @@ async function handleGraphToolCall(
         const details = await contentReaders.task.readTaskDetailsAsync(task.dataFilePath);
         const result = { ...transformTaskRow(task), ...details };
         return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+      }
+
+      case 'create_task': {
+        const params = CreateTaskGraphInput.parse(args);
+        const numericId = await repository.createTaskAsync({
+          title: params.title,
+          task_list_id: params.task_list_id,
+          ...(params.body != null ? { body: params.body } : {}),
+          ...(params.body_type != null ? { body_type: params.body_type } : {}),
+          ...(params.due_date != null ? { due_date: params.due_date } : {}),
+          ...(params.importance != null ? { importance: params.importance } : {}),
+          ...(params.reminder_date != null ? { reminder_date: params.reminder_date } : {}),
+        });
+        const result = {
+          id: numericId,
+          title: params.title,
+          task_list_id: params.task_list_id,
+          status: 'created',
+        };
+        return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+      }
+
+      case 'update_task': {
+        const params = UpdateTaskGraphInput.parse(args);
+        const updates: Record<string, unknown> = {};
+        if (params.title != null) updates.title = params.title;
+        if (params.body != null) {
+          updates.body = {
+            contentType: params.body_type ?? 'text',
+            content: params.body,
+          };
+        }
+        if (params.due_date != null) {
+          updates.dueDateTime = {
+            dateTime: params.due_date,
+            timeZone: 'UTC',
+          };
+        }
+        if (params.importance != null) updates.importance = params.importance;
+        if (params.reminder_date != null) {
+          updates.isReminderOn = true;
+          updates.reminderDateTime = {
+            dateTime: params.reminder_date,
+            timeZone: 'UTC',
+          };
+        }
+        if (params.status != null) updates.status = params.status;
+        await repository.updateTaskAsync(params.task_id, updates);
+        return {
+          content: [{ type: 'text', text: `Successfully updated task ${params.task_id}` }],
+        };
+      }
+
+      case 'complete_task': {
+        const params = CompleteTaskGraphInput.parse(args);
+        await repository.completeTaskAsync(params.task_id);
+        return {
+          content: [{ type: 'text', text: `Successfully completed task ${params.task_id}` }],
+        };
+      }
+
+      case 'create_task_list': {
+        const params = CreateTaskListGraphInput.parse(args);
+        const numericId = await repository.createTaskListAsync(params.display_name);
+        const result = {
+          id: numericId,
+          display_name: params.display_name,
+          status: 'created',
+        };
+        return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+      }
+
+      case 'prepare_delete_task': {
+        const params = PrepareDeleteTaskInput.parse(args);
+        const task = await repository.getTaskAsync(params.task_id);
+        if (task == null) {
+          return { content: [{ type: 'text', text: 'Task not found' }], isError: true };
+        }
+
+        const taskInfo = repository.getTaskInfo(params.task_id);
+        const graphTask = taskInfo != null
+          ? await repository.getClient().getTask(taskInfo.taskListId, taskInfo.taskId)
+          : null;
+        const hash = hashTaskForApproval({
+          taskId: taskInfo?.taskId ?? '',
+          title: graphTask?.title ?? null,
+          listId: taskInfo?.taskListId ?? '',
+        });
+
+        const token = tokenManager.generateToken({
+          operation: 'delete_task',
+          targetType: 'task',
+          targetId: params.task_id,
+          targetHash: hash,
+        });
+
+        const result = {
+          token_id: token.tokenId,
+          expires_at: new Date(token.expiresAt).toISOString(),
+          task: transformTaskRow(task),
+          action: 'This task will be permanently deleted.',
+        };
+        return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+      }
+
+      case 'confirm_delete_task': {
+        const params = ConfirmDeleteTaskInput.parse(args);
+
+        // Re-fetch the task and compute fresh hash for comparison
+        const taskInfo = repository.getTaskInfo(params.task_id);
+        const graphTask = taskInfo != null
+          ? await repository.getClient().getTask(taskInfo.taskListId, taskInfo.taskId)
+          : null;
+        const currentHash = hashTaskForApproval({
+          taskId: taskInfo?.taskId ?? '',
+          title: graphTask?.title ?? null,
+          listId: taskInfo?.taskListId ?? '',
+        });
+
+        const validation = tokenManager.consumeToken(params.token_id, 'delete_task', params.task_id);
+        if (!validation.valid) {
+          const errorMessages: Record<string, string> = {
+            NOT_FOUND: 'Token not found or already used',
+            EXPIRED: 'Token has expired. Please call prepare_delete_task again.',
+            OPERATION_MISMATCH: 'Token was not generated for delete_task',
+            TARGET_MISMATCH: 'Token was generated for a different task',
+            ALREADY_CONSUMED: 'Token has already been used',
+          };
+          return {
+            content: [{ type: 'text', text: errorMessages[validation.error ?? ''] ?? 'Invalid token' }],
+            isError: true,
+          };
+        }
+
+        // Check that the task hasn't changed since prepare
+        if (validation.token!.targetHash !== currentHash) {
+          return {
+            content: [{ type: 'text', text: 'Task has changed since prepare was called. Please call prepare_delete_task again.' }],
+            isError: true,
+          };
+        }
+
+        await repository.deleteTaskAsync(params.task_id);
+        return {
+          content: [{ type: 'text', text: `Successfully deleted task ${params.task_id}` }],
+        };
       }
 
       // Note tools - NOT SUPPORTED in Graph API

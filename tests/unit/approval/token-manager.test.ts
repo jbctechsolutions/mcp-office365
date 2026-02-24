@@ -5,7 +5,17 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
-import { hashEmailForApproval, hashFolderForApproval } from '../../../src/approval/hash.js';
+import {
+  hashEmailForApproval,
+  hashFolderForApproval,
+  hashDraftForSend,
+  hashDirectSendForApproval,
+  hashReplyForApproval,
+  hashForwardForApproval,
+  hashEventForApproval,
+  hashContactForApproval,
+  hashTaskForApproval,
+} from '../../../src/approval/hash.js';
 import { ApprovalTokenManager } from '../../../src/approval/token-manager.js';
 
 // =============================================================================
@@ -77,6 +87,200 @@ describe('hashFolderForApproval', () => {
     expect(hash).toMatch(/^[0-9a-f]{16}$/);
     // null name should produce a different hash than a non-null name
     expect(hash).not.toBe(hashFolderForApproval(folder));
+  });
+});
+
+// =============================================================================
+// hashDraftForSend
+// =============================================================================
+
+describe('hashDraftForSend', () => {
+  const draft = { id: 1, subject: 'Draft email', recipientCount: 3 };
+
+  it('returns a consistent hash for the same input', () => {
+    expect(hashDraftForSend(draft)).toBe(hashDraftForSend(draft));
+  });
+
+  it('returns different hashes for different inputs', () => {
+    const other = { id: 2, subject: 'Other draft', recipientCount: 1 };
+    expect(hashDraftForSend(draft)).not.toBe(hashDraftForSend(other));
+  });
+
+  it('returns a 16-character hex string', () => {
+    expect(hashDraftForSend(draft)).toMatch(/^[0-9a-f]{16}$/);
+  });
+
+  it('handles null subject', () => {
+    const nullSubject = { id: 1, subject: null, recipientCount: 3 };
+    const hash = hashDraftForSend(nullSubject);
+    expect(hash).toMatch(/^[0-9a-f]{16}$/);
+    expect(hash).not.toBe(hashDraftForSend(draft));
+  });
+});
+
+// =============================================================================
+// hashDirectSendForApproval
+// =============================================================================
+
+describe('hashDirectSendForApproval', () => {
+  const params = { subject: 'Hello', toCount: 2, ccCount: 1, bccCount: 0 };
+
+  it('returns a consistent hash for the same input', () => {
+    expect(hashDirectSendForApproval(params)).toBe(hashDirectSendForApproval(params));
+  });
+
+  it('returns different hashes for different inputs', () => {
+    const other = { subject: 'Goodbye', toCount: 1, ccCount: 0, bccCount: 3 };
+    expect(hashDirectSendForApproval(params)).not.toBe(hashDirectSendForApproval(other));
+  });
+
+  it('returns a 16-character hex string', () => {
+    expect(hashDirectSendForApproval(params)).toMatch(/^[0-9a-f]{16}$/);
+  });
+});
+
+// =============================================================================
+// hashReplyForApproval
+// =============================================================================
+
+describe('hashReplyForApproval', () => {
+  const params = { originalId: 42, commentLength: 100, replyAll: false };
+
+  it('returns a consistent hash for the same input', () => {
+    expect(hashReplyForApproval(params)).toBe(hashReplyForApproval(params));
+  });
+
+  it('returns different hashes for different inputs', () => {
+    const other = { originalId: 43, commentLength: 200, replyAll: true };
+    expect(hashReplyForApproval(params)).not.toBe(hashReplyForApproval(other));
+  });
+
+  it('returns a 16-character hex string', () => {
+    expect(hashReplyForApproval(params)).toMatch(/^[0-9a-f]{16}$/);
+  });
+
+  it('distinguishes replyAll true from false', () => {
+    const replyAllTrue = { ...params, replyAll: true };
+    expect(hashReplyForApproval(params)).not.toBe(hashReplyForApproval(replyAllTrue));
+  });
+});
+
+// =============================================================================
+// hashForwardForApproval
+// =============================================================================
+
+describe('hashForwardForApproval', () => {
+  const params = { originalId: 42, recipientCount: 3 };
+
+  it('returns a consistent hash for the same input', () => {
+    expect(hashForwardForApproval(params)).toBe(hashForwardForApproval(params));
+  });
+
+  it('returns different hashes for different inputs', () => {
+    const other = { originalId: 43, recipientCount: 1 };
+    expect(hashForwardForApproval(params)).not.toBe(hashForwardForApproval(other));
+  });
+
+  it('returns a 16-character hex string', () => {
+    expect(hashForwardForApproval(params)).toMatch(/^[0-9a-f]{16}$/);
+  });
+});
+
+// =============================================================================
+// hashEventForApproval
+// =============================================================================
+
+describe('hashEventForApproval', () => {
+  const event = { id: 10, subject: 'Meeting', startDateTime: '2026-02-23T10:00:00' };
+
+  it('returns a consistent hash for the same input', () => {
+    expect(hashEventForApproval(event)).toBe(hashEventForApproval(event));
+  });
+
+  it('returns different hashes for different inputs', () => {
+    const other = { id: 11, subject: 'Standup', startDateTime: '2026-02-24T09:00:00' };
+    expect(hashEventForApproval(event)).not.toBe(hashEventForApproval(other));
+  });
+
+  it('returns a 16-character hex string', () => {
+    expect(hashEventForApproval(event)).toMatch(/^[0-9a-f]{16}$/);
+  });
+
+  it('handles null subject', () => {
+    const nullSubject = { id: 10, subject: null, startDateTime: '2026-02-23T10:00:00' };
+    const hash = hashEventForApproval(nullSubject);
+    expect(hash).toMatch(/^[0-9a-f]{16}$/);
+    expect(hash).not.toBe(hashEventForApproval(event));
+  });
+
+  it('handles null startDateTime', () => {
+    const nullStart = { id: 10, subject: 'Meeting', startDateTime: null };
+    const hash = hashEventForApproval(nullStart);
+    expect(hash).toMatch(/^[0-9a-f]{16}$/);
+    expect(hash).not.toBe(hashEventForApproval(event));
+  });
+});
+
+// =============================================================================
+// hashContactForApproval
+// =============================================================================
+
+describe('hashContactForApproval', () => {
+  const contact = { id: 20, displayName: 'John Doe', emailAddress: 'john@example.com' };
+
+  it('returns a consistent hash for the same input', () => {
+    expect(hashContactForApproval(contact)).toBe(hashContactForApproval(contact));
+  });
+
+  it('returns different hashes for different inputs', () => {
+    const other = { id: 21, displayName: 'Jane Smith', emailAddress: 'jane@example.com' };
+    expect(hashContactForApproval(contact)).not.toBe(hashContactForApproval(other));
+  });
+
+  it('returns a 16-character hex string', () => {
+    expect(hashContactForApproval(contact)).toMatch(/^[0-9a-f]{16}$/);
+  });
+
+  it('handles null displayName', () => {
+    const nullName = { id: 20, displayName: null, emailAddress: 'john@example.com' };
+    const hash = hashContactForApproval(nullName);
+    expect(hash).toMatch(/^[0-9a-f]{16}$/);
+    expect(hash).not.toBe(hashContactForApproval(contact));
+  });
+
+  it('handles null emailAddress', () => {
+    const nullEmail = { id: 20, displayName: 'John Doe', emailAddress: null };
+    const hash = hashContactForApproval(nullEmail);
+    expect(hash).toMatch(/^[0-9a-f]{16}$/);
+    expect(hash).not.toBe(hashContactForApproval(contact));
+  });
+});
+
+// =============================================================================
+// hashTaskForApproval
+// =============================================================================
+
+describe('hashTaskForApproval', () => {
+  const task = { taskId: 'task-abc-123', title: 'Buy groceries', listId: 'list-xyz' };
+
+  it('returns a consistent hash for the same input', () => {
+    expect(hashTaskForApproval(task)).toBe(hashTaskForApproval(task));
+  });
+
+  it('returns different hashes for different inputs', () => {
+    const other = { taskId: 'task-def-456', title: 'Clean house', listId: 'list-uvw' };
+    expect(hashTaskForApproval(task)).not.toBe(hashTaskForApproval(other));
+  });
+
+  it('returns a 16-character hex string', () => {
+    expect(hashTaskForApproval(task)).toMatch(/^[0-9a-f]{16}$/);
+  });
+
+  it('handles null title', () => {
+    const nullTitle = { taskId: 'task-abc-123', title: null, listId: 'list-xyz' };
+    const hash = hashTaskForApproval(nullTitle);
+    expect(hash).toMatch(/^[0-9a-f]{16}$/);
+    expect(hash).not.toBe(hashTaskForApproval(task));
   });
 });
 
@@ -349,6 +553,112 @@ describe('ApprovalTokenManager', () => {
       // Mutating the original should not affect the token's metadata
       metadata['key'] = 'changed';
       expect(token.metadata['key']).toBe('value');
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // Send operation types
+  // ---------------------------------------------------------------------------
+
+  describe('send operation types', () => {
+    it('should accept send_draft operation', () => {
+      const token = manager.generateToken({
+        operation: 'send_draft',
+        targetType: 'email',
+        targetId: 1,
+        targetHash: 'hash1',
+      });
+      expect(token.operation).toBe('send_draft');
+
+      const result = manager.validateToken(token.tokenId, 'send_draft', 1);
+      expect(result.valid).toBe(true);
+    });
+
+    it('should accept send_email operation', () => {
+      const token = manager.generateToken({
+        operation: 'send_email',
+        targetType: 'email',
+        targetId: 0,
+        targetHash: 'hash2',
+      });
+      expect(token.operation).toBe('send_email');
+
+      const result = manager.validateToken(token.tokenId, 'send_email', 0);
+      expect(result.valid).toBe(true);
+    });
+
+    it('should accept reply_email operation', () => {
+      const token = manager.generateToken({
+        operation: 'reply_email',
+        targetType: 'email',
+        targetId: 5,
+        targetHash: 'hash3',
+      });
+      expect(token.operation).toBe('reply_email');
+
+      const result = manager.validateToken(token.tokenId, 'reply_email', 5);
+      expect(result.valid).toBe(true);
+    });
+
+    it('should accept forward_email operation', () => {
+      const token = manager.generateToken({
+        operation: 'forward_email',
+        targetType: 'email',
+        targetId: 7,
+        targetHash: 'hash4',
+      });
+      expect(token.operation).toBe('forward_email');
+
+      const result = manager.validateToken(token.tokenId, 'forward_email', 7);
+      expect(result.valid).toBe(true);
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // Delete operation types for events, contacts, tasks
+  // ---------------------------------------------------------------------------
+
+  describe('delete operation types for events, contacts, tasks', () => {
+    it('should accept delete_event operation with event target type', () => {
+      const token = manager.generateToken({
+        operation: 'delete_event',
+        targetType: 'event',
+        targetId: 10,
+        targetHash: 'evhash',
+      });
+      expect(token.operation).toBe('delete_event');
+      expect(token.targetType).toBe('event');
+
+      const result = manager.validateToken(token.tokenId, 'delete_event', 10);
+      expect(result.valid).toBe(true);
+    });
+
+    it('should accept delete_contact operation with contact target type', () => {
+      const token = manager.generateToken({
+        operation: 'delete_contact',
+        targetType: 'contact',
+        targetId: 20,
+        targetHash: 'cthash',
+      });
+      expect(token.operation).toBe('delete_contact');
+      expect(token.targetType).toBe('contact');
+
+      const result = manager.validateToken(token.tokenId, 'delete_contact', 20);
+      expect(result.valid).toBe(true);
+    });
+
+    it('should accept delete_task operation with task target type', () => {
+      const token = manager.generateToken({
+        operation: 'delete_task',
+        targetType: 'task',
+        targetId: 30,
+        targetHash: 'tkhash',
+      });
+      expect(token.operation).toBe('delete_task');
+      expect(token.targetType).toBe('task');
+
+      const result = manager.validateToken(token.tokenId, 'delete_task', 30);
+      expect(result.valid).toBe(true);
     });
   });
 });

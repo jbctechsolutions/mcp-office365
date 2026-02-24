@@ -127,3 +127,33 @@ export {
   RenameFolderInput,
   MoveFolderInput,
 } from './mailbox-organization.js';
+
+// Mail send tools
+export {
+  MailSendTools,
+  createMailSendTools,
+  CreateDraftInput,
+  UpdateDraftInput,
+  ListDraftsInput,
+  PrepareSendDraftInput,
+  ConfirmSendDraftInput,
+  PrepareSendEmailInput,
+  ConfirmSendEmailInput,
+  PrepareReplyEmailInput,
+  ConfirmReplyEmailInput,
+  PrepareForwardEmailInput,
+  ConfirmForwardEmailInput,
+  type IMailSendRepository,
+  type CreateDraftResult,
+  type CreateDraftParams,
+  type UpdateDraftParams,
+  type ListDraftsParams,
+  type PrepareSendDraftParams,
+  type ConfirmSendDraftParams,
+  type PrepareSendEmailParams,
+  type ConfirmSendEmailParams,
+  type PrepareReplyEmailParams,
+  type ConfirmReplyEmailParams,
+  type PrepareForwardEmailParams,
+  type ConfirmForwardEmailParams,
+} from './mail-send.js';
