@@ -106,7 +106,12 @@ npx -y mcp-outlook-mac
 ```
 Set `USE_GRAPH_API=1` in your MCP configuration.
 
-On first run, complete device code authentication. See [Configuration](#configuration) for details.
+**Pre-authenticate (optional):**
+```bash
+npx @jbctechsolutions/mcp-outlook-mac auth
+```
+
+Or just configure the server — it will prompt for authentication on first use.
 
 **For production or work accounts:** See [Custom Azure AD Setup](#custom-azure-ad-setup) below.
 
@@ -468,6 +473,21 @@ If you see an automation permission error:
 Large mailboxes may cause timeout errors. Try reducing the `limit` parameter in your queries.
 
 ### Graph API Backend
+
+#### Pre-authentication
+
+You can authenticate before configuring the MCP server:
+
+```bash
+# Authenticate
+npx @jbctechsolutions/mcp-outlook-mac auth
+
+# Check status
+npx @jbctechsolutions/mcp-outlook-mac auth --status
+
+# Sign out
+npx @jbctechsolutions/mcp-outlook-mac auth --logout
+```
 
 #### Authentication required
 

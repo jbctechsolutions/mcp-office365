@@ -41,10 +41,12 @@ import {
   createGraphRepository,
   createGraphContentReadersWithClient,
   isAuthenticated,
+  getAccessToken,
   GraphMailboxAdapter,
   type GraphRepository,
   type GraphContentReaders,
 } from './graph/index.js';
+import { parseCliCommand, handleAuthCommand, createAuthMutex } from './cli.js';
 import { createMailTools } from './tools/mail.js';
 import { createCalendarTools } from './tools/calendar.js';
 import { createContactsTools } from './tools/contacts.js';
@@ -116,7 +118,6 @@ import type { CreateEventResult } from './tools/index.js';
 import {
   wrapError,
   OutlookNotRunningError,
-  GraphAuthRequiredError,
   GraphError,
 } from './utils/errors.js';
 
@@ -1637,12 +1638,13 @@ export function createServer(): Server {
 
   /**
    * Initializes Graph API backend.
+   * If not authenticated, triggers the device code flow inline.
    */
-  async function initializeGraphBackend(): Promise<void> {
-    // Check if already authenticated
+  const initializeGraphBackend = createAuthMutex(async (): Promise<void> => {
+    // Try to authenticate if needed (triggers device code flow for first-time users)
     const authenticated = await isAuthenticated();
     if (!authenticated) {
-      throw new GraphAuthRequiredError();
+      await getAccessToken();
     }
 
     graphRepository = createGraphRepository();
@@ -1653,7 +1655,7 @@ export function createServer(): Server {
     sendTools = createMailSendTools(graphRepository, tokenManager);
 
     initialized = true;
-  }
+  });
 
   /**
    * Ensures the backend is initialized.
@@ -3418,9 +3420,15 @@ function stripHtml(html: string): string {
 // =============================================================================
 
 async function main(): Promise<void> {
+  // Check for CLI subcommands before starting MCP server
+  const cliCommand = parseCliCommand(process.argv.slice(2));
+  if (cliCommand != null) {
+    const exitCode = await handleAuthCommand(cliCommand.flags);
+    process.exit(exitCode);
+  }
+
   const server = createServer();
   const transport = new StdioServerTransport();
-
   await server.connect(transport);
 }
 
