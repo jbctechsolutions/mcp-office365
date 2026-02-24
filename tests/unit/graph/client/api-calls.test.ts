@@ -141,6 +141,9 @@ const VALID_ENDPOINT_PATTERNS = [
   // Events
   /^\/me\/events$/,
   /^\/me\/events\/[^/]+$/,
+  /^\/me\/events\/[^/]+\/accept$/,
+  /^\/me\/events\/[^/]+\/decline$/,
+  /^\/me\/events\/[^/]+\/tentativelyAccept$/,
   /^\/me\/calendarView$/,
   // Contacts
   /^\/me\/contacts$/,
@@ -700,6 +703,99 @@ describe('Graph API endpoint and method validation', () => {
   });
 
   // =========================================================================
+  // Calendar Write Operations
+  // =========================================================================
+
+  describe('Calendar write operation endpoints and bodies', () => {
+    it('createEvent POSTs to /me/events with event body (no calendarId)', async () => {
+      const event = {
+        subject: 'Team Meeting',
+        start: { dateTime: '2026-02-24T10:00:00', timeZone: 'UTC' },
+        end: { dateTime: '2026-02-24T11:00:00', timeZone: 'UTC' },
+      };
+      setupMock({ id: 'evt-new', subject: 'Team Meeting' });
+
+      await client.createEvent(event);
+
+      expect(apiCalls).toHaveLength(1);
+      expect(apiCalls[0].url).toBe('/me/events');
+      expect(apiCalls[0].method).toBe('post');
+      expect(apiCalls[0].body).toEqual(event);
+    });
+
+    it('createEvent with calendarId POSTs to /me/calendars/{id}/events', async () => {
+      const event = {
+        subject: 'Calendar-specific Event',
+        start: { dateTime: '2026-02-24T10:00:00', timeZone: 'UTC' },
+        end: { dateTime: '2026-02-24T11:00:00', timeZone: 'UTC' },
+      };
+      setupMock({ id: 'evt-new', subject: 'Calendar-specific Event' });
+
+      await client.createEvent(event, 'cal-1');
+
+      expect(apiCalls).toHaveLength(1);
+      expect(apiCalls[0].url).toBe('/me/calendars/cal-1/events');
+      expect(apiCalls[0].method).toBe('post');
+      expect(apiCalls[0].body).toEqual(event);
+    });
+
+    it('updateEvent PATCHes /me/events/{id} with updates', async () => {
+      const updates = { subject: 'Updated Meeting', location: { displayName: 'Room 42' } };
+
+      await client.updateEvent('evt-1', updates);
+
+      expect(apiCalls).toHaveLength(1);
+      expect(apiCalls[0].url).toBe('/me/events/evt-1');
+      expect(apiCalls[0].method).toBe('patch');
+      expect(apiCalls[0].body).toEqual(updates);
+    });
+
+    it('deleteEvent DELETEs /me/events/{id}', async () => {
+      await client.deleteEvent('evt-1');
+
+      expect(apiCalls).toHaveLength(1);
+      expect(apiCalls[0].url).toBe('/me/events/evt-1');
+      expect(apiCalls[0].method).toBe('delete');
+    });
+
+    it('respondToEvent with accept POSTs to /me/events/{id}/accept', async () => {
+      await client.respondToEvent('evt-1', 'accept', true, 'I will attend');
+
+      expect(apiCalls).toHaveLength(1);
+      expect(apiCalls[0].url).toBe('/me/events/evt-1/accept');
+      expect(apiCalls[0].method).toBe('post');
+      expect(apiCalls[0].body).toEqual({ sendResponse: true, comment: 'I will attend' });
+    });
+
+    it('respondToEvent with decline POSTs to /me/events/{id}/decline', async () => {
+      await client.respondToEvent('evt-1', 'decline', true, 'Cannot make it');
+
+      expect(apiCalls).toHaveLength(1);
+      expect(apiCalls[0].url).toBe('/me/events/evt-1/decline');
+      expect(apiCalls[0].method).toBe('post');
+      expect(apiCalls[0].body).toEqual({ sendResponse: true, comment: 'Cannot make it' });
+    });
+
+    it('respondToEvent with tentative POSTs to /me/events/{id}/tentativelyAccept', async () => {
+      await client.respondToEvent('evt-1', 'tentative', false, 'Maybe');
+
+      expect(apiCalls).toHaveLength(1);
+      expect(apiCalls[0].url).toBe('/me/events/evt-1/tentativelyAccept');
+      expect(apiCalls[0].method).toBe('post');
+      expect(apiCalls[0].body).toEqual({ sendResponse: false, comment: 'Maybe' });
+    });
+
+    it('respondToEvent without comment defaults to empty string', async () => {
+      await client.respondToEvent('evt-1', 'accept', true);
+
+      expect(apiCalls).toHaveLength(1);
+      expect(apiCalls[0].url).toBe('/me/events/evt-1/accept');
+      expect(apiCalls[0].method).toBe('post');
+      expect(apiCalls[0].body).toEqual({ sendResponse: true, comment: '' });
+    });
+  });
+
+  // =========================================================================
   // Well-known folder name validation
   // =========================================================================
 
@@ -836,6 +932,18 @@ describe('Graph API endpoint and method validation', () => {
 
       setupMock({ uploadUrl: 'https://upload.example.com/session' });
       await client.createUploadSession('m1', { AttachmentItem: { attachmentType: 'file', name: 'big.zip', size: 5000000 } });
+
+      // Exercise calendar write methods
+      setupMock({ id: 'evt-new', subject: 'New Event' });
+      await client.createEvent({ subject: 'New Event' });
+      await client.createEvent({ subject: 'Cal Event' }, 'cal-1');
+
+      setupMock();
+      await client.updateEvent('evt-1', { subject: 'Updated' });
+      await client.deleteEvent('evt-1');
+      await client.respondToEvent('evt-1', 'accept', true, 'Yes');
+      await client.respondToEvent('evt-1', 'decline', true, 'No');
+      await client.respondToEvent('evt-1', 'tentative', false);
 
       // Verify all captured URLs
       for (const call of apiCalls) {
@@ -1055,6 +1163,63 @@ describe('Graph API endpoint and method validation', () => {
       await client.listMessages('f1');
 
       expect(apiCalls.filter(c => c.method === 'get').length).toBeGreaterThan(0);
+    });
+
+    it('createEvent clears cache', async () => {
+      await client.listCalendars();
+      apiCalls.length = 0;
+
+      setupMock({ id: 'evt-new', subject: 'New Event' });
+      await client.createEvent({ subject: 'New Event' });
+      apiCalls.length = 0;
+
+      setupMock();
+      await client.listCalendars();
+
+      const getCalls = apiCalls.filter(c => c.method === 'get' && c.url === '/me/calendars');
+      expect(getCalls.length).toBeGreaterThan(0);
+    });
+
+    it('updateEvent clears cache', async () => {
+      await client.listCalendars();
+      apiCalls.length = 0;
+
+      await client.updateEvent('evt-1', { subject: 'Updated' });
+      apiCalls.length = 0;
+
+      setupMock();
+      await client.listCalendars();
+
+      const getCalls = apiCalls.filter(c => c.method === 'get' && c.url === '/me/calendars');
+      expect(getCalls.length).toBeGreaterThan(0);
+    });
+
+    it('deleteEvent clears cache', async () => {
+      await client.listCalendars();
+      apiCalls.length = 0;
+
+      await client.deleteEvent('evt-1');
+      apiCalls.length = 0;
+
+      setupMock();
+      await client.listCalendars();
+
+      const getCalls = apiCalls.filter(c => c.method === 'get' && c.url === '/me/calendars');
+      expect(getCalls.length).toBeGreaterThan(0);
+    });
+
+    it('respondToEvent clears cache', async () => {
+      await client.listCalendars();
+      apiCalls.length = 0;
+
+      await client.respondToEvent('evt-1', 'accept', true);
+      apiCalls.length = 0;
+
+      setupMock();
+      await client.listCalendars();
+
+      const getCalls = apiCalls.filter(c => c.method === 'get' && c.url === '/me/calendars');
+      expect(getCalls.length).toBeGreaterThan(0);
     });
   });
 });

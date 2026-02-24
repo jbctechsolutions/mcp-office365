@@ -326,6 +326,74 @@ export class GraphClient {
   }
 
   // ===========================================================================
+  // Calendar Write Operations
+  // ===========================================================================
+
+  /**
+   * Creates a new calendar event.
+   */
+  async createEvent(
+    event: Record<string, unknown>,
+    calendarId?: string
+  ): Promise<MicrosoftGraph.Event> {
+    const client = await this.getClient();
+    const url = calendarId != null
+      ? `/me/calendars/${calendarId}/events`
+      : '/me/events';
+
+    const result = await client
+      .api(url)
+      .post(event) as MicrosoftGraph.Event;
+    this.cache.clear();
+    return result;
+  }
+
+  /**
+   * Updates an existing calendar event.
+   */
+  async updateEvent(eventId: string, updates: Record<string, unknown>): Promise<void> {
+    const client = await this.getClient();
+    await client
+      .api(`/me/events/${eventId}`)
+      .patch(updates);
+    this.cache.clear();
+  }
+
+  /**
+   * Deletes a calendar event.
+   */
+  async deleteEvent(eventId: string): Promise<void> {
+    const client = await this.getClient();
+    await client
+      .api(`/me/events/${eventId}`)
+      .delete();
+    this.cache.clear();
+  }
+
+  /**
+   * Responds to a calendar event invitation.
+   */
+  async respondToEvent(
+    eventId: string,
+    response: 'accept' | 'decline' | 'tentative',
+    sendResponse: boolean,
+    comment?: string
+  ): Promise<void> {
+    const client = await this.getClient();
+    const actionMap: Record<string, string> = {
+      accept: 'accept',
+      decline: 'decline',
+      tentative: 'tentativelyAccept',
+    };
+    const action = actionMap[response];
+
+    await client
+      .api(`/me/events/${eventId}/${action}`)
+      .post({ sendResponse, comment: comment ?? '' });
+    this.cache.clear();
+  }
+
+  // ===========================================================================
   // Contacts
   // ===========================================================================
 
