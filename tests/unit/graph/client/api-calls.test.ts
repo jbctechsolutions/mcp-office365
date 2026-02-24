@@ -796,6 +796,47 @@ describe('Graph API endpoint and method validation', () => {
   });
 
   // =========================================================================
+  // Contact Write Operations
+  // =========================================================================
+
+  describe('Contact write operation endpoints and bodies', () => {
+    it('createContact POSTs to /me/contacts with contact body', async () => {
+      const contact = {
+        givenName: 'John',
+        surname: 'Doe',
+        emailAddresses: [{ address: 'john@example.com', name: 'John Doe' }],
+      };
+      setupMock({ id: 'contact-new', displayName: 'John Doe' });
+
+      await client.createContact(contact);
+
+      expect(apiCalls).toHaveLength(1);
+      expect(apiCalls[0].url).toBe('/me/contacts');
+      expect(apiCalls[0].method).toBe('post');
+      expect(apiCalls[0].body).toEqual(contact);
+    });
+
+    it('updateContact PATCHes /me/contacts/{id} with updates', async () => {
+      const updates = { givenName: 'Jane', jobTitle: 'Manager' };
+
+      await client.updateContact('contact-1', updates);
+
+      expect(apiCalls).toHaveLength(1);
+      expect(apiCalls[0].url).toBe('/me/contacts/contact-1');
+      expect(apiCalls[0].method).toBe('patch');
+      expect(apiCalls[0].body).toEqual(updates);
+    });
+
+    it('deleteContact DELETEs /me/contacts/{id}', async () => {
+      await client.deleteContact('contact-1');
+
+      expect(apiCalls).toHaveLength(1);
+      expect(apiCalls[0].url).toBe('/me/contacts/contact-1');
+      expect(apiCalls[0].method).toBe('delete');
+    });
+  });
+
+  // =========================================================================
   // Well-known folder name validation
   // =========================================================================
 
@@ -944,6 +985,14 @@ describe('Graph API endpoint and method validation', () => {
       await client.respondToEvent('evt-1', 'accept', true, 'Yes');
       await client.respondToEvent('evt-1', 'decline', true, 'No');
       await client.respondToEvent('evt-1', 'tentative', false);
+
+      // Exercise contact write methods
+      setupMock({ id: 'contact-new', displayName: 'John Doe' });
+      await client.createContact({ givenName: 'John', surname: 'Doe' });
+
+      setupMock();
+      await client.updateContact('c-1', { givenName: 'Jane' });
+      await client.deleteContact('c-1');
 
       // Verify all captured URLs
       for (const call of apiCalls) {
@@ -1219,6 +1268,49 @@ describe('Graph API endpoint and method validation', () => {
       await client.listCalendars();
 
       const getCalls = apiCalls.filter(c => c.method === 'get' && c.url === '/me/calendars');
+      expect(getCalls.length).toBeGreaterThan(0);
+    });
+
+    it('createContact clears cache', async () => {
+      await client.listContacts();
+      apiCalls.length = 0;
+
+      setupMock({ id: 'contact-new', displayName: 'John Doe' });
+      await client.createContact({ givenName: 'John', surname: 'Doe' });
+      apiCalls.length = 0;
+
+      setupMock();
+      await client.listContacts();
+
+      const getCalls = apiCalls.filter(c => c.method === 'get' && c.url === '/me/contacts');
+      expect(getCalls.length).toBeGreaterThan(0);
+    });
+
+    it('updateContact clears cache', async () => {
+      await client.listContacts();
+      apiCalls.length = 0;
+
+      await client.updateContact('c-1', { givenName: 'Jane' });
+      apiCalls.length = 0;
+
+      setupMock();
+      await client.listContacts();
+
+      const getCalls = apiCalls.filter(c => c.method === 'get' && c.url === '/me/contacts');
+      expect(getCalls.length).toBeGreaterThan(0);
+    });
+
+    it('deleteContact clears cache', async () => {
+      await client.listContacts();
+      apiCalls.length = 0;
+
+      await client.deleteContact('c-1');
+      apiCalls.length = 0;
+
+      setupMock();
+      await client.listContacts();
+
+      const getCalls = apiCalls.filter(c => c.method === 'get' && c.url === '/me/contacts');
       expect(getCalls.length).toBeGreaterThan(0);
     });
   });

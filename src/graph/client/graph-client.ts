@@ -455,6 +455,44 @@ export class GraphClient {
   }
 
   // ===========================================================================
+  // Contact Write Operations
+  // ===========================================================================
+
+  /**
+   * Creates a new contact.
+   */
+  async createContact(contact: Record<string, unknown>): Promise<MicrosoftGraph.Contact> {
+    const client = await this.getClient();
+    const result = await client
+      .api('/me/contacts')
+      .post(contact) as MicrosoftGraph.Contact;
+    this.cache.clear();
+    return result;
+  }
+
+  /**
+   * Updates an existing contact.
+   */
+  async updateContact(contactId: string, updates: Record<string, unknown>): Promise<void> {
+    const client = await this.getClient();
+    await client
+      .api(`/me/contacts/${contactId}`)
+      .patch(updates);
+    this.cache.clear();
+  }
+
+  /**
+   * Deletes a contact.
+   */
+  async deleteContact(contactId: string): Promise<void> {
+    const client = await this.getClient();
+    await client
+      .api(`/me/contacts/${contactId}`)
+      .delete();
+    this.cache.clear();
+  }
+
+  // ===========================================================================
   // Tasks (Microsoft To Do)
   // ===========================================================================
 
