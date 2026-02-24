@@ -41,6 +41,7 @@ interface IdCache {
   events: Map<number, string>;
   contacts: Map<number, string>;
   tasks: Map<number, { taskListId: string; taskId: string }>;
+  taskLists: Map<number, string>;
   attachments: Map<number, { messageId: string; attachmentId: string }>;
 }
 
@@ -57,6 +58,7 @@ export class GraphRepository implements IRepository {
     events: new Map(),
     contacts: new Map(),
     tasks: new Map(),
+    taskLists: new Map(),
     attachments: new Map(),
   };
 
@@ -464,6 +466,8 @@ export class GraphRepository implements IRepository {
       if (task.id != null && task.taskListId != null) {
         const numericId = hashStringToNumber(task.id);
         this.idCache.tasks.set(numericId, { taskListId: task.taskListId, taskId: task.id });
+        const listNumericId = hashStringToNumber(task.taskListId);
+        this.idCache.taskLists.set(listNumericId, task.taskListId);
       }
     }
 
@@ -481,6 +485,8 @@ export class GraphRepository implements IRepository {
       if (task.id != null && task.taskListId != null) {
         const numericId = hashStringToNumber(task.id);
         this.idCache.tasks.set(numericId, { taskListId: task.taskListId, taskId: task.id });
+        const listNumericId = hashStringToNumber(task.taskListId);
+        this.idCache.taskLists.set(listNumericId, task.taskListId);
       }
     }
 
@@ -1038,6 +1044,199 @@ export class GraphRepository implements IRepository {
     const graphId = this.idCache.events.get(eventId);
     if (graphId == null) throw new Error(`Event ID ${eventId} not found in cache`);
     await this.client.respondToEvent(graphId, response, sendResponse, comment);
+  }
+
+  // ===========================================================================
+  // Contact Write Operations (Async)
+  // ===========================================================================
+
+  /**
+   * Creates a new contact.
+   *
+   * Maps snake_case input fields to Graph API camelCase fields, calls
+   * client.createContact(), caches the resulting ID, and returns a numeric ID.
+   */
+  async createContactAsync(params: {
+    given_name?: string;
+    surname?: string;
+    email?: string;
+    phone?: string;
+    mobile_phone?: string;
+    company?: string;
+    job_title?: string;
+    street_address?: string;
+    city?: string;
+    state?: string;
+    postal_code?: string;
+    country?: string;
+  }): Promise<number> {
+    const graphContact: Record<string, unknown> = {};
+    if (params.given_name != null) graphContact.givenName = params.given_name;
+    if (params.surname != null) graphContact.surname = params.surname;
+    if (params.email != null) graphContact.emailAddresses = [{ address: params.email }];
+    if (params.phone != null) graphContact.businessPhones = [params.phone];
+    if (params.mobile_phone != null) graphContact.mobilePhone = params.mobile_phone;
+    if (params.company != null) graphContact.companyName = params.company;
+    if (params.job_title != null) graphContact.jobTitle = params.job_title;
+
+    // Build address only if any address field is present
+    if (params.street_address != null || params.city != null || params.state != null || params.postal_code != null || params.country != null) {
+      const address: Record<string, string> = {};
+      if (params.street_address != null) address.street = params.street_address;
+      if (params.city != null) address.city = params.city;
+      if (params.state != null) address.state = params.state;
+      if (params.postal_code != null) address.postalCode = params.postal_code;
+      if (params.country != null) address.countryOrRegion = params.country;
+      graphContact.businessAddress = address;
+    }
+
+    const created = await this.client.createContact(graphContact);
+    const graphId = created.id!;
+    const numericId = hashStringToNumber(graphId);
+    this.idCache.contacts.set(numericId, graphId);
+    return numericId;
+  }
+
+  /**
+   * Updates an existing contact.
+   *
+   * Looks up the Graph string ID from idCache.contacts, then calls
+   * client.updateContact(). Throws if the contact is not cached.
+   */
+  async updateContactAsync(contactId: number, updates: Record<string, unknown>): Promise<void> {
+    const graphId = this.idCache.contacts.get(contactId);
+    if (graphId == null) throw new Error(`Contact ID ${contactId} not found in cache`);
+    await this.client.updateContact(graphId, updates);
+  }
+
+  /**
+   * Deletes a contact.
+   *
+   * Looks up the Graph string ID from idCache.contacts, calls
+   * client.deleteContact(), and removes the entry from idCache.
+   * Throws if the contact is not cached.
+   */
+  async deleteContactAsync(contactId: number): Promise<void> {
+    const graphId = this.idCache.contacts.get(contactId);
+    if (graphId == null) throw new Error(`Contact ID ${contactId} not found in cache`);
+    await this.client.deleteContact(graphId);
+    this.idCache.contacts.delete(contactId);
+  }
+
+  // ===========================================================================
+  // Task Write Operations (Async)
+  // ===========================================================================
+
+  /**
+   * Creates a new task in a task list.
+   *
+   * Looks up the Graph task list ID from idCache.taskLists, builds a
+   * Graph API task object from the given params, calls client.createTask(),
+   * caches the resulting ID, and returns a numeric ID.
+   */
+  async createTaskAsync(params: {
+    title: string;
+    task_list_id: number;
+    body?: string;
+    body_type?: 'text' | 'html';
+    due_date?: string;
+    importance?: 'low' | 'normal' | 'high';
+    reminder_date?: string;
+  }): Promise<number> {
+    const graphListId = this.idCache.taskLists.get(params.task_list_id);
+    if (graphListId == null) throw new Error(`Task list ID ${params.task_list_id} not found in cache`);
+
+    const graphTask: Record<string, unknown> = {
+      title: params.title,
+    };
+
+    if (params.body != null) {
+      graphTask.body = {
+        contentType: params.body_type ?? 'text',
+        content: params.body,
+      };
+    }
+
+    if (params.due_date != null) {
+      graphTask.dueDateTime = {
+        dateTime: params.due_date,
+        timeZone: 'UTC',
+      };
+    }
+
+    if (params.importance != null) {
+      graphTask.importance = params.importance;
+    }
+
+    if (params.reminder_date != null) {
+      graphTask.isReminderOn = true;
+      graphTask.reminderDateTime = {
+        dateTime: params.reminder_date,
+        timeZone: 'UTC',
+      };
+    }
+
+    const created = await this.client.createTask(graphListId, graphTask);
+    const graphId = created.id!;
+    const numericId = hashStringToNumber(graphId);
+    this.idCache.tasks.set(numericId, { taskListId: graphListId, taskId: graphId });
+    return numericId;
+  }
+
+  /**
+   * Updates an existing task.
+   *
+   * Looks up the Graph task info from idCache.tasks, then calls
+   * client.updateTask(). Throws if the task is not cached.
+   */
+  async updateTaskAsync(taskId: number, updates: Record<string, unknown>): Promise<void> {
+    const taskInfo = this.idCache.tasks.get(taskId);
+    if (taskInfo == null) throw new Error(`Task ID ${taskId} not found in cache`);
+    await this.client.updateTask(taskInfo.taskListId, taskInfo.taskId, updates);
+  }
+
+  /**
+   * Marks a task as completed.
+   *
+   * Convenience method that calls updateTaskAsync with status: 'completed'
+   * and the current time as completedDateTime.
+   */
+  async completeTaskAsync(taskId: number): Promise<void> {
+    await this.updateTaskAsync(taskId, {
+      status: 'completed',
+      completedDateTime: {
+        dateTime: new Date().toISOString(),
+        timeZone: 'UTC',
+      },
+    });
+  }
+
+  /**
+   * Deletes a task.
+   *
+   * Looks up the Graph task info from idCache.tasks, calls
+   * client.deleteTask(), and removes the entry from idCache.
+   * Throws if the task is not cached.
+   */
+  async deleteTaskAsync(taskId: number): Promise<void> {
+    const taskInfo = this.idCache.tasks.get(taskId);
+    if (taskInfo == null) throw new Error(`Task ID ${taskId} not found in cache`);
+    await this.client.deleteTask(taskInfo.taskListId, taskInfo.taskId);
+    this.idCache.tasks.delete(taskId);
+  }
+
+  /**
+   * Creates a new task list.
+   *
+   * Calls client.createTaskList(), caches the resulting ID in
+   * idCache.taskLists, and returns a numeric ID.
+   */
+  async createTaskListAsync(displayName: string): Promise<number> {
+    const created = await this.client.createTaskList(displayName);
+    const graphId = created.id!;
+    const numericId = hashStringToNumber(graphId);
+    this.idCache.taskLists.set(numericId, graphId);
+    return numericId;
   }
 }
 

@@ -78,7 +78,7 @@ export function resolveFilePath(downloadDir: string, filename: string): string {
   const base = safeName.substring(0, safeName.length - ext.length);
 
   let counter = 1;
-  while (true) {
+  for (;;) { // eslint-disable-line no-constant-condition
     candidate = path.join(downloadDir, `${base}(${counter})${ext}`);
     if (!fs.existsSync(candidate)) {
       return candidate;

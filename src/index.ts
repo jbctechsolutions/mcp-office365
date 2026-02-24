@@ -109,7 +109,7 @@ import {
   PrepareForwardEmailInput,
   ConfirmForwardEmailInput,
 } from './tools/index.js';
-import { ApprovalTokenManager, hashEventForApproval } from './approval/index.js';
+import { ApprovalTokenManager, hashEventForApproval, hashContactForApproval, hashTaskForApproval } from './approval/index.js';
 import type { CreateEventResult } from './tools/index.js';
 import {
   wrapError,
@@ -621,6 +621,74 @@ const TOOLS: Tool[] = [
       required: ['contact_id'],
     },
   },
+  {
+    name: 'create_contact',
+    description: 'Create a new contact in Outlook. All fields are optional but at least one should be provided.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        given_name: { type: 'string', description: 'First name' },
+        surname: { type: 'string', description: 'Last name' },
+        email: { type: 'string', description: 'Email address' },
+        phone: { type: 'string', description: 'Business phone number' },
+        mobile_phone: { type: 'string', description: 'Mobile phone number' },
+        company: { type: 'string', description: 'Company name' },
+        job_title: { type: 'string', description: 'Job title' },
+        street_address: { type: 'string', description: 'Street address' },
+        city: { type: 'string', description: 'City' },
+        state: { type: 'string', description: 'State or province' },
+        postal_code: { type: 'string', description: 'Postal/ZIP code' },
+        country: { type: 'string', description: 'Country or region' },
+      },
+      required: [],
+    },
+  },
+  {
+    name: 'update_contact',
+    description: 'Update an existing contact. Only specified fields will be updated.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        contact_id: { type: 'number', description: 'The contact ID to update' },
+        given_name: { type: 'string', description: 'First name' },
+        surname: { type: 'string', description: 'Last name' },
+        email: { type: 'string', description: 'Email address' },
+        phone: { type: 'string', description: 'Business phone number' },
+        mobile_phone: { type: 'string', description: 'Mobile phone number' },
+        company: { type: 'string', description: 'Company name' },
+        job_title: { type: 'string', description: 'Job title' },
+        street_address: { type: 'string', description: 'Street address' },
+        city: { type: 'string', description: 'City' },
+        state: { type: 'string', description: 'State or province' },
+        postal_code: { type: 'string', description: 'Postal/ZIP code' },
+        country: { type: 'string', description: 'Country or region' },
+      },
+      required: ['contact_id'],
+    },
+  },
+  {
+    name: 'prepare_delete_contact',
+    description: 'Prepare to delete a contact. Returns a preview and approval token. Call confirm_delete_contact to execute.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        contact_id: { type: 'number', description: 'The contact ID to delete' },
+      },
+      required: ['contact_id'],
+    },
+  },
+  {
+    name: 'confirm_delete_contact',
+    description: 'Confirm deletion of a contact using a token from prepare_delete_contact',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        token_id: { type: 'string', description: 'The approval token from prepare_delete_contact' },
+        contact_id: { type: 'number', description: 'The contact ID to delete' },
+      },
+      required: ['token_id', 'contact_id'],
+    },
+  },
   // Task tools
   {
     name: 'list_tasks',
@@ -678,6 +746,86 @@ const TOOLS: Tool[] = [
         },
       },
       required: ['task_id'],
+    },
+  },
+  {
+    name: 'create_task',
+    description: 'Create a new task in a task list',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        title: { type: 'string', description: 'Task title' },
+        task_list_id: { type: 'number', description: 'The task list ID to create the task in' },
+        body: { type: 'string', description: 'Task body/notes' },
+        body_type: { type: 'string', enum: ['text', 'html'], default: 'text', description: 'Body content type' },
+        due_date: { type: 'string', description: 'Due date (ISO 8601 format)' },
+        importance: { type: 'string', enum: ['low', 'normal', 'high'], description: 'Task importance' },
+        reminder_date: { type: 'string', description: 'Reminder date (ISO 8601 format)' },
+      },
+      required: ['title', 'task_list_id'],
+    },
+  },
+  {
+    name: 'update_task',
+    description: 'Update an existing task. Only specified fields will be updated.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        task_id: { type: 'number', description: 'The task ID to update' },
+        title: { type: 'string', description: 'New task title' },
+        body: { type: 'string', description: 'New task body/notes' },
+        body_type: { type: 'string', enum: ['text', 'html'], description: 'Body content type' },
+        due_date: { type: 'string', description: 'New due date (ISO 8601 format)' },
+        importance: { type: 'string', enum: ['low', 'normal', 'high'], description: 'Task importance' },
+        reminder_date: { type: 'string', description: 'Reminder date (ISO 8601 format)' },
+        status: { type: 'string', enum: ['notStarted', 'inProgress', 'completed', 'waitingOnOthers', 'deferred'], description: 'Task status' },
+      },
+      required: ['task_id'],
+    },
+  },
+  {
+    name: 'complete_task',
+    description: 'Mark a task as completed',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        task_id: { type: 'number', description: 'The task ID to complete' },
+      },
+      required: ['task_id'],
+    },
+  },
+  {
+    name: 'create_task_list',
+    description: 'Create a new task list',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        display_name: { type: 'string', description: 'Name for the new task list' },
+      },
+      required: ['display_name'],
+    },
+  },
+  {
+    name: 'prepare_delete_task',
+    description: 'Prepare to delete a task. Returns a preview and approval token. Call confirm_delete_task to execute.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        task_id: { type: 'number', description: 'The task ID to delete' },
+      },
+      required: ['task_id'],
+    },
+  },
+  {
+    name: 'confirm_delete_task',
+    description: 'Confirm deletion of a task using a token from prepare_delete_task',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        token_id: { type: 'string', description: 'The approval token from prepare_delete_task' },
+        task_id: { type: 'number', description: 'The task ID to delete' },
+      },
+      required: ['token_id', 'task_id'],
     },
   },
   // Note tools
@@ -1756,7 +1904,7 @@ async function handleSendToolCall(
     // Two-Phase — Send Email (Direct)
     case 'prepare_send_email': {
       const params = PrepareSendEmailInput.parse(args);
-      const result = await sendTools.prepareSendEmail(params);
+      const result = sendTools.prepareSendEmail(params);
       return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
     }
     case 'confirm_send_email': {
@@ -2302,6 +2450,92 @@ const ConfirmDeleteEventInput = z.strictObject({
 });
 
 // =============================================================================
+// Contact Write — Zod Schemas (Graph API)
+// =============================================================================
+
+const CreateContactGraphInput = z.strictObject({
+  given_name: z.string().optional(),
+  surname: z.string().optional(),
+  email: z.string().email().optional(),
+  phone: z.string().optional(),
+  mobile_phone: z.string().optional(),
+  company: z.string().optional(),
+  job_title: z.string().optional(),
+  street_address: z.string().optional(),
+  city: z.string().optional(),
+  state: z.string().optional(),
+  postal_code: z.string().optional(),
+  country: z.string().optional(),
+});
+
+const UpdateContactGraphInput = z.strictObject({
+  contact_id: z.number().int().positive(),
+  given_name: z.string().optional(),
+  surname: z.string().optional(),
+  email: z.string().email().optional(),
+  phone: z.string().optional(),
+  mobile_phone: z.string().optional(),
+  company: z.string().optional(),
+  job_title: z.string().optional(),
+  street_address: z.string().optional(),
+  city: z.string().optional(),
+  state: z.string().optional(),
+  postal_code: z.string().optional(),
+  country: z.string().optional(),
+});
+
+const PrepareDeleteContactInput = z.strictObject({
+  contact_id: z.number().int().positive(),
+});
+
+const ConfirmDeleteContactInput = z.strictObject({
+  token_id: z.uuid(),
+  contact_id: z.number().int().positive(),
+});
+
+// =============================================================================
+// Task Write — Zod Schemas (Graph API)
+// =============================================================================
+
+const CreateTaskGraphInput = z.strictObject({
+  title: z.string().min(1),
+  task_list_id: z.number().int().positive(),
+  body: z.string().optional(),
+  body_type: z.enum(['text', 'html']).optional(),
+  due_date: z.string().optional(),
+  importance: z.enum(['low', 'normal', 'high']).optional(),
+  reminder_date: z.string().optional(),
+});
+
+const UpdateTaskGraphInput = z.strictObject({
+  task_id: z.number().int().positive(),
+  title: z.string().optional(),
+  body: z.string().optional(),
+  body_type: z.enum(['text', 'html']).optional(),
+  due_date: z.string().optional(),
+  importance: z.enum(['low', 'normal', 'high']).optional(),
+  reminder_date: z.string().optional(),
+  status: z.enum(['notStarted', 'inProgress', 'completed', 'waitingOnOthers', 'deferred']).optional(),
+});
+
+const CompleteTaskGraphInput = z.strictObject({
+  task_id: z.number().int().positive(),
+});
+
+const CreateTaskListGraphInput = z.strictObject({
+  display_name: z.string().min(1),
+});
+
+const PrepareDeleteTaskInput = z.strictObject({
+  task_id: z.number().int().positive(),
+});
+
+const ConfirmDeleteTaskInput = z.strictObject({
+  token_id: z.uuid(),
+  task_id: z.number().int().positive(),
+});
+
+// =============================================================================
 // Graph API Tool Handler
 // =============================================================================
 
@@ -2657,6 +2891,127 @@ async function handleGraphToolCall(
         return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
       }
 
+      case 'create_contact': {
+        const params = CreateContactGraphInput.parse(args);
+        const numericId = await repository.createContactAsync({
+          ...(params.given_name != null ? { given_name: params.given_name } : {}),
+          ...(params.surname != null ? { surname: params.surname } : {}),
+          ...(params.email != null ? { email: params.email } : {}),
+          ...(params.phone != null ? { phone: params.phone } : {}),
+          ...(params.mobile_phone != null ? { mobile_phone: params.mobile_phone } : {}),
+          ...(params.company != null ? { company: params.company } : {}),
+          ...(params.job_title != null ? { job_title: params.job_title } : {}),
+          ...(params.street_address != null ? { street_address: params.street_address } : {}),
+          ...(params.city != null ? { city: params.city } : {}),
+          ...(params.state != null ? { state: params.state } : {}),
+          ...(params.postal_code != null ? { postal_code: params.postal_code } : {}),
+          ...(params.country != null ? { country: params.country } : {}),
+        });
+        const result = {
+          id: numericId,
+          given_name: params.given_name ?? null,
+          surname: params.surname ?? null,
+          email: params.email ?? null,
+          status: 'created',
+        };
+        return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+      }
+
+      case 'update_contact': {
+        const params = UpdateContactGraphInput.parse(args);
+        const updates: Record<string, unknown> = {};
+        if (params.given_name != null) updates.givenName = params.given_name;
+        if (params.surname != null) updates.surname = params.surname;
+        if (params.email != null) updates.emailAddresses = [{ address: params.email }];
+        if (params.phone != null) updates.businessPhones = [params.phone];
+        if (params.mobile_phone != null) updates.mobilePhone = params.mobile_phone;
+        if (params.company != null) updates.companyName = params.company;
+        if (params.job_title != null) updates.jobTitle = params.job_title;
+        if (params.street_address != null || params.city != null || params.state != null || params.postal_code != null || params.country != null) {
+          const address: Record<string, string> = {};
+          if (params.street_address != null) address.street = params.street_address;
+          if (params.city != null) address.city = params.city;
+          if (params.state != null) address.state = params.state;
+          if (params.postal_code != null) address.postalCode = params.postal_code;
+          if (params.country != null) address.countryOrRegion = params.country;
+          updates.businessAddress = address;
+        }
+        await repository.updateContactAsync(params.contact_id, updates);
+        return {
+          content: [{ type: 'text', text: `Successfully updated contact ${params.contact_id}` }],
+        };
+      }
+
+      case 'prepare_delete_contact': {
+        const params = PrepareDeleteContactInput.parse(args);
+        const contact = await repository.getContactAsync(params.contact_id);
+        if (contact == null) {
+          return { content: [{ type: 'text', text: 'Contact not found' }], isError: true };
+        }
+
+        const graphId = repository.getGraphId('contact', params.contact_id);
+        const graphContact = graphId != null ? await repository.getClient().getContact(graphId) : null;
+        const hash = hashContactForApproval({
+          id: params.contact_id,
+          displayName: graphContact?.displayName ?? null,
+          emailAddress: graphContact?.emailAddresses?.[0]?.address ?? null,
+        });
+
+        const token = tokenManager.generateToken({
+          operation: 'delete_contact',
+          targetType: 'contact',
+          targetId: params.contact_id,
+          targetHash: hash,
+        });
+
+        const result = {
+          token_id: token.tokenId,
+          expires_at: new Date(token.expiresAt).toISOString(),
+          contact: transformContactRow(contact),
+          action: 'This contact will be permanently deleted.',
+        };
+        return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+      }
+
+      case 'confirm_delete_contact': {
+        const params = ConfirmDeleteContactInput.parse(args);
+
+        const graphId = repository.getGraphId('contact', params.contact_id);
+        const graphContact = graphId != null ? await repository.getClient().getContact(graphId) : null;
+        const currentHash = hashContactForApproval({
+          id: params.contact_id,
+          displayName: graphContact?.displayName ?? null,
+          emailAddress: graphContact?.emailAddresses?.[0]?.address ?? null,
+        });
+
+        const validation = tokenManager.consumeToken(params.token_id, 'delete_contact', params.contact_id);
+        if (!validation.valid) {
+          const errorMessages: Record<string, string> = {
+            NOT_FOUND: 'Token not found or already used',
+            EXPIRED: 'Token has expired. Please call prepare_delete_contact again.',
+            OPERATION_MISMATCH: 'Token was not generated for delete_contact',
+            TARGET_MISMATCH: 'Token was generated for a different contact',
+            ALREADY_CONSUMED: 'Token has already been used',
+          };
+          return {
+            content: [{ type: 'text', text: errorMessages[validation.error ?? ''] ?? 'Invalid token' }],
+            isError: true,
+          };
+        }
+
+        if (validation.token!.targetHash !== currentHash) {
+          return {
+            content: [{ type: 'text', text: 'Contact has changed since prepare was called. Please call prepare_delete_contact again.' }],
+            isError: true,
+          };
+        }
+
+        await repository.deleteContactAsync(params.contact_id);
+        return {
+          content: [{ type: 'text', text: `Successfully deleted contact ${params.contact_id}` }],
+        };
+      }
+
       // Task tools
       case 'list_tasks': {
         const params = ListTasksInput.parse(args ?? {});
@@ -2684,6 +3039,152 @@ async function handleGraphToolCall(
         const details = await contentReaders.task.readTaskDetailsAsync(task.dataFilePath);
         const result = { ...transformTaskRow(task), ...details };
         return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+      }
+
+      case 'create_task': {
+        const params = CreateTaskGraphInput.parse(args);
+        const numericId = await repository.createTaskAsync({
+          title: params.title,
+          task_list_id: params.task_list_id,
+          ...(params.body != null ? { body: params.body } : {}),
+          ...(params.body_type != null ? { body_type: params.body_type } : {}),
+          ...(params.due_date != null ? { due_date: params.due_date } : {}),
+          ...(params.importance != null ? { importance: params.importance } : {}),
+          ...(params.reminder_date != null ? { reminder_date: params.reminder_date } : {}),
+        });
+        const result = {
+          id: numericId,
+          title: params.title,
+          task_list_id: params.task_list_id,
+          status: 'created',
+        };
+        return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+      }
+
+      case 'update_task': {
+        const params = UpdateTaskGraphInput.parse(args);
+        const updates: Record<string, unknown> = {};
+        if (params.title != null) updates.title = params.title;
+        if (params.body != null) {
+          updates.body = {
+            contentType: params.body_type ?? 'text',
+            content: params.body,
+          };
+        }
+        if (params.due_date != null) {
+          updates.dueDateTime = {
+            dateTime: params.due_date,
+            timeZone: 'UTC',
+          };
+        }
+        if (params.importance != null) updates.importance = params.importance;
+        if (params.reminder_date != null) {
+          updates.isReminderOn = true;
+          updates.reminderDateTime = {
+            dateTime: params.reminder_date,
+            timeZone: 'UTC',
+          };
+        }
+        if (params.status != null) updates.status = params.status;
+        await repository.updateTaskAsync(params.task_id, updates);
+        return {
+          content: [{ type: 'text', text: `Successfully updated task ${params.task_id}` }],
+        };
+      }
+
+      case 'complete_task': {
+        const params = CompleteTaskGraphInput.parse(args);
+        await repository.completeTaskAsync(params.task_id);
+        return {
+          content: [{ type: 'text', text: `Successfully completed task ${params.task_id}` }],
+        };
+      }
+
+      case 'create_task_list': {
+        const params = CreateTaskListGraphInput.parse(args);
+        const numericId = await repository.createTaskListAsync(params.display_name);
+        const result = {
+          id: numericId,
+          display_name: params.display_name,
+          status: 'created',
+        };
+        return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+      }
+
+      case 'prepare_delete_task': {
+        const params = PrepareDeleteTaskInput.parse(args);
+        const task = await repository.getTaskAsync(params.task_id);
+        if (task == null) {
+          return { content: [{ type: 'text', text: 'Task not found' }], isError: true };
+        }
+
+        const taskInfo = repository.getTaskInfo(params.task_id);
+        const graphTask = taskInfo != null
+          ? await repository.getClient().getTask(taskInfo.taskListId, taskInfo.taskId)
+          : null;
+        const hash = hashTaskForApproval({
+          taskId: taskInfo?.taskId ?? '',
+          title: graphTask?.title ?? null,
+          listId: taskInfo?.taskListId ?? '',
+        });
+
+        const token = tokenManager.generateToken({
+          operation: 'delete_task',
+          targetType: 'task',
+          targetId: params.task_id,
+          targetHash: hash,
+        });
+
+        const result = {
+          token_id: token.tokenId,
+          expires_at: new Date(token.expiresAt).toISOString(),
+          task: transformTaskRow(task),
+          action: 'This task will be permanently deleted.',
+        };
+        return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+      }
+
+      case 'confirm_delete_task': {
+        const params = ConfirmDeleteTaskInput.parse(args);
+
+        // Re-fetch the task and compute fresh hash for comparison
+        const taskInfo = repository.getTaskInfo(params.task_id);
+        const graphTask = taskInfo != null
+          ? await repository.getClient().getTask(taskInfo.taskListId, taskInfo.taskId)
+          : null;
+        const currentHash = hashTaskForApproval({
+          taskId: taskInfo?.taskId ?? '',
+          title: graphTask?.title ?? null,
+          listId: taskInfo?.taskListId ?? '',
+        });
+
+        const validation = tokenManager.consumeToken(params.token_id, 'delete_task', params.task_id);
+        if (!validation.valid) {
+          const errorMessages: Record<string, string> = {
+            NOT_FOUND: 'Token not found or already used',
+            EXPIRED: 'Token has expired. Please call prepare_delete_task again.',
+            OPERATION_MISMATCH: 'Token was not generated for delete_task',
+            TARGET_MISMATCH: 'Token was generated for a different task',
+            ALREADY_CONSUMED: 'Token has already been used',
+          };
+          return {
+            content: [{ type: 'text', text: errorMessages[validation.error ?? ''] ?? 'Invalid token' }],
+            isError: true,
+          };
+        }
+
+        // Check that the task hasn't changed since prepare
+        if (validation.token!.targetHash !== currentHash) {
+          return {
+            content: [{ type: 'text', text: 'Task has changed since prepare was called. Please call prepare_delete_task again.' }],
+            isError: true,
+          };
+        }
+
+        await repository.deleteTaskAsync(params.task_id);
+        return {
+          content: [{ type: 'text', text: `Successfully deleted task ${params.task_id}` }],
+        };
       }
 
       // Note tools - NOT SUPPORTED in Graph API

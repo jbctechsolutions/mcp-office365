@@ -901,6 +901,64 @@ export class GraphClient {
 
     return matched.slice(0, limit);
   }
+
+  // ===========================================================================
+  // Task Write Operations
+  // ===========================================================================
+
+  /**
+   * Creates a new task in a task list.
+   */
+  async createTask(
+    taskListId: string,
+    task: Record<string, unknown>
+  ): Promise<MicrosoftGraph.TodoTask> {
+    const client = await this.getClient();
+    const result = await client
+      .api(`/me/todo/lists/${taskListId}/tasks`)
+      .post(task) as MicrosoftGraph.TodoTask;
+    this.cache.clear();
+    return result;
+  }
+
+  /**
+   * Updates an existing task.
+   */
+  async updateTask(
+    taskListId: string,
+    taskId: string,
+    updates: Record<string, unknown>
+  ): Promise<MicrosoftGraph.TodoTask> {
+    const client = await this.getClient();
+    const result = await client
+      .api(`/me/todo/lists/${taskListId}/tasks/${taskId}`)
+      .patch(updates) as MicrosoftGraph.TodoTask;
+    this.cache.clear();
+    return result;
+  }
+
+  /**
+   * Deletes a task.
+   */
+  async deleteTask(taskListId: string, taskId: string): Promise<void> {
+    const client = await this.getClient();
+    await client
+      .api(`/me/todo/lists/${taskListId}/tasks/${taskId}`)
+      .delete();
+    this.cache.clear();
+  }
+
+  /**
+   * Creates a new task list.
+   */
+  async createTaskList(displayName: string): Promise<MicrosoftGraph.TodoTaskList> {
+    const client = await this.getClient();
+    const result = await client
+      .api('/me/todo/lists')
+      .post({ displayName }) as MicrosoftGraph.TodoTaskList;
+    this.cache.clear();
+    return result;
+  }
 }
 
 /**

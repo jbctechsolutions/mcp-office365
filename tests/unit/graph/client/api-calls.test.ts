@@ -837,6 +837,57 @@ describe('Graph API endpoint and method validation', () => {
   });
 
   // =========================================================================
+  // Task Write Operations
+  // =========================================================================
+
+  describe('Task write operation endpoints and bodies', () => {
+    it('createTask POSTs to /me/todo/lists/{listId}/tasks', async () => {
+      const task = { title: 'Buy groceries', importance: 'high' };
+      setupMock({ id: 'task-new', title: 'Buy groceries' });
+
+      await client.createTask('list-1', task);
+
+      expect(apiCalls).toHaveLength(1);
+      expect(apiCalls[0].url).toBe('/me/todo/lists/list-1/tasks');
+      expect(apiCalls[0].method).toBe('post');
+      expect(apiCalls[0].body).toEqual(task);
+    });
+
+    it('updateTask PATCHes /me/todo/lists/{listId}/tasks/{taskId}', async () => {
+      const updates = { title: 'Updated title' };
+      setupMock({ id: 'task-1', title: 'Updated title' });
+
+      await client.updateTask('list-1', 'task-1', updates);
+
+      expect(apiCalls).toHaveLength(1);
+      expect(apiCalls[0].url).toBe('/me/todo/lists/list-1/tasks/task-1');
+      expect(apiCalls[0].method).toBe('patch');
+      expect(apiCalls[0].body).toEqual(updates);
+    });
+
+    it('deleteTask DELETEs /me/todo/lists/{listId}/tasks/{taskId}', async () => {
+      setupMock(undefined);
+
+      await client.deleteTask('list-1', 'task-1');
+
+      expect(apiCalls).toHaveLength(1);
+      expect(apiCalls[0].url).toBe('/me/todo/lists/list-1/tasks/task-1');
+      expect(apiCalls[0].method).toBe('delete');
+    });
+
+    it('createTaskList POSTs to /me/todo/lists', async () => {
+      setupMock({ id: 'list-new', displayName: 'Shopping' });
+
+      await client.createTaskList('Shopping');
+
+      expect(apiCalls).toHaveLength(1);
+      expect(apiCalls[0].url).toBe('/me/todo/lists');
+      expect(apiCalls[0].method).toBe('post');
+      expect(apiCalls[0].body).toEqual({ displayName: 'Shopping' });
+    });
+  });
+
+  // =========================================================================
   // Well-known folder name validation
   // =========================================================================
 
@@ -993,6 +1044,19 @@ describe('Graph API endpoint and method validation', () => {
       setupMock();
       await client.updateContact('c-1', { givenName: 'Jane' });
       await client.deleteContact('c-1');
+
+      // Exercise task write methods
+      setupMock({ id: 'task-new', title: 'Buy groceries' });
+      await client.createTask('list-1', { title: 'Buy groceries' });
+
+      setupMock({ id: 'task-1', title: 'Updated' });
+      await client.updateTask('list-1', 'task-1', { title: 'Updated' });
+
+      setupMock();
+      await client.deleteTask('list-1', 'task-1');
+
+      setupMock({ id: 'list-new', displayName: 'Shopping' });
+      await client.createTaskList('Shopping');
 
       // Verify all captured URLs
       for (const call of apiCalls) {
@@ -1311,6 +1375,65 @@ describe('Graph API endpoint and method validation', () => {
       await client.listContacts();
 
       const getCalls = apiCalls.filter(c => c.method === 'get' && c.url === '/me/contacts');
+      expect(getCalls.length).toBeGreaterThan(0);
+    });
+
+    it('createTask clears cache', async () => {
+      await client.listTaskLists();
+      apiCalls.length = 0;
+
+      setupMock({ id: 'task-new', title: 'Test' });
+      await client.createTask('list-1', { title: 'Test' });
+      apiCalls.length = 0;
+
+      setupMock();
+      await client.listTaskLists();
+
+      const getCalls = apiCalls.filter(c => c.method === 'get' && c.url === '/me/todo/lists');
+      expect(getCalls.length).toBeGreaterThan(0);
+    });
+
+    it('updateTask clears cache', async () => {
+      await client.listTaskLists();
+      apiCalls.length = 0;
+
+      setupMock({ id: 'task-1', title: 'Updated' });
+      await client.updateTask('list-1', 'task-1', { title: 'Updated' });
+      apiCalls.length = 0;
+
+      setupMock();
+      await client.listTaskLists();
+
+      const getCalls = apiCalls.filter(c => c.method === 'get' && c.url === '/me/todo/lists');
+      expect(getCalls.length).toBeGreaterThan(0);
+    });
+
+    it('deleteTask clears cache', async () => {
+      await client.listTaskLists();
+      apiCalls.length = 0;
+
+      await client.deleteTask('list-1', 'task-1');
+      apiCalls.length = 0;
+
+      setupMock();
+      await client.listTaskLists();
+
+      const getCalls = apiCalls.filter(c => c.method === 'get' && c.url === '/me/todo/lists');
+      expect(getCalls.length).toBeGreaterThan(0);
+    });
+
+    it('createTaskList clears cache', async () => {
+      await client.listTaskLists();
+      apiCalls.length = 0;
+
+      setupMock({ id: 'list-new', displayName: 'New List' });
+      await client.createTaskList('New List');
+      apiCalls.length = 0;
+
+      setupMock();
+      await client.listTaskLists();
+
+      const getCalls = apiCalls.filter(c => c.method === 'get' && c.url === '/me/todo/lists');
       expect(getCalls.length).toBeGreaterThan(0);
     });
   });

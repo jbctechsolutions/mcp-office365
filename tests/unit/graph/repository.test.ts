@@ -50,6 +50,15 @@ vi.mock('../../../src/graph/client/index.js', () => ({
       sendMail: vi.fn(),
       replyMessage: vi.fn(),
       forwardMessage: vi.fn(),
+      // Contact write operations
+      createContact: vi.fn(),
+      updateContact: vi.fn(),
+      deleteContact: vi.fn(),
+      // Task write operations
+      createTask: vi.fn(),
+      updateTask: vi.fn(),
+      deleteTask: vi.fn(),
+      createTaskList: vi.fn(),
     };
   }),
 }));
@@ -1117,6 +1126,346 @@ describe('graph/repository', () => {
         await expect(
           repository.forwardMessageAsync(99999, ['a@b.com'])
         ).rejects.toThrow('Message ID 99999 not found in cache');
+      });
+    });
+  });
+
+  describe('Contact Write Operations (Async)', () => {
+    describe('createContactAsync', () => {
+      it('maps fields correctly and calls client.createContact', async () => {
+        mockClient.createContact.mockResolvedValue({
+          id: 'contact-new-1',
+          displayName: 'John Doe',
+        });
+
+        const numericId = await repository.createContactAsync({
+          given_name: 'John',
+          surname: 'Doe',
+          email: 'john@example.com',
+          phone: '+1234567890',
+          mobile_phone: '+0987654321',
+          company: 'Acme Inc',
+          job_title: 'Engineer',
+          street_address: '123 Main St',
+          city: 'Springfield',
+          state: 'IL',
+          postal_code: '62704',
+          country: 'US',
+        });
+
+        expect(mockClient.createContact).toHaveBeenCalledWith({
+          givenName: 'John',
+          surname: 'Doe',
+          emailAddresses: [{ address: 'john@example.com' }],
+          businessPhones: ['+1234567890'],
+          mobilePhone: '+0987654321',
+          companyName: 'Acme Inc',
+          jobTitle: 'Engineer',
+          businessAddress: {
+            street: '123 Main St',
+            city: 'Springfield',
+            state: 'IL',
+            postalCode: '62704',
+            countryOrRegion: 'US',
+          },
+        });
+
+        expect(numericId).toBe(hashStringToNumber('contact-new-1'));
+      });
+
+      it('adds result to idCache', async () => {
+        mockClient.createContact.mockResolvedValue({
+          id: 'contact-new-2',
+          displayName: 'Jane',
+        });
+
+        const numericId = await repository.createContactAsync({
+          given_name: 'Jane',
+        });
+
+        const graphId = repository.getGraphId('contact', numericId);
+        expect(graphId).toBe('contact-new-2');
+      });
+
+      it('handles minimal fields (only given_name)', async () => {
+        mockClient.createContact.mockResolvedValue({
+          id: 'contact-min',
+          displayName: 'Min',
+        });
+
+        await repository.createContactAsync({ given_name: 'Min' });
+
+        expect(mockClient.createContact).toHaveBeenCalledWith({
+          givenName: 'Min',
+        });
+      });
+
+      it('does not include businessAddress when no address fields provided', async () => {
+        mockClient.createContact.mockResolvedValue({
+          id: 'contact-no-addr',
+          displayName: 'No Address',
+        });
+
+        await repository.createContactAsync({
+          given_name: 'No',
+          surname: 'Address',
+        });
+
+        const callArgs = mockClient.createContact.mock.calls[0][0];
+        expect(callArgs).not.toHaveProperty('businessAddress');
+      });
+    });
+
+    describe('updateContactAsync', () => {
+      it('looks up graph ID and calls client.updateContact', async () => {
+        // Populate contact cache
+        mockClient.listContacts.mockResolvedValue([
+          { id: 'contact-1', displayName: 'Existing Contact' },
+        ]);
+        await repository.listContactsAsync(50, 0);
+
+        mockClient.updateContact.mockResolvedValue(undefined);
+
+        await repository.updateContactAsync(hashStringToNumber('contact-1'), {
+          givenName: 'Updated',
+        });
+
+        expect(mockClient.updateContact).toHaveBeenCalledWith('contact-1', {
+          givenName: 'Updated',
+        });
+      });
+
+      it('throws if contact not in cache', async () => {
+        await expect(
+          repository.updateContactAsync(99999, { givenName: 'Nope' })
+        ).rejects.toThrow('Contact ID 99999 not found in cache');
+      });
+    });
+
+    describe('deleteContactAsync', () => {
+      it('calls client.deleteContact and removes from idCache', async () => {
+        // Populate contact cache
+        mockClient.listContacts.mockResolvedValue([
+          { id: 'contact-del', displayName: 'To Delete' },
+        ]);
+        await repository.listContactsAsync(50, 0);
+
+        mockClient.deleteContact.mockResolvedValue(undefined);
+
+        const numericId = hashStringToNumber('contact-del');
+        await repository.deleteContactAsync(numericId);
+
+        expect(mockClient.deleteContact).toHaveBeenCalledWith('contact-del');
+
+        // Verify it was removed from cache
+        const graphId = repository.getGraphId('contact', numericId);
+        expect(graphId).toBeUndefined();
+      });
+
+      it('throws if contact not in cache', async () => {
+        await expect(
+          repository.deleteContactAsync(99999)
+        ).rejects.toThrow('Contact ID 99999 not found in cache');
+      });
+    });
+  });
+
+  describe('Task Write Operations (Async)', () => {
+    describe('taskLists cache population', () => {
+      it('populates taskLists cache in listTasksAsync', async () => {
+        mockClient.listAllTasks.mockResolvedValue([
+          { id: 'task-1', taskListId: 'list-1', title: 'Task 1' },
+          { id: 'task-2', taskListId: 'list-2', title: 'Task 2' },
+        ]);
+
+        await repository.listTasksAsync(50, 0);
+
+        // Verify taskLists cache was populated
+        const idCache = (repository as any).idCache;
+        expect(idCache.taskLists.get(hashStringToNumber('list-1'))).toBe('list-1');
+        expect(idCache.taskLists.get(hashStringToNumber('list-2'))).toBe('list-2');
+      });
+
+      it('populates taskLists cache in listIncompleteTasksAsync', async () => {
+        mockClient.listAllTasks.mockResolvedValue([
+          { id: 'task-3', taskListId: 'list-3', title: 'Task 3' },
+        ]);
+
+        await repository.listIncompleteTasksAsync(50, 0);
+
+        const idCache = (repository as any).idCache;
+        expect(idCache.taskLists.get(hashStringToNumber('list-3'))).toBe('list-3');
+      });
+    });
+
+    describe('createTaskAsync', () => {
+      it('creates a task with all fields and caches the result', async () => {
+        // Populate taskLists cache
+        mockClient.listAllTasks.mockResolvedValue([
+          { id: 'task-existing', taskListId: 'list-1', title: 'Existing' },
+        ]);
+        await repository.listTasksAsync(50, 0);
+
+        mockClient.createTask.mockResolvedValue({
+          id: 'task-new-1',
+          title: 'New Task',
+        });
+
+        const listNumericId = hashStringToNumber('list-1');
+        const numericId = await repository.createTaskAsync({
+          title: 'New Task',
+          task_list_id: listNumericId,
+          body: 'Some notes',
+          body_type: 'text',
+          due_date: '2026-03-01T00:00:00Z',
+          importance: 'high',
+          reminder_date: '2026-02-28T09:00:00Z',
+        });
+
+        expect(mockClient.createTask).toHaveBeenCalledWith('list-1', {
+          title: 'New Task',
+          body: { contentType: 'text', content: 'Some notes' },
+          dueDateTime: { dateTime: '2026-03-01T00:00:00Z', timeZone: 'UTC' },
+          importance: 'high',
+          isReminderOn: true,
+          reminderDateTime: { dateTime: '2026-02-28T09:00:00Z', timeZone: 'UTC' },
+        });
+
+        expect(numericId).toBe(hashStringToNumber('task-new-1'));
+
+        // Verify cached in tasks
+        const taskInfo = repository.getTaskInfo(numericId);
+        expect(taskInfo).toEqual({ taskListId: 'list-1', taskId: 'task-new-1' });
+      });
+
+      it('creates a task with only required fields', async () => {
+        mockClient.listAllTasks.mockResolvedValue([
+          { id: 'task-existing', taskListId: 'list-1', title: 'Existing' },
+        ]);
+        await repository.listTasksAsync(50, 0);
+
+        mockClient.createTask.mockResolvedValue({
+          id: 'task-min',
+          title: 'Minimal Task',
+        });
+
+        const listNumericId = hashStringToNumber('list-1');
+        await repository.createTaskAsync({
+          title: 'Minimal Task',
+          task_list_id: listNumericId,
+        });
+
+        expect(mockClient.createTask).toHaveBeenCalledWith('list-1', {
+          title: 'Minimal Task',
+        });
+      });
+
+      it('throws when task list ID not in cache', async () => {
+        await expect(
+          repository.createTaskAsync({
+            title: 'Test',
+            task_list_id: 99999,
+          })
+        ).rejects.toThrow('Task list ID 99999 not found in cache');
+      });
+    });
+
+    describe('updateTaskAsync', () => {
+      it('looks up task info and calls client.updateTask', async () => {
+        // Populate task cache
+        mockClient.listAllTasks.mockResolvedValue([
+          { id: 'task-1', taskListId: 'list-1', title: 'Old Title' },
+        ]);
+        await repository.listTasksAsync(50, 0);
+
+        mockClient.updateTask.mockResolvedValue(undefined);
+
+        await repository.updateTaskAsync(hashStringToNumber('task-1'), {
+          title: 'New Title',
+        });
+
+        expect(mockClient.updateTask).toHaveBeenCalledWith('list-1', 'task-1', {
+          title: 'New Title',
+        });
+      });
+
+      it('throws if task not in cache', async () => {
+        await expect(
+          repository.updateTaskAsync(99999, { title: 'Nope' })
+        ).rejects.toThrow('Task ID 99999 not found in cache');
+      });
+    });
+
+    describe('completeTaskAsync', () => {
+      it('calls updateTaskAsync with completed status', async () => {
+        // Populate task cache
+        mockClient.listAllTasks.mockResolvedValue([
+          { id: 'task-1', taskListId: 'list-1', title: 'To Complete' },
+        ]);
+        await repository.listTasksAsync(50, 0);
+
+        mockClient.updateTask.mockResolvedValue(undefined);
+
+        await repository.completeTaskAsync(hashStringToNumber('task-1'));
+
+        expect(mockClient.updateTask).toHaveBeenCalledWith('list-1', 'task-1', {
+          status: 'completed',
+          completedDateTime: {
+            dateTime: expect.any(String),
+            timeZone: 'UTC',
+          },
+        });
+      });
+
+      it('throws if task not in cache', async () => {
+        await expect(
+          repository.completeTaskAsync(99999)
+        ).rejects.toThrow('Task ID 99999 not found in cache');
+      });
+    });
+
+    describe('deleteTaskAsync', () => {
+      it('calls client.deleteTask and removes from idCache', async () => {
+        // Populate task cache
+        mockClient.listAllTasks.mockResolvedValue([
+          { id: 'task-del', taskListId: 'list-1', title: 'To Delete' },
+        ]);
+        await repository.listTasksAsync(50, 0);
+
+        mockClient.deleteTask.mockResolvedValue(undefined);
+
+        const numericId = hashStringToNumber('task-del');
+        await repository.deleteTaskAsync(numericId);
+
+        expect(mockClient.deleteTask).toHaveBeenCalledWith('list-1', 'task-del');
+
+        // Verify it was removed from cache
+        const taskInfo = repository.getTaskInfo(numericId);
+        expect(taskInfo).toBeUndefined();
+      });
+
+      it('throws if task not in cache', async () => {
+        await expect(
+          repository.deleteTaskAsync(99999)
+        ).rejects.toThrow('Task ID 99999 not found in cache');
+      });
+    });
+
+    describe('createTaskListAsync', () => {
+      it('creates task list and caches the result', async () => {
+        mockClient.createTaskList.mockResolvedValue({
+          id: 'new-list-1',
+          displayName: 'My New List',
+        });
+
+        const numericId = await repository.createTaskListAsync('My New List');
+
+        expect(mockClient.createTaskList).toHaveBeenCalledWith('My New List');
+        expect(numericId).toBe(hashStringToNumber('new-list-1'));
+
+        // Verify it was cached in taskLists
+        const idCache = (repository as any).idCache;
+        expect(idCache.taskLists.get(numericId)).toBe('new-list-1');
       });
     });
   });

@@ -333,7 +333,7 @@ export class MailSendTools {
     };
   }
 
-  async prepareSendEmail(params: PrepareSendEmailParams): Promise<{
+  prepareSendEmail(params: PrepareSendEmailParams): {
     token_id: string;
     expires_at: string;
     preview: {
@@ -343,7 +343,7 @@ export class MailSendTools {
       bcc?: string[];
     };
     action: string;
-  }> {
+  } {
     const hash = hashDirectSendForApproval({
       subject: params.subject,
       toCount: params.to.length,
