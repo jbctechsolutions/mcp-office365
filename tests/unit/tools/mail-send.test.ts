@@ -25,6 +25,21 @@ vi.mock('../../../src/graph/attachments.js', () => ({
 
 import { uploadAttachment } from '../../../src/graph/attachments.js';
 
+// Mock the signature module
+const { mockReadSignature, mockWriteSignature, mockAppendSignature } = vi.hoisted(() => ({
+  mockReadSignature: vi.fn().mockReturnValue(null),
+  mockWriteSignature: vi.fn(),
+  mockAppendSignature: vi.fn(),
+}));
+
+vi.mock('../../../src/signature.js', () => ({
+  readSignature: mockReadSignature,
+  writeSignature: mockWriteSignature,
+  appendSignature: mockAppendSignature,
+}));
+
+import { readSignature, writeSignature, appendSignature } from '../../../src/signature.js';
+
 // =============================================================================
 // Test Fixtures
 // =============================================================================
@@ -733,6 +748,44 @@ describe('MailSendTools', () => {
           draft_id: 5,
         })
       ).rejects.toThrow(ApprovalInvalidError);
+    });
+  });
+
+  // ===========================================================================
+  // Signature Management
+  // ===========================================================================
+
+  describe('setSignature', () => {
+    it('writes HTML signature and returns success', async () => {
+      const result = await tools.setSignature({ content: '<p>Joel</p>', content_type: 'html' });
+
+      expect(result).toEqual({ success: true, message: 'Signature saved successfully.' });
+      expect(writeSignature).toHaveBeenCalledWith('<p>Joel</p>', 'html');
+    });
+
+    it('writes text signature and returns success', async () => {
+      const result = await tools.setSignature({ content: '-- Joel', content_type: 'text' });
+
+      expect(result).toEqual({ success: true, message: 'Signature saved successfully.' });
+      expect(writeSignature).toHaveBeenCalledWith('-- Joel', 'text');
+    });
+  });
+
+  describe('getSignature', () => {
+    it('returns signature content when set', async () => {
+      vi.mocked(readSignature).mockReturnValue('<p>-- Joel</p>');
+
+      const result = await tools.getSignature();
+
+      expect(result).toEqual({ has_signature: true, content: '<p>-- Joel</p>' });
+    });
+
+    it('returns no-signature message when not set', async () => {
+      vi.mocked(readSignature).mockReturnValue(null);
+
+      const result = await tools.getSignature();
+
+      expect(result).toEqual({ has_signature: false, message: 'No signature is set. Use set_signature to create one.' });
     });
   });
 

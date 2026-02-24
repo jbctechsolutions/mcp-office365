@@ -30,6 +30,7 @@ import {
 } from '../utils/errors.js';
 import type { GraphClient } from '../graph/client/index.js';
 import { uploadAttachment } from '../graph/attachments.js';
+import { readSignature, writeSignature } from '../signature.js';
 
 // =============================================================================
 // Repository Interface
@@ -180,6 +181,13 @@ export const ForwardAsDraftInput = z.strictObject({
   to_recipients: z.array(z.string().email()).optional().describe('Forward recipients'),
   comment: z.string().optional().describe('Initial forward body text'),
 });
+
+export const SetSignatureInput = z.strictObject({
+  content: z.string().describe('Signature content (HTML or plain text)'),
+  content_type: z.enum(['html', 'text']).default('html').describe('Content type of the signature'),
+});
+
+export const GetSignatureInput = z.strictObject({});
 
 // =============================================================================
 // Type Exports
@@ -582,6 +590,23 @@ export class MailSendTools {
       draft_id: numericId,
       message: 'Forward draft created. Use update_draft to edit, then prepare_send_draft or prepare_send_email to send.',
     };
+  }
+
+  // ---------------------------------------------------------------------------
+  // Signature Management
+  // ---------------------------------------------------------------------------
+
+  async setSignature(params: z.infer<typeof SetSignatureInput>): Promise<{ success: boolean; message: string }> {
+    writeSignature(params.content, params.content_type);
+    return { success: true, message: 'Signature saved successfully.' };
+  }
+
+  async getSignature(): Promise<{ has_signature: boolean; content?: string; message?: string }> {
+    const signature = readSignature();
+    if (signature == null) {
+      return { has_signature: false, message: 'No signature is set. Use set_signature to create one.' };
+    }
+    return { has_signature: true, content: signature };
   }
 
   // ---------------------------------------------------------------------------
