@@ -50,6 +50,7 @@ import { createContactsTools } from './tools/contacts.js';
 import { createTasksTools } from './tools/tasks.js';
 import { createNotesTools } from './tools/notes.js';
 import { createMailboxOrganizationTools } from './tools/mailbox-organization.js';
+import { createMailSendTools } from './tools/mail-send.js';
 import {
   ListEmailsInput,
   SearchEmailsInput,
@@ -95,6 +96,17 @@ import {
   CreateFolderInput,
   RenameFolderInput,
   MoveFolderInput,
+  CreateDraftInput,
+  UpdateDraftInput,
+  ListDraftsInput,
+  PrepareSendDraftInput,
+  ConfirmSendDraftInput,
+  PrepareSendEmailInput,
+  ConfirmSendEmailInput,
+  PrepareReplyEmailInput,
+  ConfirmReplyEmailInput,
+  PrepareForwardEmailInput,
+  ConfirmForwardEmailInput,
 } from './tools/index.js';
 import { ApprovalTokenManager } from './approval/index.js';
 import type { CreateEventResult } from './tools/index.js';
@@ -1082,6 +1094,246 @@ const TOOLS: Tool[] = [
       required: ['to', 'subject', 'body'],
     },
   },
+  // =========================================================================
+  // Mail Send — Draft Management (Non-Destructive, Graph API only)
+  // =========================================================================
+  {
+    name: 'create_draft',
+    description: 'Create a draft email that can be edited and sent later',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        to: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'To recipients (email addresses)',
+        },
+        cc: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'CC recipients (email addresses)',
+        },
+        bcc: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'BCC recipients (email addresses)',
+        },
+        subject: {
+          type: 'string',
+          description: 'Email subject',
+        },
+        body: {
+          type: 'string',
+          description: 'Email body',
+        },
+        body_type: {
+          type: 'string',
+          enum: ['text', 'html'],
+          default: 'text',
+          description: 'Body content type (default: text)',
+        },
+      },
+      required: ['subject', 'body'],
+    },
+  },
+  {
+    name: 'update_draft',
+    description: 'Update an existing draft email',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        draft_id: {
+          type: 'number',
+          description: 'The draft ID to update',
+        },
+        to: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'To recipients (email addresses)',
+        },
+        cc: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'CC recipients (email addresses)',
+        },
+        bcc: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'BCC recipients (email addresses)',
+        },
+        subject: {
+          type: 'string',
+          description: 'Email subject',
+        },
+        body: {
+          type: 'string',
+          description: 'Email body',
+        },
+        body_type: {
+          type: 'string',
+          enum: ['text', 'html'],
+          description: 'Body content type',
+        },
+      },
+      required: ['draft_id'],
+    },
+  },
+  {
+    name: 'list_drafts',
+    description: 'List all draft emails',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        limit: {
+          type: 'number',
+          description: 'Maximum number of drafts to return (1-100, default 50)',
+          default: 50,
+        },
+        offset: {
+          type: 'number',
+          description: 'Number of drafts to skip (default 0)',
+          default: 0,
+        },
+      },
+      required: [],
+    },
+  },
+  // =========================================================================
+  // Mail Send — Two-Phase Approval (Graph API only)
+  // =========================================================================
+  {
+    name: 'prepare_send_draft',
+    description: 'Prepare to send a draft email. Returns a preview and approval token.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        draft_id: { type: 'number', description: 'The draft ID to send' },
+      },
+      required: ['draft_id'],
+    },
+  },
+  {
+    name: 'confirm_send_draft',
+    description: 'Confirm and send a draft email using the approval token.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        token_id: { type: 'string', description: 'Approval token from prepare_send_draft' },
+        draft_id: { type: 'number', description: 'The draft ID to send' },
+      },
+      required: ['token_id', 'draft_id'],
+    },
+  },
+  {
+    name: 'prepare_send_email',
+    description: 'Prepare to send an email immediately. Returns a preview and approval token.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        to: {
+          type: 'array',
+          items: { type: 'string' },
+          minItems: 1,
+          description: 'To recipients (email addresses)',
+        },
+        cc: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'CC recipients (email addresses)',
+        },
+        bcc: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'BCC recipients (email addresses)',
+        },
+        subject: {
+          type: 'string',
+          description: 'Email subject',
+        },
+        body: {
+          type: 'string',
+          description: 'Email body',
+        },
+        body_type: {
+          type: 'string',
+          enum: ['text', 'html'],
+          default: 'text',
+          description: 'Body content type (default: text)',
+        },
+      },
+      required: ['to', 'subject', 'body'],
+    },
+  },
+  {
+    name: 'confirm_send_email',
+    description: 'Confirm and send an email using the approval token.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        token_id: { type: 'string', description: 'Approval token from prepare_send_email' },
+      },
+      required: ['token_id'],
+    },
+  },
+  {
+    name: 'prepare_reply_email',
+    description: 'Prepare to reply to an email. Returns a preview and approval token.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        message_id: { type: 'number', description: 'The message ID to reply to' },
+        comment: { type: 'string', description: 'Reply body' },
+        reply_all: {
+          type: 'boolean',
+          default: true,
+          description: 'Reply to all recipients (default true)',
+        },
+      },
+      required: ['message_id', 'comment'],
+    },
+  },
+  {
+    name: 'confirm_reply_email',
+    description: 'Confirm and reply to an email using the approval token.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        token_id: { type: 'string', description: 'Approval token from prepare_reply_email' },
+        message_id: { type: 'number', description: 'The message ID being replied to' },
+      },
+      required: ['token_id', 'message_id'],
+    },
+  },
+  {
+    name: 'prepare_forward_email',
+    description: 'Prepare to forward an email. Returns a preview and approval token.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        message_id: { type: 'number', description: 'The message ID to forward' },
+        to_recipients: {
+          type: 'array',
+          items: { type: 'string' },
+          minItems: 1,
+          description: 'Forward to recipients (email addresses)',
+        },
+        comment: { type: 'string', description: 'Optional comment to include' },
+      },
+      required: ['message_id', 'to_recipients'],
+    },
+  },
+  {
+    name: 'confirm_forward_email',
+    description: 'Confirm and forward an email using the approval token.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        token_id: { type: 'string', description: 'Approval token from prepare_forward_email' },
+        message_id: { type: 'number', description: 'The message ID being forwarded' },
+      },
+      required: ['token_id', 'message_id'],
+    },
+  },
 ];
 
 // =============================================================================
@@ -1119,6 +1371,7 @@ export function createServer(): Server {
   let tasksTools: ReturnType<typeof createTasksTools> | null = null;
   let notesTools: ReturnType<typeof createNotesTools> | null = null;
   let orgTools: ReturnType<typeof createMailboxOrganizationTools> | null = null;
+  let sendTools: ReturnType<typeof createMailSendTools> | null = null;
   let calendarWriter: ICalendarWriter | null = null;
   let calendarManager: ICalendarManager | null = null;
   let mailSender: IMailSender | null = null;
@@ -1167,6 +1420,7 @@ export function createServer(): Server {
 
     const adapter = new GraphMailboxAdapter(graphRepository);
     orgTools = createMailboxOrganizationTools(adapter, tokenManager);
+    sendTools = createMailSendTools(graphRepository, tokenManager);
 
     initialized = true;
   }
@@ -1198,7 +1452,7 @@ export function createServer(): Server {
 
       // Graph API mode - handle async operations directly
       if (useGraphApi && graphRepository != null) {
-        return await handleGraphToolCall(name, args, graphRepository, graphContentReaders!, orgTools!);
+        return await handleGraphToolCall(name, args, graphRepository, graphContentReaders!, orgTools!, sendTools!);
       }
 
       // AppleScript mode - use sync tool interfaces
@@ -1402,6 +1656,86 @@ async function handleOrgToolCall(
     case 'move_folder': {
       const params = MoveFolderInput.parse(args);
       const result = await orgTools.moveFolder(params);
+      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+    }
+
+    default:
+      return null;
+  }
+}
+
+// =============================================================================
+// Mail Send Tool Handler (Graph API only)
+// =============================================================================
+
+async function handleSendToolCall(
+  name: string,
+  args: unknown,
+  sendTools: ReturnType<typeof createMailSendTools>
+): Promise<ToolResult | null> {
+  switch (name) {
+    // Non-Destructive — Draft Management
+    case 'create_draft': {
+      const params = CreateDraftInput.parse(args);
+      const result = await sendTools.createDraft(params);
+      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+    }
+    case 'update_draft': {
+      const params = UpdateDraftInput.parse(args);
+      const result = await sendTools.updateDraft(params);
+      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+    }
+    case 'list_drafts': {
+      const params = ListDraftsInput.parse(args ?? {});
+      const result = await sendTools.listDrafts(params);
+      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+    }
+
+    // Two-Phase — Send Draft
+    case 'prepare_send_draft': {
+      const params = PrepareSendDraftInput.parse(args);
+      const result = await sendTools.prepareSendDraft(params);
+      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+    }
+    case 'confirm_send_draft': {
+      const params = ConfirmSendDraftInput.parse(args);
+      const result = await sendTools.confirmSendDraft(params);
+      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+    }
+
+    // Two-Phase — Send Email (Direct)
+    case 'prepare_send_email': {
+      const params = PrepareSendEmailInput.parse(args);
+      const result = await sendTools.prepareSendEmail(params);
+      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+    }
+    case 'confirm_send_email': {
+      const params = ConfirmSendEmailInput.parse(args);
+      const result = await sendTools.confirmSendEmail(params);
+      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+    }
+
+    // Two-Phase — Reply Email
+    case 'prepare_reply_email': {
+      const params = PrepareReplyEmailInput.parse(args);
+      const result = await sendTools.prepareReplyEmail(params);
+      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+    }
+    case 'confirm_reply_email': {
+      const params = ConfirmReplyEmailInput.parse(args);
+      const result = await sendTools.confirmReplyEmail(params);
+      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+    }
+
+    // Two-Phase — Forward Email
+    case 'prepare_forward_email': {
+      const params = PrepareForwardEmailInput.parse(args);
+      const result = await sendTools.prepareForwardEmail(params);
+      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+    }
+    case 'confirm_forward_email': {
+      const params = ConfirmForwardEmailInput.parse(args);
+      const result = await sendTools.confirmForwardEmail(params);
       return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
     }
 
@@ -1845,11 +2179,16 @@ async function handleGraphToolCall(
   args: unknown,
   repository: GraphRepository,
   contentReaders: GraphContentReaders,
-  orgTools: ReturnType<typeof createMailboxOrganizationTools>
+  orgTools: ReturnType<typeof createMailboxOrganizationTools>,
+  sendTools: ReturnType<typeof createMailSendTools>
 ): Promise<ToolResult> {
   // Handle mailbox organization tools (shared between backends)
   const orgResult = await handleOrgToolCall(name, args, orgTools);
   if (orgResult != null) return orgResult;
+
+  // Handle mail send tools (Graph API only)
+  const sendResult = await handleSendToolCall(name, args, sendTools);
+  if (sendResult != null) return sendResult;
 
   try {
     switch (name) {

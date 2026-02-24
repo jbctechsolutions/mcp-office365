@@ -245,9 +245,9 @@ export class MailSendTools {
       subject: params.subject,
       body: params.body,
       bodyType: params.body_type,
-      to: params.to,
-      cc: params.cc,
-      bcc: params.bcc,
+      ...(params.to != null ? { to: params.to } : {}),
+      ...(params.cc != null ? { cc: params.cc } : {}),
+      ...(params.bcc != null ? { bcc: params.bcc } : {}),
     });
     return { success: true, draft_id: draftId };
   }
@@ -446,8 +446,8 @@ export class MailSendTools {
       body: metadata.body,
       bodyType: metadata.bodyType,
       to: metadata.to,
-      cc: metadata.cc,
-      bcc: metadata.bcc,
+      ...(metadata.cc != null ? { cc: metadata.cc } : {}),
+      ...(metadata.bcc != null ? { bcc: metadata.bcc } : {}),
     });
 
     return { success: true, message: 'Email sent successfully.' };
