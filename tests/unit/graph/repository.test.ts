@@ -10,6 +10,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { GraphRepository, createGraphRepository } from '../../../src/graph/repository.js';
 import { hashStringToNumber } from '../../../src/graph/mappers/utils.js';
+import { downloadAttachment } from '../../../src/graph/attachments.js';
+
+vi.mocked(downloadAttachment);
 
 // Mock the GraphClient
 vi.mock('../../../src/graph/client/index.js', () => ({
@@ -50,6 +53,13 @@ vi.mock('../../../src/graph/client/index.js', () => ({
       sendMail: vi.fn(),
       replyMessage: vi.fn(),
       forwardMessage: vi.fn(),
+      // Attachment operations
+      listAttachments: vi.fn(),
+      // Calendar write operations
+      createEvent: vi.fn(),
+      updateEvent: vi.fn(),
+      deleteEvent: vi.fn(),
+      respondToEvent: vi.fn(),
       // Contact write operations
       createContact: vi.fn(),
       updateContact: vi.fn(),
@@ -61,6 +71,11 @@ vi.mock('../../../src/graph/client/index.js', () => ({
       createTaskList: vi.fn(),
     };
   }),
+}));
+
+// Mock the downloadAttachment helper
+vi.mock('../../../src/graph/attachments.js', () => ({
+  downloadAttachment: vi.fn(),
 }));
 
 describe('graph/repository', () => {
@@ -1126,6 +1141,690 @@ describe('graph/repository', () => {
         await expect(
           repository.forwardMessageAsync(99999, ['a@b.com'])
         ).rejects.toThrow('Message ID 99999 not found in cache');
+      });
+    });
+  });
+
+  describe('Sync method stubs throw errors', () => {
+    it('moveEmail throws', () => {
+      expect(() => repository.moveEmail(1, 2)).toThrow('Use moveEmailAsync()');
+    });
+    it('deleteEmail throws', () => {
+      expect(() => repository.deleteEmail(1)).toThrow('Use deleteEmailAsync()');
+    });
+    it('archiveEmail throws', () => {
+      expect(() => repository.archiveEmail(1)).toThrow('Use archiveEmailAsync()');
+    });
+    it('junkEmail throws', () => {
+      expect(() => repository.junkEmail(1)).toThrow('Use junkEmailAsync()');
+    });
+    it('markEmailRead throws', () => {
+      expect(() => repository.markEmailRead(1, true)).toThrow('Use markEmailReadAsync()');
+    });
+    it('setEmailFlag throws', () => {
+      expect(() => repository.setEmailFlag(1, 0)).toThrow('Use setEmailFlagAsync()');
+    });
+    it('setEmailCategories throws', () => {
+      expect(() => repository.setEmailCategories(1, ['cat'])).toThrow('Use setEmailCategoriesAsync()');
+    });
+    it('createFolder throws', () => {
+      expect(() => repository.createFolder('test')).toThrow('Use createFolderAsync()');
+    });
+    it('deleteFolder throws', () => {
+      expect(() => repository.deleteFolder(1)).toThrow('Use deleteFolderAsync()');
+    });
+    it('renameFolder throws', () => {
+      expect(() => repository.renameFolder(1, 'new')).toThrow('Use renameFolderAsync()');
+    });
+    it('moveFolder throws', () => {
+      expect(() => repository.moveFolder(1, 2)).toThrow('Use moveFolderAsync()');
+    });
+    it('emptyFolder throws', () => {
+      expect(() => repository.emptyFolder(1)).toThrow('Use emptyFolderAsync()');
+    });
+  });
+
+  describe('Email Write Operations (Async)', () => {
+    describe('archiveEmailAsync', () => {
+      it('calls archiveMessage with the correct graph ID', async () => {
+        mockClient.searchMessages.mockResolvedValue([
+          { id: 'msg-arch', subject: 'Archive me' },
+        ]);
+        await repository.searchEmailsAsync('Archive me', 50);
+
+        mockClient.archiveMessage.mockResolvedValue(undefined);
+        await repository.archiveEmailAsync(hashStringToNumber('msg-arch'));
+
+        expect(mockClient.archiveMessage).toHaveBeenCalledWith('msg-arch');
+      });
+
+      it('throws if message not in cache', async () => {
+        await expect(
+          repository.archiveEmailAsync(99999)
+        ).rejects.toThrow('Message ID 99999 not found in cache');
+      });
+    });
+
+    describe('junkEmailAsync', () => {
+      it('calls junkMessage with the correct graph ID', async () => {
+        mockClient.searchMessages.mockResolvedValue([
+          { id: 'msg-junk', subject: 'Spam' },
+        ]);
+        await repository.searchEmailsAsync('Spam', 50);
+
+        mockClient.junkMessage.mockResolvedValue(undefined);
+        await repository.junkEmailAsync(hashStringToNumber('msg-junk'));
+
+        expect(mockClient.junkMessage).toHaveBeenCalledWith('msg-junk');
+      });
+
+      it('throws if message not in cache', async () => {
+        await expect(
+          repository.junkEmailAsync(99999)
+        ).rejects.toThrow('Message ID 99999 not found in cache');
+      });
+    });
+
+    describe('markEmailReadAsync', () => {
+      it('calls updateMessage with isRead flag', async () => {
+        mockClient.searchMessages.mockResolvedValue([
+          { id: 'msg-read', subject: 'Read me' },
+        ]);
+        await repository.searchEmailsAsync('Read me', 50);
+
+        mockClient.updateMessage.mockResolvedValue(undefined);
+        await repository.markEmailReadAsync(hashStringToNumber('msg-read'), true);
+
+        expect(mockClient.updateMessage).toHaveBeenCalledWith('msg-read', { isRead: true });
+      });
+
+      it('throws if message not in cache', async () => {
+        await expect(
+          repository.markEmailReadAsync(99999, false)
+        ).rejects.toThrow('Message ID 99999 not found in cache');
+      });
+    });
+
+    describe('setEmailFlagAsync', () => {
+      it('maps flag status 0 to notFlagged', async () => {
+        mockClient.searchMessages.mockResolvedValue([
+          { id: 'msg-flag', subject: 'Flag me' },
+        ]);
+        await repository.searchEmailsAsync('Flag me', 50);
+
+        mockClient.updateMessage.mockResolvedValue(undefined);
+        await repository.setEmailFlagAsync(hashStringToNumber('msg-flag'), 0);
+
+        expect(mockClient.updateMessage).toHaveBeenCalledWith('msg-flag', {
+          flag: { flagStatus: 'notFlagged' },
+        });
+      });
+
+      it('maps flag status 1 to flagged', async () => {
+        mockClient.searchMessages.mockResolvedValue([
+          { id: 'msg-flag1', subject: 'Flag 1' },
+        ]);
+        await repository.searchEmailsAsync('Flag 1', 50);
+
+        mockClient.updateMessage.mockResolvedValue(undefined);
+        await repository.setEmailFlagAsync(hashStringToNumber('msg-flag1'), 1);
+
+        expect(mockClient.updateMessage).toHaveBeenCalledWith('msg-flag1', {
+          flag: { flagStatus: 'flagged' },
+        });
+      });
+
+      it('maps flag status 2 to complete', async () => {
+        mockClient.searchMessages.mockResolvedValue([
+          { id: 'msg-flag2', subject: 'Flag 2' },
+        ]);
+        await repository.searchEmailsAsync('Flag 2', 50);
+
+        mockClient.updateMessage.mockResolvedValue(undefined);
+        await repository.setEmailFlagAsync(hashStringToNumber('msg-flag2'), 2);
+
+        expect(mockClient.updateMessage).toHaveBeenCalledWith('msg-flag2', {
+          flag: { flagStatus: 'complete' },
+        });
+      });
+
+      it('throws if message not in cache', async () => {
+        await expect(
+          repository.setEmailFlagAsync(99999, 0)
+        ).rejects.toThrow('Message ID 99999 not found in cache');
+      });
+    });
+
+    describe('setEmailCategoriesAsync', () => {
+      it('calls updateMessage with categories', async () => {
+        mockClient.searchMessages.mockResolvedValue([
+          { id: 'msg-cat', subject: 'Categorize me' },
+        ]);
+        await repository.searchEmailsAsync('Categorize me', 50);
+
+        mockClient.updateMessage.mockResolvedValue(undefined);
+        await repository.setEmailCategoriesAsync(
+          hashStringToNumber('msg-cat'),
+          ['Important', 'Work']
+        );
+
+        expect(mockClient.updateMessage).toHaveBeenCalledWith('msg-cat', {
+          categories: ['Important', 'Work'],
+        });
+      });
+
+      it('throws if message not in cache', async () => {
+        await expect(
+          repository.setEmailCategoriesAsync(99999, ['cat'])
+        ).rejects.toThrow('Message ID 99999 not found in cache');
+      });
+    });
+  });
+
+  describe('Folder Write Operations (Async)', () => {
+    describe('createFolderAsync', () => {
+      it('calls createMailFolder and caches the new folder', async () => {
+        mockClient.createMailFolder.mockResolvedValue({
+          id: 'folder-new',
+          displayName: 'Reports',
+          parentFolderId: null,
+          totalItemCount: 0,
+          unreadItemCount: 0,
+        });
+
+        const result = await repository.createFolderAsync('Reports');
+
+        expect(mockClient.createMailFolder).toHaveBeenCalledWith('Reports', undefined);
+        expect(result.name).toBe('Reports');
+        expect(result.id).toBe(hashStringToNumber('folder-new'));
+
+        // Verify cache was updated
+        const graphId = repository.getGraphId('folder', result.id);
+        expect(graphId).toBe('folder-new');
+      });
+
+      it('passes parent folder graph ID when parentFolderId provided', async () => {
+        // Populate folder cache
+        mockClient.listMailFolders.mockResolvedValue([
+          { id: 'parent-folder', displayName: 'Parent', totalItemCount: 0, unreadItemCount: 0 },
+        ]);
+        await repository.listFoldersAsync();
+
+        mockClient.createMailFolder.mockResolvedValue({
+          id: 'sub-folder',
+          displayName: 'SubFolder',
+          parentFolderId: 'parent-folder',
+          totalItemCount: 0,
+          unreadItemCount: 0,
+        });
+
+        await repository.createFolderAsync('SubFolder', hashStringToNumber('parent-folder'));
+
+        expect(mockClient.createMailFolder).toHaveBeenCalledWith('SubFolder', 'parent-folder');
+      });
+    });
+
+    describe('deleteFolderAsync', () => {
+      it('calls deleteMailFolder and removes from cache', async () => {
+        // Populate folder cache
+        mockClient.listMailFolders.mockResolvedValue([
+          { id: 'folder-del', displayName: 'ToDelete', totalItemCount: 0, unreadItemCount: 0 },
+        ]);
+        await repository.listFoldersAsync();
+
+        mockClient.deleteMailFolder.mockResolvedValue(undefined);
+
+        const numericId = hashStringToNumber('folder-del');
+        await repository.deleteFolderAsync(numericId);
+
+        expect(mockClient.deleteMailFolder).toHaveBeenCalledWith('folder-del');
+        expect(repository.getGraphId('folder', numericId)).toBeUndefined();
+      });
+
+      it('throws if folder not in cache', async () => {
+        await expect(
+          repository.deleteFolderAsync(99999)
+        ).rejects.toThrow('Folder ID 99999 not found in cache');
+      });
+    });
+
+    describe('renameFolderAsync', () => {
+      it('calls renameMailFolder with the correct graph ID', async () => {
+        // Populate folder cache
+        mockClient.listMailFolders.mockResolvedValue([
+          { id: 'folder-ren', displayName: 'OldName', totalItemCount: 0, unreadItemCount: 0 },
+        ]);
+        await repository.listFoldersAsync();
+
+        mockClient.renameMailFolder.mockResolvedValue(undefined);
+
+        await repository.renameFolderAsync(hashStringToNumber('folder-ren'), 'NewName');
+
+        expect(mockClient.renameMailFolder).toHaveBeenCalledWith('folder-ren', 'NewName');
+      });
+
+      it('throws if folder not in cache', async () => {
+        await expect(
+          repository.renameFolderAsync(99999, 'NewName')
+        ).rejects.toThrow('Folder ID 99999 not found in cache');
+      });
+    });
+
+    describe('moveFolderAsync', () => {
+      it('calls moveMailFolder with correct graph IDs', async () => {
+        // Populate folder cache with both folders
+        mockClient.listMailFolders.mockResolvedValue([
+          { id: 'folder-src', displayName: 'Source', totalItemCount: 0, unreadItemCount: 0 },
+          { id: 'folder-dest', displayName: 'Destination', totalItemCount: 0, unreadItemCount: 0 },
+        ]);
+        await repository.listFoldersAsync();
+
+        mockClient.moveMailFolder.mockResolvedValue(undefined);
+
+        await repository.moveFolderAsync(
+          hashStringToNumber('folder-src'),
+          hashStringToNumber('folder-dest')
+        );
+
+        expect(mockClient.moveMailFolder).toHaveBeenCalledWith('folder-src', 'folder-dest');
+      });
+
+      it('throws if source folder not in cache', async () => {
+        await expect(
+          repository.moveFolderAsync(99999, 88888)
+        ).rejects.toThrow('Folder ID 99999 not found in cache');
+      });
+
+      it('throws if destination folder not in cache', async () => {
+        // Populate only the source folder
+        mockClient.listMailFolders.mockResolvedValue([
+          { id: 'folder-only', displayName: 'Source', totalItemCount: 0, unreadItemCount: 0 },
+        ]);
+        await repository.listFoldersAsync();
+
+        await expect(
+          repository.moveFolderAsync(hashStringToNumber('folder-only'), 88888)
+        ).rejects.toThrow('Parent folder ID 88888 not found in cache');
+      });
+    });
+
+    describe('emptyFolderAsync', () => {
+      it('calls emptyMailFolder with the correct graph ID', async () => {
+        // Populate folder cache
+        mockClient.listMailFolders.mockResolvedValue([
+          { id: 'folder-empty', displayName: 'Trash', totalItemCount: 5, unreadItemCount: 0 },
+        ]);
+        await repository.listFoldersAsync();
+
+        mockClient.emptyMailFolder.mockResolvedValue(undefined);
+
+        await repository.emptyFolderAsync(hashStringToNumber('folder-empty'));
+
+        expect(mockClient.emptyMailFolder).toHaveBeenCalledWith('folder-empty');
+      });
+
+      it('throws if folder not in cache', async () => {
+        await expect(
+          repository.emptyFolderAsync(99999)
+        ).rejects.toThrow('Folder ID 99999 not found in cache');
+      });
+    });
+  });
+
+  describe('Attachment Operations (Async)', () => {
+    describe('listAttachmentsAsync', () => {
+      it('lists attachments and caches them', async () => {
+        // Populate message cache first
+        mockClient.searchMessages.mockResolvedValue([
+          { id: 'msg-att-1', subject: 'With attachments' },
+        ]);
+        await repository.searchEmailsAsync('attachments', 50);
+
+        mockClient.listAttachments.mockResolvedValue([
+          { id: 'att-1', name: 'doc.pdf', size: 1024, contentType: 'application/pdf', isInline: false },
+          { id: 'att-2', name: 'image.png', size: 2048, contentType: 'image/png', isInline: true },
+        ]);
+
+        const result = await repository.listAttachmentsAsync(hashStringToNumber('msg-att-1'));
+
+        expect(mockClient.listAttachments).toHaveBeenCalledWith('msg-att-1');
+        expect(result).toHaveLength(2);
+        expect(result[0]).toEqual({
+          id: hashStringToNumber('att-1'),
+          name: 'doc.pdf',
+          size: 1024,
+          contentType: 'application/pdf',
+          isInline: false,
+        });
+        expect(result[1]).toEqual({
+          id: hashStringToNumber('att-2'),
+          name: 'image.png',
+          size: 2048,
+          contentType: 'image/png',
+          isInline: true,
+        });
+      });
+
+      it('handles missing attachment fields with defaults', async () => {
+        mockClient.searchMessages.mockResolvedValue([
+          { id: 'msg-att-2', subject: 'Minimal' },
+        ]);
+        await repository.searchEmailsAsync('Minimal', 50);
+
+        mockClient.listAttachments.mockResolvedValue([
+          { id: null, name: null, size: null, contentType: null },
+        ]);
+
+        const result = await repository.listAttachmentsAsync(hashStringToNumber('msg-att-2'));
+
+        expect(result).toHaveLength(1);
+        expect(result[0].name).toBe('');
+        expect(result[0].size).toBe(0);
+        expect(result[0].contentType).toBe('application/octet-stream');
+        expect(result[0].isInline).toBe(false);
+      });
+
+      it('throws if message not in cache', async () => {
+        await expect(
+          repository.listAttachmentsAsync(99999)
+        ).rejects.toThrow('Message ID 99999 not found in cache');
+      });
+    });
+
+    describe('downloadAttachmentAsync', () => {
+      it('delegates to downloadAttachment helper with cached IDs', async () => {
+        // Populate message cache
+        mockClient.searchMessages.mockResolvedValue([
+          { id: 'msg-dl', subject: 'Download test' },
+        ]);
+        await repository.searchEmailsAsync('Download test', 50);
+
+        // Populate attachment cache via listAttachmentsAsync
+        mockClient.listAttachments.mockResolvedValue([
+          { id: 'att-dl-1', name: 'file.zip', size: 5000, contentType: 'application/zip' },
+        ]);
+        await repository.listAttachmentsAsync(hashStringToNumber('msg-dl'));
+
+        const mockResult = { filePath: '/tmp/file.zip', name: 'file.zip', size: 5000, contentType: 'application/zip' };
+        vi.mocked(downloadAttachment).mockResolvedValue(mockResult);
+
+        const result = await repository.downloadAttachmentAsync(hashStringToNumber('att-dl-1'));
+
+        expect(downloadAttachment).toHaveBeenCalledWith(
+          mockClient,
+          'msg-dl',
+          'att-dl-1'
+        );
+        expect(result).toEqual(mockResult);
+      });
+
+      it('throws if attachment not in cache', async () => {
+        await expect(
+          repository.downloadAttachmentAsync(99999)
+        ).rejects.toThrow('Attachment ID 99999 not found in cache. Call list_attachments first.');
+      });
+    });
+  });
+
+  describe('Calendar Write Operations (Async)', () => {
+    describe('createEventAsync', () => {
+      it('creates an event with required fields and caches result', async () => {
+        mockClient.createEvent.mockResolvedValue({
+          id: 'event-new-1',
+          subject: 'Team Meeting',
+        });
+
+        const numericId = await repository.createEventAsync({
+          subject: 'Team Meeting',
+          start: '2026-03-01T10:00:00',
+          end: '2026-03-01T11:00:00',
+          timezone: 'America/New_York',
+        });
+
+        expect(mockClient.createEvent).toHaveBeenCalledWith(
+          {
+            subject: 'Team Meeting',
+            start: { dateTime: '2026-03-01T10:00:00', timeZone: 'America/New_York' },
+            end: { dateTime: '2026-03-01T11:00:00', timeZone: 'America/New_York' },
+          },
+          undefined
+        );
+
+        expect(numericId).toBe(hashStringToNumber('event-new-1'));
+        expect(repository.getGraphId('event', numericId)).toBe('event-new-1');
+      });
+
+      it('includes location when provided', async () => {
+        mockClient.createEvent.mockResolvedValue({ id: 'event-loc' });
+
+        await repository.createEventAsync({
+          subject: 'Office Meeting',
+          start: '2026-03-01T10:00:00',
+          end: '2026-03-01T11:00:00',
+          timezone: 'UTC',
+          location: 'Conference Room B',
+        });
+
+        const callArgs = mockClient.createEvent.mock.calls[0][0];
+        expect(callArgs.location).toEqual({ displayName: 'Conference Room B' });
+      });
+
+      it('includes body with type when provided', async () => {
+        mockClient.createEvent.mockResolvedValue({ id: 'event-body' });
+
+        await repository.createEventAsync({
+          subject: 'Review',
+          start: '2026-03-01T10:00:00',
+          end: '2026-03-01T11:00:00',
+          timezone: 'UTC',
+          body: '<p>Agenda items</p>',
+          bodyType: 'html',
+        });
+
+        const callArgs = mockClient.createEvent.mock.calls[0][0];
+        expect(callArgs.body).toEqual({
+          contentType: 'html',
+          content: '<p>Agenda items</p>',
+        });
+      });
+
+      it('defaults body type to text', async () => {
+        mockClient.createEvent.mockResolvedValue({ id: 'event-body-text' });
+
+        await repository.createEventAsync({
+          subject: 'Review',
+          start: '2026-03-01T10:00:00',
+          end: '2026-03-01T11:00:00',
+          timezone: 'UTC',
+          body: 'Plain text agenda',
+        });
+
+        const callArgs = mockClient.createEvent.mock.calls[0][0];
+        expect(callArgs.body.contentType).toBe('text');
+      });
+
+      it('includes attendees when provided', async () => {
+        mockClient.createEvent.mockResolvedValue({ id: 'event-att' });
+
+        await repository.createEventAsync({
+          subject: 'Team Sync',
+          start: '2026-03-01T10:00:00',
+          end: '2026-03-01T11:00:00',
+          timezone: 'UTC',
+          attendees: [
+            { email: 'alice@example.com', name: 'Alice', type: 'required' },
+            { email: 'bob@example.com', type: 'optional' },
+          ],
+        });
+
+        const callArgs = mockClient.createEvent.mock.calls[0][0];
+        expect(callArgs.attendees).toEqual([
+          { emailAddress: { address: 'alice@example.com', name: 'Alice' }, type: 'required' },
+          { emailAddress: { address: 'bob@example.com', name: undefined }, type: 'optional' },
+        ]);
+      });
+
+      it('sets isAllDay flag', async () => {
+        mockClient.createEvent.mockResolvedValue({ id: 'event-allday' });
+
+        await repository.createEventAsync({
+          subject: 'Holiday',
+          start: '2026-03-01',
+          end: '2026-03-02',
+          timezone: 'UTC',
+          isAllDay: true,
+        });
+
+        const callArgs = mockClient.createEvent.mock.calls[0][0];
+        expect(callArgs.isAllDay).toBe(true);
+      });
+
+      it('includes recurrence when provided', async () => {
+        mockClient.createEvent.mockResolvedValue({ id: 'event-recur' });
+
+        const recurrence = {
+          pattern: { type: 'weekly' as const, interval: 1, daysOfWeek: ['monday'] },
+          range: { type: 'noEnd' as const, startDate: '2026-03-01' },
+        };
+
+        await repository.createEventAsync({
+          subject: 'Weekly Standup',
+          start: '2026-03-01T09:00:00',
+          end: '2026-03-01T09:15:00',
+          timezone: 'UTC',
+          recurrence,
+        });
+
+        const callArgs = mockClient.createEvent.mock.calls[0][0];
+        expect(callArgs.recurrence).toEqual(recurrence);
+      });
+
+      it('passes calendarId when provided', async () => {
+        // Populate folder cache with a calendar ID
+        mockClient.listCalendars.mockResolvedValue([
+          { id: 'cal-work', name: 'Work Calendar' },
+        ]);
+        await repository.listCalendarsAsync();
+
+        mockClient.createEvent.mockResolvedValue({ id: 'event-cal' });
+
+        await repository.createEventAsync({
+          subject: 'Work Event',
+          start: '2026-03-01T10:00:00',
+          end: '2026-03-01T11:00:00',
+          timezone: 'UTC',
+          calendarId: hashStringToNumber('cal-work'),
+        });
+
+        expect(mockClient.createEvent).toHaveBeenCalledWith(
+          expect.any(Object),
+          'cal-work'
+        );
+      });
+    });
+
+    describe('updateEventAsync', () => {
+      it('looks up graph ID and calls updateEvent', async () => {
+        // Populate event cache
+        mockClient.listEvents.mockResolvedValue([
+          { id: 'event-upd', subject: 'Existing', start: {}, end: {} },
+        ]);
+        await repository.listEventsAsync(50, 0);
+
+        mockClient.updateEvent.mockResolvedValue(undefined);
+
+        await repository.updateEventAsync(hashStringToNumber('event-upd'), {
+          subject: 'Updated Meeting',
+        });
+
+        expect(mockClient.updateEvent).toHaveBeenCalledWith('event-upd', {
+          subject: 'Updated Meeting',
+        });
+      });
+
+      it('throws if event not in cache', async () => {
+        await expect(
+          repository.updateEventAsync(99999, { subject: 'Nope' })
+        ).rejects.toThrow('Event ID 99999 not found in cache');
+      });
+    });
+
+    describe('deleteEventAsync', () => {
+      it('deletes event and removes from cache', async () => {
+        // Populate event cache
+        mockClient.listEvents.mockResolvedValue([
+          { id: 'event-del', subject: 'To Delete', start: {}, end: {} },
+        ]);
+        await repository.listEventsAsync(50, 0);
+
+        mockClient.deleteEvent.mockResolvedValue(undefined);
+
+        const numericId = hashStringToNumber('event-del');
+        await repository.deleteEventAsync(numericId);
+
+        expect(mockClient.deleteEvent).toHaveBeenCalledWith('event-del');
+        expect(repository.getGraphId('event', numericId)).toBeUndefined();
+      });
+
+      it('throws if event not in cache', async () => {
+        await expect(
+          repository.deleteEventAsync(99999)
+        ).rejects.toThrow('Event ID 99999 not found in cache');
+      });
+    });
+
+    describe('respondToEventAsync', () => {
+      it('responds to event with accept and comment', async () => {
+        // Populate event cache
+        mockClient.listEvents.mockResolvedValue([
+          { id: 'event-resp', subject: 'Invitation', start: {}, end: {} },
+        ]);
+        await repository.listEventsAsync(50, 0);
+
+        mockClient.respondToEvent.mockResolvedValue(undefined);
+
+        await repository.respondToEventAsync(
+          hashStringToNumber('event-resp'),
+          'accept',
+          true,
+          'Looking forward to it!'
+        );
+
+        expect(mockClient.respondToEvent).toHaveBeenCalledWith(
+          'event-resp',
+          'accept',
+          true,
+          'Looking forward to it!'
+        );
+      });
+
+      it('responds to event with decline without comment', async () => {
+        // Populate event cache
+        mockClient.listEvents.mockResolvedValue([
+          { id: 'event-resp2', subject: 'Decline This', start: {}, end: {} },
+        ]);
+        await repository.listEventsAsync(50, 0);
+
+        mockClient.respondToEvent.mockResolvedValue(undefined);
+
+        await repository.respondToEventAsync(
+          hashStringToNumber('event-resp2'),
+          'decline',
+          false
+        );
+
+        expect(mockClient.respondToEvent).toHaveBeenCalledWith(
+          'event-resp2',
+          'decline',
+          false,
+          undefined
+        );
+      });
+
+      it('throws if event not in cache', async () => {
+        await expect(
+          repository.respondToEventAsync(99999, 'accept', true)
+        ).rejects.toThrow('Event ID 99999 not found in cache');
       });
     });
   });

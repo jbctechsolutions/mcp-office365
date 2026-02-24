@@ -538,6 +538,52 @@ describe('Graph API endpoint and method validation', () => {
       expect(moveCalls[1].url).toBe('/me/messages/msg-2/move');
       expect(moveCalls[1].body).toEqual({ destinationId: 'deleteditems' });
     });
+
+    it('emptyMailFolder handles pagination when @odata.nextLink is present', async () => {
+      const page1Messages = [{ id: 'msg-a' }, { id: 'msg-b' }];
+      const page2Messages = [{ id: 'msg-c' }, { id: 'msg-d' }];
+      const nextLinkUrl = 'https://graph.microsoft.com/v1.0/me/mailFolders/folder-1/messages?$skip=100';
+      let getCount = 0;
+      mockApi.mockImplementation((url: string) => {
+        const isFirstPage = url.includes('/messages') && !url.includes('/move') && !url.startsWith('https://');
+        const isNextLink = url === nextLinkUrl;
+        let response: any = {};
+        if (isFirstPage && getCount === 0) {
+          response = { value: page1Messages, '@odata.nextLink': nextLinkUrl };
+          getCount++;
+        } else if (isNextLink) {
+          response = { value: page2Messages };
+        }
+        const { builder, call } = createTrackingBuilder(response);
+        call.url = url;
+        return builder;
+      });
+
+      await client.emptyMailFolder('folder-1');
+
+      // Verify the initial GET fetched messages from the folder
+      const initialGet = apiCalls.find(c => c.method === 'get' && c.url.includes('/mailFolders/'));
+      expect(initialGet).toBeDefined();
+      expect(initialGet!.url).toBe('/me/mailFolders/folder-1/messages');
+      expect(initialGet!.selectFields).toBe('id');
+      expect(initialGet!.topValue).toBe(100);
+
+      // Verify the nextLink URL was called
+      const nextLinkGet = apiCalls.find(c => c.method === 'get' && c.url === nextLinkUrl);
+      expect(nextLinkGet).toBeDefined();
+
+      // Verify all messages from both pages were moved to deleteditems
+      const moveCalls = apiCalls.filter(c => c.method === 'post' && c.url.includes('/move'));
+      expect(moveCalls).toHaveLength(4);
+      expect(moveCalls[0].url).toBe('/me/messages/msg-a/move');
+      expect(moveCalls[0].body).toEqual({ destinationId: 'deleteditems' });
+      expect(moveCalls[1].url).toBe('/me/messages/msg-b/move');
+      expect(moveCalls[1].body).toEqual({ destinationId: 'deleteditems' });
+      expect(moveCalls[2].url).toBe('/me/messages/msg-c/move');
+      expect(moveCalls[2].body).toEqual({ destinationId: 'deleteditems' });
+      expect(moveCalls[3].url).toBe('/me/messages/msg-d/move');
+      expect(moveCalls[3].body).toEqual({ destinationId: 'deleteditems' });
+    });
   });
 
   // =========================================================================
