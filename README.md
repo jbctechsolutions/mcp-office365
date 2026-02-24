@@ -4,49 +4,87 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Node.js Version](https://img.shields.io/node/v/mcp-outlook-mac)](https://nodejs.org)
 
-A [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) server that provides read-only access to Outlook for Mac. Access your emails, calendar events, contacts, tasks, and notes directly through MCP tools.
+A [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) server that provides full access to Microsoft Outlook. Read, write, and manage your emails, calendar events, contacts, tasks, and notes directly through MCP tools.
 
 ## Features
 
-- **Mostly read-only** - Calendar event creation supported; all other data is read-only
+- **72 tools** - Full read/write access to mail, calendar, contacts, and tasks
 - **Two backends** - AppleScript for classic Outlook, Microsoft Graph API for new Outlook
+- **Two-phase approval** - Destructive operations (delete, send) require explicit confirmation
 - **Works offline** - AppleScript backend requires no network (Graph API requires internet)
 - **Fast and reliable** - Direct communication with Outlook or Microsoft servers
 
-### Available Tools
+### Available Tools (72)
 
-**Accounts**
+**Accounts (1)**
 - `list_accounts` - List all configured Outlook accounts
 
-**Mail**
-- `list_folders` - List all mail folders with unread counts (supports `account_id` filtering)
+**Mail - Reading (5)**
+- `list_folders` - List all mail folders with unread counts
 - `list_emails` - List emails in a folder with pagination
 - `search_emails` - Search emails by subject, sender, or content
 - `get_email` - Get full email details including body
 - `get_unread_count` - Get unread email count
-- `send_email` - Send an email with attachments and HTML support (AppleScript backend only)
 
-**Calendar**
+**Mail - Sending & Drafts (12)** *(Graph API)*
+- `send_email` - Send an email with attachments and HTML support
+- `create_draft` - Create a new draft email
+- `update_draft` - Update an existing draft
+- `list_drafts` - List all draft emails
+- `prepare_send_draft` / `confirm_send_draft` - Send a draft (two-phase)
+- `prepare_send_email` / `confirm_send_email` - Compose and send (two-phase)
+- `prepare_reply_email` / `confirm_reply_email` - Reply to a message (two-phase)
+- `prepare_forward_email` / `confirm_forward_email` - Forward a message (two-phase)
+
+**Attachments (2)**
+- `list_attachments` - List attachment metadata for an email
+- `download_attachment` - Download an email attachment to disk
+
+**Mailbox Organization (23)** *(Graph API)*
+- `mark_email_read` / `mark_email_unread` - Toggle read status
+- `set_email_flag` / `clear_email_flag` - Flag/unflag emails
+- `set_email_categories` - Categorize emails
+- `create_folder` / `rename_folder` / `move_folder` - Folder management
+- `prepare_delete_email` / `confirm_delete_email` - Delete email (two-phase)
+- `prepare_move_email` / `confirm_move_email` - Move email (two-phase)
+- `prepare_archive_email` / `confirm_archive_email` - Archive email (two-phase)
+- `prepare_junk_email` / `confirm_junk_email` - Mark as junk (two-phase)
+- `prepare_delete_folder` / `confirm_delete_folder` - Delete folder (two-phase)
+- `prepare_empty_folder` / `confirm_empty_folder` - Empty folder (two-phase)
+- `prepare_batch_delete_emails` / `prepare_batch_move_emails` / `confirm_batch_operation` - Batch operations (two-phase)
+
+**Calendar - Reading (4)**
 - `list_calendars` - List all calendars
 - `list_events` - List events with date range filtering
 - `get_event` - Get event details
 - `search_events` - Search events by title
-- `create_event` - Create a new calendar event (AppleScript backend only)
-- `respond_to_event` - Accept, decline, or tentatively accept event invitations (AppleScript backend only)
-- `delete_event` - Delete a calendar event or recurring series (AppleScript backend only)
-- `update_event` - Update event details (title, time, location, etc.) (AppleScript backend only)
 
-**Contacts**
+**Calendar - Writing (6)**
+- `create_event` - Create a new calendar event
+- `update_event` - Update event details (title, time, location, etc.)
+- `respond_to_event` - Accept, decline, or tentatively accept invitations
+- `delete_event` - Delete a calendar event or recurring series
+- `prepare_delete_event` / `confirm_delete_event` - Delete event with two-phase approval *(Graph API)*
+
+**Contacts (7)**
 - `list_contacts` - List all contacts with pagination
 - `search_contacts` - Search contacts by name
 - `get_contact` - Get contact details
+- `create_contact` - Create a new contact *(Graph API)*
+- `update_contact` - Update contact details *(Graph API)*
+- `prepare_delete_contact` / `confirm_delete_contact` - Delete contact (two-phase) *(Graph API)*
 
-**Tasks**
+**Tasks (9)**
 - `list_tasks` - List tasks with completion filtering
 - `get_task` - Get task details
 - `search_tasks` - Search tasks by name
+- `create_task` - Create a new task *(Graph API)*
+- `update_task` - Update task details *(Graph API)*
+- `complete_task` - Mark a task as complete *(Graph API)*
+- `create_task_list` - Create a new task list *(Graph API)*
+- `prepare_delete_task` / `confirm_delete_task` - Delete task (two-phase) *(Graph API)*
 
-**Notes**
+**Notes (3)** *(AppleScript only)*
 - `list_notes` - List all notes
 - `get_note` - Get note details
 - `search_notes` - Search notes by content
@@ -94,22 +132,9 @@ Google accounts configured in Outlook for Mac cannot be accessed via the AppleSc
 
 **Write Operations**
 
-Currently, write operations (event management, email sending) are only supported via the AppleScript backend. These features will be added to the Graph API backend in a future release:
-- Event RSVP operations
-- Event deletion
-- Event updates
-- Email sending
-
-For these operations, use the AppleScript backend with classic Outlook for Mac.
+The AppleScript backend supports calendar event management (create, update, delete, RSVP) and email sending. All other write operations (drafts, mailbox organization, contacts, tasks) are only available via the Graph API backend.
 
 ### Microsoft Graph API Backend
-
-**🚧 Beta Status**
-
-The Graph API backend is currently in beta. Write operations are not yet implemented:
-- ❌ Event management (create, update, delete, RSVP) - Coming soon
-- ❌ Email sending - Coming soon
-- ✅ All read operations are fully functional and stable
 
 **Notes Not Available**
 
@@ -146,14 +171,12 @@ Your authentication tokens are stored securely in `~/.outlook-mcp/tokens.json` a
 #### Required Permissions
 
 The Graph API backend requests these Microsoft Graph permissions:
-- `Mail.ReadWrite` - Read and send your mail
+- `Mail.ReadWrite` - Read, send, and manage your mail
 - `Calendars.ReadWrite` - Read and manage your calendars
-- `Contacts.Read` - Read your contacts
-- `Tasks.Read` - Read your tasks
+- `Contacts.ReadWrite` - Read and manage your contacts
+- `Tasks.ReadWrite` - Read and manage your tasks
 - `User.Read` - Read your profile
 - `offline_access` - Maintain access (for token refresh)
-
-**Note:** Write operations (email sending, event management) are configured but not yet implemented in the Graph API backend. They currently only work via the AppleScript backend.
 
 #### Security Model - Shared Azure AD App
 
@@ -164,14 +187,13 @@ This project provides a shared Azure AD application for quick-start convenience.
 - **Only data you explicitly consent to** during the device code authentication flow
 - **Only when you're actively using** the MCP server
 - **Tokens are stored locally** on your machine (`~/.outlook-mcp/tokens.json`)
-- **Read-only access** to mail, calendar, contacts, and tasks
+- **Read/write access** to mail, calendar, contacts, and tasks (with two-phase approval for destructive operations)
 
 ##### ❌ What the Shared App CANNOT Access
 
 - **Your data when you're not using the server** - tokens are only used by your local MCP instance
 - **Your password or credentials** - Microsoft handles authentication
 - **Other users' data** - each user authenticates separately with their own account
-- **Write operations** - current permissions are read-only (by design)
 
 ##### 🔒 How It Works (Technical Details)
 
@@ -205,7 +227,7 @@ See [Custom Azure AD Setup](#custom-azure-ad-setup) below for instructions.
 ##### 🤝 Trust & Transparency
 
 - ✅ **Open Source** - Full code available at [GitHub](https://github.com/jbctechsolutions/mcp-outlook-mac)
-- ✅ **Minimal Scopes** - Only requests necessary read permissions
+- ✅ **Minimal Scopes** - Only requests necessary permissions
 - ✅ **Standard Practice** - Same model used by Postman, Microsoft Graph Explorer, and many open-source tools
 - ✅ **User Control** - You can revoke access anytime in your [Microsoft account settings](https://account.microsoft.com/privacy/app-access)
 - ✅ **Override Option** - Use `OUTLOOK_MCP_CLIENT_ID` environment variable to use your own app
@@ -218,7 +240,7 @@ See [Custom Azure AD Setup](#custom-azure-ad-setup) below for instructions.
 - Corporate policies may block external multi-tenant apps
 
 **Risk to app owner (JBC Tech Solutions):**
-- Microsoft could revoke the app if abuse is detected (minimal risk with read-only permissions)
+- Microsoft could revoke the app if abuse is detected
 - No access to your data or liability for your usage
 
 **Cost:** Using the shared app is **free for everyone** - no charges to you or the app owner.
@@ -240,10 +262,10 @@ The server includes a pre-configured shared Azure AD app for quick-start testing
 
 1. Go to **API permissions** → **Add a permission** → **Microsoft Graph** → **Delegated permissions**
 2. Add these permissions:
-   - `Mail.ReadWrite` - Read and send mail
+   - `Mail.ReadWrite` - Read, send, and manage mail
    - `Calendars.ReadWrite` - Manage calendar events
-   - `Contacts.Read` - Read contacts
-   - `Tasks.Read` - Read tasks
+   - `Contacts.ReadWrite` - Manage contacts
+   - `Tasks.ReadWrite` - Manage tasks
    - `User.Read` - User profile
    - `offline_access` - Token refresh
 3. Click **Add permissions**
@@ -406,7 +428,7 @@ Add the plugin marketplace to your `~/.claude/settings.json`:
 - Automation permission for Outlook (you'll be prompted on first use)
 
 ### Graph API Backend
-- macOS, Windows, or Linux
+- macOS, Windows, or Linux (no Outlook installation required)
 - Microsoft account (personal or work/school)
 - Node.js 18 or later
 - Internet connection
@@ -482,14 +504,16 @@ Uses AppleScript to communicate with Microsoft Outlook for Mac:
 - Works best with classic Outlook for Mac
 - Requires Outlook to be running
 - Works offline (no network required)
+- Calendar write ops (create, update, delete, RSVP) and email sending
 - Full support for Notes
 
 ### Graph API Backend
 
 Uses Microsoft Graph API to access your data:
-- Works with "new Outlook" for Mac (cloud-based)
+- Works with "new Outlook" for Mac (or any platform - no Outlook installation required)
 - Connects directly to Microsoft's servers
-- Works without Outlook running
+- Full read/write operations: mail, drafts, calendar, contacts, tasks, mailbox organization
+- Two-phase approval for destructive operations (delete, send)
 - Supports personal and work/school accounts
 - Does not support Notes (Graph API limitation)
 
@@ -545,6 +569,8 @@ src/
 │   ├── repository.ts   # IRepository implementation
 │   └── content-readers.ts  # Content reader implementations
 ├── tools/              # MCP tool implementations
+│   ├── mail-send.ts   # Draft/send/reply/forward tools
+│   └── mailbox-organization.ts  # Move, delete, flag, categorize tools
 ├── types/              # TypeScript type definitions
 └── utils/              # Utilities (dates, errors, etc.)
 ```

@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [v1.2.1] - 2026-02-24
+
+### Changed
+- **Documentation overhaul**: Updated README to reflect v1.2.0 capabilities — 72 tools, full Graph API write operations, removed outdated "read-only" and "beta" references
+- Updated Graph API permissions documentation (`Contacts.ReadWrite`, `Tasks.ReadWrite`)
+- Updated security model documentation to reflect read/write access with two-phase approval
+- Fixed CHANGELOG comparison links for all versions
+
 ## [v1.2.0] - 2026-02-23
 
 ### Added
@@ -144,10 +152,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Unit, integration, and E2E tests
 
 ### Known Limitations
-- **Graph API Backend (Beta)**
-  - Event management write operations not yet implemented (create, update, delete, RSVP)
-  - Email sending not yet implemented
-  - Read operations are fully functional and stable
+- **Graph API Backend**
+  - Notes not available (Microsoft Graph API limitation)
+  - All other read/write operations fully implemented as of v1.2.0
 
 - **Platform Limitations**
   - AppleScript backend does not support Google accounts (macOS limitation)
@@ -167,7 +174,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-[Unreleased]: https://github.com/jbctechsolutions/mcp-outlook-mac/compare/v1.1.0...HEAD
+[Unreleased]: https://github.com/jbctechsolutions/mcp-outlook-mac/compare/v1.2.1...HEAD
+[v1.2.1]: https://github.com/jbctechsolutions/mcp-outlook-mac/compare/v1.2.0...v1.2.1
+[v1.2.0]: https://github.com/jbctechsolutions/mcp-outlook-mac/compare/v1.1.8...v1.2.0
+[v1.1.8]: https://github.com/jbctechsolutions/mcp-outlook-mac/compare/v1.1.7...v1.1.8
+[v1.1.7]: https://github.com/jbctechsolutions/mcp-outlook-mac/compare/v1.1.6...v1.1.7
+[v1.1.6]: https://github.com/jbctechsolutions/mcp-outlook-mac/compare/v1.1.5...v1.1.6
+[v1.1.5]: https://github.com/jbctechsolutions/mcp-outlook-mac/compare/v1.1.4...v1.1.5
+[v1.1.4]: https://github.com/jbctechsolutions/mcp-outlook-mac/compare/v1.1.0...v1.1.4
 [1.1.0]: https://github.com/jbctechsolutions/mcp-outlook-mac/compare/v1.0.3...v1.1.0
 [1.0.3]: https://github.com/jbctechsolutions/mcp-outlook-mac/compare/v1.0.2...v1.0.3
 [1.0.2]: https://github.com/jbctechsolutions/mcp-outlook-mac/compare/v1.0.1...v1.0.2
