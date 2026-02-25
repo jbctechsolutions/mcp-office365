@@ -1776,9 +1776,18 @@ export function createServer(): Server {
     }
   }
 
+  // Tools that only exist when using Graph API (signature + scheduling)
+  const GRAPH_ONLY_TOOL_NAMES = new Set([
+    'set_signature',
+    'get_signature',
+    'check_availability',
+    'find_meeting_times',
+  ]);
+
   // Register tool list handler
   server.setRequestHandler(ListToolsRequestSchema, () => {
-    return { tools: TOOLS };
+    const tools = useGraphApi ? TOOLS : TOOLS.filter((t) => !GRAPH_ONLY_TOOL_NAMES.has(t.name));
+    return { tools };
   });
 
   // Register tool call handler (async for Graph API support)

@@ -37,20 +37,73 @@ export interface ISchedulingRepository {
 // Zod Schemas
 // =============================================================================
 
-export const CheckAvailabilityInput = z.strictObject({
-  email_addresses: z.array(z.string().email()).min(1).describe('Email addresses to check availability for'),
-  start_time: z.string().describe('Start of time window (ISO 8601)'),
-  end_time: z.string().describe('End of time window (ISO 8601)'),
-  availability_view_interval: z.number().int().min(5).max(1440).default(30).describe('Time slot interval in minutes (default: 30)'),
-});
+const iso8601DateTimeString = z
+  .string()
+  .refine((value) => !Number.isNaN(Date.parse(value)), {
+    message: 'must be a valid ISO 8601 date-time string',
+  });
 
-export const FindMeetingTimesInput = z.strictObject({
-  attendees: z.array(z.string().email()).min(1).describe('Attendee email addresses'),
-  duration_minutes: z.number().int().min(1).describe('Meeting duration in minutes'),
-  start_time: z.string().optional().describe('Start of search window (ISO 8601)'),
-  end_time: z.string().optional().describe('End of search window (ISO 8601)'),
-  max_candidates: z.number().int().min(1).max(25).default(5).describe('Max time suggestions to return (default: 5)'),
-});
+export const CheckAvailabilityInput = z
+  .strictObject({
+    email_addresses: z.array(z.string().email()).min(1).describe('Email addresses to check availability for'),
+    start_time: iso8601DateTimeString.describe('Start of time window (ISO 8601)'),
+    end_time: iso8601DateTimeString.describe('End of time window (ISO 8601)'),
+    availability_view_interval: z
+      .number()
+      .int()
+      .min(5)
+      .max(1440)
+      .default(30)
+      .describe('Time slot interval in minutes (default: 30)'),
+  })
+  .superRefine((data, ctx) => {
+    const start = Date.parse(data.start_time);
+    const end = Date.parse(data.end_time);
+    if (!Number.isNaN(start) && !Number.isNaN(end) && start >= end) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['end_time'],
+        message: 'end_time must be after start_time',
+      });
+    }
+  });
+
+export const FindMeetingTimesInput = z
+  .strictObject({
+    attendees: z.array(z.string().email()).min(1).describe('Attendee email addresses'),
+    duration_minutes: z.number().int().min(1).describe('Meeting duration in minutes'),
+    start_time: iso8601DateTimeString.optional().describe('Start of search window (ISO 8601)'),
+    end_time: iso8601DateTimeString.optional().describe('End of search window (ISO 8601)'),
+    max_candidates: z
+      .number()
+      .int()
+      .min(1)
+      .max(25)
+      .default(5)
+      .describe('Max time suggestions to return (default: 5)'),
+  })
+  .superRefine((data, ctx) => {
+    if (data.start_time != null && data.end_time != null) {
+      const start = Date.parse(data.start_time);
+      const end = Date.parse(data.end_time);
+      if (!Number.isNaN(start) && !Number.isNaN(end) && start >= end) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['end_time'],
+          message: 'end_time must be after start_time when both are provided',
+        });
+      }
+    }
+    const hasStart = data.start_time !== undefined;
+    const hasEnd = data.end_time !== undefined;
+    if (hasStart !== hasEnd) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: hasStart ? ['end_time'] : ['start_time'],
+        message: 'start_time and end_time must be provided together or omitted together',
+      });
+    }
+  });
 
 // =============================================================================
 // Scheduling Tools Class

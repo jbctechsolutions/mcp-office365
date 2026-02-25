@@ -570,9 +570,9 @@ export class MailSendTools {
     message: string;
   }> {
     // Reply comments are always plain text (no body_type field)
-    const comment = params.comment != null
-      ? appendSignature(params.comment, 'text', params.include_signature)
-      : params.comment;
+    const baseComment = params.comment ?? (params.include_signature ? '' : undefined);
+    const comment =
+      baseComment != null ? appendSignature(baseComment, 'text', params.include_signature) : baseComment;
     const { numericId } = await this.repository.replyAsDraftAsync(
       params.message_id,
       params.reply_all,
@@ -591,9 +591,9 @@ export class MailSendTools {
     message: string;
   }> {
     // Forward comments are always plain text (no body_type field)
-    const comment = params.comment != null
-      ? appendSignature(params.comment, 'text', params.include_signature)
-      : params.comment;
+    const baseComment = params.comment ?? (params.include_signature ? '' : undefined);
+    const comment =
+      baseComment != null ? appendSignature(baseComment, 'text', params.include_signature) : baseComment;
     const { numericId } = await this.repository.forwardAsDraftAsync(
       params.message_id,
       params.to_recipients,
@@ -611,8 +611,13 @@ export class MailSendTools {
   // ---------------------------------------------------------------------------
 
   setSignature(params: z.infer<typeof SetSignatureInput>): { success: boolean; message: string } {
-    writeSignature(params.content, params.content_type);
-    return { success: true, message: 'Signature saved successfully.' };
+    try {
+      writeSignature(params.content, params.content_type);
+      return { success: true, message: 'Signature saved successfully.' };
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      return { success: false, message };
+    }
   }
 
   getSignature(): { has_signature: boolean; content?: string; message?: string } {

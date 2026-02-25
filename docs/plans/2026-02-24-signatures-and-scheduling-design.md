@@ -19,7 +19,7 @@ Signatures stored as HTML at `~/.outlook-mcp/signature.html` (reuses existing co
 
 **`set_signature`** — Saves an HTML signature to disk.
 - Input: `{ content: string, content_type: 'html' | 'text' }`
-- If `content_type` is `text`, wraps in `<pre>` tag for HTML storage
+- If `content_type` is `text`, content is HTML-escaped and wrapped in `<pre>` for safe storage
 - Returns success confirmation
 
 **`get_signature`** — Reads the stored signature.
@@ -32,12 +32,13 @@ When creating/sending emails, the server appends `<br><br>` + signature HTML to 
 1. A signature file exists at `~/.outlook-mcp/signature.html`
 2. The `include_signature` param is `true` (default) on the tool call
 
-**Affected tools:**
+**Affected tools (Graph API only):**
 - `create_draft`
-- `send_email` (AppleScript)
 - `prepare_send_email`
 - `reply_as_draft`
 - `forward_as_draft`
+
+**Note:** Signature tools (`set_signature`, `get_signature`) and auto-append are only available when using the Graph API backend. AppleScript mode does not advertise these tools or append signatures to `send_email`.
 
 **NOT affected:**
 - `update_draft` — user is manually editing, don't double-append
