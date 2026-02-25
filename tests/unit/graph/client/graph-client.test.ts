@@ -857,4 +857,86 @@ describe('graph/client/graph-client', () => {
       });
     });
   });
+
+  describe('getSchedule', () => {
+    it('calls POST /me/calendar/getSchedule with correct body and returns value array', async () => {
+      const mockResponse = {
+        value: [
+          {
+            scheduleId: 'bob@example.com',
+            availabilityView: '0120',
+            scheduleItems: [
+              { status: 'busy', start: { dateTime: '2026-02-24T10:00:00' }, end: { dateTime: '2026-02-24T11:00:00' } },
+            ],
+          },
+        ],
+      };
+      const postBuilder = { post: vi.fn().mockResolvedValue(mockResponse) };
+      mockApi.mockReturnValue(postBuilder);
+
+      const result = await graphClient.getSchedule({
+        schedules: ['bob@example.com'],
+        startTime: { dateTime: '2026-02-24T08:00:00', timeZone: 'UTC' },
+        endTime: { dateTime: '2026-02-24T18:00:00', timeZone: 'UTC' },
+        availabilityViewInterval: 30,
+      });
+
+      expect(mockApi).toHaveBeenCalledWith('/me/calendar/getSchedule');
+      expect(postBuilder.post).toHaveBeenCalledWith({
+        schedules: ['bob@example.com'],
+        startTime: { dateTime: '2026-02-24T08:00:00', timeZone: 'UTC' },
+        endTime: { dateTime: '2026-02-24T18:00:00', timeZone: 'UTC' },
+        availabilityViewInterval: 30,
+      });
+      expect(result).toEqual(mockResponse.value);
+    });
+  });
+
+  describe('findMeetingTimes', () => {
+    it('calls POST /me/findMeetingTimes with correct body and returns full response', async () => {
+      const mockResponse = {
+        meetingTimeSuggestions: [
+          {
+            confidence: 100,
+            meetingTimeSlot: {
+              start: { dateTime: '2026-02-24T14:00:00', timeZone: 'UTC' },
+              end: { dateTime: '2026-02-24T15:00:00', timeZone: 'UTC' },
+            },
+            attendeeAvailability: [
+              { attendee: { emailAddress: { address: 'bob@example.com' } }, availability: 'free' },
+            ],
+          },
+        ],
+        emptySuggestionsReason: '',
+      };
+      const postBuilder = { post: vi.fn().mockResolvedValue(mockResponse) };
+      mockApi.mockReturnValue(postBuilder);
+
+      const result = await graphClient.findMeetingTimes({
+        attendees: [{ emailAddress: { address: 'bob@example.com' }, type: 'required' }],
+        meetingDuration: 'PT1H',
+        timeConstraint: {
+          timeslots: [{
+            start: { dateTime: '2026-02-24T08:00:00', timeZone: 'UTC' },
+            end: { dateTime: '2026-02-24T18:00:00', timeZone: 'UTC' },
+          }],
+        },
+        maxCandidates: 5,
+      });
+
+      expect(mockApi).toHaveBeenCalledWith('/me/findMeetingTimes');
+      expect(postBuilder.post).toHaveBeenCalledWith({
+        attendees: [{ emailAddress: { address: 'bob@example.com' }, type: 'required' }],
+        meetingDuration: 'PT1H',
+        timeConstraint: {
+          timeslots: [{
+            start: { dateTime: '2026-02-24T08:00:00', timeZone: 'UTC' },
+            end: { dateTime: '2026-02-24T18:00:00', timeZone: 'UTC' },
+          }],
+        },
+        maxCandidates: 5,
+      });
+      expect(result).toEqual(mockResponse);
+    });
+  });
 });

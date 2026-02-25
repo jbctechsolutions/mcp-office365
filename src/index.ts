@@ -53,7 +53,16 @@ import { createContactsTools } from './tools/contacts.js';
 import { createTasksTools } from './tools/tasks.js';
 import { createNotesTools } from './tools/notes.js';
 import { createMailboxOrganizationTools } from './tools/mailbox-organization.js';
-import { createMailSendTools } from './tools/mail-send.js';
+import {
+  createMailSendTools,
+  SetSignatureInput,
+  GetSignatureInput,
+} from './tools/mail-send.js';
+import {
+  createSchedulingTools,
+  CheckAvailabilityInput,
+  FindMeetingTimesInput,
+} from './tools/scheduling.js';
 import {
   ListEmailsInput,
   SearchEmailsInput,
@@ -1307,6 +1316,11 @@ const TOOLS: Tool[] = [
           default: 'text',
           description: 'Body content type (default: text)',
         },
+        include_signature: {
+          type: 'boolean',
+          default: true,
+          description: 'Include email signature (default: true)',
+        },
         attachments: {
           type: 'array',
           description: 'File attachments',
@@ -1448,6 +1462,11 @@ const TOOLS: Tool[] = [
           default: 'text',
           description: 'Body content type (default: text)',
         },
+        include_signature: {
+          type: 'boolean',
+          default: true,
+          description: 'Include email signature (default: true)',
+        },
         attachments: {
           type: 'array',
           description: 'File attachments',
@@ -1544,6 +1563,11 @@ const TOOLS: Tool[] = [
         message_id: { type: 'number', description: 'The message ID to reply to' },
         comment: { type: 'string', description: 'Initial reply body text' },
         reply_all: { type: 'boolean', default: false, description: 'Reply to all recipients (default: false)' },
+        include_signature: {
+          type: 'boolean',
+          default: true,
+          description: 'Include email signature (default: true)',
+        },
       },
       required: ['message_id'],
     },
@@ -1561,8 +1585,88 @@ const TOOLS: Tool[] = [
           description: 'Forward recipients (can also add later via update_draft)',
         },
         comment: { type: 'string', description: 'Initial forward body text' },
+        include_signature: {
+          type: 'boolean',
+          default: true,
+          description: 'Include email signature (default: true)',
+        },
       },
       required: ['message_id'],
+    },
+  },
+  // Signature management tools
+  {
+    name: 'set_signature',
+    description: 'Save an email signature that will be auto-appended to outgoing emails',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        content: { type: 'string', description: 'Signature content (HTML or plain text)' },
+        content_type: {
+          type: 'string',
+          enum: ['html', 'text'],
+          default: 'html',
+          description: 'Content type of the signature (default: html)',
+        },
+      },
+      required: ['content'],
+    },
+  },
+  {
+    name: 'get_signature',
+    description: 'Get the currently stored email signature',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {},
+      required: [],
+    },
+  },
+  // Calendar scheduling tools
+  {
+    name: 'check_availability',
+    description: 'Check free/busy availability for one or more people in a time window',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        email_addresses: {
+          type: 'array',
+          items: { type: 'string' },
+          minItems: 1,
+          description: 'Email addresses to check availability for',
+        },
+        start_time: { type: 'string', description: 'Start of time window (ISO 8601)' },
+        end_time: { type: 'string', description: 'End of time window (ISO 8601)' },
+        availability_view_interval: {
+          type: 'number',
+          default: 30,
+          description: 'Time slot interval in minutes (default: 30)',
+        },
+      },
+      required: ['email_addresses', 'start_time', 'end_time'],
+    },
+  },
+  {
+    name: 'find_meeting_times',
+    description: 'Find available meeting time slots for a group of attendees',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        attendees: {
+          type: 'array',
+          items: { type: 'string' },
+          minItems: 1,
+          description: 'Attendee email addresses',
+        },
+        duration_minutes: { type: 'number', description: 'Meeting duration in minutes' },
+        start_time: { type: 'string', description: 'Start of search window (ISO 8601, optional)' },
+        end_time: { type: 'string', description: 'End of search window (ISO 8601, optional)' },
+        max_candidates: {
+          type: 'number',
+          default: 5,
+          description: 'Maximum number of time suggestions (default: 5)',
+        },
+      },
+      required: ['attendees', 'duration_minutes'],
     },
   },
 ];
@@ -1603,6 +1707,7 @@ export function createServer(): Server {
   let notesTools: ReturnType<typeof createNotesTools> | null = null;
   let orgTools: ReturnType<typeof createMailboxOrganizationTools> | null = null;
   let sendTools: ReturnType<typeof createMailSendTools> | null = null;
+  let schedulingTools: ReturnType<typeof createSchedulingTools> | null = null;
   let calendarWriter: ICalendarWriter | null = null;
   let calendarManager: ICalendarManager | null = null;
   let mailSender: IMailSender | null = null;
@@ -1653,6 +1758,7 @@ export function createServer(): Server {
     const adapter = new GraphMailboxAdapter(graphRepository);
     orgTools = createMailboxOrganizationTools(adapter, tokenManager);
     sendTools = createMailSendTools(graphRepository, tokenManager);
+    schedulingTools = createSchedulingTools(graphRepository);
 
     initialized = true;
   });
@@ -1670,9 +1776,18 @@ export function createServer(): Server {
     }
   }
 
+  // Tools that only exist when using Graph API (signature + scheduling)
+  const GRAPH_ONLY_TOOL_NAMES = new Set([
+    'set_signature',
+    'get_signature',
+    'check_availability',
+    'find_meeting_times',
+  ]);
+
   // Register tool list handler
   server.setRequestHandler(ListToolsRequestSchema, () => {
-    return { tools: TOOLS };
+    const tools = useGraphApi ? TOOLS : TOOLS.filter((t) => !GRAPH_ONLY_TOOL_NAMES.has(t.name));
+    return { tools };
   });
 
   // Register tool call handler (async for Graph API support)
@@ -1684,7 +1799,7 @@ export function createServer(): Server {
 
       // Graph API mode - handle async operations directly
       if (useGraphApi && graphRepository != null) {
-        return await handleGraphToolCall(name, args, graphRepository, graphContentReaders!, orgTools!, sendTools!, tokenManager);
+        return await handleGraphToolCall(name, args, graphRepository, graphContentReaders!, orgTools!, sendTools!, schedulingTools!, tokenManager);
       }
 
       // AppleScript mode - use sync tool interfaces
@@ -1983,6 +2098,42 @@ async function handleSendToolCall(
       return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
     }
 
+    case 'set_signature': {
+      const params = SetSignatureInput.parse(args);
+      const result = sendTools.setSignature(params);
+      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+    }
+    case 'get_signature': {
+      GetSignatureInput.parse(args ?? {});
+      const result = sendTools.getSignature();
+      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+    }
+
+    default:
+      return null;
+  }
+}
+
+// =============================================================================
+// Scheduling Tool Handler (Graph API only)
+// =============================================================================
+
+async function handleSchedulingToolCall(
+  name: string,
+  args: unknown,
+  schedulingTools: ReturnType<typeof createSchedulingTools>
+): Promise<ToolResult | null> {
+  switch (name) {
+    case 'check_availability': {
+      const params = CheckAvailabilityInput.parse(args);
+      const result = await schedulingTools.checkAvailability(params);
+      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+    }
+    case 'find_meeting_times': {
+      const params = FindMeetingTimesInput.parse(args);
+      const result = await schedulingTools.findMeetingTimes(params);
+      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+    }
     default:
       return null;
   }
@@ -2592,6 +2743,7 @@ async function handleGraphToolCall(
   contentReaders: GraphContentReaders,
   orgTools: ReturnType<typeof createMailboxOrganizationTools>,
   sendTools: ReturnType<typeof createMailSendTools>,
+  schedulingTools: ReturnType<typeof createSchedulingTools>,
   tokenManager: ApprovalTokenManager
 ): Promise<ToolResult> {
   // Handle mailbox organization tools (shared between backends)
@@ -2601,6 +2753,10 @@ async function handleGraphToolCall(
   // Handle mail send tools (Graph API only)
   const sendResult = await handleSendToolCall(name, args, sendTools);
   if (sendResult != null) return sendResult;
+
+  // Handle scheduling tools (Graph API only)
+  const schedulingResult = await handleSchedulingToolCall(name, args, schedulingTools);
+  if (schedulingResult != null) return schedulingResult;
 
   try {
     switch (name) {

@@ -73,6 +73,9 @@ vi.mock('../../../src/graph/client/index.js', () => ({
       updateTask: vi.fn(),
       deleteTask: vi.fn(),
       createTaskList: vi.fn(),
+      // Calendar scheduling operations
+      getSchedule: vi.fn(),
+      findMeetingTimes: vi.fn(),
     };
   }),
 }));
@@ -2293,6 +2296,95 @@ describe('graph/repository', () => {
         // Verify it was cached in taskLists
         const idCache = (repository as any).idCache;
         expect(idCache.taskLists.get(numericId)).toBe('new-list-1');
+      });
+    });
+  });
+
+  describe('Calendar Scheduling', () => {
+    describe('getScheduleAsync', () => {
+      it('calls client.getSchedule with formatted params and returns result', async () => {
+        const mockSchedules = [
+          { scheduleId: 'bob@example.com', availabilityView: '0120', scheduleItems: [] },
+        ];
+        mockClient.getSchedule.mockResolvedValue(mockSchedules);
+
+        const result = await repository.getScheduleAsync({
+          emailAddresses: ['bob@example.com'],
+          startTime: '2026-02-24T08:00:00Z',
+          endTime: '2026-02-24T18:00:00Z',
+          availabilityViewInterval: 30,
+        });
+
+        expect(mockClient.getSchedule).toHaveBeenCalledWith({
+          schedules: ['bob@example.com'],
+          startTime: { dateTime: '2026-02-24T08:00:00Z', timeZone: 'UTC' },
+          endTime: { dateTime: '2026-02-24T18:00:00Z', timeZone: 'UTC' },
+          availabilityViewInterval: 30,
+        });
+        expect(result).toEqual(mockSchedules);
+      });
+
+      it('uses default interval of 30 when not specified', async () => {
+        mockClient.getSchedule.mockResolvedValue([]);
+
+        await repository.getScheduleAsync({
+          emailAddresses: ['bob@example.com'],
+          startTime: '2026-02-24T08:00:00Z',
+          endTime: '2026-02-24T18:00:00Z',
+        });
+
+        expect(mockClient.getSchedule).toHaveBeenCalledWith(
+          expect.objectContaining({ availabilityViewInterval: 30 })
+        );
+      });
+    });
+
+    describe('findMeetingTimesAsync', () => {
+      it('calls client.findMeetingTimes with formatted attendees and ISO duration', async () => {
+        const mockResult = {
+          meetingTimeSuggestions: [{ confidence: 100 }],
+          emptySuggestionsReason: '',
+        };
+        mockClient.findMeetingTimes.mockResolvedValue(mockResult);
+
+        const result = await repository.findMeetingTimesAsync({
+          attendees: ['bob@example.com', 'alice@example.com'],
+          durationMinutes: 60,
+          startTime: '2026-02-24T08:00:00Z',
+          endTime: '2026-02-24T18:00:00Z',
+          maxCandidates: 5,
+        });
+
+        expect(mockClient.findMeetingTimes).toHaveBeenCalledWith({
+          attendees: [
+            { emailAddress: { address: 'bob@example.com' }, type: 'required' },
+            { emailAddress: { address: 'alice@example.com' }, type: 'required' },
+          ],
+          meetingDuration: 'PT1H0M',
+          timeConstraint: {
+            timeslots: [{
+              start: { dateTime: '2026-02-24T08:00:00Z', timeZone: 'UTC' },
+              end: { dateTime: '2026-02-24T18:00:00Z', timeZone: 'UTC' },
+            }],
+          },
+          maxCandidates: 5,
+        });
+        expect(result).toEqual(mockResult);
+      });
+
+      it('omits timeConstraint when startTime/endTime not provided', async () => {
+        mockClient.findMeetingTimes.mockResolvedValue({ meetingTimeSuggestions: [] });
+
+        await repository.findMeetingTimesAsync({
+          attendees: ['bob@example.com'],
+          durationMinutes: 30,
+        });
+
+        expect(mockClient.findMeetingTimes).toHaveBeenCalledWith({
+          attendees: [{ emailAddress: { address: 'bob@example.com' }, type: 'required' }],
+          meetingDuration: 'PT0H30M',
+          maxCandidates: 5,
+        });
       });
     });
   });

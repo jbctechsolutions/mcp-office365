@@ -30,6 +30,7 @@ import {
 } from '../utils/errors.js';
 import type { GraphClient } from '../graph/client/index.js';
 import { uploadAttachment } from '../graph/attachments.js';
+import { readSignature, writeSignature, appendSignature } from '../signature.js';
 
 // =============================================================================
 // Repository Interface
@@ -95,6 +96,7 @@ export const CreateDraftInput = z.strictObject({
   body: z.string().describe('Email body'),
   body_type: z.enum(['text', 'html']).default('text').describe('Body content type'),
   attachments: z.array(AttachmentInput).optional().describe('File attachments'),
+  include_signature: z.boolean().default(true).describe('Include email signature (default: true)'),
 });
 
 export const UpdateDraftInput = z.strictObject({
@@ -135,6 +137,7 @@ export const PrepareSendEmailInput = z.strictObject({
   body: z.string().describe('Email body'),
   body_type: z.enum(['text', 'html']).default('text').describe('Body content type'),
   attachments: z.array(AttachmentInput).optional().describe('File attachments'),
+  include_signature: z.boolean().default(true).describe('Include email signature (default: true)'),
 });
 
 export const ConfirmSendEmailInput = z.strictObject({
@@ -173,13 +176,22 @@ export const ReplyAsDraftInput = z.strictObject({
   message_id: z.number().int().positive().describe('The message ID to reply to'),
   comment: z.string().optional().describe('Initial reply body text'),
   reply_all: z.boolean().default(false).describe('Reply to all recipients (default: false)'),
+  include_signature: z.boolean().default(true).describe('Include email signature (default: true)'),
 });
 
 export const ForwardAsDraftInput = z.strictObject({
   message_id: z.number().int().positive().describe('The message ID to forward'),
   to_recipients: z.array(z.string().email()).optional().describe('Forward recipients'),
   comment: z.string().optional().describe('Initial forward body text'),
+  include_signature: z.boolean().default(true).describe('Include email signature (default: true)'),
 });
+
+export const SetSignatureInput = z.strictObject({
+  content: z.string().describe('Signature content (HTML or plain text)'),
+  content_type: z.enum(['html', 'text']).default('html').describe('Content type of the signature'),
+});
+
+export const GetSignatureInput = z.strictObject({});
 
 // =============================================================================
 // Type Exports
@@ -281,9 +293,10 @@ export class MailSendTools {
   // ---------------------------------------------------------------------------
 
   async createDraft(params: CreateDraftParams): Promise<{ success: boolean; draft_id: number }> {
+    const body = appendSignature(params.body, params.body_type, params.include_signature);
     const { numericId, graphId } = await this.repository.createDraftAsync({
       subject: params.subject,
-      body: params.body,
+      body,
       bodyType: params.body_type,
       ...(params.to != null ? { to: params.to } : {}),
       ...(params.cc != null ? { cc: params.cc } : {}),
@@ -364,6 +377,7 @@ export class MailSendTools {
     };
     action: string;
   } {
+    const body = appendSignature(params.body, params.body_type, params.include_signature);
     const hash = hashDirectSendForApproval({
       subject: params.subject,
       toCount: params.to.length,
@@ -379,7 +393,7 @@ export class MailSendTools {
       targetHash: hash,
       metadata: {
         subject: params.subject,
-        body: params.body,
+        body,
         bodyType: params.body_type,
         to: params.to,
         cc: params.cc,
@@ -555,10 +569,14 @@ export class MailSendTools {
     draft_id: number;
     message: string;
   }> {
+    // Reply comments are always plain text (no body_type field)
+    const baseComment = params.comment ?? (params.include_signature ? '' : undefined);
+    const comment =
+      baseComment != null ? appendSignature(baseComment, 'text', params.include_signature) : baseComment;
     const { numericId } = await this.repository.replyAsDraftAsync(
       params.message_id,
       params.reply_all,
-      params.comment,
+      comment,
     );
     return {
       success: true,
@@ -572,16 +590,42 @@ export class MailSendTools {
     draft_id: number;
     message: string;
   }> {
+    // Forward comments are always plain text (no body_type field)
+    const baseComment = params.comment ?? (params.include_signature ? '' : undefined);
+    const comment =
+      baseComment != null ? appendSignature(baseComment, 'text', params.include_signature) : baseComment;
     const { numericId } = await this.repository.forwardAsDraftAsync(
       params.message_id,
       params.to_recipients,
-      params.comment,
+      comment,
     );
     return {
       success: true,
       draft_id: numericId,
       message: 'Forward draft created. Use update_draft to edit, then prepare_send_draft or prepare_send_email to send.',
     };
+  }
+
+  // ---------------------------------------------------------------------------
+  // Signature Management
+  // ---------------------------------------------------------------------------
+
+  setSignature(params: z.infer<typeof SetSignatureInput>): { success: boolean; message: string } {
+    try {
+      writeSignature(params.content, params.content_type);
+      return { success: true, message: 'Signature saved successfully.' };
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      return { success: false, message };
+    }
+  }
+
+  getSignature(): { has_signature: boolean; content?: string; message?: string } {
+    const signature = readSignature();
+    if (signature == null) {
+      return { has_signature: false, message: 'No signature is set. Use set_signature to create one.' };
+    }
+    return { has_signature: true, content: signature };
   }
 
   // ---------------------------------------------------------------------------
