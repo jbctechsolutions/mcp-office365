@@ -2091,12 +2091,12 @@ async function handleSendToolCall(
 
     case 'set_signature': {
       const params = SetSignatureInput.parse(args);
-      const result = await sendTools.setSignature(params);
+      const result = sendTools.setSignature(params);
       return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
     }
     case 'get_signature': {
       GetSignatureInput.parse(args ?? {});
-      const result = await sendTools.getSignature();
+      const result = sendTools.getSignature();
       return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
     }
 

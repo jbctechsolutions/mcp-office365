@@ -610,12 +610,12 @@ export class MailSendTools {
   // Signature Management
   // ---------------------------------------------------------------------------
 
-  async setSignature(params: z.infer<typeof SetSignatureInput>): Promise<{ success: boolean; message: string }> {
+  setSignature(params: z.infer<typeof SetSignatureInput>): { success: boolean; message: string } {
     writeSignature(params.content, params.content_type);
     return { success: true, message: 'Signature saved successfully.' };
   }
 
-  async getSignature(): Promise<{ has_signature: boolean; content?: string; message?: string }> {
+  getSignature(): { has_signature: boolean; content?: string; message?: string } {
     const signature = readSignature();
     if (signature == null) {
       return { has_signature: false, message: 'No signature is set. Use set_signature to create one.' };

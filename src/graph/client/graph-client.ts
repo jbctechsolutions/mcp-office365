@@ -904,7 +904,7 @@ export class GraphClient {
     maxCandidates?: number;
   }): Promise<unknown> {
     const client = await this.getClient();
-    return await client.api('/me/findMeetingTimes').post(params);
+    return (await client.api('/me/findMeetingTimes').post(params)) as unknown;
   }
 
   // ===========================================================================
