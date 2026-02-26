@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [v1.5.0] - 2026-02-26
+
+### Added
+- **`body_file` parameter** on `create_draft` and `prepare_send_email`: path to a file containing the email body so the server reads it from disk instead of receiving it in the MCP payload. Avoids transport size limits for large HTML (e.g. with embedded images). Either `body` or `body_file` is required.
+- **`inline_images` on `create_draft`**: array of `{ file_path, content_id }` to attach images as inline parts; reference in HTML via `<img src="cid:content_id">` to avoid embedding base64 in the JSON body.
+- **`uploadInlineAttachment()`** in Graph attachments helper: uploads a file as an inline attachment with `isInline` and `contentId`, MIME type from extension, 3MB max per image.
+
 ## [v1.3.0] - 2026-02-24
 
 ### Added
