@@ -1334,8 +1334,24 @@ const TOOLS: Tool[] = [
             required: ['file_path'],
           },
         },
+        body_file: {
+          type: 'string',
+          description: 'Path to a file containing the email body (alternative to body; use to avoid large MCP payloads)',
+        },
+        inline_images: {
+          type: 'array',
+          description: 'Inline images for HTML body: reference in body via <img src="cid:content_id"> to avoid embedding base64 in the payload',
+          items: {
+            type: 'object',
+            properties: {
+              file_path: { type: 'string', description: 'Absolute path to the image file' },
+              content_id: { type: 'string', description: 'Content-ID for HTML (e.g. "logo" for cid:logo)' },
+            },
+            required: ['file_path', 'content_id'],
+          },
+        },
       },
-      required: ['subject', 'body'],
+      required: ['subject'],
     },
   },
   {
@@ -1454,7 +1470,11 @@ const TOOLS: Tool[] = [
         },
         body: {
           type: 'string',
-          description: 'Email body',
+          description: 'Email body (omit when using body_file)',
+        },
+        body_file: {
+          type: 'string',
+          description: 'Path to a file containing the email body (alternative to body; use to avoid large MCP payloads)',
         },
         body_type: {
           type: 'string',
@@ -1481,7 +1501,7 @@ const TOOLS: Tool[] = [
           },
         },
       },
-      required: ['to', 'subject', 'body'],
+      required: ['to', 'subject'],
     },
   },
   {

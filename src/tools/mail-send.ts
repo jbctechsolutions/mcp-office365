@@ -10,6 +10,7 @@
  * for all send operations (send draft, send email, reply, forward).
  */
 
+import * as fs from 'fs';
 import { z } from 'zod';
 import type { EmailRow } from '../database/repository.js';
 import {
@@ -29,7 +30,7 @@ import {
   NotFoundError,
 } from '../utils/errors.js';
 import type { GraphClient } from '../graph/client/index.js';
-import { uploadAttachment } from '../graph/attachments.js';
+import { uploadAttachment, uploadInlineAttachment } from '../graph/attachments.js';
 import { readSignature, writeSignature, appendSignature } from '../signature.js';
 
 // =============================================================================
@@ -88,16 +89,28 @@ const AttachmentInput = z.strictObject({
   content_type: z.string().optional().describe('Override MIME type'),
 });
 
-export const CreateDraftInput = z.strictObject({
-  to: z.array(z.string().email()).optional().describe('To recipients'),
-  cc: z.array(z.string().email()).optional().describe('CC recipients'),
-  bcc: z.array(z.string().email()).optional().describe('BCC recipients'),
-  subject: z.string().describe('Email subject'),
-  body: z.string().describe('Email body'),
-  body_type: z.enum(['text', 'html']).default('text').describe('Body content type'),
-  attachments: z.array(AttachmentInput).optional().describe('File attachments'),
-  include_signature: z.boolean().default(true).describe('Include email signature (default: true)'),
+const InlineImageInput = z.strictObject({
+  file_path: z.string().describe('Absolute path to the image file'),
+  content_id: z.string().describe('Content-ID for referencing in HTML (use in <img src="cid:content_id">)'),
 });
+
+export const CreateDraftInput = z
+  .strictObject({
+    to: z.array(z.string().email()).optional().describe('To recipients'),
+    cc: z.array(z.string().email()).optional().describe('CC recipients'),
+    bcc: z.array(z.string().email()).optional().describe('BCC recipients'),
+    subject: z.string().describe('Email subject'),
+    body: z.string().optional().describe('Email body (omit when using body_file)'),
+    body_file: z.string().optional().describe('Path to a file containing the email body (alternative to body)'),
+    body_type: z.enum(['text', 'html']).default('text').describe('Body content type'),
+    attachments: z.array(AttachmentInput).optional().describe('File attachments'),
+    inline_images: z.array(InlineImageInput).optional().describe('Inline images for HTML body (reference via cid: in img tags)'),
+    include_signature: z.boolean().default(true).describe('Include email signature (default: true)'),
+  })
+  .refine((data) => data.body != null || data.body_file != null, {
+    message: 'Either body or body_file is required',
+    path: ['body'],
+  });
 
 export const UpdateDraftInput = z.strictObject({
   draft_id: z.number().int().positive().describe('The draft ID to update'),
@@ -129,16 +142,22 @@ export const ConfirmSendDraftInput = z.strictObject({
 });
 
 // Send Email (direct)
-export const PrepareSendEmailInput = z.strictObject({
-  to: z.array(z.string().email()).min(1).describe('To recipients'),
-  cc: z.array(z.string().email()).optional().describe('CC recipients'),
-  bcc: z.array(z.string().email()).optional().describe('BCC recipients'),
-  subject: z.string().describe('Email subject'),
-  body: z.string().describe('Email body'),
-  body_type: z.enum(['text', 'html']).default('text').describe('Body content type'),
-  attachments: z.array(AttachmentInput).optional().describe('File attachments'),
-  include_signature: z.boolean().default(true).describe('Include email signature (default: true)'),
-});
+export const PrepareSendEmailInput = z
+  .strictObject({
+    to: z.array(z.string().email()).min(1).describe('To recipients'),
+    cc: z.array(z.string().email()).optional().describe('CC recipients'),
+    bcc: z.array(z.string().email()).optional().describe('BCC recipients'),
+    subject: z.string().describe('Email subject'),
+    body: z.string().optional().describe('Email body (omit when using body_file)'),
+    body_file: z.string().optional().describe('Path to a file containing the email body (alternative to body)'),
+    body_type: z.enum(['text', 'html']).default('text').describe('Body content type'),
+    attachments: z.array(AttachmentInput).optional().describe('File attachments'),
+    include_signature: z.boolean().default(true).describe('Include email signature (default: true)'),
+  })
+  .refine((data) => data.body != null || data.body_file != null, {
+    message: 'Either body or body_file is required',
+    path: ['body'],
+  });
 
 export const ConfirmSendEmailInput = z.strictObject({
   token_id: z.uuid().describe('Approval token from prepare_send_email'),
@@ -293,7 +312,11 @@ export class MailSendTools {
   // ---------------------------------------------------------------------------
 
   async createDraft(params: CreateDraftParams): Promise<{ success: boolean; draft_id: number }> {
-    const body = appendSignature(params.body, params.body_type, params.include_signature);
+    const rawBody =
+      params.body_file != null
+        ? fs.readFileSync(params.body_file, 'utf-8')
+        : params.body!;
+    const body = appendSignature(rawBody, params.body_type, params.include_signature);
     const { numericId, graphId } = await this.repository.createDraftAsync({
       subject: params.subject,
       body,
@@ -307,6 +330,13 @@ export class MailSendTools {
       const graphClient = this.repository.getGraphClient();
       for (const att of params.attachments) {
         await uploadAttachment(graphClient, graphId, att.file_path, att.name, att.content_type);
+      }
+    }
+
+    if (params.inline_images != null && params.inline_images.length > 0) {
+      const graphClient = this.repository.getGraphClient();
+      for (const img of params.inline_images) {
+        await uploadInlineAttachment(graphClient, graphId, img.file_path, img.content_id);
       }
     }
 
@@ -377,7 +407,11 @@ export class MailSendTools {
     };
     action: string;
   } {
-    const body = appendSignature(params.body, params.body_type, params.include_signature);
+    const rawBody =
+      params.body_file != null
+        ? fs.readFileSync(params.body_file, 'utf-8')
+        : params.body!;
+    const body = appendSignature(rawBody, params.body_type, params.include_signature);
     const hash = hashDirectSendForApproval({
       subject: params.subject,
       toCount: params.to.length,
