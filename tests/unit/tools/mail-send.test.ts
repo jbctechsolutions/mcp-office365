@@ -18,12 +18,20 @@ import {
   TargetChangedError,
 } from '../../../src/utils/errors.js';
 
+const mockReadFileSync = vi.hoisted(() => vi.fn());
+
+vi.mock('fs', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('fs')>();
+  return { ...actual, readFileSync: mockReadFileSync };
+});
+
 // Mock the attachments module
 vi.mock('../../../src/graph/attachments.js', () => ({
   uploadAttachment: vi.fn().mockResolvedValue(undefined),
+  uploadInlineAttachment: vi.fn().mockResolvedValue(undefined),
 }));
 
-import { uploadAttachment } from '../../../src/graph/attachments.js';
+import { uploadAttachment, uploadInlineAttachment } from '../../../src/graph/attachments.js';
 
 // Mock the signature module
 const { mockReadSignature, mockWriteSignature, mockAppendSignature } = vi.hoisted(() => ({
@@ -226,6 +234,42 @@ describe('MailSendTools', () => {
 
       expect(uploadAttachment).not.toHaveBeenCalled();
     });
+
+    it('reads body from body_file when provided and uses it for the draft', async () => {
+      vi.mocked(mockAppendSignature).mockImplementation((b) => b);
+      (repo.createDraftAsync as ReturnType<typeof vi.fn>).mockResolvedValue({ numericId: 46, graphId: 'AAA-graph-46' });
+      mockReadFileSync.mockReturnValue('<p>HTML from file</p>');
+
+      await tools.createDraft({
+        subject: 'From File',
+        body_file: '/tmp/email-body.html',
+        body_type: 'html',
+      });
+
+      expect(mockReadFileSync).toHaveBeenCalledWith('/tmp/email-body.html', 'utf-8');
+      expect(repo.createDraftAsync).toHaveBeenCalledWith(
+        expect.objectContaining({ body: '<p>HTML from file</p>', bodyType: 'html' })
+      );
+    });
+
+    it('uploads inline_images after creating draft when provided', async () => {
+      (repo.createDraftAsync as ReturnType<typeof vi.fn>).mockResolvedValue({ numericId: 47, graphId: 'AAA-graph-47' });
+      vi.mocked(uploadInlineAttachment).mockResolvedValue(undefined);
+
+      await tools.createDraft({
+        subject: 'With Inline Image',
+        body: '<p>See <img src="cid:logo" /></p>',
+        body_type: 'html',
+        inline_images: [
+          { file_path: '/tmp/logo.png', content_id: 'logo' },
+        ],
+      });
+
+      expect(uploadInlineAttachment).toHaveBeenCalledTimes(1);
+      expect(uploadInlineAttachment).toHaveBeenCalledWith(
+        mockGraphClient, 'AAA-graph-47', '/tmp/logo.png', 'logo'
+      );
+    });
   });
 
   describe('updateDraft', () => {
@@ -359,6 +403,26 @@ describe('MailSendTools', () => {
       expect(result.preview.subject).toBe('Direct Send');
       expect(result.preview.to).toEqual(['bob@example.com']);
       expect(result.action).toContain('sent');
+    });
+
+    it('prepareSendEmail reads body from body_file when provided', async () => {
+      mockReadFileSync.mockReturnValue('<p>Body from file</p>');
+      vi.mocked(mockAppendSignature).mockImplementation((b) => b);
+
+      const result = await tools.prepareSendEmail({
+        to: ['bob@example.com'],
+        subject: 'From File',
+        body_file: '/tmp/email-body.html',
+        body_type: 'html',
+      });
+
+      expect(mockReadFileSync).toHaveBeenCalledWith('/tmp/email-body.html', 'utf-8');
+      expect(result.token_id).toBeDefined();
+      const prepared = await tools.confirmSendEmail({ token_id: result.token_id });
+      expect(prepared.success).toBe(true);
+      expect(repo.sendMailAsync).toHaveBeenCalledWith(
+        expect.objectContaining({ body: '<p>Body from file</p>', bodyType: 'html' })
+      );
     });
 
     it('confirmSendEmail reads params from token metadata and calls sendMailAsync', async () => {

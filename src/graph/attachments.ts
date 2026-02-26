@@ -162,6 +162,61 @@ export async function uploadAttachment(
   }
 }
 
+/** MIME type by extension for inline images. */
+const IMAGE_EXT_TO_MIME: Record<string, string> = {
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.gif': 'image/gif',
+  '.webp': 'image/webp',
+};
+
+/**
+ * Uploads a file as an inline attachment (e.g. for cid: references in HTML body).
+ *
+ * Use this when the HTML body references the image via <img src="cid:contentId">.
+ * Keeps the body small by not embedding base64 in the MCP payload.
+ *
+ * Only supports files <= 3MB (same as regular inline upload).
+ *
+ * @param client - The Graph API client
+ * @param messageId - The message to attach the file to
+ * @param filePath - Local path to the image file
+ * @param contentId - Content-ID used in HTML (e.g. "logo" for cid:logo)
+ * @param contentType - Optional MIME type (defaults from file extension or image/png)
+ */
+export async function uploadInlineAttachment(
+  client: GraphClient,
+  messageId: string,
+  filePath: string,
+  contentId: string,
+  contentType?: string,
+): Promise<void> {
+  const fileName = path.basename(filePath);
+  const ext = path.extname(filePath).toLowerCase();
+  const mimeType = contentType ?? IMAGE_EXT_TO_MIME[ext] ?? 'image/png';
+  const stat = fs.statSync(filePath);
+  const fileSize = stat.size;
+
+  if (fileSize > INLINE_MAX_BYTES) {
+    throw new Error(
+      `Inline image too large (${fileSize} bytes). Max ${INLINE_MAX_BYTES} bytes. Use a smaller image or attach as regular attachment.`
+    );
+  }
+
+  const fileContent = fs.readFileSync(filePath);
+  const base64 = fileContent.toString('base64');
+
+  await client.addAttachment(messageId, {
+    '@odata.type': '#microsoft.graph.fileAttachment',
+    name: fileName,
+    contentBytes: base64,
+    contentType: mimeType,
+    isInline: true,
+    contentId,
+  });
+}
+
 /**
  * Downloads an attachment from a message and saves it to disk.
  *

@@ -31,6 +31,7 @@ import {
   sanitizeFilename,
   resolveFilePath,
   uploadAttachment,
+  uploadInlineAttachment,
   downloadAttachment,
 } from '../../../src/graph/attachments.js';
 import type { GraphClient } from '../../../src/graph/client/index.js';
@@ -387,6 +388,77 @@ describe('uploadAttachment', () => {
     await expect(
       uploadAttachment(mockClient as unknown as GraphClient, 'msg-1', '/path/to/large.zip')
     ).rejects.toThrow('Upload chunk failed');
+  });
+});
+
+// =============================================================================
+// uploadInlineAttachment
+// =============================================================================
+
+describe('uploadInlineAttachment', () => {
+  let mockClient: { addAttachment: ReturnType<typeof vi.fn> };
+
+  beforeEach(() => {
+    mockClient = { addAttachment: vi.fn().mockResolvedValue({}) };
+    vi.mocked(fs.readFileSync).mockReset();
+    vi.mocked(fs.statSync).mockReset();
+  });
+
+  it('posts file as inline attachment with contentId', async () => {
+    const fileContent = Buffer.alloc(100);
+    vi.mocked(fs.statSync).mockReturnValue({ size: 100 } as fs.Stats);
+    vi.mocked(fs.readFileSync).mockReturnValue(fileContent);
+
+    await uploadInlineAttachment(
+      mockClient as unknown as GraphClient,
+      'msg-1',
+      '/path/to/logo.png',
+      'logo'
+    );
+
+    expect(mockClient.addAttachment).toHaveBeenCalledWith('msg-1', {
+      '@odata.type': '#microsoft.graph.fileAttachment',
+      name: 'logo.png',
+      contentBytes: fileContent.toString('base64'),
+      contentType: 'image/png',
+      isInline: true,
+      contentId: 'logo',
+    });
+  });
+
+  it('defaults to image/png for unknown extension', async () => {
+    const fileContent = Buffer.alloc(50);
+    vi.mocked(fs.statSync).mockReturnValue({ size: 50 } as fs.Stats);
+    vi.mocked(fs.readFileSync).mockReturnValue(fileContent);
+
+    await uploadInlineAttachment(
+      mockClient as unknown as GraphClient,
+      'msg-1',
+      '/path/to/image.xyz',
+      'img1'
+    );
+
+    expect(mockClient.addAttachment).toHaveBeenCalledWith('msg-1', expect.objectContaining({
+      contentType: 'image/png',
+      isInline: true,
+      contentId: 'img1',
+    }));
+  });
+
+  it('throws when file exceeds 3MB', async () => {
+    const overLimit = 3 * 1024 * 1024 + 1;
+    vi.mocked(fs.statSync).mockReturnValue({ size: overLimit } as fs.Stats);
+
+    await expect(
+      uploadInlineAttachment(
+        mockClient as unknown as GraphClient,
+        'msg-1',
+        '/path/to/large.png',
+        'big'
+      )
+    ).rejects.toThrow(/Inline image too large/);
+
+    expect(mockClient.addAttachment).not.toHaveBeenCalled();
   });
 });
 
