@@ -8,7 +8,7 @@ A [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) server that p
 
 ## Features
 
-- **83 tools** - Full read/write access to mail, calendar, contacts, and tasks
+- **84 tools** - Full read/write access to mail, calendar, contacts, and tasks
 - **Two backends** - AppleScript for classic Outlook, Microsoft Graph API for new Outlook
 - **Two-phase approval** - Destructive operations (delete, send) require explicit confirmation
 - **Works offline** - AppleScript backend requires no network (Graph API requires internet)
@@ -88,7 +88,8 @@ A [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) server that p
 - `update_contact` - Update contact details *(Graph API)*
 - `prepare_delete_contact` / `confirm_delete_contact` - Delete contact (two-phase) *(Graph API)*
 
-**Tasks (9)**
+**Tasks (10)**
+- `list_task_lists` - List all task lists (Microsoft To Do) *(Graph API)*
 - `list_tasks` - List tasks with completion filtering
 - `get_task` - Get task details
 - `search_tasks` - Search tasks by name

@@ -939,6 +939,54 @@ describe('graph/repository', () => {
     });
   });
 
+  describe('listTaskListsAsync', () => {
+    it('returns mapped task lists with numeric IDs', async () => {
+      mockClient.listTaskLists.mockResolvedValue([
+        { id: 'list-1', displayName: 'My Tasks', wellknownListName: 'defaultList' },
+        { id: 'list-2', displayName: 'Work', wellknownListName: 'none' },
+      ]);
+
+      const result = await repository.listTaskListsAsync();
+
+      expect(result).toHaveLength(2);
+      expect(result[0]).toEqual({
+        id: hashStringToNumber('list-1'),
+        name: 'My Tasks',
+        isDefault: true,
+      });
+      expect(result[1]).toEqual({
+        id: hashStringToNumber('list-2'),
+        name: 'Work',
+        isDefault: false,
+      });
+    });
+
+    it('caches task list IDs', async () => {
+      mockClient.listTaskLists.mockResolvedValue([
+        { id: 'list-1', displayName: 'My Tasks', wellknownListName: 'defaultList' },
+      ]);
+
+      await repository.listTaskListsAsync();
+
+      const cachedId = repository.getTaskListGraphId(hashStringToNumber('list-1'));
+      expect(cachedId).toBe('list-1');
+    });
+
+    it('detects default list via wellknownListName', async () => {
+      mockClient.listTaskLists.mockResolvedValue([
+        { id: 'list-1', displayName: 'Tasks', wellknownListName: 'defaultList' },
+        { id: 'list-2', displayName: 'Custom', wellknownListName: 'none' },
+        { id: 'list-3', displayName: 'Another' },
+      ]);
+
+      const result = await repository.listTaskListsAsync();
+
+      expect(result[0].isDefault).toBe(true);
+      expect(result[1].isDefault).toBe(false);
+      expect(result[2].isDefault).toBe(false);
+    });
+  });
+
   describe('Notes (NOT SUPPORTED)', () => {
     describe('listNotes', () => {
       it('returns empty array (sync)', () => {

@@ -43,11 +43,11 @@ describe('MCP Client E2E', () => {
       // List tools
       const result = await client.listTools();
 
-      // Verify tools were returned (78 in AppleScript mode, 88 in Graph API mode)
+      // Verify tools were returned (78 in AppleScript mode, 89 in Graph API mode)
       expect(result.tools).toBeDefined();
       expect(Array.isArray(result.tools)).toBe(true);
       const count = result.tools.length;
-      expect([78, 88]).toContain(count);
+      expect([78, 89]).toContain(count);
 
       // Verify core tools exist
       const toolNames = result.tools.map((t) => t.name);

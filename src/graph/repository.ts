@@ -687,6 +687,20 @@ export class GraphRepository implements IRepository {
     return mapTaskToTaskRow({ ...task, taskListId: taskInfo.taskListId });
   }
 
+  async listTaskListsAsync(): Promise<Array<{ id: number; name: string; isDefault: boolean }>> {
+    const lists = await this.client.listTaskLists();
+    return lists.map((list) => {
+      const graphId = list.id!;
+      const numericId = hashStringToNumber(graphId);
+      this.idCache.taskLists.set(numericId, graphId);
+      return {
+        id: numericId,
+        name: list.displayName ?? '',
+        isDefault: list.wellknownListName === 'defaultList',
+      };
+    });
+  }
+
   // ===========================================================================
   // Notes (NOT SUPPORTED)
   // ===========================================================================
@@ -757,6 +771,13 @@ export class GraphRepository implements IRepository {
    */
   getTaskInfo(numericId: number): { taskListId: string; taskId: string } | undefined {
     return this.idCache.tasks.get(numericId);
+  }
+
+  /**
+   * Gets the Graph string ID for a task list from a numeric ID.
+   */
+  getTaskListGraphId(numericId: number): string | undefined {
+    return this.idCache.taskLists.get(numericId);
   }
 
   // ===========================================================================

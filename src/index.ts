@@ -777,6 +777,11 @@ const TOOLS: Tool[] = [
   },
   // Task tools
   {
+    name: 'list_task_lists',
+    description: 'List all task lists (Microsoft To Do) (Graph API)',
+    inputSchema: { type: 'object', properties: {}, required: [] },
+  },
+  {
     name: 'list_tasks',
     description: 'List tasks with pagination and filtering',
     inputSchema: {
@@ -1994,6 +1999,7 @@ export function createServer(): Server {
     'create_mail_rule',
     'prepare_delete_mail_rule',
     'confirm_delete_mail_rule',
+    'list_task_lists',
   ]);
 
   // Register tool list handler
@@ -3501,6 +3507,11 @@ async function handleGraphToolCall(
       }
 
       // Task tools
+      case 'list_task_lists': {
+        const lists = await repository.listTaskListsAsync();
+        return { content: [{ type: 'text', text: JSON.stringify({ task_lists: lists }, null, 2) }] };
+      }
+
       case 'list_tasks': {
         const params = ListTasksInput.parse(args ?? {});
         const tasks = params.include_completed
