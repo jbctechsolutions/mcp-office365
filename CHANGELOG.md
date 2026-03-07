@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [v2.3.0] - 2026-03-07
+
+### Added
+- **8 People API tools** (Phase 4) bringing the total to ~172 tools
+- `list_relevant_people` — AI-ranked relevant contacts based on communication patterns
+- `search_people` — search people by name or email
+- `get_manager` / `get_direct_reports` — organizational chart navigation
+- `get_user_profile` — detailed user profile by email or ID
+- `get_user_photo` — download user profile photo to disk
+- `get_user_presence` / `get_users_presence` — real-time presence status (single and batch)
+
 ## [v2.2.0] - 2026-03-07
 
 ### Added
@@ -265,7 +276,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-[Unreleased]: https://github.com/jbctechsolutions/mcp-office365-mac/compare/v2.2.0...HEAD
+[Unreleased]: https://github.com/jbctechsolutions/mcp-office365-mac/compare/v2.3.0...HEAD
+[v2.3.0]: https://github.com/jbctechsolutions/mcp-office365-mac/compare/v2.2.0...v2.3.0
 [v2.2.0]: https://github.com/jbctechsolutions/mcp-office365-mac/compare/v2.1.0...v2.2.0
 [v2.1.0]: https://github.com/jbctechsolutions/mcp-office365-mac/compare/v2.0.0...v2.1.0
 [v2.0.0]: https://github.com/jbctechsolutions/mcp-office365-mac/compare/v1.5.0...v2.0.0
