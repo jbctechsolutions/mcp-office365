@@ -45,6 +45,7 @@ interface IdCache {
   taskLists: Map<number, string>;
   attachments: Map<number, { messageId: string; attachmentId: string }>;
   rules: Map<number, string>;
+  contactFolders: Map<number, string>;
 }
 
 /**
@@ -65,6 +66,7 @@ export class GraphRepository implements IRepository {
     taskLists: new Map(),
     attachments: new Map(),
     rules: new Map(),
+    contactFolders: new Map(),
   };
 
   constructor(deviceCodeCallback?: DeviceCodeCallback) {
@@ -608,6 +610,51 @@ export class GraphRepository implements IRepository {
 
     const contact = await this.client.getContact(graphId);
     return contact != null ? mapContactToContactRow(contact) : undefined;
+  }
+
+  // ===========================================================================
+  // Contact Folders
+  // ===========================================================================
+
+  async listContactFoldersAsync(): Promise<Array<{ id: number; name: string; parentFolderId: string | null }>> {
+    const folders = await this.client.listContactFolders();
+    return folders.map((folder) => {
+      const graphId = folder.id!;
+      const numericId = hashStringToNumber(graphId);
+      this.idCache.contactFolders.set(numericId, graphId);
+      return {
+        id: numericId,
+        name: folder.displayName ?? '',
+        parentFolderId: folder.parentFolderId ?? null,
+      };
+    });
+  }
+
+  async createContactFolderAsync(name: string): Promise<number> {
+    const created = await this.client.createContactFolder(name);
+    const graphId = created.id!;
+    const numericId = hashStringToNumber(graphId);
+    this.idCache.contactFolders.set(numericId, graphId);
+    return numericId;
+  }
+
+  async deleteContactFolderAsync(folderId: number): Promise<void> {
+    const graphId = this.idCache.contactFolders.get(folderId);
+    if (graphId == null) throw new Error(`Contact folder ID ${folderId} not found in cache. Try searching for or listing the item first to refresh the cache.`);
+    await this.client.deleteContactFolder(graphId);
+    this.idCache.contactFolders.delete(folderId);
+  }
+
+  async listContactsInFolderAsync(folderId: number, limit: number = 100): Promise<ContactRow[]> {
+    const graphId = this.idCache.contactFolders.get(folderId);
+    if (graphId == null) throw new Error(`Contact folder ID ${folderId} not found in cache. Try searching for or listing the item first to refresh the cache.`);
+    const contacts = await this.client.listContactsInFolder(graphId, limit);
+    return contacts.map((c) => {
+      if (c.id != null) {
+        this.idCache.contacts.set(hashStringToNumber(c.id), c.id);
+      }
+      return mapContactToContactRow(c);
+    });
   }
 
   // ===========================================================================

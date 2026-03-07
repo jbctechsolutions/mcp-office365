@@ -86,6 +86,11 @@ vi.mock('../../../src/graph/client/index.js', () => ({
       listMailRules: vi.fn(),
       createMailRule: vi.fn(),
       deleteMailRule: vi.fn(),
+      // Contact folder operations
+      listContactFolders: vi.fn(),
+      createContactFolder: vi.fn(),
+      deleteContactFolder: vi.fn(),
+      listContactsInFolder: vi.fn(),
     };
   }),
 }));
@@ -3011,6 +3016,88 @@ describe('graph/repository', () => {
 
       it('throws for unknown rule ID', async () => {
         await expect(repository.deleteMailRuleAsync(999999)).rejects.toThrow('not found in cache');
+      });
+    });
+  });
+
+  // ===========================================================================
+  // Contact Folders
+  // ===========================================================================
+
+  describe('Contact Folders', () => {
+    describe('listContactFoldersAsync', () => {
+      it('returns mapped folders and caches IDs', async () => {
+        mockClient.listContactFolders.mockResolvedValue([
+          { id: 'cf-1', displayName: 'Work', parentFolderId: 'root-1' },
+          { id: 'cf-2', displayName: 'Personal', parentFolderId: null },
+        ]);
+
+        const result = await repository.listContactFoldersAsync();
+
+        expect(result).toHaveLength(2);
+        expect(result[0].id).toBe(hashStringToNumber('cf-1'));
+        expect(result[0].name).toBe('Work');
+        expect(result[0].parentFolderId).toBe('root-1');
+        expect(result[1].id).toBe(hashStringToNumber('cf-2'));
+        expect(result[1].name).toBe('Personal');
+        expect(result[1].parentFolderId).toBeNull();
+      });
+    });
+
+    describe('createContactFolderAsync', () => {
+      it('creates a folder and caches the ID', async () => {
+        mockClient.createContactFolder.mockResolvedValue({ id: 'cf-new', displayName: 'Friends' });
+
+        const result = await repository.createContactFolderAsync('Friends');
+
+        expect(result).toBe(hashStringToNumber('cf-new'));
+        expect(mockClient.createContactFolder).toHaveBeenCalledWith('Friends');
+      });
+    });
+
+    describe('deleteContactFolderAsync', () => {
+      it('deletes a folder and removes from cache', async () => {
+        // First cache the folder
+        mockClient.listContactFolders.mockResolvedValue([{ id: 'cf-del', displayName: 'To Delete' }]);
+        await repository.listContactFoldersAsync();
+
+        mockClient.deleteContactFolder.mockResolvedValue(undefined);
+        const numericId = hashStringToNumber('cf-del');
+        await repository.deleteContactFolderAsync(numericId);
+
+        expect(mockClient.deleteContactFolder).toHaveBeenCalledWith('cf-del');
+
+        // Should throw if we try to delete again (removed from cache)
+        await expect(repository.deleteContactFolderAsync(numericId)).rejects.toThrow('not found in cache');
+      });
+
+      it('throws for unknown folder ID', async () => {
+        await expect(repository.deleteContactFolderAsync(999999)).rejects.toThrow('not found in cache');
+      });
+    });
+
+    describe('listContactsInFolderAsync', () => {
+      it('returns contacts and caches contact IDs', async () => {
+        // First cache the folder
+        mockClient.listContactFolders.mockResolvedValue([{ id: 'cf-1', displayName: 'Work' }]);
+        await repository.listContactFoldersAsync();
+
+        mockClient.listContactsInFolder.mockResolvedValue([
+          { id: 'c-1', displayName: 'Alice', givenName: 'Alice', surname: 'Smith', emailAddresses: [], businessPhones: [] },
+          { id: 'c-2', displayName: 'Bob', givenName: 'Bob', surname: 'Jones', emailAddresses: [], businessPhones: [] },
+        ]);
+
+        const numericFolderId = hashStringToNumber('cf-1');
+        const result = await repository.listContactsInFolderAsync(numericFolderId, 50);
+
+        expect(result).toHaveLength(2);
+        expect(result[0].displayName).toBe('Alice');
+        expect(result[1].displayName).toBe('Bob');
+        expect(mockClient.listContactsInFolder).toHaveBeenCalledWith('cf-1', 50);
+      });
+
+      it('throws for unknown folder ID', async () => {
+        await expect(repository.listContactsInFolderAsync(999999)).rejects.toThrow('not found in cache');
       });
     });
   });

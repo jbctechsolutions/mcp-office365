@@ -152,6 +152,10 @@ const VALID_ENDPOINT_PATTERNS = [
   // Contacts
   /^\/me\/contacts$/,
   /^\/me\/contacts\/[^/]+$/,
+  // Contact Folders
+  /^\/me\/contactFolders$/,
+  /^\/me\/contactFolders\/[^/]+$/,
+  /^\/me\/contactFolders\/[^/]+\/contacts$/,
   // Tasks (Microsoft To Do)
   /^\/me\/todo\/lists$/,
   /^\/me\/todo\/lists\/[^/]+$/,
@@ -1122,6 +1126,56 @@ describe('Graph API endpoint and method validation', () => {
   });
 
   // =========================================================================
+  // Contact Folders operations
+  // =========================================================================
+
+  describe('Contact Folders operations', () => {
+    it('listContactFolders GETs /me/contactFolders', async () => {
+      setupMock({ value: [{ id: 'cf-1', displayName: 'Work' }] });
+
+      const result = await client.listContactFolders();
+
+      expect(apiCalls).toHaveLength(1);
+      expect(apiCalls[0].url).toBe('/me/contactFolders');
+      expect(apiCalls[0].method).toBe('get');
+      expect(result).toEqual([{ id: 'cf-1', displayName: 'Work' }]);
+    });
+
+    it('createContactFolder POSTs to /me/contactFolders', async () => {
+      setupMock({ id: 'cf-new', displayName: 'Friends' });
+
+      await client.createContactFolder('Friends');
+
+      expect(apiCalls).toHaveLength(1);
+      expect(apiCalls[0].url).toBe('/me/contactFolders');
+      expect(apiCalls[0].method).toBe('post');
+      expect(apiCalls[0].body).toEqual({ displayName: 'Friends' });
+    });
+
+    it('deleteContactFolder DELETEs /me/contactFolders/{folderId}', async () => {
+      setupMock(undefined);
+
+      await client.deleteContactFolder('cf-1');
+
+      expect(apiCalls).toHaveLength(1);
+      expect(apiCalls[0].url).toBe('/me/contactFolders/cf-1');
+      expect(apiCalls[0].method).toBe('delete');
+    });
+
+    it('listContactsInFolder GETs /me/contactFolders/{folderId}/contacts', async () => {
+      setupMock({ value: [{ id: 'c-1', displayName: 'Alice' }] });
+
+      const result = await client.listContactsInFolder('cf-1', 50);
+
+      expect(apiCalls).toHaveLength(1);
+      expect(apiCalls[0].url).toBe('/me/contactFolders/cf-1/contacts');
+      expect(apiCalls[0].method).toBe('get');
+      expect(apiCalls[0].topValue).toBe(50);
+      expect(result).toEqual([{ id: 'c-1', displayName: 'Alice' }]);
+    });
+  });
+
+  // =========================================================================
   // Well-known folder name validation
   // =========================================================================
 
@@ -1323,6 +1377,19 @@ describe('Graph API endpoint and method validation', () => {
 
       setupMock(undefined);
       await client.deleteMailRule('rule-1');
+
+      // Exercise contact folder methods
+      setupMock({ value: [{ id: 'cf-1', displayName: 'Work' }] });
+      await client.listContactFolders();
+
+      setupMock({ id: 'cf-new', displayName: 'Friends' });
+      await client.createContactFolder('Friends');
+
+      setupMock(undefined);
+      await client.deleteContactFolder('cf-1');
+
+      setupMock({ value: [{ id: 'c-1', displayName: 'Alice' }] });
+      await client.listContactsInFolder('cf-1', 50);
 
       // Verify all captured URLs
       for (const call of apiCalls) {
@@ -1796,6 +1863,36 @@ describe('Graph API endpoint and method validation', () => {
 
       setupMock(undefined);
       await client.deleteMailRule('rule-1');
+      apiCalls.length = 0;
+
+      setupMock();
+      await client.listMailFolders();
+
+      const getCalls = apiCalls.filter(c => c.method === 'get' && c.url === '/me/mailFolders');
+      expect(getCalls.length).toBeGreaterThan(0);
+    });
+
+    it('createContactFolder clears cache', async () => {
+      await client.listMailFolders();
+      apiCalls.length = 0;
+
+      setupMock({ id: 'cf-new', displayName: 'Friends' });
+      await client.createContactFolder('Friends');
+      apiCalls.length = 0;
+
+      setupMock();
+      await client.listMailFolders();
+
+      const getCalls = apiCalls.filter(c => c.method === 'get' && c.url === '/me/mailFolders');
+      expect(getCalls.length).toBeGreaterThan(0);
+    });
+
+    it('deleteContactFolder clears cache', async () => {
+      await client.listMailFolders();
+      apiCalls.length = 0;
+
+      setupMock(undefined);
+      await client.deleteContactFolder('cf-1');
       apiCalls.length = 0;
 
       setupMock();

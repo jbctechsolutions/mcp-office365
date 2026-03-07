@@ -670,6 +670,10 @@ const TOOLS: Tool[] = [
           description: 'Number of contacts to skip (default 0)',
           default: 0,
         },
+        folder_id: {
+          type: 'number',
+          description: 'Filter contacts by contact folder ID (optional)',
+        },
       },
       required: [],
     },
@@ -1942,6 +1946,50 @@ const TOOLS: Tool[] = [
       required: ['token_id', 'rule_id'],
     },
   },
+  // Contact folder tools
+  {
+    name: 'list_contact_folders',
+    description: 'List all contact folders (Graph API)',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {},
+      required: [],
+    },
+  },
+  {
+    name: 'create_contact_folder',
+    description: 'Create a contact folder (Graph API)',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        name: { type: 'string', description: 'Contact folder name' },
+      },
+      required: ['name'],
+    },
+  },
+  {
+    name: 'prepare_delete_contact_folder',
+    description: 'Prepare to delete a contact folder. Returns an approval token. Call confirm_delete_contact_folder to execute. (Graph API)',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        folder_id: { type: 'number', description: 'Contact folder ID to delete' },
+      },
+      required: ['folder_id'],
+    },
+  },
+  {
+    name: 'confirm_delete_contact_folder',
+    description: 'Confirm contact folder deletion with approval token (Graph API)',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        token_id: { type: 'string', description: 'The approval token from prepare_delete_contact_folder' },
+        folder_id: { type: 'number', description: 'The contact folder ID to delete' },
+      },
+      required: ['token_id', 'folder_id'],
+    },
+  },
 ];
 
 // =============================================================================
@@ -2068,6 +2116,10 @@ export function createServer(): Server {
     'rename_task_list',
     'prepare_delete_task_list',
     'confirm_delete_task_list',
+    'list_contact_folders',
+    'create_contact_folder',
+    'prepare_delete_contact_folder',
+    'confirm_delete_contact_folder',
   ]);
 
   // Register tool list handler
@@ -3070,6 +3122,19 @@ const ConfirmDeleteTaskListInput = z.strictObject({
   task_list_id: z.number().int().positive().describe('The task list ID to delete'),
 });
 
+const CreateContactFolderInput = z.strictObject({
+  name: z.string().min(1).describe('Contact folder name'),
+});
+
+const PrepareDeleteContactFolderInput = z.strictObject({
+  folder_id: z.number().int().positive().describe('Contact folder ID to delete'),
+});
+
+const ConfirmDeleteContactFolderInput = z.strictObject({
+  token_id: z.string().uuid().describe('Approval token from prepare_delete_contact_folder'),
+  folder_id: z.number().int().positive().describe('The contact folder ID to delete'),
+});
+
 // =============================================================================
 // Graph API Tool Handler
 // =============================================================================
@@ -3456,7 +3521,9 @@ async function handleGraphToolCall(
       // Contact tools
       case 'list_contacts': {
         const params = ListContactsInput.parse(args ?? {});
-        const contacts = await repository.listContactsAsync(params.limit, params.offset);
+        const contacts = params.folder_id != null
+          ? await repository.listContactsInFolderAsync(params.folder_id, params.limit)
+          : await repository.listContactsAsync(params.limit, params.offset);
         const result = { contacts: contacts.map(transformContactRow) };
         return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
       }
@@ -3894,6 +3961,76 @@ async function handleGraphToolCall(
       case 'confirm_delete_mail_rule': {
         const params = ConfirmDeleteMailRuleInput.parse(args);
         return await rulesTools.confirmDeleteMailRule(params);
+      }
+
+      // Contact folder tools
+      case 'list_contact_folders': {
+        const folders = await repository.listContactFoldersAsync();
+        return { content: [{ type: 'text', text: JSON.stringify({ contact_folders: folders }, null, 2) }] };
+      }
+
+      case 'create_contact_folder': {
+        const params = CreateContactFolderInput.parse(args);
+        const folderId = await repository.createContactFolderAsync(params.name);
+        const result = {
+          id: folderId,
+          name: params.name,
+          status: 'created',
+        };
+        return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+      }
+
+      case 'prepare_delete_contact_folder': {
+        const params = PrepareDeleteContactFolderInput.parse(args);
+        const token = tokenManager.generateToken({
+          operation: 'delete_contact_folder',
+          targetType: 'contact_folder',
+          targetId: params.folder_id,
+          targetHash: String(params.folder_id),
+        });
+
+        return {
+          content: [{
+            type: 'text' as const,
+            text: JSON.stringify({
+              token_id: token.tokenId,
+              expires_at: new Date(token.expiresAt).toISOString(),
+              folder_id: params.folder_id,
+              action: `To confirm deleting contact folder ${params.folder_id}, call confirm_delete_contact_folder with the token_id and folder_id.`,
+            }, null, 2),
+          }],
+        };
+      }
+
+      case 'confirm_delete_contact_folder': {
+        const params = ConfirmDeleteContactFolderInput.parse(args);
+        const validation = tokenManager.consumeToken(params.token_id, 'delete_contact_folder', params.folder_id);
+        if (!validation.valid) {
+          const errorMessages: Record<string, string> = {
+            NOT_FOUND: 'Token not found or already used',
+            EXPIRED: 'Token has expired. Please call prepare_delete_contact_folder again.',
+            OPERATION_MISMATCH: 'Token was not generated for delete_contact_folder',
+            TARGET_MISMATCH: 'Token was generated for a different contact folder',
+            ALREADY_CONSUMED: 'Token has already been used',
+          };
+          return {
+            content: [{
+              type: 'text' as const,
+              text: JSON.stringify({
+                success: false,
+                error: errorMessages[validation.error ?? ''] ?? 'Invalid token',
+              }, null, 2),
+            }],
+          };
+        }
+
+        await repository.deleteContactFolderAsync(params.folder_id);
+        return {
+          content: [{
+            type: 'text' as const,
+            text: JSON.stringify({ success: true, message: 'Contact folder deleted' }, null, 2),
+          }],
+        };
       }
 
       default:

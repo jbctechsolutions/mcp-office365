@@ -616,6 +616,51 @@ export class GraphClient {
   }
 
   // ===========================================================================
+  // Contact Folders
+  // ===========================================================================
+
+  /**
+   * Lists all contact folders.
+   */
+  async listContactFolders(): Promise<MicrosoftGraph.ContactFolder[]> {
+    const client = await this.getClient();
+    const response = await client.api('/me/contactFolders').get() as PageCollection;
+    return response.value as MicrosoftGraph.ContactFolder[];
+  }
+
+  /**
+   * Creates a new contact folder.
+   */
+  async createContactFolder(displayName: string): Promise<MicrosoftGraph.ContactFolder> {
+    const client = await this.getClient();
+    const result = await client.api('/me/contactFolders').post({ displayName }) as MicrosoftGraph.ContactFolder;
+    this.cache.clear();
+    return result;
+  }
+
+  /**
+   * Deletes a contact folder.
+   */
+  async deleteContactFolder(folderId: string): Promise<void> {
+    const client = await this.getClient();
+    await client.api(`/me/contactFolders/${folderId}`).delete();
+    this.cache.clear();
+  }
+
+  /**
+   * Lists contacts in a specific contact folder.
+   */
+  async listContactsInFolder(folderId: string, limit: number = 100): Promise<MicrosoftGraph.Contact[]> {
+    const client = await this.getClient();
+    const response = await client
+      .api(`/me/contactFolders/${folderId}/contacts`)
+      .select('id,displayName,givenName,surname,emailAddresses,businessPhones,mobilePhone,jobTitle,companyName')
+      .top(limit)
+      .get() as PageCollection;
+    return response.value as MicrosoftGraph.Contact[];
+  }
+
+  // ===========================================================================
   // Tasks (Microsoft To Do)
   // ===========================================================================
 

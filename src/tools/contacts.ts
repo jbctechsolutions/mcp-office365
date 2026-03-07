@@ -26,6 +26,7 @@ export const ListContactsInput = z.strictObject({
     .default(50)
     .describe('Maximum number of contacts to return (1-100)'),
   offset: z.number().int().min(0).default(0).describe('Number of contacts to skip'),
+  folder_id: z.number().int().positive().optional().describe('Filter contacts by contact folder ID'),
 });
 
 export const SearchContactsInput = z.strictObject({
