@@ -1704,6 +1704,31 @@ export class GraphClient {
     const client = await this.getClient();
     await client.api(`/me/todo/lists/${taskListId}/tasks/${taskId}/linkedResources/${linkedResourceId}`).delete();
   }
+
+  // ===========================================================================
+  // Task Attachments
+  // ===========================================================================
+
+  async listTaskAttachments(taskListId: string, taskId: string): Promise<MicrosoftGraph.AttachmentBase[]> {
+    const client = await this.getClient();
+    const response = await client.api(`/me/todo/lists/${taskListId}/tasks/${taskId}/attachments`).get() as PageCollection;
+    return response.value as MicrosoftGraph.AttachmentBase[];
+  }
+
+  async createTaskAttachment(taskListId: string, taskId: string, name: string, contentBytes: string, contentType: string = 'application/octet-stream'): Promise<MicrosoftGraph.AttachmentBase> {
+    const client = await this.getClient();
+    return await client.api(`/me/todo/lists/${taskListId}/tasks/${taskId}/attachments`).post({
+      '@odata.type': '#microsoft.graph.taskFileAttachment',
+      name,
+      contentBytes,
+      contentType,
+    }) as MicrosoftGraph.AttachmentBase;
+  }
+
+  async deleteTaskAttachment(taskListId: string, taskId: string, attachmentId: string): Promise<void> {
+    const client = await this.getClient();
+    await client.api(`/me/todo/lists/${taskListId}/tasks/${taskId}/attachments/${attachmentId}`).delete();
+  }
 }
 
 /**

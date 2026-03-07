@@ -60,6 +60,7 @@ interface IdCache {
   chatMessages: Map<number, { chatId: string; messageId: string }>;
   checklistItems: Map<number, { taskListId: string; taskId: string; checklistItemId: string }>;
   linkedResources: Map<number, { taskListId: string; taskId: string; linkedResourceId: string }>;
+  taskAttachments: Map<number, { taskListId: string; taskId: string; attachmentId: string }>;
 }
 
 /**
@@ -93,6 +94,7 @@ export class GraphRepository implements IRepository {
     chatMessages: new Map(),
     checklistItems: new Map(),
     linkedResources: new Map(),
+    taskAttachments: new Map(),
   };
 
   constructor(deviceCodeCallback?: DeviceCodeCallback) {
@@ -1833,6 +1835,46 @@ export class GraphRepository implements IRepository {
     if (cached == null) throw new Error(`Linked resource ID ${linkedResourceId} not found in cache. Try listing linked resources first.`);
     await this.client.deleteLinkedResource(cached.taskListId, cached.taskId, cached.linkedResourceId);
     this.idCache.linkedResources.delete(linkedResourceId);
+  }
+
+  // ===========================================================================
+  // Task Attachments
+  // ===========================================================================
+
+  async listTaskAttachmentsAsync(taskId: number): Promise<Array<{
+    id: number; name: string; size: number; contentType: string;
+  }>> {
+    const taskInfo = this.idCache.tasks.get(taskId);
+    if (taskInfo == null) throw new Error(`Task ID ${taskId} not found in cache. Try listing tasks first.`);
+    const items = await this.client.listTaskAttachments(taskInfo.taskListId, taskInfo.taskId);
+    return items.map((item) => {
+      const graphId = item.id!;
+      const numericId = hashStringToNumber(graphId);
+      this.idCache.taskAttachments.set(numericId, { taskListId: taskInfo.taskListId, taskId: taskInfo.taskId, attachmentId: graphId });
+      return {
+        id: numericId,
+        name: (item as Record<string, unknown>)['name'] as string ?? '',
+        size: item.size ?? 0,
+        contentType: item.contentType ?? '',
+      };
+    });
+  }
+
+  async createTaskAttachmentAsync(taskId: number, name: string, contentBytes: string, contentType?: string): Promise<number> {
+    const taskInfo = this.idCache.tasks.get(taskId);
+    if (taskInfo == null) throw new Error(`Task ID ${taskId} not found in cache. Try listing tasks first.`);
+    const item = await this.client.createTaskAttachment(taskInfo.taskListId, taskInfo.taskId, name, contentBytes, contentType);
+    const graphId = item.id!;
+    const numericId = hashStringToNumber(graphId);
+    this.idCache.taskAttachments.set(numericId, { taskListId: taskInfo.taskListId, taskId: taskInfo.taskId, attachmentId: graphId });
+    return numericId;
+  }
+
+  async deleteTaskAttachmentAsync(taskAttachmentId: number): Promise<void> {
+    const cached = this.idCache.taskAttachments.get(taskAttachmentId);
+    if (cached == null) throw new Error(`Task attachment ID ${taskAttachmentId} not found in cache. Try listing task attachments first.`);
+    await this.client.deleteTaskAttachment(cached.taskListId, cached.taskId, cached.attachmentId);
+    this.idCache.taskAttachments.delete(taskAttachmentId);
   }
 
   // ===========================================================================

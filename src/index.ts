@@ -104,6 +104,13 @@ import {
   ConfirmDeleteLinkedResourceInput,
 } from './tools/linked-resources.js';
 import {
+  TaskAttachmentsTools,
+  ListTaskAttachmentsInput,
+  CreateTaskAttachmentInput,
+  PrepareDeleteTaskAttachmentInput,
+  ConfirmDeleteTaskAttachmentInput,
+} from './tools/task-attachments.js';
+import {
   TeamsTools,
   ListChannelsInput,
   GetChannelInput,
@@ -2743,6 +2750,54 @@ const TOOLS: Tool[] = [
       required: ['approval_token'],
     },
   },
+  // Task Attachments tools
+  {
+    name: 'list_task_attachments',
+    description: 'List attachments on a To Do task (Graph API)',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        task_id: { type: 'number', description: 'Task ID from list_tasks or search_tasks' },
+      },
+      required: ['task_id'],
+    },
+  },
+  {
+    name: 'create_task_attachment',
+    description: 'Attach a file to a To Do task (small files only, base64 encoded) (Graph API)',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        task_id: { type: 'number', description: 'Task ID' },
+        name: { type: 'string', description: 'File name of the attachment' },
+        content_bytes: { type: 'string', description: 'Base64-encoded file content' },
+        content_type: { type: 'string', description: 'MIME type (default: application/octet-stream)' },
+      },
+      required: ['task_id', 'name', 'content_bytes'],
+    },
+  },
+  {
+    name: 'prepare_delete_task_attachment',
+    description: 'Prepare to delete a task attachment. Returns an approval token. Call confirm_delete_task_attachment to execute. (Graph API)',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        task_attachment_id: { type: 'number', description: 'Task attachment ID to delete' },
+      },
+      required: ['task_attachment_id'],
+    },
+  },
+  {
+    name: 'confirm_delete_task_attachment',
+    description: 'Confirm deletion of a task attachment with approval token (Graph API)',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        approval_token: { type: 'string', description: 'The approval token from prepare_delete_task_attachment' },
+      },
+      required: ['approval_token'],
+    },
+  },
 ];
 
 // =============================================================================
@@ -2789,6 +2844,7 @@ export function createServer(): Server {
   let teamsTools: TeamsTools | null = null;
   let checklistItemsTools: ChecklistItemsTools | null = null;
   let linkedResourcesTools: LinkedResourcesTools | null = null;
+  let taskAttachmentsTools: TaskAttachmentsTools | null = null;
   let calendarWriter: ICalendarWriter | null = null;
   let calendarManager: ICalendarManager | null = null;
   let mailSender: IMailSender | null = null;
@@ -2847,6 +2903,7 @@ export function createServer(): Server {
     teamsTools = new TeamsTools(graphRepository, tokenManager);
     checklistItemsTools = new ChecklistItemsTools(graphRepository, tokenManager);
     linkedResourcesTools = new LinkedResourcesTools(graphRepository, tokenManager);
+    taskAttachmentsTools = new TaskAttachmentsTools(graphRepository, tokenManager);
 
     initialized = true;
   });
@@ -2940,6 +2997,10 @@ export function createServer(): Server {
     'create_linked_resource',
     'prepare_delete_linked_resource',
     'confirm_delete_linked_resource',
+    'list_task_attachments',
+    'create_task_attachment',
+    'prepare_delete_task_attachment',
+    'confirm_delete_task_attachment',
   ]);
 
   // Register tool list handler
@@ -2957,7 +3018,7 @@ export function createServer(): Server {
 
       // Graph API mode - handle async operations directly
       if (useGraphApi && graphRepository != null) {
-        return await handleGraphToolCall(name, args, graphRepository, graphContentReaders!, orgTools!, sendTools!, schedulingTools!, rulesTools!, categoriesTools!, calendarPermissionsTools!, focusedOverridesTools!, teamsTools!, checklistItemsTools!, linkedResourcesTools!, tokenManager);
+        return await handleGraphToolCall(name, args, graphRepository, graphContentReaders!, orgTools!, sendTools!, schedulingTools!, rulesTools!, categoriesTools!, calendarPermissionsTools!, focusedOverridesTools!, teamsTools!, checklistItemsTools!, linkedResourcesTools!, taskAttachmentsTools!, tokenManager);
       }
 
       // AppleScript mode - use sync tool interfaces
@@ -4033,6 +4094,7 @@ async function handleGraphToolCall(
   teamsTools: TeamsTools,
   checklistItemsTools: ChecklistItemsTools,
   linkedResourcesTools: LinkedResourcesTools,
+  taskAttachmentsTools: TaskAttachmentsTools,
   tokenManager: ApprovalTokenManager
 ): Promise<ToolResult> {
   // Handle mailbox organization tools (shared between backends)
@@ -5229,6 +5291,27 @@ async function handleGraphToolCall(
       case 'confirm_delete_linked_resource': {
         const params = ConfirmDeleteLinkedResourceInput.parse(args);
         return await linkedResourcesTools.confirmDeleteLinkedResource(params);
+      }
+
+      // Task Attachments tools
+      case 'list_task_attachments': {
+        const params = ListTaskAttachmentsInput.parse(args);
+        return await taskAttachmentsTools.listTaskAttachments(params);
+      }
+
+      case 'create_task_attachment': {
+        const params = CreateTaskAttachmentInput.parse(args);
+        return await taskAttachmentsTools.createTaskAttachment(params);
+      }
+
+      case 'prepare_delete_task_attachment': {
+        const params = PrepareDeleteTaskAttachmentInput.parse(args);
+        return taskAttachmentsTools.prepareDeleteTaskAttachment(params);
+      }
+
+      case 'confirm_delete_task_attachment': {
+        const params = ConfirmDeleteTaskAttachmentInput.parse(args);
+        return await taskAttachmentsTools.confirmDeleteTaskAttachment(params);
       }
 
       default:
