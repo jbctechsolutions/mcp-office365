@@ -1615,6 +1615,7 @@ export class GraphRepository implements IRepository {
       end_date?: string | undefined;
       occurrences?: number | undefined;
     } | undefined;
+    categories?: string[];
   }): Promise<number> {
     const graphListId = this.idCache.taskLists.get(params.task_list_id);
     if (graphListId == null) throw new Error(`Task list ID ${params.task_list_id} not found in cache. Try searching for or listing the item first to refresh the cache.`);
@@ -1647,6 +1648,10 @@ export class GraphRepository implements IRepository {
         dateTime: params.reminder_date,
         timeZone: 'UTC',
       };
+    }
+
+    if (params.categories != null) {
+      graphTask.categories = params.categories;
     }
 
     if (params.recurrence != null) {

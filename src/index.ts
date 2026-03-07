@@ -966,6 +966,7 @@ const TOOLS: Tool[] = [
           },
           required: ['pattern', 'range_type', 'start_date'],
         },
+        categories: { type: 'array', items: { type: 'string' }, description: 'Category names to assign to the task' },
       },
       required: ['title', 'task_list_id'],
     },
@@ -999,6 +1000,7 @@ const TOOLS: Tool[] = [
           },
           required: ['pattern', 'range_type', 'start_date'],
         },
+        categories: { type: 'array', items: { type: 'string' }, description: 'Category names to assign to the task' },
       },
       required: ['task_id'],
     },
@@ -3968,6 +3970,7 @@ const CreateTaskGraphInput = z.strictObject({
   importance: z.enum(['low', 'normal', 'high']).optional(),
   reminder_date: z.string().optional(),
   recurrence: RecurrenceSchema,
+  categories: z.array(z.string()).optional(),
 });
 
 const UpdateTaskGraphInput = z.strictObject({
@@ -3980,6 +3983,7 @@ const UpdateTaskGraphInput = z.strictObject({
   reminder_date: z.string().optional(),
   status: z.enum(['notStarted', 'inProgress', 'completed', 'waitingOnOthers', 'deferred']).optional(),
   recurrence: RecurrenceSchema,
+  categories: z.array(z.string()).optional(),
 });
 
 const CompleteTaskGraphInput = z.strictObject({
@@ -4674,6 +4678,7 @@ async function handleGraphToolCall(
           ...(params.importance != null ? { importance: params.importance } : {}),
           ...(params.reminder_date != null ? { reminder_date: params.reminder_date } : {}),
           ...(params.recurrence != null ? { recurrence: params.recurrence } : {}),
+          ...(params.categories != null ? { categories: params.categories } : {}),
         });
         const result = {
           id: numericId,
@@ -4725,6 +4730,7 @@ async function handleGraphToolCall(
             },
           };
         }
+        if (params.categories != null) updates.categories = params.categories;
         await repository.updateTaskAsync(params.task_id, updates);
         return {
           content: [{ type: 'text', text: `Successfully updated task ${params.task_id}` }],
