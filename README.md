@@ -8,7 +8,7 @@ A [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) server that p
 
 ## Features
 
-- **96 tools** - Full read/write access to mail, calendar, contacts, and tasks
+- **98 tools** - Full read/write access to mail, calendar, contacts, and tasks
 - **Two backends** - AppleScript for classic Outlook, Microsoft Graph API for new Outlook
 - **Two-phase approval** - Destructive operations (delete, send) require explicit confirmation
 - **Works offline** - AppleScript backend requires no network (Graph API requires internet)
@@ -70,6 +70,10 @@ A [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) server that p
 **Automatic Replies (2)** *(Graph API)*
 - `get_automatic_replies` - Get the current automatic replies (out-of-office) settings
 - `set_automatic_replies` - Set automatic replies (out-of-office) settings
+
+**Mailbox Settings (2)** *(Graph API)*
+- `get_mailbox_settings` - Get the current mailbox settings (language, time zone, date/time formats, working hours)
+- `update_mailbox_settings` - Update mailbox settings (language, time zone, date/time formats)
 
 **Calendar - Reading (5)**
 - `list_calendars` - List all calendars

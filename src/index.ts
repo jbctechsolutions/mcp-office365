@@ -2005,6 +2005,42 @@ const TOOLS: Tool[] = [
       required: ['status'],
     },
   },
+  // Mailbox settings tools
+  {
+    name: 'get_mailbox_settings',
+    description: 'Get the current mailbox settings (language, time zone, date/time formats, working hours)',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {},
+      required: [],
+    },
+  },
+  {
+    name: 'update_mailbox_settings',
+    description: 'Update mailbox settings (language, time zone, date/time formats)',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        language: {
+          type: 'string',
+          description: 'Locale code (e.g. en-US)',
+        },
+        time_zone: {
+          type: 'string',
+          description: 'Time zone (e.g. America/New_York)',
+        },
+        date_format: {
+          type: 'string',
+          description: 'Date format string',
+        },
+        time_format: {
+          type: 'string',
+          description: 'Time format string',
+        },
+      },
+      required: [],
+    },
+  },
   // Contact folder tools
   {
     name: 'list_contact_folders',
@@ -2201,6 +2237,8 @@ export function createServer(): Server {
     'confirm_delete_task_list',
     'get_automatic_replies',
     'set_automatic_replies',
+    'get_mailbox_settings',
+    'update_mailbox_settings',
     'list_contact_folders',
     'create_contact_folder',
     'prepare_delete_contact_folder',
@@ -3227,6 +3265,15 @@ const SetAutomaticRepliesInput = z.strictObject({
   scheduled_end: z.string().optional().describe('Schedule end (ISO 8601)'),
 });
 
+const GetMailboxSettingsInput = z.strictObject({});
+
+const UpdateMailboxSettingsInput = z.strictObject({
+  language: z.string().optional().describe('Locale code (e.g. en-US)'),
+  time_zone: z.string().optional().describe('Time zone (e.g. America/New_York)'),
+  date_format: z.string().optional().describe('Date format string'),
+  time_format: z.string().optional().describe('Time format string'),
+});
+
 const CreateContactFolderInput = z.strictObject({
   name: z.string().min(1).describe('Contact folder name'),
 });
@@ -4102,6 +4149,24 @@ async function handleGraphToolCall(
         if (params.scheduled_end != null) replyParams.scheduledEndDateTime = params.scheduled_end;
         await repository.setAutomaticRepliesAsync(replyParams);
         return { content: [{ type: 'text', text: JSON.stringify({ success: true, status: params.status }, null, 2) }] };
+      }
+
+      // Mailbox settings tools
+      case 'get_mailbox_settings': {
+        GetMailboxSettingsInput.parse(args ?? {});
+        const result = await repository.getMailboxSettingsAsync();
+        return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+      }
+
+      case 'update_mailbox_settings': {
+        const params = UpdateMailboxSettingsInput.parse(args);
+        const settingsParams: Parameters<typeof repository.updateMailboxSettingsAsync>[0] = {};
+        if (params.language != null) settingsParams.language = params.language;
+        if (params.time_zone != null) settingsParams.timeZone = params.time_zone;
+        if (params.date_format != null) settingsParams.dateFormat = params.date_format;
+        if (params.time_format != null) settingsParams.timeFormat = params.time_format;
+        await repository.updateMailboxSettingsAsync(settingsParams);
+        return { content: [{ type: 'text', text: JSON.stringify({ success: true }, null, 2) }] };
       }
 
       // Contact folder tools

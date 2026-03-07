@@ -377,6 +377,26 @@ export class GraphClient {
   }
 
   // ===========================================================================
+  // Mailbox Settings
+  // ===========================================================================
+
+  /**
+   * Gets the full mailbox settings for the current user.
+   */
+  async getMailboxSettings(): Promise<Record<string, unknown>> {
+    const client = await this.getClient();
+    return await client.api('/me/mailboxSettings').get() as Record<string, unknown>;
+  }
+
+  /**
+   * Updates mailbox settings for the current user.
+   */
+  async updateMailboxSettings(settings: Record<string, unknown>): Promise<void> {
+    const client = await this.getClient();
+    await client.api('/me/mailboxSettings').patch(settings);
+  }
+
+  // ===========================================================================
   // Calendars
   // ===========================================================================
 

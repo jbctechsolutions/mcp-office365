@@ -1805,6 +1805,47 @@ export class GraphRepository implements IRepository {
     await this.client.setAutomaticReplies(settings);
   }
 
+  // ===========================================================================
+  // Mailbox Settings
+  // ===========================================================================
+
+  /**
+   * Gets the current mailbox settings (language, time zone, formats, working hours).
+   */
+  async getMailboxSettingsAsync(): Promise<{
+    language: string | null;
+    timeZone: string | null;
+    dateFormat: string | null;
+    timeFormat: string | null;
+    workingHours: unknown | null;
+  }> {
+    const settings = await this.client.getMailboxSettings();
+    return {
+      language: (settings as any).language?.locale ?? null,
+      timeZone: (settings as any).timeZone ?? null,
+      dateFormat: (settings as any).dateFormat ?? null,
+      timeFormat: (settings as any).timeFormat ?? null,
+      workingHours: (settings as any).workingHours ?? null,
+    };
+  }
+
+  /**
+   * Updates mailbox settings (language, time zone, date/time formats).
+   */
+  async updateMailboxSettingsAsync(params: {
+    language?: string;
+    timeZone?: string;
+    dateFormat?: string;
+    timeFormat?: string;
+  }): Promise<void> {
+    const settings: Record<string, unknown> = {};
+    if (params.language != null) settings['language'] = { locale: params.language };
+    if (params.timeZone != null) settings['timeZone'] = params.timeZone;
+    if (params.dateFormat != null) settings['dateFormat'] = params.dateFormat;
+    if (params.timeFormat != null) settings['timeFormat'] = params.timeFormat;
+    await this.client.updateMailboxSettings(settings);
+  }
+
   /**
    * Gets the Graph string ID for a folder from the cache.
    */
