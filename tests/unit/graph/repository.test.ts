@@ -11,6 +11,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { GraphRepository, createGraphRepository } from '../../../src/graph/repository.js';
 import { hashStringToNumber } from '../../../src/graph/mappers/utils.js';
 import { downloadAttachment } from '../../../src/graph/attachments.js';
+import * as fs from 'fs';
+import * as path from 'path';
 
 vi.mocked(downloadAttachment);
 
@@ -91,13 +93,33 @@ vi.mock('../../../src/graph/client/index.js', () => ({
       createContactFolder: vi.fn(),
       deleteContactFolder: vi.fn(),
       listContactsInFolder: vi.fn(),
+      // Contact photo operations
+      getContactPhoto: vi.fn(),
+      setContactPhoto: vi.fn(),
     };
   }),
 }));
 
-// Mock the downloadAttachment helper
+// Mock the downloadAttachment helper and getDownloadDir
 vi.mock('../../../src/graph/attachments.js', () => ({
   downloadAttachment: vi.fn(),
+  getDownloadDir: vi.fn().mockReturnValue('/tmp/mcp-outlook-attachments'),
+}));
+
+// Mock fs and path for contact photo tests
+vi.mock('fs', () => ({
+  writeFileSync: vi.fn(),
+  readFileSync: vi.fn().mockReturnValue(Buffer.from('fake-photo')),
+  mkdirSync: vi.fn(),
+  existsSync: vi.fn().mockReturnValue(false),
+}));
+
+vi.mock('path', () => ({
+  join: vi.fn().mockImplementation((...args: string[]) => args.join('/')),
+  extname: vi.fn().mockImplementation((p: string) => {
+    const dot = p.lastIndexOf('.');
+    return dot >= 0 ? p.substring(dot) : '';
+  }),
 }));
 
 describe('graph/repository', () => {
@@ -3098,6 +3120,85 @@ describe('graph/repository', () => {
 
       it('throws for unknown folder ID', async () => {
         await expect(repository.listContactsInFolderAsync(999999)).rejects.toThrow('not found in cache');
+      });
+    });
+  });
+
+  // ===========================================================================
+  // Contact Photos
+  // ===========================================================================
+
+  describe('Contact Photos', () => {
+    describe('getContactPhotoAsync', () => {
+      it('downloads and saves photo, returns path', async () => {
+        // First cache the contact
+        mockClient.listContacts.mockResolvedValue([
+          { id: 'contact-1', displayName: 'Alice', emailAddresses: [], businessPhones: [] },
+        ]);
+        await repository.listContactsAsync(50, 0);
+
+        const mockPhotoData = new ArrayBuffer(8);
+        mockClient.getContactPhoto.mockResolvedValue(mockPhotoData);
+
+        const numericId = hashStringToNumber('contact-1');
+        const result = await repository.getContactPhotoAsync(numericId);
+
+        expect(mockClient.getContactPhoto).toHaveBeenCalledWith('contact-1');
+        expect(fs.writeFileSync).toHaveBeenCalledWith(
+          expect.stringContaining(`contact-${numericId}-photo.jpg`),
+          expect.any(Buffer),
+        );
+        expect(result.filePath).toContain(`contact-${numericId}-photo.jpg`);
+        expect(result.contentType).toBe('image/jpeg');
+      });
+
+      it('throws for unknown contact ID', async () => {
+        await expect(repository.getContactPhotoAsync(999999)).rejects.toThrow('not found in cache');
+      });
+    });
+
+    describe('setContactPhotoAsync', () => {
+      it('reads file and uploads', async () => {
+        // First cache the contact
+        mockClient.listContacts.mockResolvedValue([
+          { id: 'contact-2', displayName: 'Bob', emailAddresses: [], businessPhones: [] },
+        ]);
+        await repository.listContactsAsync(50, 0);
+
+        mockClient.setContactPhoto.mockResolvedValue(undefined);
+
+        const numericId = hashStringToNumber('contact-2');
+        await repository.setContactPhotoAsync(numericId, '/tmp/photo.jpg');
+
+        expect(fs.readFileSync).toHaveBeenCalledWith('/tmp/photo.jpg');
+        expect(mockClient.setContactPhoto).toHaveBeenCalledWith(
+          'contact-2',
+          expect.any(Buffer),
+          'image/jpeg',
+        );
+      });
+
+      it('detects PNG content type', async () => {
+        // First cache the contact
+        mockClient.listContacts.mockResolvedValue([
+          { id: 'contact-3', displayName: 'Carol', emailAddresses: [], businessPhones: [] },
+        ]);
+        await repository.listContactsAsync(50, 0);
+
+        mockClient.setContactPhoto.mockResolvedValue(undefined);
+
+        const numericId = hashStringToNumber('contact-3');
+        await repository.setContactPhotoAsync(numericId, '/tmp/photo.png');
+
+        expect(mockClient.setContactPhoto).toHaveBeenCalledWith(
+          'contact-3',
+          expect.any(Buffer),
+          'image/png',
+        );
+      });
+
+      it('throws for unknown contact ID', async () => {
+        await expect(repository.setContactPhotoAsync(999999, '/tmp/photo.jpg')).rejects.toThrow('not found in cache');
       });
     });
   });

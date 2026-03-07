@@ -616,6 +616,32 @@ export class GraphClient {
   }
 
   // ===========================================================================
+  // Contact Photos
+  // ===========================================================================
+
+  /**
+   * Gets the photo for a contact as raw binary data.
+   */
+  async getContactPhoto(contactId: string): Promise<ArrayBuffer> {
+    const client = await this.getClient();
+    return await client
+      .api(`/me/contacts/${contactId}/photo/$value`)
+      .get() as ArrayBuffer;
+  }
+
+  /**
+   * Sets or updates the photo for a contact.
+   */
+  async setContactPhoto(contactId: string, photoData: Buffer, contentType: string): Promise<void> {
+    const client = await this.getClient();
+    await client
+      .api(`/me/contacts/${contactId}/photo/$value`)
+      .header('Content-Type', contentType)
+      .put(photoData);
+    this.cache.clear();
+  }
+
+  // ===========================================================================
   // Contact Folders
   // ===========================================================================
 

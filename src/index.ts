@@ -1990,6 +1990,30 @@ const TOOLS: Tool[] = [
       required: ['token_id', 'folder_id'],
     },
   },
+  // Contact photo tools
+  {
+    name: 'get_contact_photo',
+    description: 'Download a contact\'s photo to a local file (Graph API)',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        contact_id: { type: 'number', description: 'Contact ID' },
+      },
+      required: ['contact_id'],
+    },
+  },
+  {
+    name: 'set_contact_photo',
+    description: 'Set or update a contact\'s photo from a local file (JPEG or PNG) (Graph API)',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        contact_id: { type: 'number', description: 'Contact ID' },
+        file_path: { type: 'string', description: 'Path to the photo file (JPEG or PNG)' },
+      },
+      required: ['contact_id', 'file_path'],
+    },
+  },
 ];
 
 // =============================================================================
@@ -2120,6 +2144,8 @@ export function createServer(): Server {
     'create_contact_folder',
     'prepare_delete_contact_folder',
     'confirm_delete_contact_folder',
+    'get_contact_photo',
+    'set_contact_photo',
   ]);
 
   // Register tool list handler
@@ -3135,6 +3161,15 @@ const ConfirmDeleteContactFolderInput = z.strictObject({
   folder_id: z.number().int().positive().describe('The contact folder ID to delete'),
 });
 
+const GetContactPhotoInput = z.strictObject({
+  contact_id: z.number().int().positive().describe('Contact ID'),
+});
+
+const SetContactPhotoInput = z.strictObject({
+  contact_id: z.number().int().positive().describe('Contact ID'),
+  file_path: z.string().describe('Path to the photo file (JPEG or PNG)'),
+});
+
 // =============================================================================
 // Graph API Tool Handler
 // =============================================================================
@@ -4031,6 +4066,18 @@ async function handleGraphToolCall(
             text: JSON.stringify({ success: true, message: 'Contact folder deleted' }, null, 2),
           }],
         };
+      }
+
+      case 'get_contact_photo': {
+        const params = GetContactPhotoInput.parse(args);
+        const result = await repository.getContactPhotoAsync(params.contact_id);
+        return { content: [{ type: 'text', text: JSON.stringify({ success: true, file_path: result.filePath, content_type: result.contentType }, null, 2) }] };
+      }
+
+      case 'set_contact_photo': {
+        const params = SetContactPhotoInput.parse(args);
+        await repository.setContactPhotoAsync(params.contact_id, params.file_path);
+        return { content: [{ type: 'text', text: JSON.stringify({ success: true, message: 'Contact photo updated' }, null, 2) }] };
       }
 
       default:

@@ -30,7 +30,9 @@ import {
   hashStringToNumber,
 } from './mappers/index.js';
 import type { DeviceCodeCallback } from './auth/index.js';
-import { downloadAttachment } from './attachments.js';
+import { downloadAttachment, getDownloadDir } from './attachments.js';
+import * as fs from 'fs';
+import * as path from 'path';
 
 /**
  * Cache for mapping numeric IDs back to Graph string IDs.
@@ -655,6 +657,31 @@ export class GraphRepository implements IRepository {
       }
       return mapContactToContactRow(c);
     });
+  }
+
+  // ===========================================================================
+  // Contact Photos
+  // ===========================================================================
+
+  async getContactPhotoAsync(contactId: number): Promise<{ filePath: string; contentType: string }> {
+    const graphId = this.idCache.contacts.get(contactId);
+    if (graphId == null) throw new Error(`Contact ID ${contactId} not found in cache. Try searching for or listing the item first to refresh the cache.`);
+
+    const photoData = await this.client.getContactPhoto(graphId);
+    const downloadDir = getDownloadDir();
+    const filePath = path.join(downloadDir, `contact-${contactId}-photo.jpg`);
+    fs.writeFileSync(filePath, Buffer.from(photoData));
+    return { filePath, contentType: 'image/jpeg' };
+  }
+
+  async setContactPhotoAsync(contactId: number, filePath: string): Promise<void> {
+    const graphId = this.idCache.contacts.get(contactId);
+    if (graphId == null) throw new Error(`Contact ID ${contactId} not found in cache. Try searching for or listing the item first to refresh the cache.`);
+
+    const photoData = fs.readFileSync(filePath);
+    const ext = path.extname(filePath).toLowerCase();
+    const contentType = ext === '.png' ? 'image/png' : 'image/jpeg';
+    await this.client.setContactPhoto(graphId, photoData, contentType);
   }
 
   // ===========================================================================

@@ -19,7 +19,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 interface ApiCall {
   url: string;
-  method: 'get' | 'post' | 'patch' | 'delete';
+  method: 'get' | 'post' | 'patch' | 'delete' | 'put';
   body?: any;
   selectFields?: string;
   filterExpr?: string;
@@ -28,6 +28,7 @@ interface ApiCall {
   queryParams?: any;
   topValue?: number;
   skipValue?: number;
+  headers?: Record<string, string>;
 }
 
 const apiCalls: ApiCall[] = [];
@@ -79,6 +80,17 @@ function createTrackingBuilder(mockResponse: any) {
       call.body = body;
       apiCalls.push({ ...call });
       return mockResponse;
+    }),
+    put: vi.fn().mockImplementation(async (body: any) => {
+      call.method = 'put';
+      call.body = body;
+      apiCalls.push({ ...call });
+      return undefined;
+    }),
+    header: vi.fn().mockImplementation((key: string, value: string) => {
+      call.headers = call.headers ?? {};
+      call.headers[key] = value;
+      return builder;
     }),
     delete: vi.fn().mockImplementation(async () => {
       call.method = 'delete';
@@ -152,6 +164,7 @@ const VALID_ENDPOINT_PATTERNS = [
   // Contacts
   /^\/me\/contacts$/,
   /^\/me\/contacts\/[^/]+$/,
+  /^\/me\/contacts\/[^/]+\/photo\/\$value$/,
   // Contact Folders
   /^\/me\/contactFolders$/,
   /^\/me\/contactFolders\/[^/]+$/,
@@ -1172,6 +1185,37 @@ describe('Graph API endpoint and method validation', () => {
       expect(apiCalls[0].method).toBe('get');
       expect(apiCalls[0].topValue).toBe(50);
       expect(result).toEqual([{ id: 'c-1', displayName: 'Alice' }]);
+    });
+  });
+
+  // =========================================================================
+  // Contact Photos
+  // =========================================================================
+
+  describe('Contact Photo operations', () => {
+    it('getContactPhoto GETs /me/contacts/{contactId}/photo/$value', async () => {
+      const mockPhotoData = new ArrayBuffer(8);
+      setupMock(mockPhotoData);
+
+      const result = await client.getContactPhoto('contact-1');
+
+      expect(apiCalls).toHaveLength(1);
+      expect(apiCalls[0].url).toBe('/me/contacts/contact-1/photo/$value');
+      expect(apiCalls[0].method).toBe('get');
+      expect(result).toBe(mockPhotoData);
+    });
+
+    it('setContactPhoto PUTs to /me/contacts/{contactId}/photo/$value', async () => {
+      setupMock(undefined);
+
+      const photoData = Buffer.from('fake-photo-data');
+      await client.setContactPhoto('contact-1', photoData, 'image/jpeg');
+
+      expect(apiCalls).toHaveLength(1);
+      expect(apiCalls[0].url).toBe('/me/contacts/contact-1/photo/$value');
+      expect(apiCalls[0].method).toBe('put');
+      expect(apiCalls[0].body).toBe(photoData);
+      expect(apiCalls[0].headers).toEqual({ 'Content-Type': 'image/jpeg' });
     });
   });
 
