@@ -1729,6 +1729,104 @@ export class GraphClient {
     const client = await this.getClient();
     await client.api(`/me/todo/lists/${taskListId}/tasks/${taskId}/attachments/${attachmentId}`).delete();
   }
+
+  // ===========================================================================
+  // Planner
+  // ===========================================================================
+
+  async listPlans(): Promise<MicrosoftGraph.PlannerPlan[]> {
+    const client = await this.getClient();
+    const response = await client.api('/me/planner/plans').get() as PageCollection;
+    return response.value as MicrosoftGraph.PlannerPlan[];
+  }
+
+  async getPlan(planId: string): Promise<MicrosoftGraph.PlannerPlan> {
+    const client = await this.getClient();
+    return await client.api(`/planner/plans/${planId}`).get() as MicrosoftGraph.PlannerPlan;
+  }
+
+  async createPlan(title: string, groupId: string): Promise<MicrosoftGraph.PlannerPlan> {
+    const client = await this.getClient();
+    return await client.api('/planner/plans').post({
+      title,
+      owner: groupId,
+      container: { url: `https://graph.microsoft.com/v1.0/groups/${groupId}`, type: 'group' },
+    }) as MicrosoftGraph.PlannerPlan;
+  }
+
+  async updatePlan(planId: string, updates: Record<string, unknown>, etag: string): Promise<MicrosoftGraph.PlannerPlan> {
+    const client = await this.getClient();
+    return await client.api(`/planner/plans/${planId}`).header('If-Match', etag).patch(updates) as MicrosoftGraph.PlannerPlan;
+  }
+
+  async listBuckets(planId: string): Promise<MicrosoftGraph.PlannerBucket[]> {
+    const client = await this.getClient();
+    const response = await client.api(`/planner/plans/${planId}/buckets`).get() as PageCollection;
+    return response.value as MicrosoftGraph.PlannerBucket[];
+  }
+
+  async createBucket(planId: string, name: string): Promise<MicrosoftGraph.PlannerBucket> {
+    const client = await this.getClient();
+    return await client.api('/planner/buckets').post({ planId, name }) as MicrosoftGraph.PlannerBucket;
+  }
+
+  async updateBucket(bucketId: string, updates: Record<string, unknown>, etag: string): Promise<MicrosoftGraph.PlannerBucket> {
+    const client = await this.getClient();
+    return await client.api(`/planner/buckets/${bucketId}`).header('If-Match', etag).patch(updates) as MicrosoftGraph.PlannerBucket;
+  }
+
+  async deleteBucket(bucketId: string, etag: string): Promise<void> {
+    const client = await this.getClient();
+    await client.api(`/planner/buckets/${bucketId}`).header('If-Match', etag).delete();
+  }
+
+  // ===========================================================================
+  // People & Presence
+  // ===========================================================================
+
+  async listRelevantPeople(top: number = 25): Promise<MicrosoftGraph.Person[]> {
+    const client = await this.getClient();
+    const response = await client.api('/me/people').top(top).get() as PageCollection;
+    return response.value as MicrosoftGraph.Person[];
+  }
+
+  async searchPeople(query: string, top: number = 25): Promise<MicrosoftGraph.Person[]> {
+    const client = await this.getClient();
+    const response = await client.api('/me/people').search('"' + query + '"').top(top).get() as PageCollection;
+    return response.value as MicrosoftGraph.Person[];
+  }
+
+  async getManager(): Promise<MicrosoftGraph.DirectoryObject> {
+    const client = await this.getClient();
+    return await client.api('/me/manager').get() as MicrosoftGraph.DirectoryObject;
+  }
+
+  async getDirectReports(): Promise<MicrosoftGraph.DirectoryObject[]> {
+    const client = await this.getClient();
+    const response = await client.api('/me/directReports').get() as PageCollection;
+    return response.value as MicrosoftGraph.DirectoryObject[];
+  }
+
+  async getUserProfile(identifier: string): Promise<MicrosoftGraph.User> {
+    const client = await this.getClient();
+    return await client.api(`/users/${identifier}`).get() as MicrosoftGraph.User;
+  }
+
+  async getUserPhoto(identifier: string): Promise<ArrayBuffer> {
+    const client = await this.getClient();
+    return await client.api(`/users/${identifier}/photo/$value`).get() as ArrayBuffer;
+  }
+
+  async getUserPresence(identifier: string): Promise<MicrosoftGraph.Presence> {
+    const client = await this.getClient();
+    return await client.api(`/users/${identifier}/presence`).get() as MicrosoftGraph.Presence;
+  }
+
+  async getUsersPresence(userIds: string[]): Promise<MicrosoftGraph.Presence[]> {
+    const client = await this.getClient();
+    const response = await client.api('/communications/getPresencesByUserId').post({ ids: userIds });
+    return response.value as MicrosoftGraph.Presence[];
+  }
 }
 
 /**

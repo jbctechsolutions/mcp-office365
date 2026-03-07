@@ -61,6 +61,8 @@ interface IdCache {
   checklistItems: Map<number, { taskListId: string; taskId: string; checklistItemId: string }>;
   linkedResources: Map<number, { taskListId: string; taskId: string; linkedResourceId: string }>;
   taskAttachments: Map<number, { taskListId: string; taskId: string; attachmentId: string }>;
+  plans: Map<number, { planId: string; etag: string }>;
+  plannerBuckets: Map<number, { planId: string; bucketId: string; etag: string }>;
 }
 
 /**
@@ -95,6 +97,8 @@ export class GraphRepository implements IRepository {
     checklistItems: new Map(),
     linkedResources: new Map(),
     taskAttachments: new Map(),
+    plans: new Map(),
+    plannerBuckets: new Map(),
   };
 
   constructor(deviceCodeCallback?: DeviceCodeCallback) {
@@ -2533,6 +2537,134 @@ export class GraphRepository implements IRepository {
       email: (m as any).email ?? '',
       roles: m.roles ?? [],
     }));
+  }
+
+  // ===========================================================================
+  // Planner Plans
+  // ===========================================================================
+
+  /**
+   * Lists all plans the current user has.
+   */
+  async listPlansAsync(): Promise<Array<{ id: number; title: string; owner: string; createdDateTime: string }>> {
+    const plans = await this.client.listPlans();
+    return plans.map((plan) => {
+      const graphId = plan.id!;
+      const numericId = hashStringToNumber(graphId);
+      const etag = (plan as any)['@odata.etag'] ?? '';
+      this.idCache.plans.set(numericId, { planId: graphId, etag });
+      return {
+        id: numericId,
+        title: plan.title ?? '',
+        owner: plan.owner ?? '',
+        createdDateTime: plan.createdDateTime ?? '',
+      };
+    });
+  }
+
+  /**
+   * Gets a specific plan by cached numeric ID.
+   */
+  async getPlanAsync(planId: number): Promise<{ id: number; title: string; owner: string; createdDateTime: string; etag: string }> {
+    const cached = this.idCache.plans.get(planId);
+    if (cached == null) throw new Error(`Plan ID ${planId} not found in cache. Try listing plans first.`);
+    const plan = await this.client.getPlan(cached.planId);
+    const etag = (plan as any)['@odata.etag'] ?? '';
+    this.idCache.plans.set(planId, { planId: cached.planId, etag });
+    return {
+      id: planId,
+      title: plan.title ?? '',
+      owner: plan.owner ?? '',
+      createdDateTime: plan.createdDateTime ?? '',
+      etag,
+    };
+  }
+
+  /**
+   * Creates a new plan.
+   */
+  async createPlanAsync(title: string, groupId: string): Promise<number> {
+    const plan = await this.client.createPlan(title, groupId);
+    const graphId = plan.id!;
+    const numericId = hashStringToNumber(graphId);
+    const etag = (plan as any)['@odata.etag'] ?? '';
+    this.idCache.plans.set(numericId, { planId: graphId, etag });
+    return numericId;
+  }
+
+  /**
+   * Updates a plan (requires cached ETag).
+   */
+  async updatePlanAsync(planId: number, updates: { title?: string }): Promise<void> {
+    const cached = this.idCache.plans.get(planId);
+    if (cached == null) throw new Error(`Plan ID ${planId} not found in cache. Try listing plans first.`);
+    const graphUpdates: Record<string, unknown> = {};
+    if (updates.title != null) graphUpdates['title'] = updates.title;
+    const result = await this.client.updatePlan(cached.planId, graphUpdates, cached.etag);
+    const newEtag = (result as any)['@odata.etag'] ?? cached.etag;
+    this.idCache.plans.set(planId, { planId: cached.planId, etag: newEtag });
+  }
+
+  // ===========================================================================
+  // Planner Buckets
+  // ===========================================================================
+
+  /**
+   * Lists all buckets in a plan.
+   */
+  async listBucketsAsync(planId: number): Promise<Array<{ id: number; name: string; planId: number; orderHint: string }>> {
+    const cached = this.idCache.plans.get(planId);
+    if (cached == null) throw new Error(`Plan ID ${planId} not found in cache. Try listing plans first.`);
+    const buckets = await this.client.listBuckets(cached.planId);
+    return buckets.map((bucket) => {
+      const graphId = bucket.id!;
+      const numericId = hashStringToNumber(graphId);
+      const etag = (bucket as any)['@odata.etag'] ?? '';
+      this.idCache.plannerBuckets.set(numericId, { planId: cached.planId, bucketId: graphId, etag });
+      return {
+        id: numericId,
+        name: bucket.name ?? '',
+        planId,
+        orderHint: bucket.orderHint ?? '',
+      };
+    });
+  }
+
+  /**
+   * Creates a new bucket in a plan.
+   */
+  async createBucketAsync(planId: number, name: string): Promise<number> {
+    const cached = this.idCache.plans.get(planId);
+    if (cached == null) throw new Error(`Plan ID ${planId} not found in cache. Try listing plans first.`);
+    const bucket = await this.client.createBucket(cached.planId, name);
+    const graphId = bucket.id!;
+    const numericId = hashStringToNumber(graphId);
+    const etag = (bucket as any)['@odata.etag'] ?? '';
+    this.idCache.plannerBuckets.set(numericId, { planId: cached.planId, bucketId: graphId, etag });
+    return numericId;
+  }
+
+  /**
+   * Updates a bucket (requires cached ETag).
+   */
+  async updateBucketAsync(bucketId: number, updates: { name?: string }): Promise<void> {
+    const cached = this.idCache.plannerBuckets.get(bucketId);
+    if (cached == null) throw new Error(`Bucket ID ${bucketId} not found in cache. Try listing buckets first.`);
+    const graphUpdates: Record<string, unknown> = {};
+    if (updates.name != null) graphUpdates['name'] = updates.name;
+    const result = await this.client.updateBucket(cached.bucketId, graphUpdates, cached.etag);
+    const newEtag = (result as any)['@odata.etag'] ?? cached.etag;
+    this.idCache.plannerBuckets.set(bucketId, { planId: cached.planId, bucketId: cached.bucketId, etag: newEtag });
+  }
+
+  /**
+   * Deletes a bucket (requires cached ETag).
+   */
+  async deleteBucketAsync(bucketId: number): Promise<void> {
+    const cached = this.idCache.plannerBuckets.get(bucketId);
+    if (cached == null) throw new Error(`Bucket ID ${bucketId} not found in cache. Try listing buckets first.`);
+    await this.client.deleteBucket(cached.bucketId, cached.etag);
+    this.idCache.plannerBuckets.delete(bucketId);
   }
 
   /**

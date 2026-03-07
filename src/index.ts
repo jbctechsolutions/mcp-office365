@@ -133,6 +133,29 @@ import {
   ListChatMembersInput,
 } from './tools/teams.js';
 import {
+  PeopleTools,
+  ListRelevantPeopleInput,
+  SearchPeopleInput,
+  GetManagerInput,
+  GetDirectReportsInput,
+  GetUserProfileInput,
+  GetUserPhotoInput,
+  GetUserPresenceInput,
+  GetUsersPresenceInput,
+} from './tools/people.js';
+import {
+  PlannerTools,
+  ListPlansInput,
+  GetPlanInput,
+  CreatePlanInput,
+  UpdatePlanInput,
+  ListBucketsInput,
+  CreateBucketInput,
+  UpdateBucketInput,
+  PrepareDeleteBucketInput,
+  ConfirmDeleteBucketInput,
+} from './tools/planner.js';
+import {
   ListEmailsInput,
   SearchEmailsInput,
   SearchEmailsAdvancedInput,
@@ -2800,6 +2823,199 @@ const TOOLS: Tool[] = [
       required: ['approval_token'],
     },
   },
+  // People API tools
+  {
+    name: 'list_relevant_people',
+    description: 'List AI-ranked relevant people for the current user (Graph API)',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        limit: { type: 'number', description: 'Max people to return (default 25, max 100)' },
+      },
+      required: [],
+    },
+  },
+  {
+    name: 'search_people',
+    description: 'Search people by name or email (Graph API)',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        query: { type: 'string', description: 'Search query (name or email)' },
+        limit: { type: 'number', description: 'Max results to return (default 25, max 100)' },
+      },
+      required: ['query'],
+    },
+  },
+  {
+    name: 'get_manager',
+    description: 'Get the current user\'s manager (Graph API)',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {},
+      required: [],
+    },
+  },
+  {
+    name: 'get_direct_reports',
+    description: 'Get the current user\'s direct reports (Graph API)',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {},
+      required: [],
+    },
+  },
+  {
+    name: 'get_user_profile',
+    description: 'Get a user\'s profile by email address or user ID (Graph API)',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        identifier: { type: 'string', description: 'User email address or user ID' },
+      },
+      required: ['identifier'],
+    },
+  },
+  {
+    name: 'get_user_photo',
+    description: 'Get a user\'s photo and save to disk (Graph API)',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        identifier: { type: 'string', description: 'User email address or user ID' },
+        save_path: { type: 'string', description: 'File path to save the photo (defaults to ~/Downloads/{identifier}_photo.jpg)' },
+      },
+      required: ['identifier'],
+    },
+  },
+  {
+    name: 'get_user_presence',
+    description: 'Get a user\'s presence status (Available, Busy, DoNotDisturb, etc.) (Graph API)',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        identifier: { type: 'string', description: 'User email address or user ID' },
+      },
+      required: ['identifier'],
+    },
+  },
+  {
+    name: 'get_users_presence',
+    description: 'Batch get presence status for multiple users by their IDs (Graph API)',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        user_ids: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Array of user IDs (max 650)',
+        },
+      },
+      required: ['user_ids'],
+    },
+  },
+  // Planner tools
+  {
+    name: 'list_plans',
+    description: 'List all Planner plans the user has access to (Graph API)',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {},
+      required: [],
+    },
+  },
+  {
+    name: 'get_plan',
+    description: 'Get details for a specific Planner plan (Graph API)',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        plan_id: { type: 'number', description: 'Plan ID from list_plans' },
+      },
+      required: ['plan_id'],
+    },
+  },
+  {
+    name: 'create_plan',
+    description: 'Create a new Planner plan in a Microsoft 365 group (Graph API)',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        title: { type: 'string', description: 'Plan title' },
+        group_id: { type: 'string', description: 'M365 group ID that owns the plan' },
+      },
+      required: ['title', 'group_id'],
+    },
+  },
+  {
+    name: 'update_plan',
+    description: 'Update a Planner plan title (Graph API)',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        plan_id: { type: 'number', description: 'Plan ID from list_plans' },
+        title: { type: 'string', description: 'New plan title' },
+      },
+      required: ['plan_id'],
+    },
+  },
+  {
+    name: 'list_buckets',
+    description: 'List all buckets in a Planner plan (Graph API)',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        plan_id: { type: 'number', description: 'Plan ID from list_plans' },
+      },
+      required: ['plan_id'],
+    },
+  },
+  {
+    name: 'create_bucket',
+    description: 'Create a new bucket in a Planner plan (Graph API)',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        plan_id: { type: 'number', description: 'Plan ID from list_plans' },
+        name: { type: 'string', description: 'Bucket name' },
+      },
+      required: ['plan_id', 'name'],
+    },
+  },
+  {
+    name: 'update_bucket',
+    description: 'Update a Planner bucket name (Graph API)',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        bucket_id: { type: 'number', description: 'Bucket ID from list_buckets' },
+        name: { type: 'string', description: 'New bucket name' },
+      },
+      required: ['bucket_id'],
+    },
+  },
+  {
+    name: 'prepare_delete_bucket',
+    description: 'Prepare to delete a Planner bucket. Returns an approval token. (Graph API)',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        bucket_id: { type: 'number', description: 'Bucket ID from list_buckets' },
+      },
+      required: ['bucket_id'],
+    },
+  },
+  {
+    name: 'confirm_delete_bucket',
+    description: 'Confirm deletion of a Planner bucket using the approval token from prepare_delete_bucket. (Graph API)',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        approval_token: { type: 'string', description: 'Approval token from prepare_delete_bucket' },
+      },
+      required: ['approval_token'],
+    },
+  },
 ];
 
 // =============================================================================
@@ -2844,6 +3060,8 @@ export function createServer(): Server {
   let calendarPermissionsTools: CalendarPermissionsTools | null = null;
   let focusedOverridesTools: FocusedOverridesTools | null = null;
   let teamsTools: TeamsTools | null = null;
+  let peopleTools: PeopleTools | null = null;
+  let plannerTools: PlannerTools | null = null;
   let checklistItemsTools: ChecklistItemsTools | null = null;
   let linkedResourcesTools: LinkedResourcesTools | null = null;
   let taskAttachmentsTools: TaskAttachmentsTools | null = null;
@@ -2906,6 +3124,8 @@ export function createServer(): Server {
     checklistItemsTools = new ChecklistItemsTools(graphRepository, tokenManager);
     linkedResourcesTools = new LinkedResourcesTools(graphRepository, tokenManager);
     taskAttachmentsTools = new TaskAttachmentsTools(graphRepository, tokenManager);
+    peopleTools = new PeopleTools(graphRepository.getClient());
+    plannerTools = new PlannerTools(graphRepository, tokenManager);
 
     initialized = true;
   });
@@ -3003,6 +3223,23 @@ export function createServer(): Server {
     'create_task_attachment',
     'prepare_delete_task_attachment',
     'confirm_delete_task_attachment',
+    'list_relevant_people',
+    'search_people',
+    'get_manager',
+    'get_direct_reports',
+    'get_user_profile',
+    'get_user_photo',
+    'get_user_presence',
+    'get_users_presence',
+    'list_plans',
+    'get_plan',
+    'create_plan',
+    'update_plan',
+    'list_buckets',
+    'create_bucket',
+    'update_bucket',
+    'prepare_delete_bucket',
+    'confirm_delete_bucket',
   ]);
 
   // Register tool list handler
@@ -3020,7 +3257,7 @@ export function createServer(): Server {
 
       // Graph API mode - handle async operations directly
       if (useGraphApi && graphRepository != null) {
-        return await handleGraphToolCall(name, args, graphRepository, graphContentReaders!, orgTools!, sendTools!, schedulingTools!, rulesTools!, categoriesTools!, calendarPermissionsTools!, focusedOverridesTools!, teamsTools!, checklistItemsTools!, linkedResourcesTools!, taskAttachmentsTools!, tokenManager);
+        return await handleGraphToolCall(name, args, graphRepository, graphContentReaders!, orgTools!, sendTools!, schedulingTools!, rulesTools!, categoriesTools!, calendarPermissionsTools!, focusedOverridesTools!, teamsTools!, checklistItemsTools!, linkedResourcesTools!, taskAttachmentsTools!, peopleTools!, plannerTools!, tokenManager);
       }
 
       // AppleScript mode - use sync tool interfaces
@@ -4099,6 +4336,8 @@ async function handleGraphToolCall(
   checklistItemsTools: ChecklistItemsTools,
   linkedResourcesTools: LinkedResourcesTools,
   taskAttachmentsTools: TaskAttachmentsTools,
+  peopleTools: PeopleTools,
+  plannerTools: PlannerTools,
   tokenManager: ApprovalTokenManager
 ): Promise<ToolResult> {
   // Handle mailbox organization tools (shared between backends)
@@ -5318,6 +5557,93 @@ async function handleGraphToolCall(
       case 'confirm_delete_task_attachment': {
         const params = ConfirmDeleteTaskAttachmentInput.parse(args);
         return await taskAttachmentsTools.confirmDeleteTaskAttachment(params);
+      }
+
+      // People API tools
+      case 'list_relevant_people': {
+        const params = ListRelevantPeopleInput.parse(args);
+        return await peopleTools.listRelevantPeople(params);
+      }
+
+      case 'search_people': {
+        const params = SearchPeopleInput.parse(args);
+        return await peopleTools.searchPeople(params);
+      }
+
+      case 'get_manager': {
+        GetManagerInput.parse(args);
+        return await peopleTools.getManager();
+      }
+
+      case 'get_direct_reports': {
+        GetDirectReportsInput.parse(args);
+        return await peopleTools.getDirectReports();
+      }
+
+      case 'get_user_profile': {
+        const params = GetUserProfileInput.parse(args);
+        return await peopleTools.getUserProfile(params);
+      }
+
+      case 'get_user_photo': {
+        const params = GetUserPhotoInput.parse(args);
+        return await peopleTools.getUserPhoto(params);
+      }
+
+      case 'get_user_presence': {
+        const params = GetUserPresenceInput.parse(args);
+        return await peopleTools.getUserPresence(params);
+      }
+
+      case 'get_users_presence': {
+        const params = GetUsersPresenceInput.parse(args);
+        return await peopleTools.getUsersPresence(params);
+      }
+
+      // Planner tools
+      case 'list_plans': {
+        ListPlansInput.parse(args);
+        return await plannerTools.listPlans();
+      }
+
+      case 'get_plan': {
+        const params = GetPlanInput.parse(args);
+        return await plannerTools.getPlan(params);
+      }
+
+      case 'create_plan': {
+        const params = CreatePlanInput.parse(args);
+        return await plannerTools.createPlan(params);
+      }
+
+      case 'update_plan': {
+        const params = UpdatePlanInput.parse(args);
+        return await plannerTools.updatePlan(params);
+      }
+
+      case 'list_buckets': {
+        const params = ListBucketsInput.parse(args);
+        return await plannerTools.listBuckets(params);
+      }
+
+      case 'create_bucket': {
+        const params = CreateBucketInput.parse(args);
+        return await plannerTools.createBucket(params);
+      }
+
+      case 'update_bucket': {
+        const params = UpdateBucketInput.parse(args);
+        return await plannerTools.updateBucket(params);
+      }
+
+      case 'prepare_delete_bucket': {
+        const params = PrepareDeleteBucketInput.parse(args);
+        return plannerTools.prepareDeleteBucket(params);
+      }
+
+      case 'confirm_delete_bucket': {
+        const params = ConfirmDeleteBucketInput.parse(args);
+        return await plannerTools.confirmDeleteBucket(params);
       }
 
       default:
