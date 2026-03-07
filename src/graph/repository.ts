@@ -49,6 +49,7 @@ interface IdCache {
   rules: Map<number, string>;
   contactFolders: Map<number, string>;
   categories: Map<number, string>;
+  focusedOverrides: Map<number, string>;
 }
 
 /**
@@ -71,6 +72,7 @@ export class GraphRepository implements IRepository {
     rules: new Map(),
     contactFolders: new Map(),
     categories: new Map(),
+    focusedOverrides: new Map(),
   };
 
   constructor(deviceCodeCallback?: DeviceCodeCallback) {
@@ -1888,6 +1890,48 @@ export class GraphRepository implements IRepository {
     if (graphId == null) throw new Error(`Category ID ${categoryId} not found in cache. Try searching for or listing the item first to refresh the cache.`);
     await this.client.deleteMasterCategory(graphId);
     this.idCache.categories.delete(categoryId);
+  }
+
+  // ===========================================================================
+  // Focused Inbox Overrides
+  // ===========================================================================
+
+  /**
+   * Lists all focused inbox overrides.
+   */
+  async listFocusedOverridesAsync(): Promise<Array<{ id: number; senderAddress: string; classifyAs: string }>> {
+    const overrides = await this.client.listFocusedOverrides();
+    return overrides.map((o) => {
+      const graphId = o.id!;
+      const numericId = hashStringToNumber(graphId);
+      this.idCache.focusedOverrides.set(numericId, graphId);
+      return {
+        id: numericId,
+        senderAddress: o.senderEmailAddress?.address ?? '',
+        classifyAs: o.classifyAs ?? '',
+      };
+    });
+  }
+
+  /**
+   * Creates a focused inbox override.
+   */
+  async createFocusedOverrideAsync(senderAddress: string, classifyAs: 'focused' | 'other'): Promise<number> {
+    const created = await this.client.createFocusedOverride(senderAddress, classifyAs);
+    const graphId = created.id!;
+    const numericId = hashStringToNumber(graphId);
+    this.idCache.focusedOverrides.set(numericId, graphId);
+    return numericId;
+  }
+
+  /**
+   * Deletes a focused inbox override.
+   */
+  async deleteFocusedOverrideAsync(overrideId: number): Promise<void> {
+    const graphId = this.idCache.focusedOverrides.get(overrideId);
+    if (graphId == null) throw new Error(`Focused override ID ${overrideId} not found in cache. Try searching for or listing the item first to refresh the cache.`);
+    await this.client.deleteFocusedOverride(graphId);
+    this.idCache.focusedOverrides.delete(overrideId);
   }
 
   /**

@@ -196,3 +196,15 @@ export {
   type PrepareDeleteCategoryParams,
   type ConfirmDeleteCategoryParams,
 } from './categories.js';
+
+// Focused overrides tools
+export {
+  FocusedOverridesTools,
+  CreateFocusedOverrideInput,
+  PrepareDeleteFocusedOverrideInput,
+  ConfirmDeleteFocusedOverrideInput,
+  type IFocusedOverridesRepository,
+  type CreateFocusedOverrideParams,
+  type PrepareDeleteFocusedOverrideParams,
+  type ConfirmDeleteFocusedOverrideParams,
+} from './focused-overrides.js';

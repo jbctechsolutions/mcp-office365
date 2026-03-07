@@ -76,6 +76,12 @@ import {
   ConfirmDeleteCategoryInput,
 } from './tools/categories.js';
 import {
+  FocusedOverridesTools,
+  CreateFocusedOverrideInput,
+  PrepareDeleteFocusedOverrideInput,
+  ConfirmDeleteFocusedOverrideInput,
+} from './tools/focused-overrides.js';
+import {
   ListEmailsInput,
   SearchEmailsInput,
   SearchEmailsAdvancedInput,
@@ -2009,6 +2015,50 @@ const TOOLS: Tool[] = [
       required: ['approval_token'],
     },
   },
+  // Focused inbox override tools
+  {
+    name: 'list_focused_overrides',
+    description: 'List all focused inbox overrides (Graph API)',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {},
+      required: [],
+    },
+  },
+  {
+    name: 'create_focused_override',
+    description: 'Create a focused inbox override for a sender (Graph API)',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        sender_address: { type: 'string', description: 'Sender email address' },
+        classify_as: { type: 'string', enum: ['focused', 'other'], description: 'Classification' },
+      },
+      required: ['sender_address', 'classify_as'],
+    },
+  },
+  {
+    name: 'prepare_delete_focused_override',
+    description: 'Prepare to delete a focused inbox override. Returns a preview and approval token. Call confirm_delete_focused_override to execute. (Graph API)',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        override_id: { type: 'number', description: 'Override ID to delete' },
+      },
+      required: ['override_id'],
+    },
+  },
+  {
+    name: 'confirm_delete_focused_override',
+    description: 'Confirm focused inbox override deletion with approval token (Graph API)',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        approval_token: { type: 'string', description: 'The approval token from prepare_delete_focused_override' },
+      },
+      required: ['approval_token'],
+    },
+  },
   // Automatic replies (OOF) tools
   {
     name: 'get_automatic_replies',
@@ -2200,6 +2250,7 @@ export function createServer(): Server {
   let schedulingTools: ReturnType<typeof createSchedulingTools> | null = null;
   let rulesTools: MailRulesTools | null = null;
   let categoriesTools: CategoriesTools | null = null;
+  let focusedOverridesTools: FocusedOverridesTools | null = null;
   let calendarWriter: ICalendarWriter | null = null;
   let calendarManager: ICalendarManager | null = null;
   let mailSender: IMailSender | null = null;
@@ -2253,6 +2304,7 @@ export function createServer(): Server {
     schedulingTools = createSchedulingTools(graphRepository);
     rulesTools = new MailRulesTools(graphRepository, tokenManager);
     categoriesTools = new CategoriesTools(graphRepository, tokenManager);
+    focusedOverridesTools = new FocusedOverridesTools(graphRepository, tokenManager);
 
     initialized = true;
   });
@@ -2287,6 +2339,10 @@ export function createServer(): Server {
     'create_category',
     'prepare_delete_category',
     'confirm_delete_category',
+    'list_focused_overrides',
+    'create_focused_override',
+    'prepare_delete_focused_override',
+    'confirm_delete_focused_override',
     'list_task_lists',
     'rename_task_list',
     'prepare_delete_task_list',
@@ -2319,7 +2375,7 @@ export function createServer(): Server {
 
       // Graph API mode - handle async operations directly
       if (useGraphApi && graphRepository != null) {
-        return await handleGraphToolCall(name, args, graphRepository, graphContentReaders!, orgTools!, sendTools!, schedulingTools!, rulesTools!, categoriesTools!, tokenManager);
+        return await handleGraphToolCall(name, args, graphRepository, graphContentReaders!, orgTools!, sendTools!, schedulingTools!, rulesTools!, categoriesTools!, focusedOverridesTools!, tokenManager);
       }
 
       // AppleScript mode - use sync tool interfaces
@@ -3366,6 +3422,7 @@ async function handleGraphToolCall(
   schedulingTools: ReturnType<typeof createSchedulingTools>,
   rulesTools: MailRulesTools,
   categoriesTools: CategoriesTools,
+  focusedOverridesTools: FocusedOverridesTools,
   tokenManager: ApprovalTokenManager
 ): Promise<ToolResult> {
   // Handle mailbox organization tools (shared between backends)
@@ -4204,6 +4261,25 @@ async function handleGraphToolCall(
       case 'confirm_delete_category': {
         const params = ConfirmDeleteCategoryInput.parse(args);
         return await categoriesTools.confirmDeleteCategory(params);
+      }
+
+      // Focused inbox override tools
+      case 'list_focused_overrides':
+        return await focusedOverridesTools.listFocusedOverrides();
+
+      case 'create_focused_override': {
+        const params = CreateFocusedOverrideInput.parse(args);
+        return await focusedOverridesTools.createFocusedOverride(params);
+      }
+
+      case 'prepare_delete_focused_override': {
+        const params = PrepareDeleteFocusedOverrideInput.parse(args);
+        return focusedOverridesTools.prepareDeleteFocusedOverride(params);
+      }
+
+      case 'confirm_delete_focused_override': {
+        const params = ConfirmDeleteFocusedOverrideInput.parse(args);
+        return await focusedOverridesTools.confirmDeleteFocusedOverride(params);
       }
 
       // Automatic replies (OOF) tools

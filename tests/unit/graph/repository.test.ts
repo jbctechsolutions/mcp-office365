@@ -97,6 +97,10 @@ vi.mock('../../../src/graph/client/index.js', () => ({
       listMasterCategories: vi.fn(),
       createMasterCategory: vi.fn(),
       deleteMasterCategory: vi.fn(),
+      // Focused inbox override operations
+      listFocusedOverrides: vi.fn(),
+      createFocusedOverride: vi.fn(),
+      deleteFocusedOverride: vi.fn(),
       // Contact folder operations
       listContactFolders: vi.fn(),
       createContactFolder: vi.fn(),
@@ -3260,6 +3264,80 @@ describe('graph/repository', () => {
 
       it('throws for unknown category ID', async () => {
         await expect(repository.deleteCategoryAsync(999999)).rejects.toThrow('not found in cache');
+      });
+    });
+  });
+
+  // ===========================================================================
+  // Focused Inbox Overrides
+  // ===========================================================================
+
+  describe('Focused Inbox Overrides', () => {
+    describe('listFocusedOverridesAsync', () => {
+      it('returns mapped overrides and caches IDs', async () => {
+        mockClient.listFocusedOverrides.mockResolvedValue([
+          { id: 'ov-1', classifyAs: 'focused', senderEmailAddress: { address: 'a@b.com' } },
+          { id: 'ov-2', classifyAs: 'other', senderEmailAddress: { address: 'c@d.com' } },
+        ]);
+
+        const result = await repository.listFocusedOverridesAsync();
+
+        expect(result).toHaveLength(2);
+        expect(result[0].id).toBe(hashStringToNumber('ov-1'));
+        expect(result[0].senderAddress).toBe('a@b.com');
+        expect(result[0].classifyAs).toBe('focused');
+        expect(result[1].id).toBe(hashStringToNumber('ov-2'));
+        expect(result[1].senderAddress).toBe('c@d.com');
+        expect(result[1].classifyAs).toBe('other');
+      });
+
+      it('caches override IDs for later retrieval', async () => {
+        mockClient.listFocusedOverrides.mockResolvedValue([
+          { id: 'ov-abc', classifyAs: 'focused', senderEmailAddress: { address: 'x@y.com' } },
+        ]);
+
+        await repository.listFocusedOverridesAsync();
+
+        mockClient.deleteFocusedOverride.mockResolvedValue(undefined);
+        await expect(repository.deleteFocusedOverrideAsync(hashStringToNumber('ov-abc'))).resolves.toBeUndefined();
+        expect(mockClient.deleteFocusedOverride).toHaveBeenCalledWith('ov-abc');
+      });
+    });
+
+    describe('createFocusedOverrideAsync', () => {
+      it('creates an override and caches the ID', async () => {
+        mockClient.createFocusedOverride.mockResolvedValue({
+          id: 'ov-new',
+          classifyAs: 'focused',
+          senderEmailAddress: { address: 'a@b.com' },
+        });
+
+        const result = await repository.createFocusedOverrideAsync('a@b.com', 'focused');
+
+        expect(result).toBe(hashStringToNumber('ov-new'));
+        expect(mockClient.createFocusedOverride).toHaveBeenCalledWith('a@b.com', 'focused');
+      });
+    });
+
+    describe('deleteFocusedOverrideAsync', () => {
+      it('deletes an override and removes from cache', async () => {
+        mockClient.listFocusedOverrides.mockResolvedValue([
+          { id: 'ov-del', classifyAs: 'other', senderEmailAddress: { address: 'x@y.com' } },
+        ]);
+        await repository.listFocusedOverridesAsync();
+
+        mockClient.deleteFocusedOverride.mockResolvedValue(undefined);
+        const numericId = hashStringToNumber('ov-del');
+        await repository.deleteFocusedOverrideAsync(numericId);
+
+        expect(mockClient.deleteFocusedOverride).toHaveBeenCalledWith('ov-del');
+
+        // Should throw if we try to delete again (removed from cache)
+        await expect(repository.deleteFocusedOverrideAsync(numericId)).rejects.toThrow('not found in cache');
+      });
+
+      it('throws for unknown override ID', async () => {
+        await expect(repository.deleteFocusedOverrideAsync(999999)).rejects.toThrow('not found in cache');
       });
     });
   });

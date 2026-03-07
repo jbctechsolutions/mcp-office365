@@ -1334,6 +1334,41 @@ export class GraphClient {
     await client.api(`/me/outlook/masterCategories/${categoryId}`).delete();
     this.cache.clear();
   }
+
+  // ===========================================================================
+  // Focused Inbox Overrides
+  // ===========================================================================
+
+  /**
+   * Lists all focused inbox overrides.
+   */
+  async listFocusedOverrides(): Promise<MicrosoftGraph.InferenceClassificationOverride[]> {
+    const client = await this.getClient();
+    const response = await client.api('/me/inferenceClassification/overrides').get() as PageCollection;
+    return response.value as MicrosoftGraph.InferenceClassificationOverride[];
+  }
+
+  /**
+   * Creates a focused inbox override.
+   */
+  async createFocusedOverride(senderAddress: string, classifyAs: 'focused' | 'other'): Promise<MicrosoftGraph.InferenceClassificationOverride> {
+    const client = await this.getClient();
+    const result = await client.api('/me/inferenceClassification/overrides').post({
+      classifyAs,
+      senderEmailAddress: { address: senderAddress },
+    }) as MicrosoftGraph.InferenceClassificationOverride;
+    this.cache.clear();
+    return result;
+  }
+
+  /**
+   * Deletes a focused inbox override.
+   */
+  async deleteFocusedOverride(overrideId: string): Promise<void> {
+    const client = await this.getClient();
+    await client.api(`/me/inferenceClassification/overrides/${overrideId}`).delete();
+    this.cache.clear();
+  }
 }
 
 /**

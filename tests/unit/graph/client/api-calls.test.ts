@@ -184,6 +184,9 @@ const VALID_ENDPOINT_PATTERNS = [
   // Master Categories
   /^\/me\/outlook\/masterCategories$/,
   /^\/me\/outlook\/masterCategories\/[^/]+$/,
+  // Focused Inbox Overrides
+  /^\/me\/inferenceClassification\/overrides$/,
+  /^\/me\/inferenceClassification\/overrides\/[^/]+$/,
   // Attachments
   /^\/me\/messages\/[^/]+\/attachments$/,
   /^\/me\/messages\/[^/]+\/attachments\/[^/]+$/,
@@ -1191,6 +1194,47 @@ describe('Graph API endpoint and method validation', () => {
 
       expect(apiCalls).toHaveLength(1);
       expect(apiCalls[0].url).toBe('/me/outlook/masterCategories/cat-1');
+      expect(apiCalls[0].method).toBe('delete');
+    });
+  });
+
+  // =========================================================================
+  // Focused Inbox Override operations
+  // =========================================================================
+
+  describe('Focused Inbox Override operations', () => {
+    it('listFocusedOverrides GETs /me/inferenceClassification/overrides', async () => {
+      setupMock({ value: [{ id: 'ov-1', classifyAs: 'focused', senderEmailAddress: { address: 'a@b.com' } }] });
+
+      const result = await client.listFocusedOverrides();
+
+      expect(apiCalls).toHaveLength(1);
+      expect(apiCalls[0].url).toBe('/me/inferenceClassification/overrides');
+      expect(apiCalls[0].method).toBe('get');
+      expect(result).toEqual([{ id: 'ov-1', classifyAs: 'focused', senderEmailAddress: { address: 'a@b.com' } }]);
+    });
+
+    it('createFocusedOverride POSTs to /me/inferenceClassification/overrides', async () => {
+      setupMock({ id: 'ov-new', classifyAs: 'focused', senderEmailAddress: { address: 'a@b.com' } });
+
+      await client.createFocusedOverride('a@b.com', 'focused');
+
+      expect(apiCalls).toHaveLength(1);
+      expect(apiCalls[0].url).toBe('/me/inferenceClassification/overrides');
+      expect(apiCalls[0].method).toBe('post');
+      expect(apiCalls[0].body).toEqual({
+        classifyAs: 'focused',
+        senderEmailAddress: { address: 'a@b.com' },
+      });
+    });
+
+    it('deleteFocusedOverride DELETEs /me/inferenceClassification/overrides/{overrideId}', async () => {
+      setupMock(undefined);
+
+      await client.deleteFocusedOverride('ov-1');
+
+      expect(apiCalls).toHaveLength(1);
+      expect(apiCalls[0].url).toBe('/me/inferenceClassification/overrides/ov-1');
       expect(apiCalls[0].method).toBe('delete');
     });
   });
