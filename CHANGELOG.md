@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [v2.4.0] - 2026-03-07
+
+### Added
+- **17 Microsoft Planner tools** (Phase 5) bringing the total to ~189 tools
+- **Plans** (4 tools):
+  - `list_plans` / `get_plan` — browse planner plans
+  - `create_plan` / `update_plan` — create and modify plans (with ETag concurrency)
+- **Buckets** (5 tools):
+  - `list_buckets` / `create_bucket` / `update_bucket` — manage plan buckets
+  - `prepare_delete_bucket` / `confirm_delete_bucket` — two-phase bucket deletion
+- **Planner Tasks** (6 tools):
+  - `list_planner_tasks` / `get_planner_task` — browse tasks with assignments, priority, dates
+  - `create_planner_task` / `update_planner_task` — create/update with bucket, assignments, priority
+  - `prepare_delete_planner_task` / `confirm_delete_planner_task` — two-phase task deletion
+- **Task Details** (2 tools):
+  - `get_planner_task_details` / `update_planner_task_details` — rich description, checklist, and references
+- **ETag caching** for all Planner write operations (plans, buckets, tasks, task details) with automatic `If-Match` header management
+
 ## [v2.3.0] - 2026-03-07
 
 ### Added
@@ -276,7 +294,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-[Unreleased]: https://github.com/jbctechsolutions/mcp-office365-mac/compare/v2.3.0...HEAD
+[Unreleased]: https://github.com/jbctechsolutions/mcp-office365-mac/compare/v2.4.0...HEAD
+[v2.4.0]: https://github.com/jbctechsolutions/mcp-office365-mac/compare/v2.3.0...v2.4.0
 [v2.3.0]: https://github.com/jbctechsolutions/mcp-office365-mac/compare/v2.2.0...v2.3.0
 [v2.2.0]: https://github.com/jbctechsolutions/mcp-office365-mac/compare/v2.1.0...v2.2.0
 [v2.1.0]: https://github.com/jbctechsolutions/mcp-office365-mac/compare/v2.0.0...v2.1.0
