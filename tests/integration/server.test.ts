@@ -48,6 +48,7 @@ describe('Server Tool Registration', () => {
     'list_emails',
     'search_emails',
     'get_email',
+    'get_emails',
     'get_unread_count',
     'list_calendars',
     'list_events',
@@ -66,7 +67,7 @@ describe('Server Tool Registration', () => {
 
   it('defines all expected tool names', () => {
     // This verifies that all 18 tools are expected
-    expect(expectedTools).toHaveLength(18);
+    expect(expectedTools).toHaveLength(19);
   });
 
   it('includes mail tools', () => {

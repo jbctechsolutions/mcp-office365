@@ -63,6 +63,13 @@ export const GetEmailInput = z.strictObject({
   strip_html: z.boolean().default(true).describe('Strip HTML tags from the body'),
 });
 
+export const GetEmailsInput = z.strictObject({
+  email_ids: z.array(z.number().int().positive()).min(1).max(25)
+    .describe('Array of email IDs to fetch (max 25)'),
+  include_body: z.boolean().default(false).describe('Include full email body'),
+  strip_html: z.boolean().default(false).describe('Strip HTML tags from body'),
+});
+
 export const GetUnreadCountInput = z.strictObject({
   folder_id: z
     .number()
@@ -90,6 +97,7 @@ export type ListFoldersParams = z.infer<typeof ListFoldersInput>;
 export type ListEmailsParams = z.infer<typeof ListEmailsInput>;
 export type SearchEmailsParams = z.infer<typeof SearchEmailsInput>;
 export type GetEmailParams = z.infer<typeof GetEmailInput>;
+export type GetEmailsParams = z.infer<typeof GetEmailsInput>;
 export type GetUnreadCountParams = z.infer<typeof GetUnreadCountInput>;
 export type ListAttachmentsParams = z.infer<typeof ListAttachmentsInput>;
 export type DownloadAttachmentParams = z.infer<typeof DownloadAttachmentInput>;

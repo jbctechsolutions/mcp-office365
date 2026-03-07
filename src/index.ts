@@ -67,6 +67,7 @@ import {
   ListEmailsInput,
   SearchEmailsInput,
   GetEmailInput,
+  GetEmailsInput,
   GetUnreadCountInput,
   ListAttachmentsInput,
   DownloadAttachmentInput,
@@ -252,6 +253,31 @@ const TOOLS: Tool[] = [
         },
       },
       required: ['email_id'],
+    },
+  },
+  {
+    name: 'get_emails',
+    description: 'Get multiple emails by ID in a single call (max 25). Useful for batch operations or summarizing threads.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        email_ids: {
+          type: 'array',
+          items: { type: 'number' },
+          description: 'Array of email IDs to fetch (max 25)',
+        },
+        include_body: {
+          type: 'boolean',
+          description: 'Include full email body (default: false)',
+          default: false,
+        },
+        strip_html: {
+          type: 'boolean',
+          description: 'Strip HTML tags from body (default: false)',
+          default: false,
+        },
+      },
+      required: ['email_ids'],
     },
   },
   {
@@ -2313,6 +2339,16 @@ async function handleAppleScriptToolCall(
       return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
     }
 
+    case 'get_emails': {
+      const params = GetEmailsInput.parse(args);
+      const results = params.email_ids.map((id) => {
+        const email = mailTools.getEmail({ email_id: id, include_body: params.include_body, strip_html: params.strip_html });
+        if (email == null) return { id, error: 'Not found' };
+        return email;
+      });
+      return { content: [{ type: 'text', text: JSON.stringify({ emails: results }, null, 2) }] };
+    }
+
     case 'get_unread_count': {
       const params = GetUnreadCountInput.parse(args ?? {});
       const result = mailTools.getUnreadCount(params);
@@ -2879,6 +2915,23 @@ async function handleGraphToolCall(
 
         const result = { ...transformEmailRow(email), body };
         return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+      }
+
+      case 'get_emails': {
+        const params = GetEmailsInput.parse(args);
+        const results = await Promise.all(
+          params.email_ids.map(async (id) => {
+            const email = await repository.getEmailAsync(id);
+            if (email == null) return { id, error: 'Not found' };
+            let body: string | null = null;
+            if (params.include_body) {
+              body = await contentReaders.email.readEmailBodyAsync(email.dataFilePath);
+              if (params.strip_html && body != null) body = stripHtml(body);
+            }
+            return { ...transformEmailRow(email), body };
+          })
+        );
+        return { content: [{ type: 'text', text: JSON.stringify({ emails: results }, null, 2) }] };
       }
 
       case 'get_unread_count': {

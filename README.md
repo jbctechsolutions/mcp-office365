@@ -8,22 +8,23 @@ A [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) server that p
 
 ## Features
 
-- **76 tools** - Full read/write access to mail, calendar, contacts, and tasks
+- **77 tools** - Full read/write access to mail, calendar, contacts, and tasks
 - **Two backends** - AppleScript for classic Outlook, Microsoft Graph API for new Outlook
 - **Two-phase approval** - Destructive operations (delete, send) require explicit confirmation
 - **Works offline** - AppleScript backend requires no network (Graph API requires internet)
 - **Fast and reliable** - Direct communication with Outlook or Microsoft servers
 
-### Available Tools (74)
+### Available Tools (75)
 
 **Accounts (1)**
 - `list_accounts` - List all configured Outlook accounts
 
-**Mail - Reading (5)**
+**Mail - Reading (6)**
 - `list_folders` - List all mail folders with unread counts
 - `list_emails` - List emails in a folder with pagination
 - `search_emails` - Search emails by subject, sender, or content
 - `get_email` - Get full email details including body
+- `get_emails` - Get multiple emails by ID in a single call (max 25)
 - `get_unread_count` - Get unread email count
 
 **Mail - Sending & Drafts (16)** *(Graph API)*

@@ -43,11 +43,11 @@ describe('MCP Client E2E', () => {
       // List tools
       const result = await client.listTools();
 
-      // Verify tools were returned (77 in AppleScript mode, 81 in Graph API mode)
+      // Verify tools were returned (78 in AppleScript mode, 82 in Graph API mode)
       expect(result.tools).toBeDefined();
       expect(Array.isArray(result.tools)).toBe(true);
       const count = result.tools.length;
-      expect([77, 81]).toContain(count);
+      expect([78, 82]).toContain(count);
 
       // Verify core tools exist
       const toolNames = result.tools.map((t) => t.name);
@@ -78,7 +78,7 @@ describe('MCP Client E2E', () => {
       expect(toolNames).toContain('send_email');
       expect(toolNames).toContain('get_note');
       // Graph-only tools (signature + scheduling) only when Graph API is enabled
-      if (count === 78) {
+      if (count === 82) {
         expect(toolNames).toContain('set_signature');
         expect(toolNames).toContain('get_signature');
         expect(toolNames).toContain('check_availability');
