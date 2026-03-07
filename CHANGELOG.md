@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [v2.2.0] - 2026-03-07
+
+### Added
+- **13 Microsoft To Do extended tools + 2 extended** (Phase 3) bringing the total to ~164 tools
+- **Checklist Items** (5 tools):
+  - `list_checklist_items` / `create_checklist_item` / `update_checklist_item` — manage subtasks on To Do tasks
+  - `prepare_delete_checklist_item` / `confirm_delete_checklist_item` — two-phase deletion
+- **Linked Resources** (4 tools):
+  - `list_linked_resources` / `create_linked_resource` — attach web links to tasks
+  - `prepare_delete_linked_resource` / `confirm_delete_linked_resource` — two-phase deletion
+- **Task Attachments** (4 tools):
+  - `list_task_attachments` / `create_task_attachment` — attach files to tasks (base64)
+  - `prepare_delete_task_attachment` / `confirm_delete_task_attachment` — two-phase deletion
+- **Categories on Tasks**: `create_task` and `update_task` now accept optional `categories: string[]` parameter
+
 ## [v2.1.0] - 2026-03-07
 
 ### Added
@@ -250,7 +265,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-[Unreleased]: https://github.com/jbctechsolutions/mcp-office365-mac/compare/v2.1.0...HEAD
+[Unreleased]: https://github.com/jbctechsolutions/mcp-office365-mac/compare/v2.2.0...HEAD
+[v2.2.0]: https://github.com/jbctechsolutions/mcp-office365-mac/compare/v2.1.0...v2.2.0
 [v2.1.0]: https://github.com/jbctechsolutions/mcp-office365-mac/compare/v2.0.0...v2.1.0
 [v2.0.0]: https://github.com/jbctechsolutions/mcp-office365-mac/compare/v1.5.0...v2.0.0
 [v1.3.0]: https://github.com/jbctechsolutions/mcp-office365-mac/compare/v1.2.1...v1.3.0

@@ -1,6 +1,6 @@
 {
   "name": "@jbctechsolutions/mcp-office365-mac",
-  "version": "2.1.0",
+  "version": "2.2.0",
   "description": "MCP server for Microsoft 365 with dual backend support (AppleScript for classic Outlook, Graph API for new Outlook/M365). Read/write access to mail, calendar, contacts, tasks, teams, planner, and more.",
   "type": "module",
   "main": "./dist/index.js",
