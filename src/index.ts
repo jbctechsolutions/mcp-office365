@@ -70,6 +70,12 @@ import {
   ConfirmDeleteMailRuleInput,
 } from './tools/mail-rules.js';
 import {
+  CategoriesTools,
+  CreateCategoryInput,
+  PrepareDeleteCategoryInput,
+  ConfirmDeleteCategoryInput,
+} from './tools/categories.js';
+import {
   ListEmailsInput,
   SearchEmailsInput,
   SearchEmailsAdvancedInput,
@@ -1959,6 +1965,50 @@ const TOOLS: Tool[] = [
       required: ['token_id', 'rule_id'],
     },
   },
+  // Master categories tools
+  {
+    name: 'list_categories',
+    description: 'List all master categories (Graph API)',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {},
+      required: [],
+    },
+  },
+  {
+    name: 'create_category',
+    description: 'Create a new master category (Graph API)',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        name: { type: 'string', description: 'Category name' },
+        color: { type: 'string', enum: ['preset0','preset1','preset2','preset3','preset4','preset5','preset6','preset7','preset8','preset9','preset10','preset11','preset12','preset13','preset14','preset15','preset16','preset17','preset18','preset19','preset20','preset21','preset22','preset23','preset24','none'], description: 'Category color preset' },
+      },
+      required: ['name', 'color'],
+    },
+  },
+  {
+    name: 'prepare_delete_category',
+    description: 'Prepare to delete a master category. Returns a preview and approval token. Call confirm_delete_category to execute. (Graph API)',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        category_id: { type: 'number', description: 'Category ID to delete' },
+      },
+      required: ['category_id'],
+    },
+  },
+  {
+    name: 'confirm_delete_category',
+    description: 'Confirm category deletion with approval token (Graph API)',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        approval_token: { type: 'string', description: 'The approval token from prepare_delete_category' },
+      },
+      required: ['approval_token'],
+    },
+  },
   // Automatic replies (OOF) tools
   {
     name: 'get_automatic_replies',
@@ -2149,6 +2199,7 @@ export function createServer(): Server {
   let sendTools: ReturnType<typeof createMailSendTools> | null = null;
   let schedulingTools: ReturnType<typeof createSchedulingTools> | null = null;
   let rulesTools: MailRulesTools | null = null;
+  let categoriesTools: CategoriesTools | null = null;
   let calendarWriter: ICalendarWriter | null = null;
   let calendarManager: ICalendarManager | null = null;
   let mailSender: IMailSender | null = null;
@@ -2201,6 +2252,7 @@ export function createServer(): Server {
     sendTools = createMailSendTools(graphRepository, tokenManager);
     schedulingTools = createSchedulingTools(graphRepository);
     rulesTools = new MailRulesTools(graphRepository, tokenManager);
+    categoriesTools = new CategoriesTools(graphRepository, tokenManager);
 
     initialized = true;
   });
@@ -2231,6 +2283,10 @@ export function createServer(): Server {
     'create_mail_rule',
     'prepare_delete_mail_rule',
     'confirm_delete_mail_rule',
+    'list_categories',
+    'create_category',
+    'prepare_delete_category',
+    'confirm_delete_category',
     'list_task_lists',
     'rename_task_list',
     'prepare_delete_task_list',
@@ -2263,7 +2319,7 @@ export function createServer(): Server {
 
       // Graph API mode - handle async operations directly
       if (useGraphApi && graphRepository != null) {
-        return await handleGraphToolCall(name, args, graphRepository, graphContentReaders!, orgTools!, sendTools!, schedulingTools!, rulesTools!, tokenManager);
+        return await handleGraphToolCall(name, args, graphRepository, graphContentReaders!, orgTools!, sendTools!, schedulingTools!, rulesTools!, categoriesTools!, tokenManager);
       }
 
       // AppleScript mode - use sync tool interfaces
@@ -3309,6 +3365,7 @@ async function handleGraphToolCall(
   sendTools: ReturnType<typeof createMailSendTools>,
   schedulingTools: ReturnType<typeof createSchedulingTools>,
   rulesTools: MailRulesTools,
+  categoriesTools: CategoriesTools,
   tokenManager: ApprovalTokenManager
 ): Promise<ToolResult> {
   // Handle mailbox organization tools (shared between backends)
@@ -4128,6 +4185,25 @@ async function handleGraphToolCall(
       case 'confirm_delete_mail_rule': {
         const params = ConfirmDeleteMailRuleInput.parse(args);
         return await rulesTools.confirmDeleteMailRule(params);
+      }
+
+      // Master categories tools
+      case 'list_categories':
+        return await categoriesTools.listCategories();
+
+      case 'create_category': {
+        const params = CreateCategoryInput.parse(args);
+        return await categoriesTools.createCategory(params);
+      }
+
+      case 'prepare_delete_category': {
+        const params = PrepareDeleteCategoryInput.parse(args);
+        return categoriesTools.prepareDeleteCategory(params);
+      }
+
+      case 'confirm_delete_category': {
+        const params = ConfirmDeleteCategoryInput.parse(args);
+        return await categoriesTools.confirmDeleteCategory(params);
       }
 
       // Automatic replies (OOF) tools

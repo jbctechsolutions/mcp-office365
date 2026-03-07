@@ -70,6 +70,14 @@ export class ApprovalTokenManager {
   }
 
   /**
+   * Looks up a token by ID without consuming or validating it.
+   * Returns undefined if the token does not exist.
+   */
+  lookupToken(tokenId: string): ApprovalToken | undefined {
+    return this.tokens.get(tokenId);
+  }
+
+  /**
    * Validates a token without consuming it or modifying state.
    * Checks existence, expiry, operation match, and target match.
    */

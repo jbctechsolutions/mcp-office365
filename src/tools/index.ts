@@ -184,3 +184,15 @@ export {
   type PrepareDeleteMailRuleParams,
   type ConfirmDeleteMailRuleParams,
 } from './mail-rules.js';
+
+// Categories tools
+export {
+  CategoriesTools,
+  CreateCategoryInput,
+  PrepareDeleteCategoryInput,
+  ConfirmDeleteCategoryInput,
+  type ICategoriesRepository,
+  type CreateCategoryParams,
+  type PrepareDeleteCategoryParams,
+  type ConfirmDeleteCategoryParams,
+} from './categories.js';

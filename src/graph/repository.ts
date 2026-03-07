@@ -48,6 +48,7 @@ interface IdCache {
   attachments: Map<number, { messageId: string; attachmentId: string }>;
   rules: Map<number, string>;
   contactFolders: Map<number, string>;
+  categories: Map<number, string>;
 }
 
 /**
@@ -69,6 +70,7 @@ export class GraphRepository implements IRepository {
     attachments: new Map(),
     rules: new Map(),
     contactFolders: new Map(),
+    categories: new Map(),
   };
 
   constructor(deviceCodeCallback?: DeviceCodeCallback) {
@@ -1844,6 +1846,48 @@ export class GraphRepository implements IRepository {
     if (params.dateFormat != null) settings['dateFormat'] = params.dateFormat;
     if (params.timeFormat != null) settings['timeFormat'] = params.timeFormat;
     await this.client.updateMailboxSettings(settings);
+  }
+
+  // ===========================================================================
+  // Master Categories
+  // ===========================================================================
+
+  /**
+   * Lists all master categories.
+   */
+  async listCategoriesAsync(): Promise<Array<{ id: number; name: string; color: string }>> {
+    const categories = await this.client.listMasterCategories();
+    return categories.map((cat) => {
+      const graphId = cat.id!;
+      const numericId = hashStringToNumber(graphId);
+      this.idCache.categories.set(numericId, graphId);
+      return {
+        id: numericId,
+        name: cat.displayName ?? '',
+        color: cat.color ?? 'none',
+      };
+    });
+  }
+
+  /**
+   * Creates a new master category.
+   */
+  async createCategoryAsync(name: string, color: string): Promise<number> {
+    const created = await this.client.createMasterCategory(name, color);
+    const graphId = created.id!;
+    const numericId = hashStringToNumber(graphId);
+    this.idCache.categories.set(numericId, graphId);
+    return numericId;
+  }
+
+  /**
+   * Deletes a master category.
+   */
+  async deleteCategoryAsync(categoryId: number): Promise<void> {
+    const graphId = this.idCache.categories.get(categoryId);
+    if (graphId == null) throw new Error(`Category ID ${categoryId} not found in cache. Try searching for or listing the item first to refresh the cache.`);
+    await this.client.deleteMasterCategory(graphId);
+    this.idCache.categories.delete(categoryId);
   }
 
   /**

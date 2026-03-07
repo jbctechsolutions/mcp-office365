@@ -1302,6 +1302,38 @@ export class GraphClient {
     await client.api(`/me/todo/lists/${listId}`).delete();
     this.cache.clear();
   }
+
+  // ===========================================================================
+  // Master Categories
+  // ===========================================================================
+
+  /**
+   * Lists all master categories.
+   */
+  async listMasterCategories(): Promise<MicrosoftGraph.OutlookCategory[]> {
+    const client = await this.getClient();
+    const response = await client.api('/me/outlook/masterCategories').get() as PageCollection;
+    return response.value as MicrosoftGraph.OutlookCategory[];
+  }
+
+  /**
+   * Creates a new master category.
+   */
+  async createMasterCategory(displayName: string, color: string): Promise<MicrosoftGraph.OutlookCategory> {
+    const client = await this.getClient();
+    const result = await client.api('/me/outlook/masterCategories').post({ displayName, color }) as MicrosoftGraph.OutlookCategory;
+    this.cache.clear();
+    return result;
+  }
+
+  /**
+   * Deletes a master category.
+   */
+  async deleteMasterCategory(categoryId: string): Promise<void> {
+    const client = await this.getClient();
+    await client.api(`/me/outlook/masterCategories/${categoryId}`).delete();
+    this.cache.clear();
+  }
 }
 
 /**

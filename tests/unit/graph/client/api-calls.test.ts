@@ -181,6 +181,9 @@ const VALID_ENDPOINT_PATTERNS = [
   // Mail Rules
   /^\/me\/mailFolders\/inbox\/messageRules$/,
   /^\/me\/mailFolders\/inbox\/messageRules\/[^/]+$/,
+  // Master Categories
+  /^\/me\/outlook\/masterCategories$/,
+  /^\/me\/outlook\/masterCategories\/[^/]+$/,
   // Attachments
   /^\/me\/messages\/[^/]+\/attachments$/,
   /^\/me\/messages\/[^/]+\/attachments\/[^/]+$/,
@@ -1155,6 +1158,44 @@ describe('Graph API endpoint and method validation', () => {
   });
 
   // =========================================================================
+  // Master Categories operations
+  // =========================================================================
+
+  describe('Master Categories operations', () => {
+    it('listMasterCategories GETs /me/outlook/masterCategories', async () => {
+      setupMock({ value: [{ id: 'cat-1', displayName: 'Red Category', color: 'preset0' }] });
+
+      const result = await client.listMasterCategories();
+
+      expect(apiCalls).toHaveLength(1);
+      expect(apiCalls[0].url).toBe('/me/outlook/masterCategories');
+      expect(apiCalls[0].method).toBe('get');
+      expect(result).toEqual([{ id: 'cat-1', displayName: 'Red Category', color: 'preset0' }]);
+    });
+
+    it('createMasterCategory POSTs to /me/outlook/masterCategories', async () => {
+      setupMock({ id: 'cat-new', displayName: 'Work', color: 'preset1' });
+
+      await client.createMasterCategory('Work', 'preset1');
+
+      expect(apiCalls).toHaveLength(1);
+      expect(apiCalls[0].url).toBe('/me/outlook/masterCategories');
+      expect(apiCalls[0].method).toBe('post');
+      expect(apiCalls[0].body).toEqual({ displayName: 'Work', color: 'preset1' });
+    });
+
+    it('deleteMasterCategory DELETEs /me/outlook/masterCategories/{categoryId}', async () => {
+      setupMock(undefined);
+
+      await client.deleteMasterCategory('cat-1');
+
+      expect(apiCalls).toHaveLength(1);
+      expect(apiCalls[0].url).toBe('/me/outlook/masterCategories/cat-1');
+      expect(apiCalls[0].method).toBe('delete');
+    });
+  });
+
+  // =========================================================================
   // Automatic Replies (Out of Office) operations
   // =========================================================================
 
@@ -1476,6 +1517,16 @@ describe('Graph API endpoint and method validation', () => {
 
       setupMock(undefined);
       await client.deleteMailRule('rule-1');
+
+      // Exercise master categories methods
+      setupMock({ value: [{ id: 'cat-1', displayName: 'Red Category', color: 'preset0' }] });
+      await client.listMasterCategories();
+
+      setupMock({ id: 'cat-new', displayName: 'Work', color: 'preset1' });
+      await client.createMasterCategory('Work', 'preset1');
+
+      setupMock(undefined);
+      await client.deleteMasterCategory('cat-1');
 
       // Exercise contact folder methods
       setupMock({ value: [{ id: 'cf-1', displayName: 'Work' }] });
@@ -1992,6 +2043,36 @@ describe('Graph API endpoint and method validation', () => {
 
       setupMock(undefined);
       await client.deleteContactFolder('cf-1');
+      apiCalls.length = 0;
+
+      setupMock();
+      await client.listMailFolders();
+
+      const getCalls = apiCalls.filter(c => c.method === 'get' && c.url === '/me/mailFolders');
+      expect(getCalls.length).toBeGreaterThan(0);
+    });
+
+    it('createMasterCategory clears cache', async () => {
+      await client.listMailFolders();
+      apiCalls.length = 0;
+
+      setupMock({ id: 'cat-new', displayName: 'Work', color: 'preset1' });
+      await client.createMasterCategory('Work', 'preset1');
+      apiCalls.length = 0;
+
+      setupMock();
+      await client.listMailFolders();
+
+      const getCalls = apiCalls.filter(c => c.method === 'get' && c.url === '/me/mailFolders');
+      expect(getCalls.length).toBeGreaterThan(0);
+    });
+
+    it('deleteMasterCategory clears cache', async () => {
+      await client.listMailFolders();
+      apiCalls.length = 0;
+
+      setupMock(undefined);
+      await client.deleteMasterCategory('cat-1');
       apiCalls.length = 0;
 
       setupMock();

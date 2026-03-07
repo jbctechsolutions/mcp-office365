@@ -93,6 +93,10 @@ vi.mock('../../../src/graph/client/index.js', () => ({
       listMailRules: vi.fn(),
       createMailRule: vi.fn(),
       deleteMailRule: vi.fn(),
+      // Master categories operations
+      listMasterCategories: vi.fn(),
+      createMasterCategory: vi.fn(),
+      deleteMasterCategory: vi.fn(),
       // Contact folder operations
       listContactFolders: vi.fn(),
       createContactFolder: vi.fn(),
@@ -3186,6 +3190,76 @@ describe('graph/repository', () => {
 
       it('throws for unknown rule ID', async () => {
         await expect(repository.deleteMailRuleAsync(999999)).rejects.toThrow('not found in cache');
+      });
+    });
+  });
+
+  // ===========================================================================
+  // Master Categories
+  // ===========================================================================
+
+  describe('Master Categories', () => {
+    describe('listCategoriesAsync', () => {
+      it('returns mapped categories and caches IDs', async () => {
+        mockClient.listMasterCategories.mockResolvedValue([
+          { id: 'cat-1', displayName: 'Red Category', color: 'preset0' },
+          { id: 'cat-2', displayName: 'Blue Category', color: 'preset1' },
+        ]);
+
+        const result = await repository.listCategoriesAsync();
+
+        expect(result).toHaveLength(2);
+        expect(result[0].id).toBe(hashStringToNumber('cat-1'));
+        expect(result[0].name).toBe('Red Category');
+        expect(result[0].color).toBe('preset0');
+        expect(result[1].id).toBe(hashStringToNumber('cat-2'));
+        expect(result[1].name).toBe('Blue Category');
+        expect(result[1].color).toBe('preset1');
+      });
+
+      it('caches category IDs for later retrieval', async () => {
+        mockClient.listMasterCategories.mockResolvedValue([
+          { id: 'cat-abc', displayName: 'Test' },
+        ]);
+
+        await repository.listCategoriesAsync();
+
+        // The ID should be cached (accessible via deleteCategoryAsync)
+        mockClient.deleteMasterCategory.mockResolvedValue(undefined);
+        await expect(repository.deleteCategoryAsync(hashStringToNumber('cat-abc'))).resolves.toBeUndefined();
+        expect(mockClient.deleteMasterCategory).toHaveBeenCalledWith('cat-abc');
+      });
+    });
+
+    describe('createCategoryAsync', () => {
+      it('creates a category and caches the ID', async () => {
+        mockClient.createMasterCategory.mockResolvedValue({ id: 'cat-new', displayName: 'Work', color: 'preset1' });
+
+        const result = await repository.createCategoryAsync('Work', 'preset1');
+
+        expect(result).toBe(hashStringToNumber('cat-new'));
+        expect(mockClient.createMasterCategory).toHaveBeenCalledWith('Work', 'preset1');
+      });
+    });
+
+    describe('deleteCategoryAsync', () => {
+      it('deletes a category and removes from cache', async () => {
+        // First cache the category
+        mockClient.listMasterCategories.mockResolvedValue([{ id: 'cat-del', displayName: 'To Delete' }]);
+        await repository.listCategoriesAsync();
+
+        mockClient.deleteMasterCategory.mockResolvedValue(undefined);
+        const numericId = hashStringToNumber('cat-del');
+        await repository.deleteCategoryAsync(numericId);
+
+        expect(mockClient.deleteMasterCategory).toHaveBeenCalledWith('cat-del');
+
+        // Should throw if we try to delete again (removed from cache)
+        await expect(repository.deleteCategoryAsync(numericId)).rejects.toThrow('not found in cache');
+      });
+
+      it('throws for unknown category ID', async () => {
+        await expect(repository.deleteCategoryAsync(999999)).rejects.toThrow('not found in cache');
       });
     });
   });

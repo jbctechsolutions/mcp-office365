@@ -47,7 +47,7 @@ describe('MCP Client E2E', () => {
       expect(result.tools).toBeDefined();
       expect(Array.isArray(result.tools)).toBe(true);
       const count = result.tools.length;
-      expect([78, 104]).toContain(count);
+      expect([78, 108]).toContain(count);
 
       // Verify core tools exist
       const toolNames = result.tools.map((t) => t.name);
