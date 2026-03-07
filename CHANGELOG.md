@@ -7,6 +7,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [v2.0.0] - 2026-03-07
+
+### Breaking Changes
+- **Package renamed** from `@jbctechsolutions/mcp-outlook-mac` to `@jbctechsolutions/mcp-office365-mac`
+- **Binary renamed** from `mcp-outlook-mac` to `mcp-office365-mac`
+- **OAuth scopes expanded** to include Teams, People, Planner, and Presence permissions (users will need to re-consent)
+
+### Added
+- **115 tools** (up from 74) across mail, calendar, contacts, tasks, and new M365 domains
+- **13 new feature tools** (v1.5.0 -> v1.6.0 equivalent):
+  - `set_email_importance` -- set email priority (low/normal/high)
+  - `add_draft_attachment` / `add_draft_inline_image` -- add attachments to existing drafts
+  - `get_emails` -- batch fetch up to 25 emails by ID
+  - `list_conversation` -- thread/conversation view
+  - `search_emails_advanced` -- KQL search with from:, subject:, hasAttachments:, date ranges
+  - `check_new_emails` -- delta sync for incremental email polling
+  - `list_mail_rules` / `create_mail_rule` / `prepare_delete_mail_rule` / `confirm_delete_mail_rule` -- inbox rule management
+  - `list_task_lists` / `rename_task_list` / `prepare_delete_task_list` / `confirm_delete_task_list` -- task list management
+  - `list_contact_folders` / `create_contact_folder` / `prepare_delete_contact_folder` / `confirm_delete_contact_folder` -- contact folder management
+  - `get_contact_photo` / `set_contact_photo` -- contact photo management
+  - `list_event_instances` -- recurring event instance management
+  - Task recurrence support on `create_task` and `update_task`
+- **10 Outlook gap features** (Phase 1):
+  - `get_automatic_replies` / `set_automatic_replies` -- out-of-office settings
+  - `get_mailbox_settings` / `update_mailbox_settings` -- timezone, language, date/time format
+  - `list_categories` / `create_category` / `prepare_delete_category` / `confirm_delete_category` -- master category management
+  - `list_focused_overrides` / `create_focused_override` / `prepare_delete_focused_override` / `confirm_delete_focused_override` -- focused inbox sender classification
+  - `get_mail_tips` -- pre-send recipient checks (OOF, mailbox full, delivery restrictions)
+  - `get_message_headers` / `get_message_mime` -- email header inspection and raw MIME export
+  - `list_calendar_groups` / `create_calendar_group` -- calendar group organization
+  - `list_calendar_permissions` / `create_calendar_permission` / `prepare_delete_calendar_permission` / `confirm_delete_calendar_permission` -- calendar sharing
+  - `list_room_lists` / `list_rooms` -- meeting room discovery
+  - Online meeting support on `create_event` and `update_event` (Teams/Skype links)
+- **M365 OAuth scopes** for Teams, People, Planner, and Presence (preparing for Phase 2+)
+
 ## [v1.5.0] - 2026-02-26
 
 ### Added
