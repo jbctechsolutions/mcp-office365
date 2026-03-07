@@ -1369,6 +1369,22 @@ export class GraphClient {
     await client.api(`/me/inferenceClassification/overrides/${overrideId}`).delete();
     this.cache.clear();
   }
+
+  // ===========================================================================
+  // Mail Tips
+  // ===========================================================================
+
+  /**
+   * Gets mail tips for the specified email addresses.
+   */
+  async getMailTips(emailAddresses: string[]): Promise<Record<string, unknown>[]> {
+    const client = await this.getClient();
+    const response = await client.api('/me/getMailTips').post({
+      emailAddresses,
+      mailTipsOptions: 'automaticReplies,mailboxFullStatus,maxMessageSize,deliveryRestriction,externalMemberCount',
+    }) as { value: Record<string, unknown>[] };
+    return response.value;
+  }
 }
 
 /**

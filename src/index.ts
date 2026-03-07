@@ -2209,6 +2209,24 @@ const TOOLS: Tool[] = [
       required: ['contact_id', 'file_path'],
     },
   },
+  // Mail tips tool
+  {
+    name: 'get_mail_tips',
+    description: 'Get mail tips (automatic replies, mailbox full, delivery restrictions, max message size) for email addresses (Graph API)',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        email_addresses: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Email addresses to check (1-20)',
+          minItems: 1,
+          maxItems: 20,
+        },
+      },
+      required: ['email_addresses'],
+    },
+  },
 ];
 
 // =============================================================================
@@ -2358,6 +2376,7 @@ export function createServer(): Server {
     'get_contact_photo',
     'set_contact_photo',
     'list_event_instances',
+    'get_mail_tips',
   ]);
 
   // Register tool list handler
@@ -3386,6 +3405,10 @@ const UpdateMailboxSettingsInput = z.strictObject({
   time_format: z.string().optional().describe('Time format string'),
 });
 
+const GetMailTipsInput = z.strictObject({
+  email_addresses: z.array(z.string().email()).min(1).max(20).describe('Email addresses to check'),
+});
+
 const CreateContactFolderInput = z.strictObject({
   name: z.string().min(1).describe('Contact folder name'),
 });
@@ -4401,6 +4424,12 @@ async function handleGraphToolCall(
         const params = SetContactPhotoInput.parse(args);
         await repository.setContactPhotoAsync(params.contact_id, params.file_path);
         return { content: [{ type: 'text', text: JSON.stringify({ success: true, message: 'Contact photo updated' }, null, 2) }] };
+      }
+
+      case 'get_mail_tips': {
+        const params = GetMailTipsInput.parse(args);
+        const tips = await repository.getMailTipsAsync(params.email_addresses);
+        return { content: [{ type: 'text', text: JSON.stringify({ mail_tips: tips }, null, 2) }] };
       }
 
       default:

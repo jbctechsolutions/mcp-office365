@@ -109,6 +109,8 @@ vi.mock('../../../src/graph/client/index.js', () => ({
       // Contact photo operations
       getContactPhoto: vi.fn(),
       setContactPhoto: vi.fn(),
+      // Mail tips operations
+      getMailTips: vi.fn(),
     };
   }),
 }));
@@ -3499,6 +3501,83 @@ describe('graph/repository', () => {
 
       it('throws for unknown contact ID', async () => {
         await expect(repository.setContactPhotoAsync(999999, '/tmp/photo.jpg')).rejects.toThrow('not found in cache');
+      });
+    });
+  });
+
+  // ===========================================================================
+  // Mail Tips
+  // ===========================================================================
+
+  describe('Mail Tips', () => {
+    describe('getMailTipsAsync', () => {
+      it('returns mapped mail tips for email addresses', async () => {
+        mockClient.getMailTips.mockResolvedValue([
+          {
+            emailAddress: { address: 'alice@example.com' },
+            automaticReplies: { message: 'I am on vacation' },
+            mailboxFull: false,
+            deliveryRestricted: false,
+            externalMemberCount: 0,
+            maxMessageSize: 37748736,
+          },
+          {
+            emailAddress: { address: 'bob@example.com' },
+            automaticReplies: null,
+            mailboxFull: true,
+            deliveryRestricted: true,
+            externalMemberCount: 5,
+            maxMessageSize: 10485760,
+          },
+        ]);
+
+        const result = await repository.getMailTipsAsync(['alice@example.com', 'bob@example.com']);
+
+        expect(result).toHaveLength(2);
+        expect(result[0].emailAddress).toBe('alice@example.com');
+        expect(result[0].automaticReplies).toEqual({ message: 'I am on vacation' });
+        expect(result[0].mailboxFull).toBe(false);
+        expect(result[0].deliveryRestricted).toBe(false);
+        expect(result[0].externalMemberCount).toBe(0);
+        expect(result[0].maxMessageSize).toBe(37748736);
+
+        expect(result[1].emailAddress).toBe('bob@example.com');
+        expect(result[1].automaticReplies).toBeNull();
+        expect(result[1].mailboxFull).toBe(true);
+        expect(result[1].deliveryRestricted).toBe(true);
+        expect(result[1].externalMemberCount).toBe(5);
+        expect(result[1].maxMessageSize).toBe(10485760);
+
+        expect(mockClient.getMailTips).toHaveBeenCalledWith(['alice@example.com', 'bob@example.com']);
+      });
+
+      it('returns defaults for missing fields', async () => {
+        mockClient.getMailTips.mockResolvedValue([
+          {},
+        ]);
+
+        const result = await repository.getMailTipsAsync(['unknown@example.com']);
+
+        expect(result).toHaveLength(1);
+        expect(result[0].emailAddress).toBe('');
+        expect(result[0].automaticReplies).toBeNull();
+        expect(result[0].mailboxFull).toBe(false);
+        expect(result[0].deliveryRestricted).toBe(false);
+        expect(result[0].externalMemberCount).toBe(0);
+        expect(result[0].maxMessageSize).toBe(0);
+      });
+
+      it('handles automaticReplies with empty message', async () => {
+        mockClient.getMailTips.mockResolvedValue([
+          {
+            emailAddress: { address: 'test@example.com' },
+            automaticReplies: { message: '' },
+          },
+        ]);
+
+        const result = await repository.getMailTipsAsync(['test@example.com']);
+
+        expect(result[0].automaticReplies).toBeNull();
       });
     });
   });

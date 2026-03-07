@@ -1934,6 +1934,29 @@ export class GraphRepository implements IRepository {
     this.idCache.focusedOverrides.delete(overrideId);
   }
 
+  // ===========================================================================
+  // Mail Tips
+  // ===========================================================================
+
+  /**
+   * Gets mail tips for the specified email addresses.
+   */
+  async getMailTipsAsync(emailAddresses: string[]): Promise<Array<{
+    emailAddress: string; automaticReplies: { message: string } | null;
+    mailboxFull: boolean; deliveryRestricted: boolean;
+    externalMemberCount: number; maxMessageSize: number;
+  }>> {
+    const tips = await this.client.getMailTips(emailAddresses);
+    return tips.map((tip: any) => ({
+      emailAddress: tip.emailAddress?.address ?? '',
+      automaticReplies: tip.automaticReplies?.message ? { message: tip.automaticReplies.message } : null,
+      mailboxFull: tip.mailboxFull ?? false,
+      deliveryRestricted: tip.deliveryRestricted ?? false,
+      externalMemberCount: tip.externalMemberCount ?? 0,
+      maxMessageSize: tip.maxMessageSize ?? 0,
+    }));
+  }
+
   /**
    * Gets the Graph string ID for a folder from the cache.
    */
