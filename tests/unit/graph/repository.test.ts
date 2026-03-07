@@ -80,6 +80,10 @@ vi.mock('../../../src/graph/client/index.js', () => ({
       // Calendar scheduling operations
       getSchedule: vi.fn(),
       findMeetingTimes: vi.fn(),
+      // Mail rules operations
+      listMailRules: vi.fn(),
+      createMailRule: vi.fn(),
+      deleteMailRule: vi.fn(),
     };
   }),
 }));
@@ -2665,6 +2669,78 @@ describe('graph/repository', () => {
         const info = repository.getTaskInfo(hashStringToNumber('task-1'));
 
         expect(info).toEqual({ taskListId: 'list-1', taskId: 'task-1' });
+      });
+    });
+  });
+
+  // ===========================================================================
+  // Mail Rules
+  // ===========================================================================
+
+  describe('Mail Rules', () => {
+    describe('listMailRulesAsync', () => {
+      it('returns mapped rules and caches IDs', async () => {
+        mockClient.listMailRules.mockResolvedValue([
+          { id: 'rule-1', displayName: 'Rule 1', sequence: 1, isEnabled: true, conditions: { subjectContains: ['test'] }, actions: { markAsRead: true } },
+          { id: 'rule-2', displayName: 'Rule 2', sequence: 2, isEnabled: false, conditions: {}, actions: {} },
+        ]);
+
+        const result = await repository.listMailRulesAsync();
+
+        expect(result).toHaveLength(2);
+        expect(result[0].id).toBe(hashStringToNumber('rule-1'));
+        expect(result[0].displayName).toBe('Rule 1');
+        expect(result[0].sequence).toBe(1);
+        expect(result[0].isEnabled).toBe(true);
+        expect(result[0].conditions).toEqual({ subjectContains: ['test'] });
+        expect(result[0].actions).toEqual({ markAsRead: true });
+        expect(result[1].id).toBe(hashStringToNumber('rule-2'));
+        expect(result[1].isEnabled).toBe(false);
+      });
+
+      it('caches rule IDs for later retrieval', async () => {
+        mockClient.listMailRules.mockResolvedValue([
+          { id: 'rule-abc', displayName: 'Test' },
+        ]);
+
+        await repository.listMailRulesAsync();
+
+        // The ID should be cached (accessible via deleteMailRuleAsync)
+        mockClient.deleteMailRule.mockResolvedValue(undefined);
+        await expect(repository.deleteMailRuleAsync(hashStringToNumber('rule-abc'))).resolves.toBeUndefined();
+        expect(mockClient.deleteMailRule).toHaveBeenCalledWith('rule-abc');
+      });
+    });
+
+    describe('createMailRuleAsync', () => {
+      it('creates a rule and caches the ID', async () => {
+        mockClient.createMailRule.mockResolvedValue({ id: 'rule-new', displayName: 'New Rule' });
+
+        const result = await repository.createMailRuleAsync({ displayName: 'New Rule', isEnabled: true });
+
+        expect(result).toBe(hashStringToNumber('rule-new'));
+        expect(mockClient.createMailRule).toHaveBeenCalledWith({ displayName: 'New Rule', isEnabled: true });
+      });
+    });
+
+    describe('deleteMailRuleAsync', () => {
+      it('deletes a rule and removes from cache', async () => {
+        // First cache the rule
+        mockClient.listMailRules.mockResolvedValue([{ id: 'rule-del', displayName: 'To Delete' }]);
+        await repository.listMailRulesAsync();
+
+        mockClient.deleteMailRule.mockResolvedValue(undefined);
+        const numericId = hashStringToNumber('rule-del');
+        await repository.deleteMailRuleAsync(numericId);
+
+        expect(mockClient.deleteMailRule).toHaveBeenCalledWith('rule-del');
+
+        // Should throw if we try to delete again (removed from cache)
+        await expect(repository.deleteMailRuleAsync(numericId)).rejects.toThrow('not found in cache');
+      });
+
+      it('throws for unknown rule ID', async () => {
+        await expect(repository.deleteMailRuleAsync(999999)).rejects.toThrow('not found in cache');
       });
     });
   });

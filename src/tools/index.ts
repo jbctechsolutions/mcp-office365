@@ -172,3 +172,15 @@ export {
 
 // Scheduling tools
 export * from './scheduling.js';
+
+// Mail rules tools
+export {
+  MailRulesTools,
+  CreateMailRuleInput,
+  PrepareDeleteMailRuleInput,
+  ConfirmDeleteMailRuleInput,
+  type IMailRulesRepository,
+  type CreateMailRuleParams,
+  type PrepareDeleteMailRuleParams,
+  type ConfirmDeleteMailRuleParams,
+} from './mail-rules.js';

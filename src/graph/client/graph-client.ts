@@ -319,6 +319,44 @@ export class GraphClient {
   }
 
   // ===========================================================================
+  // Mail Rules
+  // ===========================================================================
+
+  /**
+   * Lists all inbox mail rules.
+   */
+  async listMailRules(): Promise<MicrosoftGraph.MessageRule[]> {
+    const client = await this.getClient();
+    const response = await client
+      .api('/me/mailFolders/inbox/messageRules')
+      .get() as PageCollection;
+    return response.value as MicrosoftGraph.MessageRule[];
+  }
+
+  /**
+   * Creates a new inbox mail rule.
+   */
+  async createMailRule(rule: Record<string, unknown>): Promise<MicrosoftGraph.MessageRule> {
+    const client = await this.getClient();
+    const result = await client
+      .api('/me/mailFolders/inbox/messageRules')
+      .post(rule) as MicrosoftGraph.MessageRule;
+    this.cache.clear();
+    return result;
+  }
+
+  /**
+   * Deletes an inbox mail rule.
+   */
+  async deleteMailRule(ruleId: string): Promise<void> {
+    const client = await this.getClient();
+    await client
+      .api(`/me/mailFolders/inbox/messageRules/${ruleId}`)
+      .delete();
+    this.cache.clear();
+  }
+
+  // ===========================================================================
   // Calendars
   // ===========================================================================
 

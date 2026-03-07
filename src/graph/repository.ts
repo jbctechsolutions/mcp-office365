@@ -44,6 +44,7 @@ interface IdCache {
   tasks: Map<number, { taskListId: string; taskId: string }>;
   taskLists: Map<number, string>;
   attachments: Map<number, { messageId: string; attachmentId: string }>;
+  rules: Map<number, string>;
 }
 
 /**
@@ -63,6 +64,7 @@ export class GraphRepository implements IRepository {
     tasks: new Map(),
     taskLists: new Map(),
     attachments: new Map(),
+    rules: new Map(),
   };
 
   constructor(deviceCodeCallback?: DeviceCodeCallback) {
@@ -1550,6 +1552,58 @@ export class GraphRepository implements IRepository {
     const numericId = hashStringToNumber(graphId);
     this.idCache.taskLists.set(numericId, graphId);
     return numericId;
+  }
+
+  // ===========================================================================
+  // Mail Rules (Async)
+  // ===========================================================================
+
+  /**
+   * Lists all inbox mail rules.
+   */
+  async listMailRulesAsync(): Promise<Array<{ id: number; displayName: string; sequence: number; isEnabled: boolean; conditions: unknown; actions: unknown }>> {
+    const rules = await this.client.listMailRules();
+    return rules.map((rule) => {
+      const graphId = rule.id!;
+      const numericId = hashStringToNumber(graphId);
+      this.idCache.rules.set(numericId, graphId);
+      return {
+        id: numericId,
+        displayName: rule.displayName ?? '',
+        sequence: rule.sequence ?? 0,
+        isEnabled: rule.isEnabled ?? true,
+        conditions: rule.conditions ?? {},
+        actions: rule.actions ?? {},
+      };
+    });
+  }
+
+  /**
+   * Creates a new inbox mail rule.
+   */
+  async createMailRuleAsync(rule: Record<string, unknown>): Promise<number> {
+    const created = await this.client.createMailRule(rule);
+    const graphId = created.id!;
+    const numericId = hashStringToNumber(graphId);
+    this.idCache.rules.set(numericId, graphId);
+    return numericId;
+  }
+
+  /**
+   * Deletes an inbox mail rule.
+   */
+  async deleteMailRuleAsync(ruleId: number): Promise<void> {
+    const graphId = this.idCache.rules.get(ruleId);
+    if (graphId == null) throw new Error(`Rule ID ${ruleId} not found in cache. Try searching for or listing the item first to refresh the cache.`);
+    await this.client.deleteMailRule(graphId);
+    this.idCache.rules.delete(ruleId);
+  }
+
+  /**
+   * Gets the Graph string ID for a folder from the cache.
+   */
+  getFolderGraphId(folderId: number): string | undefined {
+    return this.idCache.folders.get(folderId);
   }
 }
 

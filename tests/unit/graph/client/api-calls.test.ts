@@ -156,6 +156,9 @@ const VALID_ENDPOINT_PATTERNS = [
   /^\/me\/todo\/lists$/,
   /^\/me\/todo\/lists\/[^/]+\/tasks$/,
   /^\/me\/todo\/lists\/[^/]+\/tasks\/[^/]+$/,
+  // Mail Rules
+  /^\/me\/mailFolders\/inbox\/messageRules$/,
+  /^\/me\/mailFolders\/inbox\/messageRules\/[^/]+$/,
   // Attachments
   /^\/me\/messages\/[^/]+\/attachments$/,
   /^\/me\/messages\/[^/]+\/attachments\/[^/]+$/,
@@ -1058,6 +1061,45 @@ describe('Graph API endpoint and method validation', () => {
   });
 
   // =========================================================================
+  // Mail Rules operations
+  // =========================================================================
+
+  describe('Mail Rules operations', () => {
+    it('listMailRules GETs /me/mailFolders/inbox/messageRules', async () => {
+      setupMock({ value: [{ id: 'rule-1', displayName: 'Test Rule' }] });
+
+      const result = await client.listMailRules();
+
+      expect(apiCalls).toHaveLength(1);
+      expect(apiCalls[0].url).toBe('/me/mailFolders/inbox/messageRules');
+      expect(apiCalls[0].method).toBe('get');
+      expect(result).toEqual([{ id: 'rule-1', displayName: 'Test Rule' }]);
+    });
+
+    it('createMailRule POSTs to /me/mailFolders/inbox/messageRules', async () => {
+      const rule = { displayName: 'New Rule', isEnabled: true };
+      setupMock({ id: 'rule-new', displayName: 'New Rule' });
+
+      await client.createMailRule(rule);
+
+      expect(apiCalls).toHaveLength(1);
+      expect(apiCalls[0].url).toBe('/me/mailFolders/inbox/messageRules');
+      expect(apiCalls[0].method).toBe('post');
+      expect(apiCalls[0].body).toEqual(rule);
+    });
+
+    it('deleteMailRule DELETEs /me/mailFolders/inbox/messageRules/{ruleId}', async () => {
+      setupMock(undefined);
+
+      await client.deleteMailRule('rule-1');
+
+      expect(apiCalls).toHaveLength(1);
+      expect(apiCalls[0].url).toBe('/me/mailFolders/inbox/messageRules/rule-1');
+      expect(apiCalls[0].method).toBe('delete');
+    });
+  });
+
+  // =========================================================================
   // Well-known folder name validation
   // =========================================================================
 
@@ -1243,6 +1285,16 @@ describe('Graph API endpoint and method validation', () => {
 
       setupMock({ id: 'list-new', displayName: 'Shopping' });
       await client.createTaskList('Shopping');
+
+      // Exercise mail rules methods
+      setupMock({ value: [{ id: 'rule-1', displayName: 'Test Rule' }] });
+      await client.listMailRules();
+
+      setupMock({ id: 'rule-new', displayName: 'New Rule' });
+      await client.createMailRule({ displayName: 'New Rule' });
+
+      setupMock(undefined);
+      await client.deleteMailRule('rule-1');
 
       // Verify all captured URLs
       for (const call of apiCalls) {
@@ -1662,6 +1714,36 @@ describe('Graph API endpoint and method validation', () => {
       await client.listTaskLists();
 
       const getCalls = apiCalls.filter(c => c.method === 'get' && c.url === '/me/todo/lists');
+      expect(getCalls.length).toBeGreaterThan(0);
+    });
+
+    it('createMailRule clears cache', async () => {
+      await client.listMailFolders();
+      apiCalls.length = 0;
+
+      setupMock({ id: 'rule-new', displayName: 'New Rule' });
+      await client.createMailRule({ displayName: 'New Rule' });
+      apiCalls.length = 0;
+
+      setupMock();
+      await client.listMailFolders();
+
+      const getCalls = apiCalls.filter(c => c.method === 'get' && c.url === '/me/mailFolders');
+      expect(getCalls.length).toBeGreaterThan(0);
+    });
+
+    it('deleteMailRule clears cache', async () => {
+      await client.listMailFolders();
+      apiCalls.length = 0;
+
+      setupMock(undefined);
+      await client.deleteMailRule('rule-1');
+      apiCalls.length = 0;
+
+      setupMock();
+      await client.listMailFolders();
+
+      const getCalls = apiCalls.filter(c => c.method === 'get' && c.url === '/me/mailFolders');
       expect(getCalls.length).toBeGreaterThan(0);
     });
   });
