@@ -1489,6 +1489,71 @@ export class GraphClient {
     }) as { value: Record<string, unknown>[] };
     return response.value;
   }
+
+  // ===========================================================================
+  // Teams
+  // ===========================================================================
+
+  /**
+   * Lists all teams the current user has joined.
+   */
+  async listJoinedTeams(): Promise<MicrosoftGraph.Team[]> {
+    const client = await this.getClient();
+    const response = await client.api('/me/joinedTeams').get() as PageCollection;
+    return response.value as MicrosoftGraph.Team[];
+  }
+
+  /**
+   * Lists all channels in a team.
+   */
+  async listChannels(teamId: string): Promise<MicrosoftGraph.Channel[]> {
+    const client = await this.getClient();
+    const response = await client.api(`/teams/${teamId}/channels`).get() as PageCollection;
+    return response.value as MicrosoftGraph.Channel[];
+  }
+
+  /**
+   * Gets a specific channel.
+   */
+  async getChannel(teamId: string, channelId: string): Promise<MicrosoftGraph.Channel> {
+    const client = await this.getClient();
+    return await client.api(`/teams/${teamId}/channels/${channelId}`).get() as MicrosoftGraph.Channel;
+  }
+
+  /**
+   * Creates a new channel in a team.
+   */
+  async createChannel(teamId: string, displayName: string, description?: string): Promise<MicrosoftGraph.Channel> {
+    const client = await this.getClient();
+    const body: Record<string, unknown> = { displayName };
+    if (description != null) body['description'] = description;
+    return await client.api(`/teams/${teamId}/channels`).post(body) as MicrosoftGraph.Channel;
+  }
+
+  /**
+   * Updates a channel's properties.
+   */
+  async updateChannel(teamId: string, channelId: string, updates: Record<string, unknown>): Promise<void> {
+    const client = await this.getClient();
+    await client.api(`/teams/${teamId}/channels/${channelId}`).patch(updates);
+  }
+
+  /**
+   * Deletes a channel.
+   */
+  async deleteChannel(teamId: string, channelId: string): Promise<void> {
+    const client = await this.getClient();
+    await client.api(`/teams/${teamId}/channels/${channelId}`).delete();
+  }
+
+  /**
+   * Lists members of a team.
+   */
+  async listTeamMembers(teamId: string): Promise<MicrosoftGraph.ConversationMember[]> {
+    const client = await this.getClient();
+    const response = await client.api(`/teams/${teamId}/members`).get() as PageCollection;
+    return response.value as MicrosoftGraph.ConversationMember[];
+  }
 }
 
 /**

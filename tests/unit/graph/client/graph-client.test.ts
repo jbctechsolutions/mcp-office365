@@ -1105,4 +1105,153 @@ describe('graph/client/graph-client', () => {
       });
     });
   });
+
+  describe('Teams', () => {
+    describe('listJoinedTeams', () => {
+      it('returns joined teams', async () => {
+        const mockTeams = [
+          { id: 'team-1', displayName: 'Engineering', description: 'Eng team' },
+          { id: 'team-2', displayName: 'Marketing', description: 'Mktg team' },
+        ];
+
+        mockApi.mockReturnValue(
+          createMockRequestBuilder({ value: mockTeams })
+        );
+
+        const result = await graphClient.listJoinedTeams();
+
+        expect(result).toHaveLength(2);
+        expect(result[0].displayName).toBe('Engineering');
+        expect(result[1].displayName).toBe('Marketing');
+        expect(mockApi).toHaveBeenCalledWith('/me/joinedTeams');
+      });
+
+      it('returns empty array when no teams', async () => {
+        mockApi.mockReturnValue(
+          createMockRequestBuilder({ value: [] })
+        );
+
+        const result = await graphClient.listJoinedTeams();
+
+        expect(result).toHaveLength(0);
+      });
+    });
+
+    describe('listChannels', () => {
+      it('returns channels for a team', async () => {
+        const mockChannels = [
+          { id: 'ch-1', displayName: 'General', membershipType: 'standard' },
+          { id: 'ch-2', displayName: 'Dev', membershipType: 'standard' },
+        ];
+
+        mockApi.mockReturnValue(
+          createMockRequestBuilder({ value: mockChannels })
+        );
+
+        const result = await graphClient.listChannels('team-1');
+
+        expect(result).toHaveLength(2);
+        expect(result[0].displayName).toBe('General');
+        expect(mockApi).toHaveBeenCalledWith('/teams/team-1/channels');
+      });
+    });
+
+    describe('getChannel', () => {
+      it('returns a specific channel', async () => {
+        const mockChannel = { id: 'ch-1', displayName: 'General', membershipType: 'standard', webUrl: 'https://teams.microsoft.com/...' };
+
+        mockApi.mockReturnValue(
+          createMockRequestBuilder(mockChannel)
+        );
+
+        const result = await graphClient.getChannel('team-1', 'ch-1');
+
+        expect(result.displayName).toBe('General');
+        expect(result.webUrl).toBe('https://teams.microsoft.com/...');
+        expect(mockApi).toHaveBeenCalledWith('/teams/team-1/channels/ch-1');
+      });
+    });
+
+    describe('createChannel', () => {
+      it('creates a channel with name only', async () => {
+        const mockCreated = { id: 'ch-new', displayName: 'New Channel' };
+        const builder = createMockRequestBuilder(mockCreated);
+        builder.post = vi.fn().mockResolvedValue(mockCreated);
+        mockApi.mockReturnValue(builder);
+
+        const result = await graphClient.createChannel('team-1', 'New Channel');
+
+        expect(result.displayName).toBe('New Channel');
+        expect(mockApi).toHaveBeenCalledWith('/teams/team-1/channels');
+        expect(builder.post).toHaveBeenCalledWith({ displayName: 'New Channel' });
+      });
+
+      it('creates a channel with description', async () => {
+        const mockCreated = { id: 'ch-new', displayName: 'New Channel', description: 'A description' };
+        const builder = createMockRequestBuilder(mockCreated);
+        builder.post = vi.fn().mockResolvedValue(mockCreated);
+        mockApi.mockReturnValue(builder);
+
+        const result = await graphClient.createChannel('team-1', 'New Channel', 'A description');
+
+        expect(result.displayName).toBe('New Channel');
+        expect(builder.post).toHaveBeenCalledWith({ displayName: 'New Channel', description: 'A description' });
+      });
+    });
+
+    describe('updateChannel', () => {
+      it('patches channel properties', async () => {
+        const builder = createMockRequestBuilder({});
+        builder.patch = vi.fn().mockResolvedValue(undefined);
+        mockApi.mockReturnValue(builder);
+
+        await graphClient.updateChannel('team-1', 'ch-1', { displayName: 'Renamed' });
+
+        expect(mockApi).toHaveBeenCalledWith('/teams/team-1/channels/ch-1');
+        expect(builder.patch).toHaveBeenCalledWith({ displayName: 'Renamed' });
+      });
+    });
+
+    describe('deleteChannel', () => {
+      it('deletes a channel', async () => {
+        const builder = createMockRequestBuilder({});
+        builder.delete = vi.fn().mockResolvedValue(undefined);
+        mockApi.mockReturnValue(builder);
+
+        await graphClient.deleteChannel('team-1', 'ch-1');
+
+        expect(mockApi).toHaveBeenCalledWith('/teams/team-1/channels/ch-1');
+        expect(builder.delete).toHaveBeenCalled();
+      });
+    });
+
+    describe('listTeamMembers', () => {
+      it('returns team members', async () => {
+        const mockMembers = [
+          { id: 'member-1', displayName: 'Alice', email: 'alice@example.com', roles: ['owner'] },
+          { id: 'member-2', displayName: 'Bob', email: 'bob@example.com', roles: [] },
+        ];
+
+        mockApi.mockReturnValue(
+          createMockRequestBuilder({ value: mockMembers })
+        );
+
+        const result = await graphClient.listTeamMembers('team-1');
+
+        expect(result).toHaveLength(2);
+        expect(result[0].displayName).toBe('Alice');
+        expect(mockApi).toHaveBeenCalledWith('/teams/team-1/members');
+      });
+
+      it('returns empty array when no members', async () => {
+        mockApi.mockReturnValue(
+          createMockRequestBuilder({ value: [] })
+        );
+
+        const result = await graphClient.listTeamMembers('team-1');
+
+        expect(result).toHaveLength(0);
+      });
+    });
+  });
 });

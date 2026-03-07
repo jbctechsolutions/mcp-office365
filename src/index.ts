@@ -89,6 +89,16 @@ import {
   ConfirmDeleteFocusedOverrideInput,
 } from './tools/focused-overrides.js';
 import {
+  TeamsTools,
+  ListChannelsInput,
+  GetChannelInput,
+  CreateChannelInput,
+  UpdateChannelInput,
+  PrepareDeleteChannelInput,
+  ConfirmDeleteChannelInput,
+  ListTeamMembersInput,
+} from './tools/teams.js';
+import {
   ListEmailsInput,
   SearchEmailsInput,
   SearchEmailsAdvancedInput,
@@ -2368,6 +2378,97 @@ const TOOLS: Tool[] = [
       required: [],
     },
   },
+  // Teams tools
+  {
+    name: 'list_teams',
+    description: 'List all Microsoft Teams the user has joined (Graph API)',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {},
+      required: [],
+    },
+  },
+  {
+    name: 'list_channels',
+    description: 'List all channels in a team (Graph API)',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        team_id: { type: 'number', description: 'Team ID from list_teams' },
+      },
+      required: ['team_id'],
+    },
+  },
+  {
+    name: 'get_channel',
+    description: 'Get details for a specific channel (Graph API)',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        channel_id: { type: 'number', description: 'Channel ID from list_channels' },
+      },
+      required: ['channel_id'],
+    },
+  },
+  {
+    name: 'create_channel',
+    description: 'Create a new channel in a team (Graph API)',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        team_id: { type: 'number', description: 'Team ID from list_teams' },
+        name: { type: 'string', description: 'Channel name' },
+        description: { type: 'string', description: 'Channel description' },
+      },
+      required: ['team_id', 'name'],
+    },
+  },
+  {
+    name: 'update_channel',
+    description: 'Update a channel name or description (Graph API)',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        channel_id: { type: 'number', description: 'Channel ID from list_channels' },
+        name: { type: 'string', description: 'New channel name' },
+        description: { type: 'string', description: 'New channel description' },
+      },
+      required: ['channel_id'],
+    },
+  },
+  {
+    name: 'prepare_delete_channel',
+    description: 'Prepare to delete a channel. Returns an approval token. Call confirm_delete_channel to execute. (Graph API)',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        channel_id: { type: 'number', description: 'Channel ID to delete' },
+      },
+      required: ['channel_id'],
+    },
+  },
+  {
+    name: 'confirm_delete_channel',
+    description: 'Confirm channel deletion with approval token (Graph API)',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        approval_token: { type: 'string', description: 'The approval token from prepare_delete_channel' },
+      },
+      required: ['approval_token'],
+    },
+  },
+  {
+    name: 'list_team_members',
+    description: 'List all members of a team (Graph API)',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        team_id: { type: 'number', description: 'Team ID from list_teams' },
+      },
+      required: ['team_id'],
+    },
+  },
 ];
 
 // =============================================================================
@@ -2411,6 +2512,7 @@ export function createServer(): Server {
   let categoriesTools: CategoriesTools | null = null;
   let calendarPermissionsTools: CalendarPermissionsTools | null = null;
   let focusedOverridesTools: FocusedOverridesTools | null = null;
+  let teamsTools: TeamsTools | null = null;
   let calendarWriter: ICalendarWriter | null = null;
   let calendarManager: ICalendarManager | null = null;
   let mailSender: IMailSender | null = null;
@@ -2466,6 +2568,7 @@ export function createServer(): Server {
     categoriesTools = new CategoriesTools(graphRepository, tokenManager);
     calendarPermissionsTools = new CalendarPermissionsTools(graphRepository, tokenManager);
     focusedOverridesTools = new FocusedOverridesTools(graphRepository, tokenManager);
+    teamsTools = new TeamsTools(graphRepository, tokenManager);
 
     initialized = true;
   });
@@ -2530,6 +2633,14 @@ export function createServer(): Server {
     'confirm_delete_calendar_permission',
     'list_room_lists',
     'list_rooms',
+    'list_teams',
+    'list_channels',
+    'get_channel',
+    'create_channel',
+    'update_channel',
+    'prepare_delete_channel',
+    'confirm_delete_channel',
+    'list_team_members',
   ]);
 
   // Register tool list handler
@@ -2547,7 +2658,7 @@ export function createServer(): Server {
 
       // Graph API mode - handle async operations directly
       if (useGraphApi && graphRepository != null) {
-        return await handleGraphToolCall(name, args, graphRepository, graphContentReaders!, orgTools!, sendTools!, schedulingTools!, rulesTools!, categoriesTools!, calendarPermissionsTools!, focusedOverridesTools!, tokenManager);
+        return await handleGraphToolCall(name, args, graphRepository, graphContentReaders!, orgTools!, sendTools!, schedulingTools!, rulesTools!, categoriesTools!, calendarPermissionsTools!, focusedOverridesTools!, teamsTools!, tokenManager);
       }
 
       // AppleScript mode - use sync tool interfaces
@@ -3620,6 +3731,7 @@ async function handleGraphToolCall(
   categoriesTools: CategoriesTools,
   calendarPermissionsTools: CalendarPermissionsTools,
   focusedOverridesTools: FocusedOverridesTools,
+  teamsTools: TeamsTools,
   tokenManager: ApprovalTokenManager
 ): Promise<ToolResult> {
   // Handle mailbox organization tools (shared between backends)
@@ -4669,6 +4781,46 @@ async function handleGraphToolCall(
         const params = ListRoomsInput.parse(args);
         const rooms = await repository.listRoomsAsync(params.room_list_email);
         return { content: [{ type: 'text', text: JSON.stringify({ rooms }, null, 2) }] };
+      }
+
+      // Teams tools
+      case 'list_teams': {
+        return await teamsTools.listTeams();
+      }
+
+      case 'list_channels': {
+        const params = ListChannelsInput.parse(args);
+        return await teamsTools.listChannels(params);
+      }
+
+      case 'get_channel': {
+        const params = GetChannelInput.parse(args);
+        return await teamsTools.getChannel(params);
+      }
+
+      case 'create_channel': {
+        const params = CreateChannelInput.parse(args);
+        return await teamsTools.createChannel(params);
+      }
+
+      case 'update_channel': {
+        const params = UpdateChannelInput.parse(args);
+        return await teamsTools.updateChannel(params);
+      }
+
+      case 'prepare_delete_channel': {
+        const params = PrepareDeleteChannelInput.parse(args);
+        return teamsTools.prepareDeleteChannel(params);
+      }
+
+      case 'confirm_delete_channel': {
+        const params = ConfirmDeleteChannelInput.parse(args);
+        return await teamsTools.confirmDeleteChannel(params);
+      }
+
+      case 'list_team_members': {
+        const params = ListTeamMembersInput.parse(args);
+        return await teamsTools.listTeamMembers(params);
       }
 
       default:

@@ -120,6 +120,14 @@ vi.mock('../../../src/graph/client/index.js', () => ({
       // Room lists & rooms operations
       listRoomLists: vi.fn(),
       listRooms: vi.fn(),
+      // Teams operations
+      listJoinedTeams: vi.fn(),
+      listChannels: vi.fn(),
+      getChannel: vi.fn(),
+      createChannel: vi.fn(),
+      updateChannel: vi.fn(),
+      deleteChannel: vi.fn(),
+      listTeamMembers: vi.fn(),
     };
   }),
 }));
@@ -3884,6 +3892,295 @@ describe('graph/repository', () => {
         const result = await repository.listRoomsAsync();
 
         expect(result).toEqual([{ name: '', address: '' }]);
+      });
+    });
+  });
+
+  describe('Teams', () => {
+    describe('listTeamsAsync', () => {
+      it('returns mapped teams with cached IDs', async () => {
+        mockClient.listJoinedTeams.mockResolvedValue([
+          { id: 'team-abc', displayName: 'Engineering', description: 'Eng team' },
+          { id: 'team-def', displayName: 'Marketing', description: 'Mktg team' },
+        ]);
+
+        const result = await repository.listTeamsAsync();
+
+        expect(result).toHaveLength(2);
+        expect(result[0].id).toBe(hashStringToNumber('team-abc'));
+        expect(result[0].name).toBe('Engineering');
+        expect(result[0].description).toBe('Eng team');
+        expect(result[1].name).toBe('Marketing');
+      });
+
+      it('caches team IDs', async () => {
+        mockClient.listJoinedTeams.mockResolvedValue([
+          { id: 'team-abc', displayName: 'Engineering', description: '' },
+        ]);
+
+        await repository.listTeamsAsync();
+
+        // Verify cache works by using listChannelsAsync (which needs cached team ID)
+        mockClient.listChannels.mockResolvedValue([]);
+        const numericId = hashStringToNumber('team-abc');
+        await expect(repository.listChannelsAsync(numericId)).resolves.toEqual([]);
+      });
+
+      it('defaults displayName and description to empty string when null', async () => {
+        mockClient.listJoinedTeams.mockResolvedValue([
+          { id: 'team-null', displayName: null, description: null },
+        ]);
+
+        const result = await repository.listTeamsAsync();
+
+        expect(result[0].name).toBe('');
+        expect(result[0].description).toBe('');
+      });
+    });
+
+    describe('listChannelsAsync', () => {
+      it('returns mapped channels', async () => {
+        // First cache the team
+        mockClient.listJoinedTeams.mockResolvedValue([
+          { id: 'team-abc', displayName: 'Eng', description: '' },
+        ]);
+        await repository.listTeamsAsync();
+        const teamId = hashStringToNumber('team-abc');
+
+        mockClient.listChannels.mockResolvedValue([
+          { id: 'ch-1', displayName: 'General', description: 'Default', membershipType: 'standard' },
+          { id: 'ch-2', displayName: 'Dev', description: '', membershipType: 'private' },
+        ]);
+
+        const result = await repository.listChannelsAsync(teamId);
+
+        expect(result).toHaveLength(2);
+        expect(result[0].id).toBe(hashStringToNumber('ch-1'));
+        expect(result[0].name).toBe('General');
+        expect(result[0].membershipType).toBe('standard');
+        expect(result[1].membershipType).toBe('private');
+        expect(mockClient.listChannels).toHaveBeenCalledWith('team-abc');
+      });
+
+      it('throws for uncached team ID', async () => {
+        await expect(repository.listChannelsAsync(999999)).rejects.toThrow('not found in cache');
+      });
+
+      it('defaults fields to empty/standard when null', async () => {
+        mockClient.listJoinedTeams.mockResolvedValue([
+          { id: 'team-abc', displayName: 'Eng', description: '' },
+        ]);
+        await repository.listTeamsAsync();
+
+        mockClient.listChannels.mockResolvedValue([
+          { id: 'ch-null', displayName: null, description: null, membershipType: null },
+        ]);
+
+        const result = await repository.listChannelsAsync(hashStringToNumber('team-abc'));
+
+        expect(result[0].name).toBe('');
+        expect(result[0].description).toBe('');
+        expect(result[0].membershipType).toBe('standard');
+      });
+    });
+
+    describe('getChannelAsync', () => {
+      it('returns channel details', async () => {
+        // Cache team and channel
+        mockClient.listJoinedTeams.mockResolvedValue([
+          { id: 'team-abc', displayName: 'Eng', description: '' },
+        ]);
+        await repository.listTeamsAsync();
+
+        mockClient.listChannels.mockResolvedValue([
+          { id: 'ch-1', displayName: 'General', description: '', membershipType: 'standard' },
+        ]);
+        await repository.listChannelsAsync(hashStringToNumber('team-abc'));
+
+        mockClient.getChannel.mockResolvedValue({
+          id: 'ch-1',
+          displayName: 'General',
+          description: 'The general channel',
+          membershipType: 'standard',
+          webUrl: 'https://teams.microsoft.com/...',
+        });
+
+        const channelId = hashStringToNumber('ch-1');
+        const result = await repository.getChannelAsync(channelId);
+
+        expect(result.id).toBe(channelId);
+        expect(result.name).toBe('General');
+        expect(result.webUrl).toBe('https://teams.microsoft.com/...');
+        expect(mockClient.getChannel).toHaveBeenCalledWith('team-abc', 'ch-1');
+      });
+
+      it('throws for uncached channel ID', async () => {
+        await expect(repository.getChannelAsync(999999)).rejects.toThrow('not found in cache');
+      });
+    });
+
+    describe('createChannelAsync', () => {
+      it('creates a channel and caches the ID', async () => {
+        mockClient.listJoinedTeams.mockResolvedValue([
+          { id: 'team-abc', displayName: 'Eng', description: '' },
+        ]);
+        await repository.listTeamsAsync();
+
+        mockClient.createChannel.mockResolvedValue({
+          id: 'ch-new',
+          displayName: 'New Channel',
+        });
+
+        const teamId = hashStringToNumber('team-abc');
+        const channelId = await repository.createChannelAsync(teamId, 'New Channel', 'Description');
+
+        expect(channelId).toBe(hashStringToNumber('ch-new'));
+        expect(mockClient.createChannel).toHaveBeenCalledWith('team-abc', 'New Channel', 'Description');
+
+        // Verify the channel was cached
+        mockClient.getChannel.mockResolvedValue({
+          id: 'ch-new',
+          displayName: 'New Channel',
+          description: 'Description',
+          membershipType: 'standard',
+          webUrl: '',
+        });
+        const channel = await repository.getChannelAsync(channelId);
+        expect(channel.name).toBe('New Channel');
+      });
+
+      it('throws for uncached team ID', async () => {
+        await expect(repository.createChannelAsync(999999, 'Test')).rejects.toThrow('not found in cache');
+      });
+    });
+
+    describe('updateChannelAsync', () => {
+      it('updates channel with mapped properties', async () => {
+        // Cache team and channel
+        mockClient.listJoinedTeams.mockResolvedValue([
+          { id: 'team-abc', displayName: 'Eng', description: '' },
+        ]);
+        await repository.listTeamsAsync();
+
+        mockClient.listChannels.mockResolvedValue([
+          { id: 'ch-1', displayName: 'General', description: '', membershipType: 'standard' },
+        ]);
+        await repository.listChannelsAsync(hashStringToNumber('team-abc'));
+
+        mockClient.updateChannel.mockResolvedValue(undefined);
+
+        const channelId = hashStringToNumber('ch-1');
+        await repository.updateChannelAsync(channelId, { name: 'Renamed', description: 'New desc' });
+
+        expect(mockClient.updateChannel).toHaveBeenCalledWith('team-abc', 'ch-1', {
+          displayName: 'Renamed',
+          description: 'New desc',
+        });
+      });
+
+      it('only sends provided fields', async () => {
+        mockClient.listJoinedTeams.mockResolvedValue([
+          { id: 'team-abc', displayName: 'Eng', description: '' },
+        ]);
+        await repository.listTeamsAsync();
+
+        mockClient.listChannels.mockResolvedValue([
+          { id: 'ch-1', displayName: 'General', description: '', membershipType: 'standard' },
+        ]);
+        await repository.listChannelsAsync(hashStringToNumber('team-abc'));
+
+        mockClient.updateChannel.mockResolvedValue(undefined);
+
+        const channelId = hashStringToNumber('ch-1');
+        await repository.updateChannelAsync(channelId, { name: 'Renamed' });
+
+        expect(mockClient.updateChannel).toHaveBeenCalledWith('team-abc', 'ch-1', {
+          displayName: 'Renamed',
+        });
+      });
+
+      it('throws for uncached channel ID', async () => {
+        await expect(repository.updateChannelAsync(999999, { name: 'Test' })).rejects.toThrow('not found in cache');
+      });
+    });
+
+    describe('deleteChannelAsync', () => {
+      it('deletes a channel and removes from cache', async () => {
+        // Cache team and channel
+        mockClient.listJoinedTeams.mockResolvedValue([
+          { id: 'team-abc', displayName: 'Eng', description: '' },
+        ]);
+        await repository.listTeamsAsync();
+
+        mockClient.listChannels.mockResolvedValue([
+          { id: 'ch-1', displayName: 'General', description: '', membershipType: 'standard' },
+        ]);
+        await repository.listChannelsAsync(hashStringToNumber('team-abc'));
+
+        mockClient.deleteChannel.mockResolvedValue(undefined);
+
+        const channelId = hashStringToNumber('ch-1');
+        await repository.deleteChannelAsync(channelId);
+
+        expect(mockClient.deleteChannel).toHaveBeenCalledWith('team-abc', 'ch-1');
+
+        // Verify channel was removed from cache
+        await expect(repository.getChannelAsync(channelId)).rejects.toThrow('not found in cache');
+      });
+
+      it('throws for uncached channel ID', async () => {
+        await expect(repository.deleteChannelAsync(999999)).rejects.toThrow('not found in cache');
+      });
+    });
+
+    describe('listTeamMembersAsync', () => {
+      it('returns mapped team members', async () => {
+        mockClient.listJoinedTeams.mockResolvedValue([
+          { id: 'team-abc', displayName: 'Eng', description: '' },
+        ]);
+        await repository.listTeamsAsync();
+
+        mockClient.listTeamMembers.mockResolvedValue([
+          { id: 'member-1', displayName: 'Alice', email: 'alice@example.com', roles: ['owner'] },
+          { id: 'member-2', displayName: 'Bob', email: 'bob@example.com', roles: [] },
+        ]);
+
+        const teamId = hashStringToNumber('team-abc');
+        const result = await repository.listTeamMembersAsync(teamId);
+
+        expect(result).toHaveLength(2);
+        expect(result[0]).toEqual({
+          id: 'member-1',
+          displayName: 'Alice',
+          email: 'alice@example.com',
+          roles: ['owner'],
+        });
+        expect(result[1].roles).toEqual([]);
+        expect(mockClient.listTeamMembers).toHaveBeenCalledWith('team-abc');
+      });
+
+      it('throws for uncached team ID', async () => {
+        await expect(repository.listTeamMembersAsync(999999)).rejects.toThrow('not found in cache');
+      });
+
+      it('defaults fields to empty when null', async () => {
+        mockClient.listJoinedTeams.mockResolvedValue([
+          { id: 'team-abc', displayName: 'Eng', description: '' },
+        ]);
+        await repository.listTeamsAsync();
+
+        mockClient.listTeamMembers.mockResolvedValue([
+          { id: null, displayName: null, email: null, roles: null },
+        ]);
+
+        const result = await repository.listTeamMembersAsync(hashStringToNumber('team-abc'));
+
+        expect(result[0]).toEqual({
+          id: '',
+          displayName: '',
+          email: '',
+          roles: [],
+        });
       });
     });
   });

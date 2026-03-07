@@ -53,6 +53,8 @@ interface IdCache {
   calendarGroups: Map<number, string>;
   calendars: Map<number, string>;
   calendarPermissions: Map<number, { calendarId: string; permissionId: string }>;
+  teams: Map<number, string>;
+  channels: Map<number, { teamId: string; channelId: string }>;
 }
 
 /**
@@ -79,6 +81,8 @@ export class GraphRepository implements IRepository {
     calendarGroups: new Map(),
     calendars: new Map(),
     calendarPermissions: new Map(),
+    teams: new Map(),
+    channels: new Map(),
   };
 
   constructor(deviceCodeCallback?: DeviceCodeCallback) {
@@ -2116,6 +2120,98 @@ export class GraphRepository implements IRepository {
     return rooms.map((item) => ({
       name: item.name ?? '',
       address: item.address ?? '',
+    }));
+  }
+
+  // ===========================================================================
+  // Teams
+  // ===========================================================================
+
+  /**
+   * Lists all joined teams with cached numeric IDs.
+   */
+  async listTeamsAsync(): Promise<Array<{ id: number; name: string; description: string }>> {
+    const teams = await this.client.listJoinedTeams();
+    return teams.map((team) => {
+      const graphId = team.id!;
+      const numericId = hashStringToNumber(graphId);
+      this.idCache.teams.set(numericId, graphId);
+      return { id: numericId, name: team.displayName ?? '', description: team.description ?? '' };
+    });
+  }
+
+  /**
+   * Lists all channels in a team with cached numeric IDs.
+   */
+  async listChannelsAsync(teamId: number): Promise<Array<{ id: number; name: string; description: string; membershipType: string }>> {
+    const graphTeamId = this.idCache.teams.get(teamId);
+    if (graphTeamId == null) throw new Error(`Team ID ${teamId} not found in cache. Try listing teams first.`);
+    const channels = await this.client.listChannels(graphTeamId);
+    return channels.map((ch) => {
+      const graphId = ch.id!;
+      const numericId = hashStringToNumber(graphId);
+      this.idCache.channels.set(numericId, { teamId: graphTeamId, channelId: graphId });
+      return { id: numericId, name: ch.displayName ?? '', description: ch.description ?? '', membershipType: ch.membershipType ?? 'standard' };
+    });
+  }
+
+  /**
+   * Gets a specific channel by cached numeric ID.
+   */
+  async getChannelAsync(channelId: number): Promise<{ id: number; name: string; description: string; membershipType: string; webUrl: string }> {
+    const cached = this.idCache.channels.get(channelId);
+    if (cached == null) throw new Error(`Channel ID ${channelId} not found in cache. Try listing channels first.`);
+    const ch = await this.client.getChannel(cached.teamId, cached.channelId);
+    return { id: channelId, name: ch.displayName ?? '', description: ch.description ?? '', membershipType: ch.membershipType ?? 'standard', webUrl: ch.webUrl ?? '' };
+  }
+
+  /**
+   * Creates a new channel in a team.
+   */
+  async createChannelAsync(teamId: number, name: string, description?: string): Promise<number> {
+    const graphTeamId = this.idCache.teams.get(teamId);
+    if (graphTeamId == null) throw new Error(`Team ID ${teamId} not found in cache. Try listing teams first.`);
+    const ch = await this.client.createChannel(graphTeamId, name, description);
+    const graphId = ch.id!;
+    const numericId = hashStringToNumber(graphId);
+    this.idCache.channels.set(numericId, { teamId: graphTeamId, channelId: graphId });
+    return numericId;
+  }
+
+  /**
+   * Updates a channel's properties.
+   */
+  async updateChannelAsync(channelId: number, updates: { name?: string; description?: string }): Promise<void> {
+    const cached = this.idCache.channels.get(channelId);
+    if (cached == null) throw new Error(`Channel ID ${channelId} not found in cache. Try listing channels first.`);
+    const graphUpdates: Record<string, unknown> = {};
+    if (updates.name != null) graphUpdates['displayName'] = updates.name;
+    if (updates.description != null) graphUpdates['description'] = updates.description;
+    await this.client.updateChannel(cached.teamId, cached.channelId, graphUpdates);
+  }
+
+  /**
+   * Deletes a channel.
+   */
+  async deleteChannelAsync(channelId: number): Promise<void> {
+    const cached = this.idCache.channels.get(channelId);
+    if (cached == null) throw new Error(`Channel ID ${channelId} not found in cache. Try listing channels first.`);
+    await this.client.deleteChannel(cached.teamId, cached.channelId);
+    this.idCache.channels.delete(channelId);
+  }
+
+  /**
+   * Lists members of a team.
+   */
+  async listTeamMembersAsync(teamId: number): Promise<Array<{ id: string; displayName: string; email: string; roles: string[] }>> {
+    const graphTeamId = this.idCache.teams.get(teamId);
+    if (graphTeamId == null) throw new Error(`Team ID ${teamId} not found in cache. Try listing teams first.`);
+    const members = await this.client.listTeamMembers(graphTeamId);
+    return members.map((m) => ({
+      id: m.id ?? '',
+      displayName: m.displayName ?? '',
+      email: (m as any).email ?? '',
+      roles: m.roles ?? [],
     }));
   }
 
