@@ -11,10 +11,10 @@
       "version": "1.0.0",
       "author": "JBC Tech Solutions, LLC",
       "license": "MIT",
-      "homepage": "https://github.com/jbctechsolutions/mcp-outlook-mac",
+      "homepage": "https://github.com/jbctechsolutions/mcp-office365-mac",
       "repository": {
         "type": "git",
-        "url": "https://github.com/jbctechsolutions/mcp-outlook-mac.git"
+        "url": "https://github.com/jbctechsolutions/mcp-office365-mac.git"
       },
       "source": {
         "type": "directory",

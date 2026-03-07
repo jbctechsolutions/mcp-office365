@@ -1,10 +1,10 @@
-# Outlook MCP Server
+# Office 365 MCP Server
 
-[![npm version](https://badge.fury.io/js/mcp-outlook-mac.svg)](https://www.npmjs.com/package/mcp-outlook-mac)
+[![npm version](https://badge.fury.io/js/mcp-office365-mac.svg)](https://www.npmjs.com/package/mcp-office365-mac)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Node.js Version](https://img.shields.io/node/v/mcp-outlook-mac)](https://nodejs.org)
+[![Node.js Version](https://img.shields.io/node/v/mcp-office365-mac)](https://nodejs.org)
 
-A [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) server that provides full access to Microsoft Outlook. Read, write, and manage your emails, calendar events, contacts, tasks, and notes directly through MCP tools.
+A [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) server that provides full access to Microsoft 365. Read, write, and manage your emails, calendar events, contacts, tasks, and notes directly through MCP tools.
 
 ## Features
 
@@ -120,20 +120,20 @@ A [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) server that p
 
 ### Option 1: AppleScript Backend (Classic Outlook)
 ```bash
-npx -y mcp-outlook-mac
+npx -y mcp-office365-mac
 ```
 Requires: Classic Outlook for Mac running
 
 ### Option 2: Graph API Backend (New Outlook)
 ```bash
 # Uses shared Azure AD app - works out of the box
-npx -y mcp-outlook-mac
+npx -y mcp-office365-mac
 ```
 Set `USE_GRAPH_API=1` in your MCP configuration.
 
 **Pre-authenticate (optional):**
 ```bash
-npx @jbctechsolutions/mcp-outlook-mac auth
+npx @jbctechsolutions/mcp-office365-mac auth
 ```
 
 Or just configure the server — it will prompt for authentication on first use.
@@ -256,7 +256,7 @@ See [Custom Azure AD Setup](#custom-azure-ad-setup) below for instructions.
 
 ##### 🤝 Trust & Transparency
 
-- ✅ **Open Source** - Full code available at [GitHub](https://github.com/jbctechsolutions/mcp-outlook-mac)
+- ✅ **Open Source** - Full code available at [GitHub](https://github.com/jbctechsolutions/mcp-office365-mac)
 - ✅ **Minimal Scopes** - Only requests necessary permissions
 - ✅ **Standard Practice** - Same model used by Postman, Microsoft Graph Explorer, and many open-source tools
 - ✅ **User Control** - You can revoke access anytime in your [Microsoft account settings](https://account.microsoft.com/privacy/app-access)
@@ -313,7 +313,7 @@ The server includes a pre-configured shared Azure AD app for quick-start testing
   "mcpServers": {
     "outlook-mac": {
       "command": "npx",
-      "args": ["-y", "mcp-outlook-mac"],
+      "args": ["-y", "mcp-office365-mac"],
       "env": {
         "USE_GRAPH_API": "1",
         "OUTLOOK_MCP_CLIENT_ID": "your-client-id-here",
@@ -344,13 +344,13 @@ The server includes a pre-configured shared Azure AD app for quick-start testing
 ### Using npx (recommended)
 
 ```bash
-npx -y @jbctechsolutions/mcp-outlook-mac
+npx -y @jbctechsolutions/mcp-office365-mac
 ```
 
 ### Using npm
 
 ```bash
-npm install -g @jbctechsolutions/mcp-outlook-mac
+npm install -g @jbctechsolutions/mcp-office365-mac
 ```
 
 ## Configuration
@@ -365,7 +365,7 @@ Add to your Claude Desktop configuration (`~/Library/Application Support/Claude/
   "mcpServers": {
     "outlook-mac": {
       "command": "npx",
-      "args": ["-y", "@jbctechsolutions/mcp-outlook-mac"]
+      "args": ["-y", "@jbctechsolutions/mcp-office365-mac"]
     }
   }
 }
@@ -377,7 +377,7 @@ Add to your Claude Desktop configuration (`~/Library/Application Support/Claude/
   "mcpServers": {
     "outlook-mac": {
       "command": "npx",
-      "args": ["-y", "@jbctechsolutions/mcp-outlook-mac"],
+      "args": ["-y", "@jbctechsolutions/mcp-office365-mac"],
       "env": {
         "USE_GRAPH_API": "1"
       }
@@ -398,7 +398,7 @@ Add the plugin marketplace to your `~/.claude/settings.json`:
     "jbctechsolutions": {
       "source": {
         "source": "github",
-        "repo": "jbctechsolutions/mcp-outlook-mac"
+        "repo": "jbctechsolutions/mcp-office365-mac"
       }
     }
   },
@@ -416,7 +416,7 @@ Add the plugin marketplace to your `~/.claude/settings.json`:
   "mcpServers": {
     "outlook-mac": {
       "command": "npx",
-      "args": ["-y", "@jbctechsolutions/mcp-outlook-mac"]
+      "args": ["-y", "@jbctechsolutions/mcp-office365-mac"]
     }
   }
 }
@@ -428,7 +428,7 @@ Add the plugin marketplace to your `~/.claude/settings.json`:
   "mcpServers": {
     "outlook-mac": {
       "command": "npx",
-      "args": ["-y", "@jbctechsolutions/mcp-outlook-mac"]
+      "args": ["-y", "@jbctechsolutions/mcp-office365-mac"]
     }
   }
 }
@@ -440,7 +440,7 @@ Add the plugin marketplace to your `~/.claude/settings.json`:
   "mcpServers": {
     "outlook-mac": {
       "command": "npx",
-      "args": ["-y", "@jbctechsolutions/mcp-outlook-mac"],
+      "args": ["-y", "@jbctechsolutions/mcp-office365-mac"],
       "env": {
         "USE_GRAPH_API": "1"
       }
@@ -505,13 +505,13 @@ You can authenticate before configuring the MCP server:
 
 ```bash
 # Authenticate
-npx @jbctechsolutions/mcp-outlook-mac auth
+npx @jbctechsolutions/mcp-office365-mac auth
 
 # Check status
-npx @jbctechsolutions/mcp-outlook-mac auth --status
+npx @jbctechsolutions/mcp-office365-mac auth --status
 
 # Sign out
-npx @jbctechsolutions/mcp-outlook-mac auth --logout
+npx @jbctechsolutions/mcp-office365-mac auth --logout
 ```
 
 #### Authentication required
@@ -631,7 +631,7 @@ We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) f
 - ✨ Suggest features
 - 📝 Improve documentation
 - 🔀 Submit pull requests
-- 💬 Help others in [Discussions](https://github.com/jbctechsolutions/mcp-outlook-mac/discussions)
+- 💬 Help others in [Discussions](https://github.com/jbctechsolutions/mcp-office365-mac/discussions)
 
 ### Code of Conduct
 This project adheres to our [Code of Conduct](CODE_OF_CONDUCT.md).

@@ -1,7 +1,7 @@
 {
-  "name": "@jbctechsolutions/mcp-outlook-mac",
+  "name": "@jbctechsolutions/mcp-office365-mac",
   "version": "1.5.0",
-  "description": "MCP server for Microsoft Outlook with dual backend support (AppleScript for classic Outlook, Graph API for new Outlook). Read/write access to mail, calendar, contacts, tasks, and notes.",
+  "description": "MCP server for Microsoft 365 with dual backend support (AppleScript for classic Outlook, Graph API for new Outlook/M365). Read/write access to mail, calendar, contacts, tasks, teams, planner, and more.",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -12,7 +12,7 @@
     }
   },
   "bin": {
-    "mcp-outlook-mac": "./dist/index.js"
+    "mcp-office365-mac": "./dist/index.js"
   },
   "files": [
     "dist",
@@ -39,6 +39,10 @@
     "calendar",
     "contacts",
     "tasks",
+    "office365",
+    "microsoft-365",
+    "teams",
+    "planner",
     "model-context-protocol",
     "microsoft-graph",
     "applescript",
@@ -49,11 +53,11 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/jbctechsolutions/mcp-outlook-mac.git"
+    "url": "https://github.com/jbctechsolutions/mcp-office365-mac.git"
   },
-  "homepage": "https://github.com/jbctechsolutions/mcp-outlook-mac#readme",
+  "homepage": "https://github.com/jbctechsolutions/mcp-office365-mac#readme",
   "bugs": {
-    "url": "https://github.com/jbctechsolutions/mcp-outlook-mac/issues"
+    "url": "https://github.com/jbctechsolutions/mcp-office365-mac/issues"
   },
   "funding": {
     "type": "individual",

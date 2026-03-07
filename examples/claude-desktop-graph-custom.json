@@ -2,7 +2,7 @@
   "mcpServers": {
     "outlook-mac": {
       "command": "npx",
-      "args": ["-y", "mcp-outlook-mac"],
+      "args": ["-y", "mcp-office365-mac"],
       "env": {
         "USE_GRAPH_API": "1",
         "OUTLOOK_MCP_CLIENT_ID": "your-azure-app-client-id",

@@ -1,8 +1,8 @@
 blank_issues_enabled: false
 contact_links:
   - name: 💬 GitHub Discussions
-    url: https://github.com/jbctechsolutions/mcp-outlook-mac/discussions
+    url: https://github.com/jbctechsolutions/mcp-office365-mac/discussions
     about: Ask questions and discuss ideas
   - name: 📖 Troubleshooting Guide
-    url: https://github.com/jbctechsolutions/mcp-outlook-mac#troubleshooting
+    url: https://github.com/jbctechsolutions/mcp-office365-mac#troubleshooting
     about: Common issues and solutions

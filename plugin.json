@@ -5,10 +5,10 @@
   "description": "Access Outlook for Mac data - emails, calendar, contacts, and tasks through the Model Context Protocol",
   "author": "JBC Tech Solutions, LLC",
   "license": "MIT",
-  "homepage": "https://github.com/jbctechsolutions/mcp-outlook-mac",
+  "homepage": "https://github.com/jbctechsolutions/mcp-office365-mac",
   "repository": {
     "type": "git",
-    "url": "https://github.com/jbctechsolutions/mcp-outlook-mac.git"
+    "url": "https://github.com/jbctechsolutions/mcp-office365-mac.git"
   },
   "keywords": [
     "mcp",

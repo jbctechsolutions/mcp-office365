@@ -7,9 +7,9 @@
  * CLI command handlers for standalone authentication management.
  *
  * Usage:
- *   npx @jbctechsolutions/mcp-outlook-mac auth           # Authenticate
- *   npx @jbctechsolutions/mcp-outlook-mac auth --status   # Check status
- *   npx @jbctechsolutions/mcp-outlook-mac auth --logout   # Sign out
+ *   npx @jbctechsolutions/mcp-office365-mac auth           # Authenticate
+ *   npx @jbctechsolutions/mcp-office365-mac auth --status   # Check status
+ *   npx @jbctechsolutions/mcp-office365-mac auth --logout   # Sign out
  */
 
 import {
@@ -101,7 +101,7 @@ async function handleStatus(print: PrintFn): Promise<number> {
     }
 
     print('Not authenticated');
-    print('Run: npx @jbctechsolutions/mcp-outlook-mac auth');
+    print('Run: npx @jbctechsolutions/mcp-office365-mac auth');
     return 1;
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);

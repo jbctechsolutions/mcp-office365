@@ -19,7 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - **Graph API onboarding flow**: First-time users are now guided through authentication automatically
   - **Inline auth on first tool call**: When unauthenticated, the server triggers Microsoft's device code flow automatically instead of returning an error
-  - **CLI `auth` subcommand**: `npx @jbctechsolutions/mcp-outlook-mac auth` for standalone pre-authentication, `--status` to check auth state, `--logout` to sign out
+  - **CLI `auth` subcommand**: `npx @jbctechsolutions/mcp-office365-mac auth` for standalone pre-authentication, `--status` to check auth state, `--logout` to sign out
   - **Auth mutex**: Concurrent tool calls during authentication safely coalesce into a single auth flow
 - **Reply/forward as draft tools**: 2 new tools (72 → 74 total)
   - `reply_as_draft` — Create a reply (or reply-all) as an editable draft
@@ -193,17 +193,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-[Unreleased]: https://github.com/jbctechsolutions/mcp-outlook-mac/compare/v1.3.0...HEAD
-[v1.3.0]: https://github.com/jbctechsolutions/mcp-outlook-mac/compare/v1.2.1...v1.3.0
-[v1.2.1]: https://github.com/jbctechsolutions/mcp-outlook-mac/compare/v1.2.0...v1.2.1
-[v1.2.0]: https://github.com/jbctechsolutions/mcp-outlook-mac/compare/v1.1.8...v1.2.0
-[v1.1.8]: https://github.com/jbctechsolutions/mcp-outlook-mac/compare/v1.1.7...v1.1.8
-[v1.1.7]: https://github.com/jbctechsolutions/mcp-outlook-mac/compare/v1.1.6...v1.1.7
-[v1.1.6]: https://github.com/jbctechsolutions/mcp-outlook-mac/compare/v1.1.5...v1.1.6
-[v1.1.5]: https://github.com/jbctechsolutions/mcp-outlook-mac/compare/v1.1.4...v1.1.5
-[v1.1.4]: https://github.com/jbctechsolutions/mcp-outlook-mac/compare/v1.1.0...v1.1.4
-[1.1.0]: https://github.com/jbctechsolutions/mcp-outlook-mac/compare/v1.0.3...v1.1.0
-[1.0.3]: https://github.com/jbctechsolutions/mcp-outlook-mac/compare/v1.0.2...v1.0.3
-[1.0.2]: https://github.com/jbctechsolutions/mcp-outlook-mac/compare/v1.0.1...v1.0.2
-[1.0.1]: https://github.com/jbctechsolutions/mcp-outlook-mac/compare/v1.0.0...v1.0.1
-[1.0.0]: https://github.com/jbctechsolutions/mcp-outlook-mac/releases/tag/v1.0.0
+[Unreleased]: https://github.com/jbctechsolutions/mcp-office365-mac/compare/v1.3.0...HEAD
+[v1.3.0]: https://github.com/jbctechsolutions/mcp-office365-mac/compare/v1.2.1...v1.3.0
+[v1.2.1]: https://github.com/jbctechsolutions/mcp-office365-mac/compare/v1.2.0...v1.2.1
+[v1.2.0]: https://github.com/jbctechsolutions/mcp-office365-mac/compare/v1.1.8...v1.2.0
+[v1.1.8]: https://github.com/jbctechsolutions/mcp-office365-mac/compare/v1.1.7...v1.1.8
+[v1.1.7]: https://github.com/jbctechsolutions/mcp-office365-mac/compare/v1.1.6...v1.1.7
+[v1.1.6]: https://github.com/jbctechsolutions/mcp-office365-mac/compare/v1.1.5...v1.1.6
+[v1.1.5]: https://github.com/jbctechsolutions/mcp-office365-mac/compare/v1.1.4...v1.1.5
+[v1.1.4]: https://github.com/jbctechsolutions/mcp-office365-mac/compare/v1.1.0...v1.1.4
+[1.1.0]: https://github.com/jbctechsolutions/mcp-office365-mac/compare/v1.0.3...v1.1.0
+[1.0.3]: https://github.com/jbctechsolutions/mcp-office365-mac/compare/v1.0.2...v1.0.3
+[1.0.2]: https://github.com/jbctechsolutions/mcp-office365-mac/compare/v1.0.1...v1.0.2
+[1.0.1]: https://github.com/jbctechsolutions/mcp-office365-mac/compare/v1.0.0...v1.0.1
+[1.0.0]: https://github.com/jbctechsolutions/mcp-office365-mac/releases/tag/v1.0.0

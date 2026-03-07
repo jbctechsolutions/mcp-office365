@@ -20,7 +20,7 @@
  * - OUTLOOK_MCP_CLIENT_ID environment variable
  * - OUTLOOK_MCP_TENANT_ID environment variable (default: 'common')
  *
- * For setup instructions: https://github.com/jbctechsolutions/mcp-outlook-mac#custom-azure-ad-setup
+ * For setup instructions: https://github.com/jbctechsolutions/mcp-office365-mac#custom-azure-ad-setup
  */
 const DEFAULT_CLIENT_ID = '8fdcd9d3-8823-48f5-bd59-c3a779053b77';
 

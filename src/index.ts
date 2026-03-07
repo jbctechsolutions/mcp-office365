@@ -4,7 +4,7 @@
  * Licensed under the MIT License. See LICENSE file in the project root.
  */
 /**
- * Outlook MCP Server
+ * Office 365 MCP Server
  *
  * A Model Context Protocol server that provides read-only access to
  * Outlook for Mac via AppleScript or Microsoft Graph API.
@@ -2039,7 +2039,7 @@ const TOOLS: Tool[] = [
 export function createServer(): Server {
   const server = new Server(
     {
-      name: 'outlook-mcp',
+      name: 'office365-mcp',
       version: '0.1.0',
     },
     {
@@ -4290,7 +4290,7 @@ async function main(): Promise<void> {
 const isMainModule =
   import.meta.url === `file://${process.argv[1]}` ||
   process.argv[1]?.endsWith('dist/index.js') === true ||
-  process.argv[1]?.includes('mcp-outlook-mac') === true ||
+  process.argv[1]?.includes('mcp-office365-mac') === true ||
   // When run via npx or bin, process.argv[1] might be undefined or a symlink
   process.argv[1] === undefined ||
   import.meta.url.endsWith('/dist/index.js');

@@ -22,8 +22,8 @@ Thank you for your interest in contributing! This document provides guidelines f
 
 1. **Fork and Clone**
    ```bash
-   git clone https://github.com/YOUR_USERNAME/mcp-outlook-mac.git
-   cd mcp-outlook-mac
+   git clone https://github.com/YOUR_USERNAME/mcp-office365-mac.git
+   cd mcp-office365-mac
    ```
 
 2. **Install Dependencies**
@@ -58,7 +58,7 @@ Test your changes with Claude Desktop or Claude Code:
   "mcpServers": {
     "outlook-mac-dev": {
       "command": "node",
-      "args": ["/path/to/mcp-outlook-mac/dist/index.js"],
+      "args": ["/path/to/mcp-office365-mac/dist/index.js"],
       "env": {
         "USE_GRAPH_API": "1"
       }
