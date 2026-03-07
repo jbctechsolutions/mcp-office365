@@ -86,6 +86,9 @@ vi.mock('../../../src/graph/client/index.js', () => ({
       // Calendar scheduling operations
       getSchedule: vi.fn(),
       findMeetingTimes: vi.fn(),
+      // Automatic replies operations
+      getAutomaticReplies: vi.fn(),
+      setAutomaticReplies: vi.fn(),
       // Mail rules operations
       listMailRules: vi.fn(),
       createMailRule: vi.fn(),
@@ -3026,6 +3029,91 @@ describe('graph/repository', () => {
         const info = repository.getTaskInfo(hashStringToNumber('task-1'));
 
         expect(info).toEqual({ taskListId: 'list-1', taskId: 'task-1' });
+      });
+    });
+  });
+
+  // ===========================================================================
+  // Automatic Replies (Out of Office)
+  // ===========================================================================
+
+  describe('Automatic Replies', () => {
+    describe('getAutomaticRepliesAsync', () => {
+      it('returns mapped automatic replies settings', async () => {
+        mockClient.getAutomaticReplies.mockResolvedValue({
+          status: 'alwaysEnabled',
+          externalAudience: 'all',
+          internalReplyMessage: '<p>I am out</p>',
+          externalReplyMessage: '<p>Away</p>',
+          scheduledStartDateTime: { dateTime: '2026-03-01T00:00:00Z', timeZone: 'UTC' },
+          scheduledEndDateTime: { dateTime: '2026-03-15T00:00:00Z', timeZone: 'UTC' },
+        });
+
+        const result = await repository.getAutomaticRepliesAsync();
+
+        expect(result.status).toBe('alwaysEnabled');
+        expect(result.externalAudience).toBe('all');
+        expect(result.internalReplyMessage).toBe('<p>I am out</p>');
+        expect(result.externalReplyMessage).toBe('<p>Away</p>');
+        expect(result.scheduledStartDateTime).toBe('2026-03-01T00:00:00Z');
+        expect(result.scheduledEndDateTime).toBe('2026-03-15T00:00:00Z');
+      });
+
+      it('returns defaults for missing fields', async () => {
+        mockClient.getAutomaticReplies.mockResolvedValue({});
+
+        const result = await repository.getAutomaticRepliesAsync();
+
+        expect(result.status).toBe('disabled');
+        expect(result.externalAudience).toBe('none');
+        expect(result.internalReplyMessage).toBe('');
+        expect(result.externalReplyMessage).toBe('');
+        expect(result.scheduledStartDateTime).toBeNull();
+        expect(result.scheduledEndDateTime).toBeNull();
+      });
+    });
+
+    describe('setAutomaticRepliesAsync', () => {
+      it('builds settings object with all fields', async () => {
+        mockClient.setAutomaticReplies.mockResolvedValue(undefined);
+
+        await repository.setAutomaticRepliesAsync({
+          status: 'alwaysEnabled',
+          externalAudience: 'all',
+          internalReplyMessage: '<p>I am out</p>',
+          externalReplyMessage: '<p>Away</p>',
+        });
+
+        expect(mockClient.setAutomaticReplies).toHaveBeenCalledWith({
+          status: 'alwaysEnabled',
+          externalAudience: 'all',
+          internalReplyMessage: '<p>I am out</p>',
+          externalReplyMessage: '<p>Away</p>',
+        });
+      });
+
+      it('builds settings object with only status', async () => {
+        mockClient.setAutomaticReplies.mockResolvedValue(undefined);
+
+        await repository.setAutomaticRepliesAsync({ status: 'disabled' });
+
+        expect(mockClient.setAutomaticReplies).toHaveBeenCalledWith({ status: 'disabled' });
+      });
+
+      it('handles scheduled dates', async () => {
+        mockClient.setAutomaticReplies.mockResolvedValue(undefined);
+
+        await repository.setAutomaticRepliesAsync({
+          status: 'scheduled',
+          scheduledStartDateTime: '2026-03-01T00:00:00Z',
+          scheduledEndDateTime: '2026-03-15T00:00:00Z',
+        });
+
+        expect(mockClient.setAutomaticReplies).toHaveBeenCalledWith({
+          status: 'scheduled',
+          scheduledStartDateTime: { dateTime: '2026-03-01T00:00:00Z', timeZone: 'UTC' },
+          scheduledEndDateTime: { dateTime: '2026-03-15T00:00:00Z', timeZone: 'UTC' },
+        });
       });
     });
   });

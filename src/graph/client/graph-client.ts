@@ -357,6 +357,26 @@ export class GraphClient {
   }
 
   // ===========================================================================
+  // Automatic Replies (Out of Office)
+  // ===========================================================================
+
+  /**
+   * Gets the automatic replies (OOF) settings.
+   */
+  async getAutomaticReplies(): Promise<Record<string, unknown>> {
+    const client = await this.getClient();
+    return await client.api('/me/mailboxSettings/automaticRepliesSetting').get() as Record<string, unknown>;
+  }
+
+  /**
+   * Sets the automatic replies (OOF) settings.
+   */
+  async setAutomaticReplies(settings: Record<string, unknown>): Promise<void> {
+    const client = await this.getClient();
+    await client.api('/me/mailboxSettings').patch({ automaticRepliesSetting: settings });
+  }
+
+  // ===========================================================================
   // Calendars
   // ===========================================================================
 

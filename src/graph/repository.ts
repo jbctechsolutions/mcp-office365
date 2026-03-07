@@ -1759,6 +1759,52 @@ export class GraphRepository implements IRepository {
     this.idCache.rules.delete(ruleId);
   }
 
+  // ===========================================================================
+  // Automatic Replies (Out of Office)
+  // ===========================================================================
+
+  /**
+   * Gets the current automatic replies (OOF) settings.
+   */
+  async getAutomaticRepliesAsync(): Promise<{
+    status: string;
+    externalAudience: string;
+    internalReplyMessage: string;
+    externalReplyMessage: string;
+    scheduledStartDateTime: string | null;
+    scheduledEndDateTime: string | null;
+  }> {
+    const settings = await this.client.getAutomaticReplies();
+    return {
+      status: (settings as any).status ?? 'disabled',
+      externalAudience: (settings as any).externalAudience ?? 'none',
+      internalReplyMessage: (settings as any).internalReplyMessage ?? '',
+      externalReplyMessage: (settings as any).externalReplyMessage ?? '',
+      scheduledStartDateTime: (settings as any).scheduledStartDateTime?.dateTime ?? null,
+      scheduledEndDateTime: (settings as any).scheduledEndDateTime?.dateTime ?? null,
+    };
+  }
+
+  /**
+   * Sets the automatic replies (OOF) settings.
+   */
+  async setAutomaticRepliesAsync(params: {
+    status: 'disabled' | 'alwaysEnabled' | 'scheduled';
+    externalAudience?: 'none' | 'contactsOnly' | 'all';
+    internalReplyMessage?: string;
+    externalReplyMessage?: string;
+    scheduledStartDateTime?: string;
+    scheduledEndDateTime?: string;
+  }): Promise<void> {
+    const settings: Record<string, unknown> = { status: params.status };
+    if (params.externalAudience != null) settings['externalAudience'] = params.externalAudience;
+    if (params.internalReplyMessage != null) settings['internalReplyMessage'] = params.internalReplyMessage;
+    if (params.externalReplyMessage != null) settings['externalReplyMessage'] = params.externalReplyMessage;
+    if (params.scheduledStartDateTime != null) settings['scheduledStartDateTime'] = { dateTime: params.scheduledStartDateTime, timeZone: 'UTC' };
+    if (params.scheduledEndDateTime != null) settings['scheduledEndDateTime'] = { dateTime: params.scheduledEndDateTime, timeZone: 'UTC' };
+    await this.client.setAutomaticReplies(settings);
+  }
+
   /**
    * Gets the Graph string ID for a folder from the cache.
    */

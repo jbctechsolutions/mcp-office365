@@ -175,6 +175,9 @@ const VALID_ENDPOINT_PATTERNS = [
   /^\/me\/todo\/lists\/[^/]+$/,
   /^\/me\/todo\/lists\/[^/]+\/tasks$/,
   /^\/me\/todo\/lists\/[^/]+\/tasks\/[^/]+$/,
+  // Automatic Replies (Out of Office)
+  /^\/me\/mailboxSettings\/automaticRepliesSetting$/,
+  /^\/me\/mailboxSettings$/,
   // Mail Rules
   /^\/me\/mailFolders\/inbox\/messageRules$/,
   /^\/me\/mailFolders\/inbox\/messageRules\/[^/]+$/,
@@ -1152,6 +1155,35 @@ describe('Graph API endpoint and method validation', () => {
   });
 
   // =========================================================================
+  // Automatic Replies (Out of Office) operations
+  // =========================================================================
+
+  describe('Automatic Replies operations', () => {
+    it('getAutomaticReplies GETs /me/mailboxSettings/automaticRepliesSetting', async () => {
+      setupMock({ status: 'disabled', externalAudience: 'none' });
+
+      const result = await client.getAutomaticReplies();
+
+      expect(apiCalls).toHaveLength(1);
+      expect(apiCalls[0].url).toBe('/me/mailboxSettings/automaticRepliesSetting');
+      expect(apiCalls[0].method).toBe('get');
+      expect(result).toEqual({ status: 'disabled', externalAudience: 'none' });
+    });
+
+    it('setAutomaticReplies PATCHes /me/mailboxSettings with automaticRepliesSetting', async () => {
+      const settings = { status: 'alwaysEnabled', internalReplyMessage: 'I am out' };
+      setupMock(undefined);
+
+      await client.setAutomaticReplies(settings);
+
+      expect(apiCalls).toHaveLength(1);
+      expect(apiCalls[0].url).toBe('/me/mailboxSettings');
+      expect(apiCalls[0].method).toBe('patch');
+      expect(apiCalls[0].body).toEqual({ automaticRepliesSetting: settings });
+    });
+  });
+
+  // =========================================================================
   // Contact Folders operations
   // =========================================================================
 
@@ -1427,6 +1459,13 @@ describe('Graph API endpoint and method validation', () => {
 
       setupMock(undefined);
       await client.deleteTaskList('list-1');
+
+      // Exercise automatic replies methods
+      setupMock({ status: 'disabled', externalAudience: 'none' });
+      await client.getAutomaticReplies();
+
+      setupMock(undefined);
+      await client.setAutomaticReplies({ status: 'alwaysEnabled' });
 
       // Exercise mail rules methods
       setupMock({ value: [{ id: 'rule-1', displayName: 'Test Rule' }] });

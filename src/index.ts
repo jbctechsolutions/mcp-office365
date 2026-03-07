@@ -1959,6 +1959,52 @@ const TOOLS: Tool[] = [
       required: ['token_id', 'rule_id'],
     },
   },
+  // Automatic replies (OOF) tools
+  {
+    name: 'get_automatic_replies',
+    description: 'Get the current automatic replies (out-of-office) settings',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {},
+      required: [],
+    },
+  },
+  {
+    name: 'set_automatic_replies',
+    description: 'Set automatic replies (out-of-office) settings',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        status: {
+          type: 'string',
+          enum: ['disabled', 'alwaysEnabled', 'scheduled'],
+          description: 'OOF status',
+        },
+        external_audience: {
+          type: 'string',
+          enum: ['none', 'contactsOnly', 'all'],
+          description: 'Who sees external reply',
+        },
+        internal_reply_message: {
+          type: 'string',
+          description: 'Reply for internal senders (HTML)',
+        },
+        external_reply_message: {
+          type: 'string',
+          description: 'Reply for external senders (HTML)',
+        },
+        scheduled_start: {
+          type: 'string',
+          description: 'Schedule start (ISO 8601)',
+        },
+        scheduled_end: {
+          type: 'string',
+          description: 'Schedule end (ISO 8601)',
+        },
+      },
+      required: ['status'],
+    },
+  },
   // Contact folder tools
   {
     name: 'list_contact_folders',
@@ -2153,6 +2199,8 @@ export function createServer(): Server {
     'rename_task_list',
     'prepare_delete_task_list',
     'confirm_delete_task_list',
+    'get_automatic_replies',
+    'set_automatic_replies',
     'list_contact_folders',
     'create_contact_folder',
     'prepare_delete_contact_folder',
@@ -3168,6 +3216,17 @@ const ConfirmDeleteTaskListInput = z.strictObject({
   task_list_id: z.number().int().positive().describe('The task list ID to delete'),
 });
 
+const GetAutomaticRepliesInput = z.strictObject({});
+
+const SetAutomaticRepliesInput = z.strictObject({
+  status: z.enum(['disabled', 'alwaysEnabled', 'scheduled']).describe('OOF status'),
+  external_audience: z.enum(['none', 'contactsOnly', 'all']).optional().describe('Who sees external reply'),
+  internal_reply_message: z.string().optional().describe('Reply for internal senders (HTML)'),
+  external_reply_message: z.string().optional().describe('Reply for external senders (HTML)'),
+  scheduled_start: z.string().optional().describe('Schedule start (ISO 8601)'),
+  scheduled_end: z.string().optional().describe('Schedule end (ISO 8601)'),
+});
+
 const CreateContactFolderInput = z.strictObject({
   name: z.string().min(1).describe('Contact folder name'),
 });
@@ -4022,6 +4081,27 @@ async function handleGraphToolCall(
       case 'confirm_delete_mail_rule': {
         const params = ConfirmDeleteMailRuleInput.parse(args);
         return await rulesTools.confirmDeleteMailRule(params);
+      }
+
+      // Automatic replies (OOF) tools
+      case 'get_automatic_replies': {
+        GetAutomaticRepliesInput.parse(args ?? {});
+        const result = await repository.getAutomaticRepliesAsync();
+        return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+      }
+
+      case 'set_automatic_replies': {
+        const params = SetAutomaticRepliesInput.parse(args);
+        const replyParams: Parameters<typeof repository.setAutomaticRepliesAsync>[0] = {
+          status: params.status,
+        };
+        if (params.external_audience != null) replyParams.externalAudience = params.external_audience;
+        if (params.internal_reply_message != null) replyParams.internalReplyMessage = params.internal_reply_message;
+        if (params.external_reply_message != null) replyParams.externalReplyMessage = params.external_reply_message;
+        if (params.scheduled_start != null) replyParams.scheduledStartDateTime = params.scheduled_start;
+        if (params.scheduled_end != null) replyParams.scheduledEndDateTime = params.scheduled_end;
+        await repository.setAutomaticRepliesAsync(replyParams);
+        return { content: [{ type: 'text', text: JSON.stringify({ success: true, status: params.status }, null, 2) }] };
       }
 
       // Contact folder tools
