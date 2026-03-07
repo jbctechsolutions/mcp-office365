@@ -919,6 +919,41 @@ const TOOLS: Tool[] = [
       required: ['token_id', 'task_id'],
     },
   },
+  {
+    name: 'rename_task_list',
+    description: 'Rename a task list (Graph API)',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        task_list_id: { type: 'number', description: 'Task list ID' },
+        name: { type: 'string', description: 'New name for the task list' },
+      },
+      required: ['task_list_id', 'name'],
+    },
+  },
+  {
+    name: 'prepare_delete_task_list',
+    description: 'Prepare to delete a task list. Returns an approval token. Call confirm_delete_task_list to execute. (Graph API)',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        task_list_id: { type: 'number', description: 'Task list ID to delete' },
+      },
+      required: ['task_list_id'],
+    },
+  },
+  {
+    name: 'confirm_delete_task_list',
+    description: 'Confirm task list deletion with approval token (Graph API)',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        token_id: { type: 'string', description: 'The approval token from prepare_delete_task_list' },
+        task_list_id: { type: 'number', description: 'The task list ID to delete' },
+      },
+      required: ['token_id', 'task_list_id'],
+    },
+  },
   // Note tools
   {
     name: 'list_notes',
@@ -2000,6 +2035,9 @@ export function createServer(): Server {
     'prepare_delete_mail_rule',
     'confirm_delete_mail_rule',
     'list_task_lists',
+    'rename_task_list',
+    'prepare_delete_task_list',
+    'confirm_delete_task_list',
   ]);
 
   // Register tool list handler
@@ -2975,6 +3013,20 @@ const ConfirmDeleteTaskInput = z.strictObject({
   task_id: z.number().int().positive(),
 });
 
+const RenameTaskListInput = z.strictObject({
+  task_list_id: z.number().int().positive().describe('Task list ID'),
+  name: z.string().min(1).describe('New name for the task list'),
+});
+
+const PrepareDeleteTaskListInput = z.strictObject({
+  task_list_id: z.number().int().positive().describe('Task list ID to delete'),
+});
+
+const ConfirmDeleteTaskListInput = z.strictObject({
+  token_id: z.string().uuid().describe('Approval token from prepare_delete_task_list'),
+  task_list_id: z.number().int().positive().describe('The task list ID to delete'),
+});
+
 // =============================================================================
 // Graph API Tool Handler
 // =============================================================================
@@ -3608,6 +3660,65 @@ async function handleGraphToolCall(
           status: 'created',
         };
         return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+      }
+
+      case 'rename_task_list': {
+        const params = RenameTaskListInput.parse(args);
+        await repository.renameTaskListAsync(params.task_list_id, params.name);
+        return { content: [{ type: 'text', text: JSON.stringify({ success: true, message: 'Task list renamed' }, null, 2) }] };
+      }
+
+      case 'prepare_delete_task_list': {
+        const params = PrepareDeleteTaskListInput.parse(args);
+        const token = tokenManager.generateToken({
+          operation: 'delete_task_list',
+          targetType: 'task_list',
+          targetId: params.task_list_id,
+          targetHash: String(params.task_list_id),
+        });
+
+        return {
+          content: [{
+            type: 'text' as const,
+            text: JSON.stringify({
+              token_id: token.tokenId,
+              expires_at: new Date(token.expiresAt).toISOString(),
+              task_list_id: params.task_list_id,
+              action: `To confirm deleting task list ${params.task_list_id}, call confirm_delete_task_list with the token_id and task_list_id.`,
+            }, null, 2),
+          }],
+        };
+      }
+
+      case 'confirm_delete_task_list': {
+        const params = ConfirmDeleteTaskListInput.parse(args);
+        const validation = tokenManager.consumeToken(params.token_id, 'delete_task_list', params.task_list_id);
+        if (!validation.valid) {
+          const errorMessages: Record<string, string> = {
+            NOT_FOUND: 'Token not found or already used',
+            EXPIRED: 'Token has expired. Please call prepare_delete_task_list again.',
+            OPERATION_MISMATCH: 'Token was not generated for delete_task_list',
+            TARGET_MISMATCH: 'Token was generated for a different task list',
+            ALREADY_CONSUMED: 'Token has already been used',
+          };
+          return {
+            content: [{
+              type: 'text' as const,
+              text: JSON.stringify({
+                success: false,
+                error: errorMessages[validation.error ?? ''] ?? 'Invalid token',
+              }, null, 2),
+            }],
+          };
+        }
+
+        await repository.deleteTaskListAsync(params.task_list_id);
+        return {
+          content: [{
+            type: 'text' as const,
+            text: JSON.stringify({ success: true, message: 'Task list deleted' }, null, 2),
+          }],
+        };
       }
 
       case 'prepare_delete_task': {

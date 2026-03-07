@@ -77,6 +77,8 @@ vi.mock('../../../src/graph/client/index.js', () => ({
       updateTask: vi.fn(),
       deleteTask: vi.fn(),
       createTaskList: vi.fn(),
+      updateTaskList: vi.fn(),
+      deleteTaskList: vi.fn(),
       // Calendar scheduling operations
       getSchedule: vi.fn(),
       findMeetingTimes: vi.fn(),
@@ -2593,6 +2595,49 @@ describe('graph/repository', () => {
         // Verify it was cached in taskLists
         const idCache = (repository as any).idCache;
         expect(idCache.taskLists.get(numericId)).toBe('new-list-1');
+      });
+    });
+
+    describe('renameTaskListAsync', () => {
+      it('calls updateTaskList with correct args', async () => {
+        // First cache the task list
+        mockClient.listTaskLists.mockResolvedValue([
+          { id: 'list-abc', displayName: 'Old Name', isOwner: true, isShared: false, wellknownListName: 'none' },
+        ]);
+        await repository.listTaskListsAsync();
+
+        mockClient.updateTaskList.mockResolvedValue(undefined);
+        const numericId = hashStringToNumber('list-abc');
+        await repository.renameTaskListAsync(numericId, 'New Name');
+
+        expect(mockClient.updateTaskList).toHaveBeenCalledWith('list-abc', { displayName: 'New Name' });
+      });
+
+      it('throws for unknown ID', async () => {
+        await expect(repository.renameTaskListAsync(999999, 'Name')).rejects.toThrow('not found in cache');
+      });
+    });
+
+    describe('deleteTaskListAsync', () => {
+      it('deletes a task list and removes from cache', async () => {
+        // First cache the task list
+        mockClient.listTaskLists.mockResolvedValue([
+          { id: 'list-del', displayName: 'To Delete', isOwner: true, isShared: false, wellknownListName: 'none' },
+        ]);
+        await repository.listTaskListsAsync();
+
+        mockClient.deleteTaskList.mockResolvedValue(undefined);
+        const numericId = hashStringToNumber('list-del');
+        await repository.deleteTaskListAsync(numericId);
+
+        expect(mockClient.deleteTaskList).toHaveBeenCalledWith('list-del');
+
+        // Should throw if we try to delete again (removed from cache)
+        await expect(repository.deleteTaskListAsync(numericId)).rejects.toThrow('not found in cache');
+      });
+
+      it('throws for unknown ID', async () => {
+        await expect(repository.deleteTaskListAsync(999999)).rejects.toThrow('not found in cache');
       });
     });
   });

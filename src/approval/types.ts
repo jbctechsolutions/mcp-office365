@@ -33,12 +33,13 @@ export type OperationType =
   | 'delete_event'
   | 'delete_contact'
   | 'delete_task'
-  | 'delete_mail_rule';
+  | 'delete_mail_rule'
+  | 'delete_task_list';
 
 /**
  * Target resource types.
  */
-export type TargetType = 'email' | 'folder' | 'event' | 'contact' | 'task' | 'rule';
+export type TargetType = 'email' | 'folder' | 'event' | 'contact' | 'task' | 'task_list' | 'rule';
 
 // =============================================================================
 // Token Types

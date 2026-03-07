@@ -1156,6 +1156,24 @@ export class GraphClient {
     this.cache.clear();
     return result;
   }
+
+  /**
+   * Updates a task list (e.g. rename).
+   */
+  async updateTaskList(listId: string, updates: Record<string, unknown>): Promise<void> {
+    const client = await this.getClient();
+    await client.api(`/me/todo/lists/${listId}`).patch(updates);
+    this.cache.clear();
+  }
+
+  /**
+   * Deletes a task list.
+   */
+  async deleteTaskList(listId: string): Promise<void> {
+    const client = await this.getClient();
+    await client.api(`/me/todo/lists/${listId}`).delete();
+    this.cache.clear();
+  }
 }
 
 /**

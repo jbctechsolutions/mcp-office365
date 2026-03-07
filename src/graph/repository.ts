@@ -1575,6 +1575,25 @@ export class GraphRepository implements IRepository {
     return numericId;
   }
 
+  /**
+   * Renames a task list.
+   */
+  async renameTaskListAsync(listId: number, name: string): Promise<void> {
+    const graphId = this.idCache.taskLists.get(listId);
+    if (graphId == null) throw new Error(`Task list ID ${listId} not found in cache. Try searching for or listing the item first to refresh the cache.`);
+    await this.client.updateTaskList(graphId, { displayName: name });
+  }
+
+  /**
+   * Deletes a task list.
+   */
+  async deleteTaskListAsync(listId: number): Promise<void> {
+    const graphId = this.idCache.taskLists.get(listId);
+    if (graphId == null) throw new Error(`Task list ID ${listId} not found in cache. Try searching for or listing the item first to refresh the cache.`);
+    await this.client.deleteTaskList(graphId);
+    this.idCache.taskLists.delete(listId);
+  }
+
   // ===========================================================================
   // Mail Rules (Async)
   // ===========================================================================

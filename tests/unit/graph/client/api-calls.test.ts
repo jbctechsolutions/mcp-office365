@@ -154,6 +154,7 @@ const VALID_ENDPOINT_PATTERNS = [
   /^\/me\/contacts\/[^/]+$/,
   // Tasks (Microsoft To Do)
   /^\/me\/todo\/lists$/,
+  /^\/me\/todo\/lists\/[^/]+$/,
   /^\/me\/todo\/lists\/[^/]+\/tasks$/,
   /^\/me\/todo\/lists\/[^/]+\/tasks\/[^/]+$/,
   // Mail Rules
@@ -1058,6 +1059,27 @@ describe('Graph API endpoint and method validation', () => {
       expect(apiCalls[0].method).toBe('post');
       expect(apiCalls[0].body).toEqual({ displayName: 'Shopping' });
     });
+
+    it('updateTaskList PATCHes /me/todo/lists/{listId}', async () => {
+      setupMock(undefined);
+
+      await client.updateTaskList('list-1', { displayName: 'Renamed' });
+
+      expect(apiCalls).toHaveLength(1);
+      expect(apiCalls[0].url).toBe('/me/todo/lists/list-1');
+      expect(apiCalls[0].method).toBe('patch');
+      expect(apiCalls[0].body).toEqual({ displayName: 'Renamed' });
+    });
+
+    it('deleteTaskList DELETEs /me/todo/lists/{listId}', async () => {
+      setupMock(undefined);
+
+      await client.deleteTaskList('list-1');
+
+      expect(apiCalls).toHaveLength(1);
+      expect(apiCalls[0].url).toBe('/me/todo/lists/list-1');
+      expect(apiCalls[0].method).toBe('delete');
+    });
   });
 
   // =========================================================================
@@ -1285,6 +1307,12 @@ describe('Graph API endpoint and method validation', () => {
 
       setupMock({ id: 'list-new', displayName: 'Shopping' });
       await client.createTaskList('Shopping');
+
+      setupMock(undefined);
+      await client.updateTaskList('list-1', { displayName: 'Renamed' });
+
+      setupMock(undefined);
+      await client.deleteTaskList('list-1');
 
       // Exercise mail rules methods
       setupMock({ value: [{ id: 'rule-1', displayName: 'Test Rule' }] });
@@ -1708,6 +1736,36 @@ describe('Graph API endpoint and method validation', () => {
 
       setupMock({ id: 'list-new', displayName: 'New List' });
       await client.createTaskList('New List');
+      apiCalls.length = 0;
+
+      setupMock();
+      await client.listTaskLists();
+
+      const getCalls = apiCalls.filter(c => c.method === 'get' && c.url === '/me/todo/lists');
+      expect(getCalls.length).toBeGreaterThan(0);
+    });
+
+    it('updateTaskList clears cache', async () => {
+      await client.listTaskLists();
+      apiCalls.length = 0;
+
+      setupMock(undefined);
+      await client.updateTaskList('list-1', { displayName: 'Renamed' });
+      apiCalls.length = 0;
+
+      setupMock();
+      await client.listTaskLists();
+
+      const getCalls = apiCalls.filter(c => c.method === 'get' && c.url === '/me/todo/lists');
+      expect(getCalls.length).toBeGreaterThan(0);
+    });
+
+    it('deleteTaskList clears cache', async () => {
+      await client.listTaskLists();
+      apiCalls.length = 0;
+
+      setupMock(undefined);
+      await client.deleteTaskList('list-1');
       apiCalls.length = 0;
 
       setupMock();
