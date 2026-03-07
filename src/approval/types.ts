@@ -43,12 +43,13 @@ export type OperationType =
   | 'send_channel_message'
   | 'reply_channel_message'
   | 'send_chat_message'
-  | 'delete_checklist_item';
+  | 'delete_checklist_item'
+  | 'delete_linked_resource';
 
 /**
  * Target resource types.
  */
-export type TargetType = 'email' | 'folder' | 'event' | 'contact' | 'task' | 'task_list' | 'rule' | 'contact_folder' | 'category' | 'focused_override' | 'calendar_permission' | 'channel' | 'channel_message' | 'chat_message' | 'checklist_item';
+export type TargetType = 'email' | 'folder' | 'event' | 'contact' | 'task' | 'task_list' | 'rule' | 'contact_folder' | 'category' | 'focused_override' | 'calendar_permission' | 'channel' | 'channel_message' | 'chat_message' | 'checklist_item' | 'linked_resource';
 
 // =============================================================================
 // Token Types

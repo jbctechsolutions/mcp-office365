@@ -1682,6 +1682,28 @@ export class GraphClient {
     const client = await this.getClient();
     await client.api(`/me/todo/lists/${taskListId}/tasks/${taskId}/checklistItems/${checklistItemId}`).delete();
   }
+
+  // ===========================================================================
+  // Linked Resources
+  // ===========================================================================
+
+  async listLinkedResources(taskListId: string, taskId: string): Promise<MicrosoftGraph.LinkedResource[]> {
+    const client = await this.getClient();
+    const response = await client.api(`/me/todo/lists/${taskListId}/tasks/${taskId}/linkedResources`).get() as PageCollection;
+    return response.value as MicrosoftGraph.LinkedResource[];
+  }
+
+  async createLinkedResource(taskListId: string, taskId: string, webUrl: string, applicationName: string, displayName?: string): Promise<MicrosoftGraph.LinkedResource> {
+    const client = await this.getClient();
+    const body: Record<string, unknown> = { webUrl, applicationName };
+    if (displayName != null) body['displayName'] = displayName;
+    return await client.api(`/me/todo/lists/${taskListId}/tasks/${taskId}/linkedResources`).post(body) as MicrosoftGraph.LinkedResource;
+  }
+
+  async deleteLinkedResource(taskListId: string, taskId: string, linkedResourceId: string): Promise<void> {
+    const client = await this.getClient();
+    await client.api(`/me/todo/lists/${taskListId}/tasks/${taskId}/linkedResources/${linkedResourceId}`).delete();
+  }
 }
 
 /**

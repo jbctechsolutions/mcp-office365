@@ -97,6 +97,13 @@ import {
   ConfirmDeleteChecklistItemInput,
 } from './tools/checklist-items.js';
 import {
+  LinkedResourcesTools,
+  ListLinkedResourcesInput,
+  CreateLinkedResourceInput,
+  PrepareDeleteLinkedResourceInput,
+  ConfirmDeleteLinkedResourceInput,
+} from './tools/linked-resources.js';
+import {
   TeamsTools,
   ListChannelsInput,
   GetChannelInput,
@@ -2688,6 +2695,54 @@ const TOOLS: Tool[] = [
       required: ['approval_token'],
     },
   },
+  // Linked Resources tools
+  {
+    name: 'list_linked_resources',
+    description: 'List linked resources on a To Do task (Graph API)',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        task_id: { type: 'number', description: 'Task ID from list_tasks or search_tasks' },
+      },
+      required: ['task_id'],
+    },
+  },
+  {
+    name: 'create_linked_resource',
+    description: 'Create a linked resource on a To Do task (Graph API)',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        task_id: { type: 'number', description: 'Task ID' },
+        web_url: { type: 'string', description: 'URL of the linked resource' },
+        application_name: { type: 'string', description: 'Name of the application' },
+        display_name: { type: 'string', description: 'Display name of the linked resource' },
+      },
+      required: ['task_id', 'web_url', 'application_name'],
+    },
+  },
+  {
+    name: 'prepare_delete_linked_resource',
+    description: 'Prepare to delete a linked resource. Returns an approval token. Call confirm_delete_linked_resource to execute. (Graph API)',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        linked_resource_id: { type: 'number', description: 'Linked resource ID to delete' },
+      },
+      required: ['linked_resource_id'],
+    },
+  },
+  {
+    name: 'confirm_delete_linked_resource',
+    description: 'Confirm deletion of a linked resource with approval token (Graph API)',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        approval_token: { type: 'string', description: 'The approval token from prepare_delete_linked_resource' },
+      },
+      required: ['approval_token'],
+    },
+  },
 ];
 
 // =============================================================================
@@ -2733,6 +2788,7 @@ export function createServer(): Server {
   let focusedOverridesTools: FocusedOverridesTools | null = null;
   let teamsTools: TeamsTools | null = null;
   let checklistItemsTools: ChecklistItemsTools | null = null;
+  let linkedResourcesTools: LinkedResourcesTools | null = null;
   let calendarWriter: ICalendarWriter | null = null;
   let calendarManager: ICalendarManager | null = null;
   let mailSender: IMailSender | null = null;
@@ -2790,6 +2846,7 @@ export function createServer(): Server {
     focusedOverridesTools = new FocusedOverridesTools(graphRepository, tokenManager);
     teamsTools = new TeamsTools(graphRepository, tokenManager);
     checklistItemsTools = new ChecklistItemsTools(graphRepository, tokenManager);
+    linkedResourcesTools = new LinkedResourcesTools(graphRepository, tokenManager);
 
     initialized = true;
   });
@@ -2879,6 +2936,10 @@ export function createServer(): Server {
     'update_checklist_item',
     'prepare_delete_checklist_item',
     'confirm_delete_checklist_item',
+    'list_linked_resources',
+    'create_linked_resource',
+    'prepare_delete_linked_resource',
+    'confirm_delete_linked_resource',
   ]);
 
   // Register tool list handler
@@ -2896,7 +2957,7 @@ export function createServer(): Server {
 
       // Graph API mode - handle async operations directly
       if (useGraphApi && graphRepository != null) {
-        return await handleGraphToolCall(name, args, graphRepository, graphContentReaders!, orgTools!, sendTools!, schedulingTools!, rulesTools!, categoriesTools!, calendarPermissionsTools!, focusedOverridesTools!, teamsTools!, checklistItemsTools!, tokenManager);
+        return await handleGraphToolCall(name, args, graphRepository, graphContentReaders!, orgTools!, sendTools!, schedulingTools!, rulesTools!, categoriesTools!, calendarPermissionsTools!, focusedOverridesTools!, teamsTools!, checklistItemsTools!, linkedResourcesTools!, tokenManager);
       }
 
       // AppleScript mode - use sync tool interfaces
@@ -3971,6 +4032,7 @@ async function handleGraphToolCall(
   focusedOverridesTools: FocusedOverridesTools,
   teamsTools: TeamsTools,
   checklistItemsTools: ChecklistItemsTools,
+  linkedResourcesTools: LinkedResourcesTools,
   tokenManager: ApprovalTokenManager
 ): Promise<ToolResult> {
   // Handle mailbox organization tools (shared between backends)
@@ -5146,6 +5208,27 @@ async function handleGraphToolCall(
       case 'confirm_delete_checklist_item': {
         const params = ConfirmDeleteChecklistItemInput.parse(args);
         return await checklistItemsTools.confirmDeleteChecklistItem(params);
+      }
+
+      // Linked Resources tools
+      case 'list_linked_resources': {
+        const params = ListLinkedResourcesInput.parse(args);
+        return await linkedResourcesTools.listLinkedResources(params);
+      }
+
+      case 'create_linked_resource': {
+        const params = CreateLinkedResourceInput.parse(args);
+        return await linkedResourcesTools.createLinkedResource(params);
+      }
+
+      case 'prepare_delete_linked_resource': {
+        const params = PrepareDeleteLinkedResourceInput.parse(args);
+        return linkedResourcesTools.prepareDeleteLinkedResource(params);
+      }
+
+      case 'confirm_delete_linked_resource': {
+        const params = ConfirmDeleteLinkedResourceInput.parse(args);
+        return await linkedResourcesTools.confirmDeleteLinkedResource(params);
       }
 
       default:

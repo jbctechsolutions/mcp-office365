@@ -59,6 +59,7 @@ interface IdCache {
   chats: Map<number, string>;
   chatMessages: Map<number, { chatId: string; messageId: string }>;
   checklistItems: Map<number, { taskListId: string; taskId: string; checklistItemId: string }>;
+  linkedResources: Map<number, { taskListId: string; taskId: string; linkedResourceId: string }>;
 }
 
 /**
@@ -91,6 +92,7 @@ export class GraphRepository implements IRepository {
     chats: new Map(),
     chatMessages: new Map(),
     checklistItems: new Map(),
+    linkedResources: new Map(),
   };
 
   constructor(deviceCodeCallback?: DeviceCodeCallback) {
@@ -1791,6 +1793,46 @@ export class GraphRepository implements IRepository {
     if (cached == null) throw new Error(`Checklist item ID ${checklistItemId} not found in cache. Try listing checklist items first.`);
     await this.client.deleteChecklistItem(cached.taskListId, cached.taskId, cached.checklistItemId);
     this.idCache.checklistItems.delete(checklistItemId);
+  }
+
+  // ===========================================================================
+  // Linked Resources
+  // ===========================================================================
+
+  async listLinkedResourcesAsync(taskId: number): Promise<Array<{
+    id: number; webUrl: string; applicationName: string; displayName: string;
+  }>> {
+    const taskInfo = this.idCache.tasks.get(taskId);
+    if (taskInfo == null) throw new Error(`Task ID ${taskId} not found in cache. Try listing tasks first.`);
+    const items = await this.client.listLinkedResources(taskInfo.taskListId, taskInfo.taskId);
+    return items.map((item) => {
+      const graphId = item.id!;
+      const numericId = hashStringToNumber(graphId);
+      this.idCache.linkedResources.set(numericId, { taskListId: taskInfo.taskListId, taskId: taskInfo.taskId, linkedResourceId: graphId });
+      return {
+        id: numericId,
+        webUrl: item.webUrl ?? '',
+        applicationName: item.applicationName ?? '',
+        displayName: item.displayName ?? '',
+      };
+    });
+  }
+
+  async createLinkedResourceAsync(taskId: number, webUrl: string, applicationName: string, displayName?: string): Promise<number> {
+    const taskInfo = this.idCache.tasks.get(taskId);
+    if (taskInfo == null) throw new Error(`Task ID ${taskId} not found in cache. Try listing tasks first.`);
+    const item = await this.client.createLinkedResource(taskInfo.taskListId, taskInfo.taskId, webUrl, applicationName, displayName);
+    const graphId = item.id!;
+    const numericId = hashStringToNumber(graphId);
+    this.idCache.linkedResources.set(numericId, { taskListId: taskInfo.taskListId, taskId: taskInfo.taskId, linkedResourceId: graphId });
+    return numericId;
+  }
+
+  async deleteLinkedResourceAsync(linkedResourceId: number): Promise<void> {
+    const cached = this.idCache.linkedResources.get(linkedResourceId);
+    if (cached == null) throw new Error(`Linked resource ID ${linkedResourceId} not found in cache. Try listing linked resources first.`);
+    await this.client.deleteLinkedResource(cached.taskListId, cached.taskId, cached.linkedResourceId);
+    this.idCache.linkedResources.delete(linkedResourceId);
   }
 
   // ===========================================================================
