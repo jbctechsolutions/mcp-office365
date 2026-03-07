@@ -146,6 +146,8 @@ export {
   ConfirmForwardEmailInput,
   ReplyAsDraftInput,
   ForwardAsDraftInput,
+  AddDraftAttachmentInput,
+  AddDraftInlineImageInput,
   type IMailSendRepository,
   type CreateDraftResult,
   type CreateDraftParams,

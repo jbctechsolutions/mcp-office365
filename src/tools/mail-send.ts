@@ -73,10 +73,12 @@ export interface IMailSendRepository {
   }): Promise<void>;
   replyMessageAsync(messageId: number, comment: string, replyAll: boolean): Promise<void>;
   forwardMessageAsync(messageId: number, toRecipients: string[], comment?: string): Promise<void>;
-  replyAsDraftAsync(messageId: number, replyAll?: boolean, comment?: string): Promise<CreateDraftResult>;
-  forwardAsDraftAsync(messageId: number, toRecipients?: string[], comment?: string): Promise<CreateDraftResult>;
+  replyAsDraftAsync(messageId: number, replyAll?: boolean, comment?: string, bodyType?: string): Promise<CreateDraftResult>;
+  forwardAsDraftAsync(messageId: number, toRecipients?: string[], comment?: string, bodyType?: string): Promise<CreateDraftResult>;
   /** Returns the Graph client for direct API operations (e.g., attachment uploads). */
   getGraphClient(): GraphClient;
+  /** Returns the Graph string ID for a cached draft numeric ID. */
+  getGraphIdForDraft(draftId: number): string | undefined;
 }
 
 // =============================================================================
@@ -112,14 +114,33 @@ export const CreateDraftInput = z
     path: ['body'],
   });
 
-export const UpdateDraftInput = z.strictObject({
-  draft_id: z.number().int().positive().describe('The draft ID to update'),
-  to: z.array(z.string().email()).optional().describe('To recipients'),
-  cc: z.array(z.string().email()).optional().describe('CC recipients'),
-  bcc: z.array(z.string().email()).optional().describe('BCC recipients'),
-  subject: z.string().optional().describe('Email subject'),
-  body: z.string().optional().describe('Email body'),
-  body_type: z.enum(['text', 'html']).optional().describe('Body content type'),
+export const UpdateDraftInput = z
+  .strictObject({
+    draft_id: z.number().int().positive().describe('The draft ID to update'),
+    to: z.array(z.string().email()).optional().describe('To recipients'),
+    cc: z.array(z.string().email()).optional().describe('CC recipients'),
+    bcc: z.array(z.string().email()).optional().describe('BCC recipients'),
+    subject: z.string().optional().describe('Email subject'),
+    body: z.string().optional().describe('Email body (omit when using body_file)'),
+    body_file: z.string().optional().describe('Path to a file containing the email body (alternative to body)'),
+    body_type: z.enum(['text', 'html']).optional().describe('Body content type'),
+  })
+  .refine((data) => !(data.body != null && data.body_file != null), {
+    message: 'Cannot provide both body and body_file',
+    path: ['body'],
+  });
+
+export const AddDraftAttachmentInput = z.strictObject({
+  draft_id: z.number().int().positive().describe('The draft ID to add attachment to'),
+  file_path: z.string().describe('Absolute path to the file to attach'),
+  name: z.string().optional().describe('Override filename'),
+  content_type: z.string().optional().describe('Override MIME type'),
+});
+
+export const AddDraftInlineImageInput = z.strictObject({
+  draft_id: z.number().int().positive().describe('The draft ID to add inline image to'),
+  file_path: z.string().describe('Absolute path to the image file'),
+  content_id: z.string().describe('Content-ID for referencing in HTML (use in <img src="cid:content_id">)'),
 });
 
 export const ListDraftsInput = z.strictObject({
@@ -195,6 +216,7 @@ export const ReplyAsDraftInput = z.strictObject({
   message_id: z.number().int().positive().describe('The message ID to reply to'),
   comment: z.string().optional().describe('Initial reply body text'),
   reply_all: z.boolean().default(false).describe('Reply to all recipients (default: false)'),
+  body_type: z.enum(['text', 'html']).default('text').describe('Body content type (default: text)'),
   include_signature: z.boolean().default(true).describe('Include email signature (default: true)'),
 });
 
@@ -202,6 +224,7 @@ export const ForwardAsDraftInput = z.strictObject({
   message_id: z.number().int().positive().describe('The message ID to forward'),
   to_recipients: z.array(z.string().email()).optional().describe('Forward recipients'),
   comment: z.string().optional().describe('Initial forward body text'),
+  body_type: z.enum(['text', 'html']).default('text').describe('Body content type (default: text)'),
   include_signature: z.boolean().default(true).describe('Include email signature (default: true)'),
 });
 
@@ -349,11 +372,39 @@ export class MailSendTools {
     if (params.cc !== undefined) updates['cc'] = params.cc;
     if (params.bcc !== undefined) updates['bcc'] = params.bcc;
     if (params.subject !== undefined) updates['subject'] = params.subject;
-    if (params.body !== undefined) updates['body'] = params.body;
-    if (params.body_type !== undefined) updates['bodyType'] = params.body_type;
+
+    // Resolve body content from body or body_file
+    const bodyContent =
+      params.body_file != null
+        ? fs.readFileSync(params.body_file, 'utf-8')
+        : params.body;
+
+    // Format body as Graph API expects: { contentType, content }
+    if (bodyContent !== undefined) {
+      const contentType = params.body_type ?? 'text';
+      updates['body'] = { contentType, content: bodyContent };
+    } else if (params.body_type !== undefined) {
+      // body_type alone without body content — no body update
+    }
 
     await this.repository.updateDraftAsync(params.draft_id, updates);
     return { success: true, message: 'Draft updated.' };
+  }
+
+  async addDraftAttachment(params: z.infer<typeof AddDraftAttachmentInput>): Promise<{ success: boolean; message: string }> {
+    const graphId = this.repository.getGraphIdForDraft(params.draft_id);
+    if (graphId == null) throw new Error(`Draft ID ${params.draft_id} not found in cache. Try listing drafts first.`);
+    const graphClient = this.repository.getGraphClient();
+    await uploadAttachment(graphClient, graphId, params.file_path, params.name, params.content_type);
+    return { success: true, message: 'Attachment added to draft.' };
+  }
+
+  async addDraftInlineImage(params: z.infer<typeof AddDraftInlineImageInput>): Promise<{ success: boolean; message: string }> {
+    const graphId = this.repository.getGraphIdForDraft(params.draft_id);
+    if (graphId == null) throw new Error(`Draft ID ${params.draft_id} not found in cache. Try listing drafts first.`);
+    const graphClient = this.repository.getGraphClient();
+    await uploadInlineAttachment(graphClient, graphId, params.file_path, params.content_id);
+    return { success: true, message: 'Inline image added to draft.' };
   }
 
   async listDrafts(params: ListDraftsParams): Promise<EmailRow[]> {
@@ -603,14 +654,14 @@ export class MailSendTools {
     draft_id: number;
     message: string;
   }> {
-    // Reply comments are always plain text (no body_type field)
     const baseComment = params.comment ?? (params.include_signature ? '' : undefined);
     const comment =
-      baseComment != null ? appendSignature(baseComment, 'text', params.include_signature) : baseComment;
+      baseComment != null ? appendSignature(baseComment, params.body_type, params.include_signature) : baseComment;
     const { numericId } = await this.repository.replyAsDraftAsync(
       params.message_id,
       params.reply_all,
       comment,
+      params.body_type,
     );
     return {
       success: true,
@@ -624,14 +675,14 @@ export class MailSendTools {
     draft_id: number;
     message: string;
   }> {
-    // Forward comments are always plain text (no body_type field)
     const baseComment = params.comment ?? (params.include_signature ? '' : undefined);
     const comment =
-      baseComment != null ? appendSignature(baseComment, 'text', params.include_signature) : baseComment;
+      baseComment != null ? appendSignature(baseComment, params.body_type, params.include_signature) : baseComment;
     const { numericId } = await this.repository.forwardAsDraftAsync(
       params.message_id,
       params.to_recipients,
       comment,
+      params.body_type,
     );
     return {
       success: true,

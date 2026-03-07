@@ -612,6 +612,13 @@ export class GraphRepository implements IRepository {
   }
 
   /**
+   * Returns the Graph string ID for a cached draft numeric ID (satisfies IMailSendRepository).
+   */
+  getGraphIdForDraft(draftId: number): string | undefined {
+    return this.idCache.messages.get(draftId);
+  }
+
+  /**
    * Gets the Graph string ID from a numeric ID.
    */
   getGraphId(type: 'folder' | 'message' | 'event' | 'contact', numericId: number): string | undefined {

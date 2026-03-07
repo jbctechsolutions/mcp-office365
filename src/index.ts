@@ -122,6 +122,8 @@ import {
   ConfirmForwardEmailInput,
   ReplyAsDraftInput,
   ForwardAsDraftInput,
+  AddDraftAttachmentInput,
+  AddDraftInlineImageInput,
 } from './tools/index.js';
 import { ApprovalTokenManager, hashEventForApproval, hashContactForApproval, hashTaskForApproval } from './approval/index.js';
 import type { CreateEventResult } from './tools/index.js';
@@ -1410,6 +1412,33 @@ const TOOLS: Tool[] = [
     },
   },
   {
+    name: 'add_draft_attachment',
+    description: 'Add a file attachment to an existing draft (Graph API)',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        draft_id: { type: 'number', description: 'The draft ID' },
+        file_path: { type: 'string', description: 'Absolute path to the file' },
+        name: { type: 'string', description: 'Override filename (optional)' },
+        content_type: { type: 'string', description: 'Override MIME type (optional)' },
+      },
+      required: ['draft_id', 'file_path'],
+    },
+  },
+  {
+    name: 'add_draft_inline_image',
+    description: 'Add an inline image to an existing draft for use in HTML body (Graph API)',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        draft_id: { type: 'number', description: 'The draft ID' },
+        file_path: { type: 'string', description: 'Absolute path to the image file' },
+        content_id: { type: 'string', description: 'Content-ID (reference in HTML as <img src="cid:content_id">)' },
+      },
+      required: ['draft_id', 'file_path', 'content_id'],
+    },
+  },
+  {
     name: 'list_drafts',
     description: 'List all draft emails',
     inputSchema: {
@@ -2068,6 +2097,16 @@ async function handleSendToolCall(
     case 'update_draft': {
       const params = UpdateDraftInput.parse(args);
       const result = await sendTools.updateDraft(params);
+      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+    }
+    case 'add_draft_attachment': {
+      const params = AddDraftAttachmentInput.parse(args);
+      const result = await sendTools.addDraftAttachment(params);
+      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+    }
+    case 'add_draft_inline_image': {
+      const params = AddDraftInlineImageInput.parse(args);
+      const result = await sendTools.addDraftInlineImage(params);
       return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
     }
     case 'list_drafts': {

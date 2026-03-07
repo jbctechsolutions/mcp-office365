@@ -8,7 +8,7 @@ A [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) server that p
 
 ## Features
 
-- **74 tools** - Full read/write access to mail, calendar, contacts, and tasks
+- **76 tools** - Full read/write access to mail, calendar, contacts, and tasks
 - **Two backends** - AppleScript for classic Outlook, Microsoft Graph API for new Outlook
 - **Two-phase approval** - Destructive operations (delete, send) require explicit confirmation
 - **Works offline** - AppleScript backend requires no network (Graph API requires internet)
@@ -26,10 +26,12 @@ A [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) server that p
 - `get_email` - Get full email details including body
 - `get_unread_count` - Get unread email count
 
-**Mail - Sending & Drafts (14)** *(Graph API)*
+**Mail - Sending & Drafts (16)** *(Graph API)*
 - `send_email` - Send an email with attachments and HTML support
 - `create_draft` - Create a new draft email
 - `update_draft` - Update an existing draft
+- `add_draft_attachment` - Add a file attachment to an existing draft *(Graph API)*
+- `add_draft_inline_image` - Add an inline image to an existing draft *(Graph API)*
 - `list_drafts` - List all draft emails
 - `prepare_send_draft` / `confirm_send_draft` - Send a draft (two-phase)
 - `prepare_send_email` / `confirm_send_email` - Compose and send (two-phase)

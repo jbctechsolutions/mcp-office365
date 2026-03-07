@@ -102,6 +102,7 @@ function createMockRepository(): IMailSendRepository {
     replyAsDraftAsync: vi.fn(),
     forwardAsDraftAsync: vi.fn(),
     getGraphClient: vi.fn().mockReturnValue(mockGraphClient),
+    getGraphIdForDraft: vi.fn(),
   };
 }
 
@@ -273,7 +274,7 @@ describe('MailSendTools', () => {
   });
 
   describe('updateDraft', () => {
-    it('builds the correct updates object from non-undefined params', async () => {
+    it('formats body as Graph API object with default text contentType', async () => {
       (repo.updateDraftAsync as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
 
       const result = await tools.updateDraft({
@@ -285,7 +286,21 @@ describe('MailSendTools', () => {
       expect(result).toEqual({ success: true, message: 'Draft updated.' });
       expect(repo.updateDraftAsync).toHaveBeenCalledWith(5, {
         subject: 'Updated Subject',
-        body: 'Updated body',
+        body: { contentType: 'text', content: 'Updated body' },
+      });
+    });
+
+    it('formats body with html contentType when body_type is html', async () => {
+      (repo.updateDraftAsync as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
+
+      await tools.updateDraft({
+        draft_id: 5,
+        body: '<p>HTML body</p>',
+        body_type: 'html',
+      });
+
+      expect(repo.updateDraftAsync).toHaveBeenCalledWith(5, {
+        body: { contentType: 'html', content: '<p>HTML body</p>' },
       });
     });
 
@@ -302,7 +317,7 @@ describe('MailSendTools', () => {
       });
     });
 
-    it('includes body_type as bodyType in updates', async () => {
+    it('does not include body when only body_type is provided', async () => {
       (repo.updateDraftAsync as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
 
       await tools.updateDraft({
@@ -310,8 +325,22 @@ describe('MailSendTools', () => {
         body_type: 'html',
       });
 
+      expect(repo.updateDraftAsync).toHaveBeenCalledWith(5, {});
+    });
+
+    it('reads body from body_file when provided', async () => {
+      (repo.updateDraftAsync as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
+      mockReadFileSync.mockReturnValue('<div>File content</div>');
+
+      await tools.updateDraft({
+        draft_id: 5,
+        body_file: '/tmp/body.html',
+        body_type: 'html',
+      });
+
+      expect(mockReadFileSync).toHaveBeenCalledWith('/tmp/body.html', 'utf-8');
       expect(repo.updateDraftAsync).toHaveBeenCalledWith(5, {
-        bodyType: 'html',
+        body: { contentType: 'html', content: '<div>File content</div>' },
       });
     });
   });
@@ -325,6 +354,67 @@ describe('MailSendTools', () => {
 
       expect(result).toBe(drafts);
       expect(repo.listDraftsAsync).toHaveBeenCalledWith(50, 0);
+    });
+  });
+
+  // ===========================================================================
+  // Add Draft Attachment / Inline Image
+  // ===========================================================================
+
+  describe('addDraftAttachment', () => {
+    it('uploads attachment to draft using cached graph ID', async () => {
+      (repo.getGraphIdForDraft as ReturnType<typeof vi.fn>).mockReturnValue('AAA-graph-draft');
+      vi.mocked(uploadAttachment).mockResolvedValue(undefined);
+
+      const result = await tools.addDraftAttachment({
+        draft_id: 5,
+        file_path: '/tmp/report.pdf',
+        name: 'report.pdf',
+        content_type: 'application/pdf',
+      });
+
+      expect(result).toEqual({ success: true, message: 'Attachment added to draft.' });
+      expect(repo.getGraphIdForDraft).toHaveBeenCalledWith(5);
+      expect(uploadAttachment).toHaveBeenCalledWith(
+        mockGraphClient, 'AAA-graph-draft', '/tmp/report.pdf', 'report.pdf', 'application/pdf'
+      );
+    });
+
+    it('throws when draft not in cache', async () => {
+      (repo.getGraphIdForDraft as ReturnType<typeof vi.fn>).mockReturnValue(undefined);
+
+      await expect(tools.addDraftAttachment({
+        draft_id: 999,
+        file_path: '/tmp/file.txt',
+      })).rejects.toThrow('Draft ID 999 not found in cache');
+    });
+  });
+
+  describe('addDraftInlineImage', () => {
+    it('uploads inline image to draft using cached graph ID', async () => {
+      (repo.getGraphIdForDraft as ReturnType<typeof vi.fn>).mockReturnValue('AAA-graph-draft');
+      vi.mocked(uploadInlineAttachment).mockResolvedValue(undefined);
+
+      const result = await tools.addDraftInlineImage({
+        draft_id: 5,
+        file_path: '/tmp/logo.png',
+        content_id: 'logo',
+      });
+
+      expect(result).toEqual({ success: true, message: 'Inline image added to draft.' });
+      expect(uploadInlineAttachment).toHaveBeenCalledWith(
+        mockGraphClient, 'AAA-graph-draft', '/tmp/logo.png', 'logo'
+      );
+    });
+
+    it('throws when draft not in cache', async () => {
+      (repo.getGraphIdForDraft as ReturnType<typeof vi.fn>).mockReturnValue(undefined);
+
+      await expect(tools.addDraftInlineImage({
+        draft_id: 999,
+        file_path: '/tmp/img.png',
+        content_id: 'img1',
+      })).rejects.toThrow('Draft ID 999 not found in cache');
     });
   });
 
@@ -656,9 +746,10 @@ describe('MailSendTools', () => {
       const result = await tools.replyAsDraft({
         message_id: 42,
         reply_all: false,
+        body_type: 'text',
       });
 
-      expect(repo.replyAsDraftAsync).toHaveBeenCalledWith(42, false, undefined);
+      expect(repo.replyAsDraftAsync).toHaveBeenCalledWith(42, false, undefined, 'text');
       expect(result).toEqual({
         success: true,
         draft_id: 101,
@@ -666,7 +757,7 @@ describe('MailSendTools', () => {
       });
     });
 
-    it('passes comment and reply_all to repository', async () => {
+    it('passes comment, reply_all, and body_type to repository', async () => {
       (repo.replyAsDraftAsync as ReturnType<typeof vi.fn>).mockResolvedValue({
         numericId: 102,
         graphId: 'draft-ra-graph-102',
@@ -676,9 +767,28 @@ describe('MailSendTools', () => {
         message_id: 42,
         comment: 'Thanks!',
         reply_all: true,
+        body_type: 'text',
       });
 
-      expect(repo.replyAsDraftAsync).toHaveBeenCalledWith(42, true, 'Thanks!');
+      expect(repo.replyAsDraftAsync).toHaveBeenCalledWith(42, true, 'Thanks!', 'text');
+    });
+
+    it('passes html body_type through to repository', async () => {
+      (repo.replyAsDraftAsync as ReturnType<typeof vi.fn>).mockResolvedValue({
+        numericId: 103,
+        graphId: 'draft-ra-graph-103',
+      });
+
+      await tools.replyAsDraft({
+        message_id: 42,
+        comment: '<p>HTML reply</p>',
+        reply_all: false,
+        body_type: 'html',
+        include_signature: true,
+      });
+
+      expect(appendSignature).toHaveBeenCalledWith('<p>HTML reply</p>', 'html', true);
+      expect(repo.replyAsDraftAsync).toHaveBeenCalledWith(42, false, '<p>HTML reply</p>', 'html');
     });
   });
 
@@ -691,9 +801,10 @@ describe('MailSendTools', () => {
 
       const result = await tools.forwardAsDraft({
         message_id: 42,
+        body_type: 'text',
       });
 
-      expect(repo.forwardAsDraftAsync).toHaveBeenCalledWith(42, undefined, undefined);
+      expect(repo.forwardAsDraftAsync).toHaveBeenCalledWith(42, undefined, undefined, 'text');
       expect(result).toEqual({
         success: true,
         draft_id: 201,
@@ -701,7 +812,7 @@ describe('MailSendTools', () => {
       });
     });
 
-    it('passes recipients and comment to repository', async () => {
+    it('passes recipients, comment, and body_type to repository', async () => {
       (repo.forwardAsDraftAsync as ReturnType<typeof vi.fn>).mockResolvedValue({
         numericId: 202,
         graphId: 'draft-fwd-graph-202',
@@ -711,12 +822,36 @@ describe('MailSendTools', () => {
         message_id: 42,
         to_recipients: ['alice@example.com'],
         comment: 'FYI',
+        body_type: 'text',
       });
 
       expect(repo.forwardAsDraftAsync).toHaveBeenCalledWith(
         42,
         ['alice@example.com'],
-        'FYI'
+        'FYI',
+        'text'
+      );
+    });
+
+    it('passes html body_type through to repository', async () => {
+      (repo.forwardAsDraftAsync as ReturnType<typeof vi.fn>).mockResolvedValue({
+        numericId: 203,
+        graphId: 'draft-fwd-graph-203',
+      });
+
+      await tools.forwardAsDraft({
+        message_id: 42,
+        comment: '<p>Please review</p>',
+        body_type: 'html',
+        include_signature: true,
+      });
+
+      expect(appendSignature).toHaveBeenCalledWith('<p>Please review</p>', 'html', true);
+      expect(repo.forwardAsDraftAsync).toHaveBeenCalledWith(
+        42,
+        undefined,
+        '<p>Please review</p>',
+        'html'
       );
     });
   });
@@ -912,22 +1047,22 @@ describe('MailSendTools', () => {
       expect(appendSignature).toHaveBeenCalledWith('Hi', 'html', true);
     });
 
-    it('appends signature in replyAsDraft', async () => {
+    it('appends signature in replyAsDraft with body_type', async () => {
       vi.mocked(appendSignature).mockReturnValue('reply text with sig');
       (repo.replyAsDraftAsync as ReturnType<typeof vi.fn>).mockResolvedValue({ numericId: 10, graphId: 'BBB' });
 
-      await tools.replyAsDraft({ message_id: 1, comment: 'reply text', include_signature: true });
+      await tools.replyAsDraft({ message_id: 1, comment: 'reply text', body_type: 'html', include_signature: true });
 
-      expect(appendSignature).toHaveBeenCalledWith('reply text', 'text', true);
+      expect(appendSignature).toHaveBeenCalledWith('reply text', 'html', true);
     });
 
-    it('appends signature in forwardAsDraft', async () => {
+    it('appends signature in forwardAsDraft with body_type', async () => {
       vi.mocked(appendSignature).mockReturnValue('fwd comment with sig');
       (repo.forwardAsDraftAsync as ReturnType<typeof vi.fn>).mockResolvedValue({ numericId: 11, graphId: 'CCC' });
 
-      await tools.forwardAsDraft({ message_id: 1, comment: 'fwd comment', include_signature: true });
+      await tools.forwardAsDraft({ message_id: 1, comment: 'fwd comment', body_type: 'html', include_signature: true });
 
-      expect(appendSignature).toHaveBeenCalledWith('fwd comment', 'text', true);
+      expect(appendSignature).toHaveBeenCalledWith('fwd comment', 'html', true);
     });
   });
 
