@@ -51,6 +51,8 @@ interface IdCache {
   categories: Map<number, string>;
   focusedOverrides: Map<number, string>;
   calendarGroups: Map<number, string>;
+  calendars: Map<number, string>;
+  calendarPermissions: Map<number, { calendarId: string; permissionId: string }>;
 }
 
 /**
@@ -75,6 +77,8 @@ export class GraphRepository implements IRepository {
     categories: new Map(),
     focusedOverrides: new Map(),
     calendarGroups: new Map(),
+    calendars: new Map(),
+    calendarPermissions: new Map(),
   };
 
   constructor(deviceCodeCallback?: DeviceCodeCallback) {
@@ -455,6 +459,7 @@ export class GraphRepository implements IRepository {
       if (calendar.id != null) {
         const numericId = hashStringToNumber(calendar.id);
         this.idCache.folders.set(numericId, calendar.id);
+        this.idCache.calendars.set(numericId, calendar.id);
       }
     }
 
@@ -2015,6 +2020,70 @@ export class GraphRepository implements IRepository {
     const numericId = hashStringToNumber(graphId);
     this.idCache.calendarGroups.set(numericId, graphId);
     return numericId;
+  }
+
+  // ===========================================================================
+  // Calendar Permissions
+  // ===========================================================================
+
+  /**
+   * Lists all permissions for a calendar.
+   */
+  async listCalendarPermissionsAsync(calendarId: number): Promise<Array<{ id: number; emailAddress: string; role: string; isRemovable: boolean; isInsideOrganization: boolean }>> {
+    const graphCalendarId = this.idCache.calendars.get(calendarId);
+    if (graphCalendarId == null) {
+      throw new Error(`Calendar ID ${calendarId} not found in cache. Please call list_calendars first.`);
+    }
+
+    const permissions = await this.client.listCalendarPermissions(graphCalendarId);
+    return permissions.map((perm) => {
+      const graphPermId = perm.id!;
+      const numericId = hashStringToNumber(graphPermId);
+      this.idCache.calendarPermissions.set(numericId, { calendarId: graphCalendarId, permissionId: graphPermId });
+      return {
+        id: numericId,
+        emailAddress: perm.emailAddress?.address ?? '',
+        role: perm.role ?? 'none',
+        isRemovable: perm.isRemovable ?? false,
+        isInsideOrganization: perm.isInsideOrganization ?? false,
+      };
+    });
+  }
+
+  /**
+   * Creates a calendar permission (shares a calendar with someone).
+   */
+  async createCalendarPermissionAsync(calendarId: number, email: string, role: string): Promise<number> {
+    const graphCalendarId = this.idCache.calendars.get(calendarId);
+    if (graphCalendarId == null) {
+      throw new Error(`Calendar ID ${calendarId} not found in cache. Please call list_calendars first.`);
+    }
+
+    const permission = await this.client.createCalendarPermission(graphCalendarId, {
+      emailAddress: {
+        address: email,
+        name: email,
+      },
+      role,
+    });
+
+    const graphPermId = permission.id!;
+    const numericId = hashStringToNumber(graphPermId);
+    this.idCache.calendarPermissions.set(numericId, { calendarId: graphCalendarId, permissionId: graphPermId });
+    return numericId;
+  }
+
+  /**
+   * Deletes a calendar permission.
+   */
+  async deleteCalendarPermissionAsync(permissionId: number): Promise<void> {
+    const cached = this.idCache.calendarPermissions.get(permissionId);
+    if (cached == null) {
+      throw new Error(`Calendar permission ID ${permissionId} not found in cache. Please call list_calendar_permissions first.`);
+    }
+
+    await this.client.deleteCalendarPermission(cached.calendarId, cached.permissionId);
+    this.idCache.calendarPermissions.delete(permissionId);
   }
 
   /**

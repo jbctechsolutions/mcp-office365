@@ -197,6 +197,20 @@ export {
   type ConfirmDeleteCategoryParams,
 } from './categories.js';
 
+// Calendar permissions tools
+export {
+  CalendarPermissionsTools,
+  ListCalendarPermissionsInput,
+  CreateCalendarPermissionInput,
+  PrepareDeleteCalendarPermissionInput,
+  ConfirmDeleteCalendarPermissionInput,
+  type ICalendarPermissionsRepository,
+  type ListCalendarPermissionsParams,
+  type CreateCalendarPermissionParams,
+  type PrepareDeleteCalendarPermissionParams,
+  type ConfirmDeleteCalendarPermissionParams,
+} from './calendar-permissions.js';
+
 // Focused overrides tools
 export {
   FocusedOverridesTools,

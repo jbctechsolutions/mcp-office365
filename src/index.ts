@@ -76,6 +76,13 @@ import {
   ConfirmDeleteCategoryInput,
 } from './tools/categories.js';
 import {
+  CalendarPermissionsTools,
+  ListCalendarPermissionsInput,
+  CreateCalendarPermissionInput,
+  PrepareDeleteCalendarPermissionInput,
+  ConfirmDeleteCalendarPermissionInput,
+} from './tools/calendar-permissions.js';
+import {
   FocusedOverridesTools,
   CreateFocusedOverrideInput,
   PrepareDeleteFocusedOverrideInput,
@@ -2271,6 +2278,53 @@ const TOOLS: Tool[] = [
       required: ['name'],
     },
   },
+  // Calendar Permission tools
+  {
+    name: 'list_calendar_permissions',
+    description: 'List all sharing permissions for a calendar (Graph API)',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        calendar_id: { type: 'number', description: 'Calendar ID' },
+      },
+      required: ['calendar_id'],
+    },
+  },
+  {
+    name: 'create_calendar_permission',
+    description: 'Share a calendar with someone by creating a permission (Graph API)',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        calendar_id: { type: 'number', description: 'Calendar ID' },
+        email_address: { type: 'string', description: 'Email of person to share with' },
+        role: { type: 'string', enum: ['read', 'write', 'delegateWithoutPrivateEventAccess', 'delegateWithPrivateEventAccess'], description: 'Permission level' },
+      },
+      required: ['calendar_id', 'email_address', 'role'],
+    },
+  },
+  {
+    name: 'prepare_delete_calendar_permission',
+    description: 'Prepare to delete a calendar sharing permission. Returns a preview and approval token. Call confirm_delete_calendar_permission to execute. (Graph API)',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        permission_id: { type: 'number', description: 'Calendar permission ID to delete' },
+      },
+      required: ['permission_id'],
+    },
+  },
+  {
+    name: 'confirm_delete_calendar_permission',
+    description: 'Confirm calendar permission deletion with approval token (Graph API)',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        approval_token: { type: 'string', description: 'The approval token from prepare_delete_calendar_permission' },
+      },
+      required: ['approval_token'],
+    },
+  },
 ];
 
 // =============================================================================
@@ -2312,6 +2366,7 @@ export function createServer(): Server {
   let schedulingTools: ReturnType<typeof createSchedulingTools> | null = null;
   let rulesTools: MailRulesTools | null = null;
   let categoriesTools: CategoriesTools | null = null;
+  let calendarPermissionsTools: CalendarPermissionsTools | null = null;
   let focusedOverridesTools: FocusedOverridesTools | null = null;
   let calendarWriter: ICalendarWriter | null = null;
   let calendarManager: ICalendarManager | null = null;
@@ -2366,6 +2421,7 @@ export function createServer(): Server {
     schedulingTools = createSchedulingTools(graphRepository);
     rulesTools = new MailRulesTools(graphRepository, tokenManager);
     categoriesTools = new CategoriesTools(graphRepository, tokenManager);
+    calendarPermissionsTools = new CalendarPermissionsTools(graphRepository, tokenManager);
     focusedOverridesTools = new FocusedOverridesTools(graphRepository, tokenManager);
 
     initialized = true;
@@ -2425,6 +2481,10 @@ export function createServer(): Server {
     'get_message_mime',
     'list_calendar_groups',
     'create_calendar_group',
+    'list_calendar_permissions',
+    'create_calendar_permission',
+    'prepare_delete_calendar_permission',
+    'confirm_delete_calendar_permission',
   ]);
 
   // Register tool list handler
@@ -2442,7 +2502,7 @@ export function createServer(): Server {
 
       // Graph API mode - handle async operations directly
       if (useGraphApi && graphRepository != null) {
-        return await handleGraphToolCall(name, args, graphRepository, graphContentReaders!, orgTools!, sendTools!, schedulingTools!, rulesTools!, categoriesTools!, focusedOverridesTools!, tokenManager);
+        return await handleGraphToolCall(name, args, graphRepository, graphContentReaders!, orgTools!, sendTools!, schedulingTools!, rulesTools!, categoriesTools!, calendarPermissionsTools!, focusedOverridesTools!, tokenManager);
       }
 
       // AppleScript mode - use sync tool interfaces
@@ -3505,6 +3565,7 @@ async function handleGraphToolCall(
   schedulingTools: ReturnType<typeof createSchedulingTools>,
   rulesTools: MailRulesTools,
   categoriesTools: CategoriesTools,
+  calendarPermissionsTools: CalendarPermissionsTools,
   focusedOverridesTools: FocusedOverridesTools,
   tokenManager: ApprovalTokenManager
 ): Promise<ToolResult> {
@@ -4514,6 +4575,27 @@ async function handleGraphToolCall(
         const params = CreateCalendarGroupInput.parse(args);
         const groupId = await repository.createCalendarGroupAsync(params.name);
         return { content: [{ type: 'text', text: JSON.stringify({ success: true, calendar_group_id: groupId, message: 'Calendar group created' }, null, 2) }] };
+      }
+
+      // Calendar permission tools
+      case 'list_calendar_permissions': {
+        const params = ListCalendarPermissionsInput.parse(args);
+        return await calendarPermissionsTools!.listCalendarPermissions(params);
+      }
+
+      case 'create_calendar_permission': {
+        const params = CreateCalendarPermissionInput.parse(args);
+        return await calendarPermissionsTools!.createCalendarPermission(params);
+      }
+
+      case 'prepare_delete_calendar_permission': {
+        const params = PrepareDeleteCalendarPermissionInput.parse(args);
+        return calendarPermissionsTools!.prepareDeleteCalendarPermission(params);
+      }
+
+      case 'confirm_delete_calendar_permission': {
+        const params = ConfirmDeleteCalendarPermissionInput.parse(args);
+        return await calendarPermissionsTools!.confirmDeleteCalendarPermission(params);
       }
 
       default:

@@ -1418,6 +1418,38 @@ export class GraphClient {
   }
 
   // ===========================================================================
+  // Calendar Permissions
+  // ===========================================================================
+
+  /**
+   * Lists all permissions for a calendar.
+   */
+  async listCalendarPermissions(calendarId: string): Promise<MicrosoftGraph.CalendarPermission[]> {
+    const client = await this.getClient();
+    const response = await client.api(`/me/calendars/${calendarId}/calendarPermissions`).get() as PageCollection;
+    return response.value as MicrosoftGraph.CalendarPermission[];
+  }
+
+  /**
+   * Creates a calendar permission (shares a calendar).
+   */
+  async createCalendarPermission(calendarId: string, permission: Record<string, unknown>): Promise<MicrosoftGraph.CalendarPermission> {
+    const client = await this.getClient();
+    const result = await client.api(`/me/calendars/${calendarId}/calendarPermissions`).post(permission) as MicrosoftGraph.CalendarPermission;
+    this.cache.clear();
+    return result;
+  }
+
+  /**
+   * Deletes a calendar permission.
+   */
+  async deleteCalendarPermission(calendarId: string, permissionId: string): Promise<void> {
+    const client = await this.getClient();
+    await client.api(`/me/calendars/${calendarId}/calendarPermissions/${permissionId}`).delete();
+    this.cache.clear();
+  }
+
+  // ===========================================================================
   // Mail Tips
   // ===========================================================================
 

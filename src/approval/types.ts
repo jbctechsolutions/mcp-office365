@@ -37,12 +37,13 @@ export type OperationType =
   | 'delete_task_list'
   | 'delete_contact_folder'
   | 'delete_category'
-  | 'delete_focused_override';
+  | 'delete_focused_override'
+  | 'delete_calendar_permission';
 
 /**
  * Target resource types.
  */
-export type TargetType = 'email' | 'folder' | 'event' | 'contact' | 'task' | 'task_list' | 'rule' | 'contact_folder' | 'category' | 'focused_override';
+export type TargetType = 'email' | 'folder' | 'event' | 'contact' | 'task' | 'task_list' | 'rule' | 'contact_folder' | 'category' | 'focused_override' | 'calendar_permission';
 
 // =============================================================================
 // Token Types
