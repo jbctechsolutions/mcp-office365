@@ -93,8 +93,8 @@ A [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) server that p
 - `list_tasks` - List tasks with completion filtering
 - `get_task` - Get task details
 - `search_tasks` - Search tasks by name
-- `create_task` - Create a new task *(Graph API)*
-- `update_task` - Update task details *(Graph API)*
+- `create_task` - Create a new task with optional recurrence *(Graph API)*
+- `update_task` - Update task details with optional recurrence *(Graph API)*
 - `complete_task` - Mark a task as complete *(Graph API)*
 - `create_task_list` - Create a new task list *(Graph API)*
 - `rename_task_list` - Rename a task list *(Graph API)*

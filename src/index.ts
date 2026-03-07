@@ -841,7 +841,7 @@ const TOOLS: Tool[] = [
   },
   {
     name: 'create_task',
-    description: 'Create a new task in a task list',
+    description: 'Create a new task in a task list. Supports optional recurrence settings for repeating tasks.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -852,13 +852,28 @@ const TOOLS: Tool[] = [
         due_date: { type: 'string', description: 'Due date (ISO 8601 format)' },
         importance: { type: 'string', enum: ['low', 'normal', 'high'], description: 'Task importance' },
         reminder_date: { type: 'string', description: 'Reminder date (ISO 8601 format)' },
+        recurrence: {
+          type: 'object',
+          description: 'Task recurrence settings',
+          properties: {
+            pattern: { type: 'string', enum: ['daily', 'weekly', 'monthly', 'yearly'], description: 'Recurrence pattern type' },
+            interval: { type: 'number', default: 1, description: 'Interval between occurrences' },
+            days_of_week: { type: 'array', items: { type: 'string', enum: ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'] }, description: 'Days of week (for weekly pattern)' },
+            day_of_month: { type: 'number', description: 'Day of month (for monthly pattern)' },
+            range_type: { type: 'string', enum: ['endDate', 'noEnd', 'numbered'], description: 'How the recurrence ends' },
+            start_date: { type: 'string', description: 'Start date (YYYY-MM-DD)' },
+            end_date: { type: 'string', description: 'End date (YYYY-MM-DD, for endDate range)' },
+            occurrences: { type: 'number', description: 'Number of occurrences (for numbered range)' },
+          },
+          required: ['pattern', 'range_type', 'start_date'],
+        },
       },
       required: ['title', 'task_list_id'],
     },
   },
   {
     name: 'update_task',
-    description: 'Update an existing task. Only specified fields will be updated.',
+    description: 'Update an existing task. Only specified fields will be updated. Supports optional recurrence settings for repeating tasks.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -870,6 +885,21 @@ const TOOLS: Tool[] = [
         importance: { type: 'string', enum: ['low', 'normal', 'high'], description: 'Task importance' },
         reminder_date: { type: 'string', description: 'Reminder date (ISO 8601 format)' },
         status: { type: 'string', enum: ['notStarted', 'inProgress', 'completed', 'waitingOnOthers', 'deferred'], description: 'Task status' },
+        recurrence: {
+          type: 'object',
+          description: 'Task recurrence settings',
+          properties: {
+            pattern: { type: 'string', enum: ['daily', 'weekly', 'monthly', 'yearly'], description: 'Recurrence pattern type' },
+            interval: { type: 'number', default: 1, description: 'Interval between occurrences' },
+            days_of_week: { type: 'array', items: { type: 'string', enum: ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'] }, description: 'Days of week (for weekly pattern)' },
+            day_of_month: { type: 'number', description: 'Day of month (for monthly pattern)' },
+            range_type: { type: 'string', enum: ['endDate', 'noEnd', 'numbered'], description: 'How the recurrence ends' },
+            start_date: { type: 'string', description: 'Start date (YYYY-MM-DD)' },
+            end_date: { type: 'string', description: 'End date (YYYY-MM-DD, for endDate range)' },
+            occurrences: { type: 'number', description: 'Number of occurrences (for numbered range)' },
+          },
+          required: ['pattern', 'range_type', 'start_date'],
+        },
       },
       required: ['task_id'],
     },
@@ -2975,6 +3005,17 @@ const ConfirmDeleteContactInput = z.strictObject({
 // Task Write — Zod Schemas (Graph API)
 // =============================================================================
 
+const RecurrenceSchema = z.strictObject({
+  pattern: z.enum(['daily', 'weekly', 'monthly', 'yearly']).describe('Recurrence pattern type'),
+  interval: z.number().int().min(1).default(1).describe('Interval between occurrences'),
+  days_of_week: z.array(z.enum(['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'])).optional().describe('Days of week (for weekly pattern)'),
+  day_of_month: z.number().int().min(1).max(31).optional().describe('Day of month (for monthly pattern)'),
+  range_type: z.enum(['endDate', 'noEnd', 'numbered']).describe('How the recurrence ends'),
+  start_date: z.string().describe('Start date (YYYY-MM-DD)'),
+  end_date: z.string().optional().describe('End date (YYYY-MM-DD, for endDate range)'),
+  occurrences: z.number().int().min(1).optional().describe('Number of occurrences (for numbered range)'),
+}).optional().describe('Task recurrence settings');
+
 const CreateTaskGraphInput = z.strictObject({
   title: z.string().min(1),
   task_list_id: z.number().int().positive(),
@@ -2983,6 +3024,7 @@ const CreateTaskGraphInput = z.strictObject({
   due_date: z.string().optional(),
   importance: z.enum(['low', 'normal', 'high']).optional(),
   reminder_date: z.string().optional(),
+  recurrence: RecurrenceSchema,
 });
 
 const UpdateTaskGraphInput = z.strictObject({
@@ -2994,6 +3036,7 @@ const UpdateTaskGraphInput = z.strictObject({
   importance: z.enum(['low', 'normal', 'high']).optional(),
   reminder_date: z.string().optional(),
   status: z.enum(['notStarted', 'inProgress', 'completed', 'waitingOnOthers', 'deferred']).optional(),
+  recurrence: RecurrenceSchema,
 });
 
 const CompleteTaskGraphInput = z.strictObject({
@@ -3602,6 +3645,7 @@ async function handleGraphToolCall(
           ...(params.due_date != null ? { due_date: params.due_date } : {}),
           ...(params.importance != null ? { importance: params.importance } : {}),
           ...(params.reminder_date != null ? { reminder_date: params.reminder_date } : {}),
+          ...(params.recurrence != null ? { recurrence: params.recurrence } : {}),
         });
         const result = {
           id: numericId,
@@ -3637,6 +3681,22 @@ async function handleGraphToolCall(
           };
         }
         if (params.status != null) updates.status = params.status;
+        if (params.recurrence != null) {
+          updates.recurrence = {
+            pattern: {
+              type: params.recurrence.pattern,
+              interval: params.recurrence.interval ?? 1,
+              ...(params.recurrence.days_of_week != null ? { daysOfWeek: params.recurrence.days_of_week } : {}),
+              ...(params.recurrence.day_of_month != null ? { dayOfMonth: params.recurrence.day_of_month } : {}),
+            },
+            range: {
+              type: params.recurrence.range_type,
+              startDate: params.recurrence.start_date,
+              ...(params.recurrence.end_date != null ? { endDate: params.recurrence.end_date } : {}),
+              ...(params.recurrence.occurrences != null ? { numberOfOccurrences: params.recurrence.occurrences } : {}),
+            },
+          };
+        }
         await repository.updateTaskAsync(params.task_id, updates);
         return {
           content: [{ type: 'text', text: `Successfully updated task ${params.task_id}` }],

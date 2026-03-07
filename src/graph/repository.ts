@@ -1478,6 +1478,16 @@ export class GraphRepository implements IRepository {
     due_date?: string;
     importance?: 'low' | 'normal' | 'high';
     reminder_date?: string;
+    recurrence?: {
+      pattern: 'daily' | 'weekly' | 'monthly' | 'yearly';
+      interval?: number | undefined;
+      days_of_week?: string[] | undefined;
+      day_of_month?: number | undefined;
+      range_type: 'endDate' | 'noEnd' | 'numbered';
+      start_date: string;
+      end_date?: string | undefined;
+      occurrences?: number | undefined;
+    } | undefined;
   }): Promise<number> {
     const graphListId = this.idCache.taskLists.get(params.task_list_id);
     if (graphListId == null) throw new Error(`Task list ID ${params.task_list_id} not found in cache. Try searching for or listing the item first to refresh the cache.`);
@@ -1509,6 +1519,23 @@ export class GraphRepository implements IRepository {
       graphTask.reminderDateTime = {
         dateTime: params.reminder_date,
         timeZone: 'UTC',
+      };
+    }
+
+    if (params.recurrence != null) {
+      (graphTask as any).recurrence = {
+        pattern: {
+          type: params.recurrence.pattern,
+          interval: params.recurrence.interval ?? 1,
+          ...(params.recurrence.days_of_week != null ? { daysOfWeek: params.recurrence.days_of_week } : {}),
+          ...(params.recurrence.day_of_month != null ? { dayOfMonth: params.recurrence.day_of_month } : {}),
+        },
+        range: {
+          type: params.recurrence.range_type,
+          startDate: params.recurrence.start_date,
+          ...(params.recurrence.end_date != null ? { endDate: params.recurrence.end_date } : {}),
+          ...(params.recurrence.occurrences != null ? { numberOfOccurrences: params.recurrence.occurrences } : {}),
+        },
       };
     }
 

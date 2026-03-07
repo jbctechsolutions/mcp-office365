@@ -2489,6 +2489,148 @@ describe('graph/repository', () => {
         });
       });
 
+      it('creates a task with daily recurrence (noEnd)', async () => {
+        mockClient.listAllTasks.mockResolvedValue([
+          { id: 'task-existing', taskListId: 'list-1', title: 'Existing' },
+        ]);
+        await repository.listTasksAsync(50, 0);
+
+        mockClient.createTask.mockResolvedValue({
+          id: 'task-recur-1',
+          title: 'Daily Task',
+        });
+
+        const listNumericId = hashStringToNumber('list-1');
+        await repository.createTaskAsync({
+          title: 'Daily Task',
+          task_list_id: listNumericId,
+          recurrence: {
+            pattern: 'daily',
+            interval: 1,
+            range_type: 'noEnd',
+            start_date: '2026-03-01',
+          },
+        });
+
+        expect(mockClient.createTask).toHaveBeenCalledWith('list-1', {
+          title: 'Daily Task',
+          recurrence: {
+            pattern: {
+              type: 'daily',
+              interval: 1,
+            },
+            range: {
+              type: 'noEnd',
+              startDate: '2026-03-01',
+            },
+          },
+        });
+      });
+
+      it('creates a task with weekly recurrence and days_of_week', async () => {
+        mockClient.listAllTasks.mockResolvedValue([
+          { id: 'task-existing', taskListId: 'list-1', title: 'Existing' },
+        ]);
+        await repository.listTasksAsync(50, 0);
+
+        mockClient.createTask.mockResolvedValue({
+          id: 'task-recur-2',
+          title: 'Weekly Task',
+        });
+
+        const listNumericId = hashStringToNumber('list-1');
+        await repository.createTaskAsync({
+          title: 'Weekly Task',
+          task_list_id: listNumericId,
+          recurrence: {
+            pattern: 'weekly',
+            interval: 2,
+            days_of_week: ['monday', 'wednesday', 'friday'],
+            range_type: 'endDate',
+            start_date: '2026-03-01',
+            end_date: '2026-06-01',
+          },
+        });
+
+        expect(mockClient.createTask).toHaveBeenCalledWith('list-1', {
+          title: 'Weekly Task',
+          recurrence: {
+            pattern: {
+              type: 'weekly',
+              interval: 2,
+              daysOfWeek: ['monday', 'wednesday', 'friday'],
+            },
+            range: {
+              type: 'endDate',
+              startDate: '2026-03-01',
+              endDate: '2026-06-01',
+            },
+          },
+        });
+      });
+
+      it('creates a task with monthly recurrence and day_of_month', async () => {
+        mockClient.listAllTasks.mockResolvedValue([
+          { id: 'task-existing', taskListId: 'list-1', title: 'Existing' },
+        ]);
+        await repository.listTasksAsync(50, 0);
+
+        mockClient.createTask.mockResolvedValue({
+          id: 'task-recur-3',
+          title: 'Monthly Task',
+        });
+
+        const listNumericId = hashStringToNumber('list-1');
+        await repository.createTaskAsync({
+          title: 'Monthly Task',
+          task_list_id: listNumericId,
+          recurrence: {
+            pattern: 'monthly',
+            day_of_month: 15,
+            range_type: 'numbered',
+            start_date: '2026-03-01',
+            occurrences: 12,
+          },
+        });
+
+        expect(mockClient.createTask).toHaveBeenCalledWith('list-1', {
+          title: 'Monthly Task',
+          recurrence: {
+            pattern: {
+              type: 'monthly',
+              interval: 1,
+              dayOfMonth: 15,
+            },
+            range: {
+              type: 'numbered',
+              startDate: '2026-03-01',
+              numberOfOccurrences: 12,
+            },
+          },
+        });
+      });
+
+      it('creates a task without recurrence — no recurrence field in graph object', async () => {
+        mockClient.listAllTasks.mockResolvedValue([
+          { id: 'task-existing', taskListId: 'list-1', title: 'Existing' },
+        ]);
+        await repository.listTasksAsync(50, 0);
+
+        mockClient.createTask.mockResolvedValue({
+          id: 'task-no-recur',
+          title: 'No Recurrence',
+        });
+
+        const listNumericId = hashStringToNumber('list-1');
+        await repository.createTaskAsync({
+          title: 'No Recurrence',
+          task_list_id: listNumericId,
+        });
+
+        const callArgs = mockClient.createTask.mock.calls[0][1];
+        expect(callArgs).not.toHaveProperty('recurrence');
+      });
+
       it('throws when task list ID not in cache', async () => {
         await expect(
           repository.createTaskAsync({
@@ -2515,6 +2657,41 @@ describe('graph/repository', () => {
 
         expect(mockClient.updateTask).toHaveBeenCalledWith('list-1', 'task-1', {
           title: 'New Title',
+        });
+      });
+
+      it('passes recurrence updates through to client.updateTask', async () => {
+        mockClient.listAllTasks.mockResolvedValue([
+          { id: 'task-1', taskListId: 'list-1', title: 'Old Title' },
+        ]);
+        await repository.listTasksAsync(50, 0);
+
+        mockClient.updateTask.mockResolvedValue(undefined);
+
+        await repository.updateTaskAsync(hashStringToNumber('task-1'), {
+          recurrence: {
+            pattern: {
+              type: 'yearly',
+              interval: 1,
+            },
+            range: {
+              type: 'noEnd',
+              startDate: '2026-01-01',
+            },
+          },
+        });
+
+        expect(mockClient.updateTask).toHaveBeenCalledWith('list-1', 'task-1', {
+          recurrence: {
+            pattern: {
+              type: 'yearly',
+              interval: 1,
+            },
+            range: {
+              type: 'noEnd',
+              startDate: '2026-01-01',
+            },
+          },
         });
       });
 
