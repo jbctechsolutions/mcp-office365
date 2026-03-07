@@ -808,7 +808,7 @@ describe('graph/repository', () => {
 
       it('throws when message ID not in cache', async () => {
         await expect(repository.moveEmailAsync(99999, 88888)).rejects.toThrow(
-          'Message ID 99999 not found in cache'
+          'Message ID 99999 not found in cache. Try searching for or listing the item first to refresh the cache.'
         );
       });
 
@@ -821,7 +821,7 @@ describe('graph/repository', () => {
 
         await expect(
           repository.moveEmailAsync(hashStringToNumber('msg-1'), 99999)
-        ).rejects.toThrow('Folder ID 99999 not found in cache');
+        ).rejects.toThrow('Folder ID 99999 not found in cache. Try searching for or listing the item first to refresh the cache.');
       });
     });
 
@@ -841,7 +841,7 @@ describe('graph/repository', () => {
 
       it('throws when message ID not in cache', async () => {
         await expect(repository.deleteEmailAsync(99999)).rejects.toThrow(
-          'Message ID 99999 not found in cache'
+          'Message ID 99999 not found in cache. Try searching for or listing the item first to refresh the cache.'
         );
       });
     });
@@ -949,7 +949,7 @@ describe('graph/repository', () => {
       it('throws when draft ID not in cache', async () => {
         await expect(
           repository.updateDraftAsync(99999, { subject: 'New' })
-        ).rejects.toThrow('Message ID 99999 not found in cache');
+        ).rejects.toThrow('Message ID 99999 not found in cache. Try searching for or listing the item first to refresh the cache.');
       });
     });
 
@@ -997,7 +997,7 @@ describe('graph/repository', () => {
 
       it('throws when draft ID not in cache', async () => {
         await expect(repository.sendDraftAsync(99999)).rejects.toThrow(
-          'Message ID 99999 not found in cache'
+          'Message ID 99999 not found in cache. Try searching for or listing the item first to refresh the cache.'
         );
       });
     });
@@ -1094,7 +1094,7 @@ describe('graph/repository', () => {
       it('throws when message ID not in cache', async () => {
         await expect(
           repository.replyMessageAsync(99999, 'Hello', false)
-        ).rejects.toThrow('Message ID 99999 not found in cache');
+        ).rejects.toThrow('Message ID 99999 not found in cache. Try searching for or listing the item first to refresh the cache.');
       });
     });
 
@@ -1147,7 +1147,7 @@ describe('graph/repository', () => {
       it('throws when message ID not in cache', async () => {
         await expect(
           repository.forwardMessageAsync(99999, ['a@b.com'])
-        ).rejects.toThrow('Message ID 99999 not found in cache');
+        ).rejects.toThrow('Message ID 99999 not found in cache. Try searching for or listing the item first to refresh the cache.');
       });
     });
   });
@@ -1173,6 +1173,9 @@ describe('graph/repository', () => {
     });
     it('setEmailCategories throws', () => {
       expect(() => repository.setEmailCategories(1, ['cat'])).toThrow('Use setEmailCategoriesAsync()');
+    });
+    it('setEmailImportance throws', () => {
+      expect(() => repository.setEmailImportance(1, 'high')).toThrow('Use setEmailImportanceAsync()');
     });
     it('createFolder throws', () => {
       expect(() => repository.createFolder('test')).toThrow('Use createFolderAsync()');
@@ -1208,7 +1211,7 @@ describe('graph/repository', () => {
       it('throws if message not in cache', async () => {
         await expect(
           repository.archiveEmailAsync(99999)
-        ).rejects.toThrow('Message ID 99999 not found in cache');
+        ).rejects.toThrow('Message ID 99999 not found in cache. Try searching for or listing the item first to refresh the cache.');
       });
     });
 
@@ -1228,7 +1231,7 @@ describe('graph/repository', () => {
       it('throws if message not in cache', async () => {
         await expect(
           repository.junkEmailAsync(99999)
-        ).rejects.toThrow('Message ID 99999 not found in cache');
+        ).rejects.toThrow('Message ID 99999 not found in cache. Try searching for or listing the item first to refresh the cache.');
       });
     });
 
@@ -1248,7 +1251,7 @@ describe('graph/repository', () => {
       it('throws if message not in cache', async () => {
         await expect(
           repository.markEmailReadAsync(99999, false)
-        ).rejects.toThrow('Message ID 99999 not found in cache');
+        ).rejects.toThrow('Message ID 99999 not found in cache. Try searching for or listing the item first to refresh the cache.');
       });
     });
 
@@ -1298,7 +1301,7 @@ describe('graph/repository', () => {
       it('throws if message not in cache', async () => {
         await expect(
           repository.setEmailFlagAsync(99999, 0)
-        ).rejects.toThrow('Message ID 99999 not found in cache');
+        ).rejects.toThrow('Message ID 99999 not found in cache. Try searching for or listing the item first to refresh the cache.');
       });
     });
 
@@ -1323,7 +1326,23 @@ describe('graph/repository', () => {
       it('throws if message not in cache', async () => {
         await expect(
           repository.setEmailCategoriesAsync(99999, ['cat'])
-        ).rejects.toThrow('Message ID 99999 not found in cache');
+        ).rejects.toThrow('Message ID 99999 not found in cache. Try searching for or listing the item first to refresh the cache.');
+      });
+    });
+
+    describe('setEmailImportanceAsync', () => {
+      it('updates message importance via updateMessage', async () => {
+        mockClient.searchMessages.mockResolvedValue([{ id: 'msg-imp', subject: 'Test' }]);
+        await repository.searchEmailsAsync('Test', 50);
+        mockClient.updateMessage.mockResolvedValue(undefined);
+
+        await repository.setEmailImportanceAsync(hashStringToNumber('msg-imp'), 'high');
+        expect(mockClient.updateMessage).toHaveBeenCalledWith('msg-imp', { importance: 'high' });
+      });
+
+      it('throws when email not in cache', async () => {
+        await expect(repository.setEmailImportanceAsync(99999, 'high'))
+          .rejects.toThrow('Message ID 99999 not found in cache');
       });
     });
   });
@@ -1391,7 +1410,7 @@ describe('graph/repository', () => {
       it('throws if folder not in cache', async () => {
         await expect(
           repository.deleteFolderAsync(99999)
-        ).rejects.toThrow('Folder ID 99999 not found in cache');
+        ).rejects.toThrow('Folder ID 99999 not found in cache. Try searching for or listing the item first to refresh the cache.');
       });
     });
 
@@ -1413,7 +1432,7 @@ describe('graph/repository', () => {
       it('throws if folder not in cache', async () => {
         await expect(
           repository.renameFolderAsync(99999, 'NewName')
-        ).rejects.toThrow('Folder ID 99999 not found in cache');
+        ).rejects.toThrow('Folder ID 99999 not found in cache. Try searching for or listing the item first to refresh the cache.');
       });
     });
 
@@ -1439,7 +1458,7 @@ describe('graph/repository', () => {
       it('throws if source folder not in cache', async () => {
         await expect(
           repository.moveFolderAsync(99999, 88888)
-        ).rejects.toThrow('Folder ID 99999 not found in cache');
+        ).rejects.toThrow('Folder ID 99999 not found in cache. Try searching for or listing the item first to refresh the cache.');
       });
 
       it('throws if destination folder not in cache', async () => {
@@ -1451,7 +1470,7 @@ describe('graph/repository', () => {
 
         await expect(
           repository.moveFolderAsync(hashStringToNumber('folder-only'), 88888)
-        ).rejects.toThrow('Parent folder ID 88888 not found in cache');
+        ).rejects.toThrow('Parent folder ID 88888 not found in cache. Try searching for or listing the item first to refresh the cache.');
       });
     });
 
@@ -1473,7 +1492,7 @@ describe('graph/repository', () => {
       it('throws if folder not in cache', async () => {
         await expect(
           repository.emptyFolderAsync(99999)
-        ).rejects.toThrow('Folder ID 99999 not found in cache');
+        ).rejects.toThrow('Folder ID 99999 not found in cache. Try searching for or listing the item first to refresh the cache.');
       });
     });
   });
@@ -1539,10 +1558,30 @@ describe('graph/repository', () => {
         });
       });
 
+      it('uses provided bodyType when updating comment', async () => {
+        mockClient.searchMessages.mockResolvedValue([
+          { id: 'msg-html', subject: 'HTML test' },
+        ]);
+        await repository.searchEmailsAsync('HTML test', 50);
+
+        mockClient.createReplyDraft.mockResolvedValue({
+          id: 'draft-html-1',
+          subject: 'Re: HTML test',
+          toRecipients: [],
+        });
+        mockClient.updateDraft.mockResolvedValue(undefined);
+
+        await repository.replyAsDraftAsync(hashStringToNumber('msg-html'), false, '<p>HTML reply</p>', 'html');
+
+        expect(mockClient.updateDraft).toHaveBeenCalledWith('draft-html-1', {
+          body: { contentType: 'html', content: '<p>HTML reply</p>' },
+        });
+      });
+
       it('throws if message not in cache', async () => {
         await expect(
           repository.replyAsDraftAsync(99999)
-        ).rejects.toThrow('Message ID 99999 not found in cache');
+        ).rejects.toThrow('Message ID 99999 not found in cache. Try searching for or listing the item first to refresh the cache.');
       });
     });
 
@@ -1594,10 +1633,35 @@ describe('graph/repository', () => {
         });
       });
 
+      it('uses provided bodyType when updating comment', async () => {
+        mockClient.searchMessages.mockResolvedValue([
+          { id: 'msg-fwd-html', subject: 'HTML forward' },
+        ]);
+        await repository.searchEmailsAsync('HTML forward', 50);
+
+        mockClient.createForwardDraft.mockResolvedValue({
+          id: 'draft-fwd-html-1',
+          subject: 'Fwd: HTML forward',
+          toRecipients: [],
+        });
+        mockClient.updateDraft.mockResolvedValue(undefined);
+
+        await repository.forwardAsDraftAsync(
+          hashStringToNumber('msg-fwd-html'),
+          undefined,
+          '<p>HTML comment</p>',
+          'html'
+        );
+
+        expect(mockClient.updateDraft).toHaveBeenCalledWith('draft-fwd-html-1', {
+          body: { contentType: 'html', content: '<p>HTML comment</p>' },
+        });
+      });
+
       it('throws if message not in cache', async () => {
         await expect(
           repository.forwardAsDraftAsync(99999)
-        ).rejects.toThrow('Message ID 99999 not found in cache');
+        ).rejects.toThrow('Message ID 99999 not found in cache. Try searching for or listing the item first to refresh the cache.');
       });
     });
   });
@@ -1658,7 +1722,7 @@ describe('graph/repository', () => {
       it('throws if message not in cache', async () => {
         await expect(
           repository.listAttachmentsAsync(99999)
-        ).rejects.toThrow('Message ID 99999 not found in cache');
+        ).rejects.toThrow('Message ID 99999 not found in cache. Try searching for or listing the item first to refresh the cache.');
       });
     });
 
@@ -1876,7 +1940,7 @@ describe('graph/repository', () => {
       it('throws if event not in cache', async () => {
         await expect(
           repository.updateEventAsync(99999, { subject: 'Nope' })
-        ).rejects.toThrow('Event ID 99999 not found in cache');
+        ).rejects.toThrow('Event ID 99999 not found in cache. Try searching for or listing the item first to refresh the cache.');
       });
     });
 
@@ -1900,7 +1964,7 @@ describe('graph/repository', () => {
       it('throws if event not in cache', async () => {
         await expect(
           repository.deleteEventAsync(99999)
-        ).rejects.toThrow('Event ID 99999 not found in cache');
+        ).rejects.toThrow('Event ID 99999 not found in cache. Try searching for or listing the item first to refresh the cache.');
       });
     });
 
@@ -1955,7 +2019,7 @@ describe('graph/repository', () => {
       it('throws if event not in cache', async () => {
         await expect(
           repository.respondToEventAsync(99999, 'accept', true)
-        ).rejects.toThrow('Event ID 99999 not found in cache');
+        ).rejects.toThrow('Event ID 99999 not found in cache. Try searching for or listing the item first to refresh the cache.');
       });
     });
   });
@@ -2068,7 +2132,7 @@ describe('graph/repository', () => {
       it('throws if contact not in cache', async () => {
         await expect(
           repository.updateContactAsync(99999, { givenName: 'Nope' })
-        ).rejects.toThrow('Contact ID 99999 not found in cache');
+        ).rejects.toThrow('Contact ID 99999 not found in cache. Try searching for or listing the item first to refresh the cache.');
       });
     });
 
@@ -2095,7 +2159,7 @@ describe('graph/repository', () => {
       it('throws if contact not in cache', async () => {
         await expect(
           repository.deleteContactAsync(99999)
-        ).rejects.toThrow('Contact ID 99999 not found in cache');
+        ).rejects.toThrow('Contact ID 99999 not found in cache. Try searching for or listing the item first to refresh the cache.');
       });
     });
   });
@@ -2196,7 +2260,7 @@ describe('graph/repository', () => {
             title: 'Test',
             task_list_id: 99999,
           })
-        ).rejects.toThrow('Task list ID 99999 not found in cache');
+        ).rejects.toThrow('Task list ID 99999 not found in cache. Try searching for or listing the item first to refresh the cache.');
       });
     });
 
@@ -2222,7 +2286,7 @@ describe('graph/repository', () => {
       it('throws if task not in cache', async () => {
         await expect(
           repository.updateTaskAsync(99999, { title: 'Nope' })
-        ).rejects.toThrow('Task ID 99999 not found in cache');
+        ).rejects.toThrow('Task ID 99999 not found in cache. Try searching for or listing the item first to refresh the cache.');
       });
     });
 
@@ -2250,7 +2314,7 @@ describe('graph/repository', () => {
       it('throws if task not in cache', async () => {
         await expect(
           repository.completeTaskAsync(99999)
-        ).rejects.toThrow('Task ID 99999 not found in cache');
+        ).rejects.toThrow('Task ID 99999 not found in cache. Try searching for or listing the item first to refresh the cache.');
       });
     });
 
@@ -2277,7 +2341,7 @@ describe('graph/repository', () => {
       it('throws if task not in cache', async () => {
         await expect(
           repository.deleteTaskAsync(99999)
-        ).rejects.toThrow('Task ID 99999 not found in cache');
+        ).rejects.toThrow('Task ID 99999 not found in cache. Try searching for or listing the item first to refresh the cache.');
       });
     });
 

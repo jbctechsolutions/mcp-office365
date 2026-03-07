@@ -52,6 +52,10 @@ export class GraphMailboxAdapter implements IMailboxRepository {
     return this.graph.setEmailCategoriesAsync(emailId, categories);
   }
 
+  setEmailImportance(emailId: number, importance: string): Promise<void> {
+    return this.graph.setEmailImportanceAsync(emailId, importance);
+  }
+
   // Folder management
   createFolder(name: string, parentFolderId?: number): Promise<FolderRow> {
     return this.graph.createFolderAsync(name, parentFolderId);

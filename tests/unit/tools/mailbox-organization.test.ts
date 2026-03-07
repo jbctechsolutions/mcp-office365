@@ -77,6 +77,7 @@ function createMockRepository(): IMailboxRepository {
     markEmailRead: vi.fn(),
     setEmailFlag: vi.fn(),
     setEmailCategories: vi.fn(),
+    setEmailImportance: vi.fn(),
     createFolder: vi.fn(),
     deleteFolder: vi.fn(),
     renameFolder: vi.fn(),
@@ -450,6 +451,22 @@ describe('MailboxOrganizationTools', () => {
 
       expect(result.success).toBe(true);
       expect(repo.setEmailCategories).toHaveBeenCalledWith(1, ['Important', 'Work']);
+    });
+  });
+
+  describe('setEmailImportance', () => {
+    it('sets importance on an email', async () => {
+      (repo.setEmailImportance as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
+      const result = await tools.setEmailImportance({ email_id: 1, importance: 'high' });
+      expect(result).toEqual({ success: true, message: 'Email importance set to high.' });
+      expect(repo.setEmailImportance).toHaveBeenCalledWith(1, 'high');
+    });
+
+    it('sets low importance', async () => {
+      (repo.setEmailImportance as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
+      const result = await tools.setEmailImportance({ email_id: 2, importance: 'low' });
+      expect(result).toEqual({ success: true, message: 'Email importance set to low.' });
+      expect(repo.setEmailImportance).toHaveBeenCalledWith(2, 'low');
     });
   });
 

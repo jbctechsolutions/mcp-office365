@@ -123,6 +123,7 @@ export {
   SetEmailFlagInput,
   ClearEmailFlagInput,
   SetEmailCategoriesInput,
+  SetEmailImportanceInput,
   CreateFolderInput,
   RenameFolderInput,
   MoveFolderInput,

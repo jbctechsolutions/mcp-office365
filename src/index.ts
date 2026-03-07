@@ -105,6 +105,7 @@ import {
   SetEmailFlagInput,
   ClearEmailFlagInput,
   SetEmailCategoriesInput,
+  SetEmailImportanceInput,
   CreateFolderInput,
   RenameFolderInput,
   MoveFolderInput,
@@ -1153,6 +1154,18 @@ const TOOLS: Tool[] = [
       required: ['email_id', 'categories'],
     },
   },
+  {
+    name: 'set_email_importance',
+    description: 'Set email importance/priority level (Graph API)',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        email_id: { type: 'number', description: 'The email ID' },
+        importance: { type: 'string', enum: ['low', 'normal', 'high'], description: 'Importance level' },
+      },
+      required: ['email_id', 'importance'],
+    },
+  },
   // =========================================================================
   // Mailbox Organization — Non-Destructive
   // =========================================================================
@@ -2006,6 +2019,11 @@ async function handleOrgToolCall(
     case 'set_email_categories': {
       const params = SetEmailCategoriesInput.parse(args);
       const result = await orgTools.setEmailCategories(params);
+      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+    }
+    case 'set_email_importance': {
+      const params = SetEmailImportanceInput.parse(args);
+      const result = await orgTools.setEmailImportance(params);
       return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
     }
 

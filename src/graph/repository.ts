@@ -232,8 +232,49 @@ export class GraphRepository implements IRepository {
     throw new Error('Use getEmailAsync() for Graph repository');
   }
 
+  /**
+   * Populates the message ID cache by listing messages from mail folders.
+   * Used as a fallback when getEmailAsync is called with an ID not yet in cache
+   * (e.g. after server restart or when list_emails/search_emails wasn't called first).
+   */
+  private async refreshMessageCacheForGetEmail(targetId: number): Promise<boolean> {
+    let folders: FolderRow[];
+    try {
+      folders = await this.listFoldersAsync();
+    } catch {
+      return false;
+    }
+    if (folders.length === 0) return false;
+    const MESSAGE_LIMIT_PER_FOLDER = 100;
+    const MAX_FOLDERS_TO_SCAN = 15;
+    for (let i = 0; i < Math.min(folders.length, MAX_FOLDERS_TO_SCAN); i++) {
+      const folder = folders[i]!;
+      const graphFolderId = this.idCache.folders.get(folder.id);
+      if (graphFolderId == null) continue;
+      let messages: Array<{ id?: string | null }>;
+      try {
+        messages = await this.client.listMessages(graphFolderId, MESSAGE_LIMIT_PER_FOLDER, 0);
+      } catch {
+        continue;
+      }
+      if (!Array.isArray(messages)) continue;
+      for (const message of messages) {
+        if (message.id != null) {
+          const numericId = hashStringToNumber(message.id);
+          this.idCache.messages.set(numericId, message.id);
+          if (numericId === targetId) return true;
+        }
+      }
+    }
+    return this.idCache.messages.has(targetId);
+  }
+
   async getEmailAsync(id: number): Promise<EmailRow | undefined> {
-    const graphId = this.idCache.messages.get(id);
+    let graphId = this.idCache.messages.get(id);
+    if (graphId == null) {
+      const found = await this.refreshMessageCacheForGetEmail(id);
+      if (found) graphId = this.idCache.messages.get(id) ?? undefined;
+    }
     if (graphId == null) {
       return undefined;
     }
@@ -619,6 +660,9 @@ export class GraphRepository implements IRepository {
   setEmailCategories(_emailId: number, _categories: string[]): void {
     throw new Error('Use setEmailCategoriesAsync() for Graph repository');
   }
+  setEmailImportance(_emailId: number, _importance: string): void {
+    throw new Error('Use setEmailImportanceAsync() for Graph repository');
+  }
   createFolder(_name: string, _parentFolderId?: number): FolderRow {
     throw new Error('Use createFolderAsync() for Graph repository');
   }
@@ -640,38 +684,38 @@ export class GraphRepository implements IRepository {
   async moveEmailAsync(emailId: number, destinationFolderId: number): Promise<void> {
     const graphMessageId = this.idCache.messages.get(emailId);
     const graphFolderId = this.idCache.folders.get(destinationFolderId);
-    if (graphMessageId == null) throw new Error(`Message ID ${emailId} not found in cache`);
-    if (graphFolderId == null) throw new Error(`Folder ID ${destinationFolderId} not found in cache`);
+    if (graphMessageId == null) throw new Error(`Message ID ${emailId} not found in cache. Try searching for or listing the item first to refresh the cache.`);
+    if (graphFolderId == null) throw new Error(`Folder ID ${destinationFolderId} not found in cache. Try searching for or listing the item first to refresh the cache.`);
     await this.client.moveMessage(graphMessageId, graphFolderId);
   }
 
   async deleteEmailAsync(emailId: number): Promise<void> {
     const graphId = this.idCache.messages.get(emailId);
-    if (graphId == null) throw new Error(`Message ID ${emailId} not found in cache`);
+    if (graphId == null) throw new Error(`Message ID ${emailId} not found in cache. Try searching for or listing the item first to refresh the cache.`);
     await this.client.deleteMessage(graphId);
   }
 
   async archiveEmailAsync(emailId: number): Promise<void> {
     const graphId = this.idCache.messages.get(emailId);
-    if (graphId == null) throw new Error(`Message ID ${emailId} not found in cache`);
+    if (graphId == null) throw new Error(`Message ID ${emailId} not found in cache. Try searching for or listing the item first to refresh the cache.`);
     await this.client.archiveMessage(graphId);
   }
 
   async junkEmailAsync(emailId: number): Promise<void> {
     const graphId = this.idCache.messages.get(emailId);
-    if (graphId == null) throw new Error(`Message ID ${emailId} not found in cache`);
+    if (graphId == null) throw new Error(`Message ID ${emailId} not found in cache. Try searching for or listing the item first to refresh the cache.`);
     await this.client.junkMessage(graphId);
   }
 
   async markEmailReadAsync(emailId: number, isRead: boolean): Promise<void> {
     const graphId = this.idCache.messages.get(emailId);
-    if (graphId == null) throw new Error(`Message ID ${emailId} not found in cache`);
+    if (graphId == null) throw new Error(`Message ID ${emailId} not found in cache. Try searching for or listing the item first to refresh the cache.`);
     await this.client.updateMessage(graphId, { isRead });
   }
 
   async setEmailFlagAsync(emailId: number, flagStatus: number): Promise<void> {
     const graphId = this.idCache.messages.get(emailId);
-    if (graphId == null) throw new Error(`Message ID ${emailId} not found in cache`);
+    if (graphId == null) throw new Error(`Message ID ${emailId} not found in cache. Try searching for or listing the item first to refresh the cache.`);
     const flagStatusMap: Record<number, string> = {
       0: 'notFlagged',
       1: 'flagged',
@@ -684,8 +728,14 @@ export class GraphRepository implements IRepository {
 
   async setEmailCategoriesAsync(emailId: number, categories: string[]): Promise<void> {
     const graphId = this.idCache.messages.get(emailId);
-    if (graphId == null) throw new Error(`Message ID ${emailId} not found in cache`);
+    if (graphId == null) throw new Error(`Message ID ${emailId} not found in cache. Try searching for or listing the item first to refresh the cache.`);
     await this.client.updateMessage(graphId, { categories });
+  }
+
+  async setEmailImportanceAsync(emailId: number, importance: string): Promise<void> {
+    const graphId = this.idCache.messages.get(emailId);
+    if (graphId == null) throw new Error(`Message ID ${emailId} not found in cache. Try searching for or listing the item first to refresh the cache.`);
+    await this.client.updateMessage(graphId, { importance });
   }
 
   async createFolderAsync(name: string, parentFolderId?: number): Promise<FolderRow> {
@@ -706,28 +756,28 @@ export class GraphRepository implements IRepository {
 
   async deleteFolderAsync(folderId: number): Promise<void> {
     const graphId = this.idCache.folders.get(folderId);
-    if (graphId == null) throw new Error(`Folder ID ${folderId} not found in cache`);
+    if (graphId == null) throw new Error(`Folder ID ${folderId} not found in cache. Try searching for or listing the item first to refresh the cache.`);
     await this.client.deleteMailFolder(graphId);
     this.idCache.folders.delete(folderId);
   }
 
   async renameFolderAsync(folderId: number, newName: string): Promise<void> {
     const graphId = this.idCache.folders.get(folderId);
-    if (graphId == null) throw new Error(`Folder ID ${folderId} not found in cache`);
+    if (graphId == null) throw new Error(`Folder ID ${folderId} not found in cache. Try searching for or listing the item first to refresh the cache.`);
     await this.client.renameMailFolder(graphId, newName);
   }
 
   async moveFolderAsync(folderId: number, destinationParentId: number): Promise<void> {
     const graphFolderId = this.idCache.folders.get(folderId);
     const graphParentId = this.idCache.folders.get(destinationParentId);
-    if (graphFolderId == null) throw new Error(`Folder ID ${folderId} not found in cache`);
-    if (graphParentId == null) throw new Error(`Parent folder ID ${destinationParentId} not found in cache`);
+    if (graphFolderId == null) throw new Error(`Folder ID ${folderId} not found in cache. Try searching for or listing the item first to refresh the cache.`);
+    if (graphParentId == null) throw new Error(`Parent folder ID ${destinationParentId} not found in cache. Try searching for or listing the item first to refresh the cache.`);
     await this.client.moveMailFolder(graphFolderId, graphParentId);
   }
 
   async emptyFolderAsync(folderId: number): Promise<void> {
     const graphId = this.idCache.folders.get(folderId);
-    if (graphId == null) throw new Error(`Folder ID ${folderId} not found in cache`);
+    if (graphId == null) throw new Error(`Folder ID ${folderId} not found in cache. Try searching for or listing the item first to refresh the cache.`);
     await this.client.emptyMailFolder(graphId);
   }
 
@@ -780,7 +830,7 @@ export class GraphRepository implements IRepository {
    */
   async updateDraftAsync(draftId: number, updates: Record<string, unknown>): Promise<void> {
     const graphId = this.idCache.messages.get(draftId);
-    if (graphId == null) throw new Error(`Message ID ${draftId} not found in cache`);
+    if (graphId == null) throw new Error(`Message ID ${draftId} not found in cache. Try searching for or listing the item first to refresh the cache.`);
     await this.client.updateDraft(graphId, updates);
   }
 
@@ -800,7 +850,7 @@ export class GraphRepository implements IRepository {
    */
   async sendDraftAsync(draftId: number): Promise<void> {
     const graphId = this.idCache.messages.get(draftId);
-    if (graphId == null) throw new Error(`Message ID ${draftId} not found in cache`);
+    if (graphId == null) throw new Error(`Message ID ${draftId} not found in cache. Try searching for or listing the item first to refresh the cache.`);
     await this.client.sendDraft(graphId);
   }
 
@@ -843,7 +893,7 @@ export class GraphRepository implements IRepository {
    */
   async replyMessageAsync(messageId: number, comment: string, replyAll: boolean): Promise<void> {
     const graphId = this.idCache.messages.get(messageId);
-    if (graphId == null) throw new Error(`Message ID ${messageId} not found in cache`);
+    if (graphId == null) throw new Error(`Message ID ${messageId} not found in cache. Try searching for or listing the item first to refresh the cache.`);
     await this.client.replyMessage(graphId, comment, replyAll);
   }
 
@@ -855,7 +905,7 @@ export class GraphRepository implements IRepository {
    */
   async forwardMessageAsync(messageId: number, toRecipients: string[], comment?: string): Promise<void> {
     const graphId = this.idCache.messages.get(messageId);
-    if (graphId == null) throw new Error(`Message ID ${messageId} not found in cache`);
+    if (graphId == null) throw new Error(`Message ID ${messageId} not found in cache. Try searching for or listing the item first to refresh the cache.`);
     const recipients = toRecipients.map(addr => ({
       emailAddress: { address: addr },
     }));
@@ -878,9 +928,10 @@ export class GraphRepository implements IRepository {
     messageId: number,
     replyAll = false,
     comment?: string,
+    bodyType: string = 'text',
   ): Promise<{ numericId: number; graphId: string }> {
     const graphMessageId = this.idCache.messages.get(messageId);
-    if (graphMessageId == null) throw new Error(`Message ID ${messageId} not found in cache`);
+    if (graphMessageId == null) throw new Error(`Message ID ${messageId} not found in cache. Try searching for or listing the item first to refresh the cache.`);
 
     const draft = replyAll
       ? await this.client.createReplyAllDraft(graphMessageId)
@@ -892,7 +943,7 @@ export class GraphRepository implements IRepository {
 
     if (comment != null) {
       await this.client.updateDraft(graphId, {
-        body: { contentType: 'text', content: comment },
+        body: { contentType: bodyType, content: comment },
       });
     }
 
@@ -912,9 +963,10 @@ export class GraphRepository implements IRepository {
     messageId: number,
     toRecipients?: string[],
     comment?: string,
+    bodyType: string = 'text',
   ): Promise<{ numericId: number; graphId: string }> {
     const graphMessageId = this.idCache.messages.get(messageId);
-    if (graphMessageId == null) throw new Error(`Message ID ${messageId} not found in cache`);
+    if (graphMessageId == null) throw new Error(`Message ID ${messageId} not found in cache. Try searching for or listing the item first to refresh the cache.`);
 
     const draft = await this.client.createForwardDraft(graphMessageId);
 
@@ -929,7 +981,7 @@ export class GraphRepository implements IRepository {
       }));
     }
     if (comment != null) {
-      updates.body = { contentType: 'text', content: comment };
+      updates.body = { contentType: bodyType, content: comment };
     }
     if (Object.keys(updates).length > 0) {
       await this.client.updateDraft(graphId, updates);
@@ -1021,7 +1073,7 @@ export class GraphRepository implements IRepository {
     isInline: boolean;
   }>> {
     const graphMessageId = this.idCache.messages.get(emailId);
-    if (graphMessageId == null) throw new Error(`Message ID ${emailId} not found in cache`);
+    if (graphMessageId == null) throw new Error(`Message ID ${emailId} not found in cache. Try searching for or listing the item first to refresh the cache.`);
 
     const attachments = await this.client.listAttachments(graphMessageId);
 
@@ -1149,7 +1201,7 @@ export class GraphRepository implements IRepository {
    */
   async updateEventAsync(eventId: number, updates: Record<string, unknown>): Promise<void> {
     const graphId = this.idCache.events.get(eventId);
-    if (graphId == null) throw new Error(`Event ID ${eventId} not found in cache`);
+    if (graphId == null) throw new Error(`Event ID ${eventId} not found in cache. Try searching for or listing the item first to refresh the cache.`);
     await this.client.updateEvent(graphId, updates);
   }
 
@@ -1162,7 +1214,7 @@ export class GraphRepository implements IRepository {
    */
   async deleteEventAsync(eventId: number): Promise<void> {
     const graphId = this.idCache.events.get(eventId);
-    if (graphId == null) throw new Error(`Event ID ${eventId} not found in cache`);
+    if (graphId == null) throw new Error(`Event ID ${eventId} not found in cache. Try searching for or listing the item first to refresh the cache.`);
     await this.client.deleteEvent(graphId);
     this.idCache.events.delete(eventId);
   }
@@ -1180,7 +1232,7 @@ export class GraphRepository implements IRepository {
     comment?: string
   ): Promise<void> {
     const graphId = this.idCache.events.get(eventId);
-    if (graphId == null) throw new Error(`Event ID ${eventId} not found in cache`);
+    if (graphId == null) throw new Error(`Event ID ${eventId} not found in cache. Try searching for or listing the item first to refresh the cache.`);
     await this.client.respondToEvent(graphId, response, sendResponse, comment);
   }
 
@@ -1243,7 +1295,7 @@ export class GraphRepository implements IRepository {
    */
   async updateContactAsync(contactId: number, updates: Record<string, unknown>): Promise<void> {
     const graphId = this.idCache.contacts.get(contactId);
-    if (graphId == null) throw new Error(`Contact ID ${contactId} not found in cache`);
+    if (graphId == null) throw new Error(`Contact ID ${contactId} not found in cache. Try searching for or listing the item first to refresh the cache.`);
     await this.client.updateContact(graphId, updates);
   }
 
@@ -1256,7 +1308,7 @@ export class GraphRepository implements IRepository {
    */
   async deleteContactAsync(contactId: number): Promise<void> {
     const graphId = this.idCache.contacts.get(contactId);
-    if (graphId == null) throw new Error(`Contact ID ${contactId} not found in cache`);
+    if (graphId == null) throw new Error(`Contact ID ${contactId} not found in cache. Try searching for or listing the item first to refresh the cache.`);
     await this.client.deleteContact(graphId);
     this.idCache.contacts.delete(contactId);
   }
@@ -1282,7 +1334,7 @@ export class GraphRepository implements IRepository {
     reminder_date?: string;
   }): Promise<number> {
     const graphListId = this.idCache.taskLists.get(params.task_list_id);
-    if (graphListId == null) throw new Error(`Task list ID ${params.task_list_id} not found in cache`);
+    if (graphListId == null) throw new Error(`Task list ID ${params.task_list_id} not found in cache. Try searching for or listing the item first to refresh the cache.`);
 
     const graphTask: Record<string, unknown> = {
       title: params.title,
@@ -1329,7 +1381,7 @@ export class GraphRepository implements IRepository {
    */
   async updateTaskAsync(taskId: number, updates: Record<string, unknown>): Promise<void> {
     const taskInfo = this.idCache.tasks.get(taskId);
-    if (taskInfo == null) throw new Error(`Task ID ${taskId} not found in cache`);
+    if (taskInfo == null) throw new Error(`Task ID ${taskId} not found in cache. Try searching for or listing the item first to refresh the cache.`);
     await this.client.updateTask(taskInfo.taskListId, taskInfo.taskId, updates);
   }
 
@@ -1358,7 +1410,7 @@ export class GraphRepository implements IRepository {
    */
   async deleteTaskAsync(taskId: number): Promise<void> {
     const taskInfo = this.idCache.tasks.get(taskId);
-    if (taskInfo == null) throw new Error(`Task ID ${taskId} not found in cache`);
+    if (taskInfo == null) throw new Error(`Task ID ${taskId} not found in cache. Try searching for or listing the item first to refresh the cache.`);
     await this.client.deleteTask(taskInfo.taskListId, taskInfo.taskId);
     this.idCache.tasks.delete(taskId);
   }

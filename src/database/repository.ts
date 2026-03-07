@@ -161,6 +161,7 @@ export interface IWriteableRepository extends IRepository {
   markEmailRead(emailId: number, isRead: boolean): void;
   setEmailFlag(emailId: number, flagStatus: number): void;
   setEmailCategories(emailId: number, categories: string[]): void;
+  setEmailImportance(emailId: number, importance: string): void;
 
   // Folder management
   createFolder(name: string, parentFolderId?: number): FolderRow;
@@ -199,6 +200,7 @@ export interface IMailboxRepository {
   markEmailRead(emailId: number, isRead: boolean): MaybePromise<void>;
   setEmailFlag(emailId: number, flagStatus: number): MaybePromise<void>;
   setEmailCategories(emailId: number, categories: string[]): MaybePromise<void>;
+  setEmailImportance(emailId: number, importance: string): MaybePromise<void>;
 
   // Folder management
   createFolder(name: string, parentFolderId?: number): MaybePromise<FolderRow>;

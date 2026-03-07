@@ -42,10 +42,11 @@ A [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) server that p
 - `list_attachments` - List attachment metadata for an email
 - `download_attachment` - Download an email attachment to disk
 
-**Mailbox Organization (23)** *(Graph API)*
+**Mailbox Organization (24)** *(Graph API)*
 - `mark_email_read` / `mark_email_unread` - Toggle read status
 - `set_email_flag` / `clear_email_flag` - Flag/unflag emails
 - `set_email_categories` - Categorize emails
+- `set_email_importance` - Set email importance/priority level (low, normal, high) *(Graph API)*
 - `create_folder` / `rename_folder` / `move_folder` - Folder management
 - `prepare_delete_email` / `confirm_delete_email` - Delete email (two-phase)
 - `prepare_move_email` / `confirm_move_email` - Move email (two-phase)

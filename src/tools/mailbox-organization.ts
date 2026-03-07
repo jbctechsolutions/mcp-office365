@@ -150,6 +150,11 @@ export const SetEmailCategoriesInput = z.strictObject({
     .describe('Categories to set (replaces existing). Use empty array to clear.'),
 });
 
+export const SetEmailImportanceInput = z.strictObject({
+  email_id: z.number().int().positive().describe('The email ID'),
+  importance: z.enum(['low', 'normal', 'high']).describe('Email importance level'),
+});
+
 // =============================================================================
 // Input Schemas — Non-Destructive Operations
 // =============================================================================
@@ -202,6 +207,7 @@ export type MarkEmailUnreadParams = z.infer<typeof MarkEmailUnreadInput>;
 export type SetEmailFlagParams = z.infer<typeof SetEmailFlagInput>;
 export type ClearEmailFlagParams = z.infer<typeof ClearEmailFlagInput>;
 export type SetEmailCategoriesParams = z.infer<typeof SetEmailCategoriesInput>;
+export type SetEmailImportanceParams = z.infer<typeof SetEmailImportanceInput>;
 export type CreateFolderParams = z.infer<typeof CreateFolderInput>;
 export type RenameFolderParams = z.infer<typeof RenameFolderInput>;
 export type MoveFolderParams = z.infer<typeof MoveFolderInput>;
@@ -630,6 +636,11 @@ export class MailboxOrganizationTools {
     await this.requireEmail(params.email_id);
     await this.repository.setEmailCategories(params.email_id, params.categories);
     return { success: true, message: 'Email categories updated.' };
+  }
+
+  async setEmailImportance(params: SetEmailImportanceParams): Promise<{ success: boolean; message: string }> {
+    await this.repository.setEmailImportance(params.email_id, params.importance);
+    return { success: true, message: `Email importance set to ${params.importance}.` };
   }
 
   // ---------------------------------------------------------------------------

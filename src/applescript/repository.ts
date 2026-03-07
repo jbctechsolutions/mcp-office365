@@ -477,6 +477,10 @@ export class AppleScriptRepository implements IWriteableRepository {
     executeAppleScriptOrThrow(script);
   }
 
+  setEmailImportance(_emailId: number, _importance: string): void {
+    throw new Error('setEmailImportance is only supported via Graph API');
+  }
+
   createFolder(name: string, parentFolderId?: number): FolderRow {
     const script = scripts.createMailFolder(name, parentFolderId);
     const output = executeAppleScriptOrThrow(script);
