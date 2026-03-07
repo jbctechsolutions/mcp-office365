@@ -8,7 +8,7 @@ A [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) server that p
 
 ## Features
 
-- **113 tools** - Full read/write access to mail, calendar, contacts, and tasks
+- **115 tools** - Full read/write access to mail, calendar, contacts, and tasks
 - **Two backends** - AppleScript for classic Outlook, Microsoft Graph API for new Outlook
 - **Two-phase approval** - Destructive operations (delete, send) require explicit confirmation
 - **Works offline** - AppleScript backend requires no network (Graph API requires internet)
@@ -109,6 +109,10 @@ A [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) server that p
 - `list_calendar_permissions` - List all sharing permissions for a calendar
 - `create_calendar_permission` - Share a calendar with someone by creating a permission
 - `prepare_delete_calendar_permission` / `confirm_delete_calendar_permission` - Delete a calendar permission (two-phase)
+
+**Room Lists & Rooms (2)** *(Graph API)*
+- `list_room_lists` - List all room lists (building/floor groupings) in the organization
+- `list_rooms` - List meeting rooms, optionally filtered by a room list email
 
 **Contacts (9)**
 - `list_contacts` - List all contacts with pagination

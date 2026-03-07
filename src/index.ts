@@ -2325,6 +2325,30 @@ const TOOLS: Tool[] = [
       required: ['approval_token'],
     },
   },
+  // Room lists & rooms tools
+  {
+    name: 'list_room_lists',
+    description: 'List all room lists (building/floor groupings) in the organization (Graph API)',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {},
+      required: [],
+    },
+  },
+  {
+    name: 'list_rooms',
+    description: 'List meeting rooms, optionally filtered by a room list email from list_room_lists (Graph API)',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        room_list_email: {
+          type: 'string',
+          description: 'Room list email to filter by (from list_room_lists)',
+        },
+      },
+      required: [],
+    },
+  },
 ];
 
 // =============================================================================
@@ -2485,6 +2509,8 @@ export function createServer(): Server {
     'create_calendar_permission',
     'prepare_delete_calendar_permission',
     'confirm_delete_calendar_permission',
+    'list_room_lists',
+    'list_rooms',
   ]);
 
   // Register tool list handler
@@ -3551,6 +3577,10 @@ const SetContactPhotoInput = z.strictObject({
   file_path: z.string().describe('Path to the photo file (JPEG or PNG)'),
 });
 
+const ListRoomsInput = z.strictObject({
+  room_list_email: z.string().email().optional().describe('Room list email to filter by (from list_room_lists)'),
+});
+
 // =============================================================================
 // Graph API Tool Handler
 // =============================================================================
@@ -4596,6 +4626,18 @@ async function handleGraphToolCall(
       case 'confirm_delete_calendar_permission': {
         const params = ConfirmDeleteCalendarPermissionInput.parse(args);
         return await calendarPermissionsTools!.confirmDeleteCalendarPermission(params);
+      }
+
+      // Room lists & rooms tools
+      case 'list_room_lists': {
+        const roomLists = await repository.listRoomListsAsync();
+        return { content: [{ type: 'text', text: JSON.stringify({ room_lists: roomLists }, null, 2) }] };
+      }
+
+      case 'list_rooms': {
+        const params = ListRoomsInput.parse(args);
+        const rooms = await repository.listRoomsAsync(params.room_list_email);
+        return { content: [{ type: 'text', text: JSON.stringify({ rooms }, null, 2) }] };
       }
 
       default:

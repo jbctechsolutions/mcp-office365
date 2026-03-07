@@ -117,6 +117,9 @@ vi.mock('../../../src/graph/client/index.js', () => ({
       // Calendar group operations
       listCalendarGroups: vi.fn(),
       createCalendarGroup: vi.fn(),
+      // Room lists & rooms operations
+      listRoomLists: vi.fn(),
+      listRooms: vi.fn(),
     };
   }),
 }));
@@ -3729,6 +3732,89 @@ describe('graph/repository', () => {
 
         const cache = (repository as any).idCache.calendarGroups;
         expect(cache.get(hashStringToNumber('cg-new'))).toBe('cg-new');
+      });
+    });
+  });
+
+  // ===========================================================================
+  // Room Lists & Rooms
+  // ===========================================================================
+
+  describe('room lists & rooms', () => {
+    describe('listRoomListsAsync', () => {
+      it('returns mapped room lists', async () => {
+        mockClient.listRoomLists.mockResolvedValue([
+          { name: 'Building A', address: 'buildinga@example.com' },
+          { name: 'Building B', address: 'buildingb@example.com' },
+        ]);
+
+        const result = await repository.listRoomListsAsync();
+
+        expect(result).toEqual([
+          { name: 'Building A', address: 'buildinga@example.com' },
+          { name: 'Building B', address: 'buildingb@example.com' },
+        ]);
+        expect(mockClient.listRoomLists).toHaveBeenCalled();
+      });
+
+      it('handles empty room lists', async () => {
+        mockClient.listRoomLists.mockResolvedValue([]);
+
+        const result = await repository.listRoomListsAsync();
+
+        expect(result).toEqual([]);
+      });
+
+      it('defaults name and address to empty string when null', async () => {
+        mockClient.listRoomLists.mockResolvedValue([
+          { name: null, address: null },
+        ]);
+
+        const result = await repository.listRoomListsAsync();
+
+        expect(result).toEqual([{ name: '', address: '' }]);
+      });
+    });
+
+    describe('listRoomsAsync', () => {
+      it('returns mapped rooms without filter', async () => {
+        mockClient.listRooms.mockResolvedValue([
+          { name: 'Room 101', address: 'room101@example.com' },
+        ]);
+
+        const result = await repository.listRoomsAsync();
+
+        expect(result).toEqual([{ name: 'Room 101', address: 'room101@example.com' }]);
+        expect(mockClient.listRooms).toHaveBeenCalledWith(undefined);
+      });
+
+      it('passes room list email filter', async () => {
+        mockClient.listRooms.mockResolvedValue([
+          { name: 'Room 201', address: 'room201@example.com' },
+        ]);
+
+        const result = await repository.listRoomsAsync('buildinga@example.com');
+
+        expect(result).toEqual([{ name: 'Room 201', address: 'room201@example.com' }]);
+        expect(mockClient.listRooms).toHaveBeenCalledWith('buildinga@example.com');
+      });
+
+      it('handles empty rooms', async () => {
+        mockClient.listRooms.mockResolvedValue([]);
+
+        const result = await repository.listRoomsAsync();
+
+        expect(result).toEqual([]);
+      });
+
+      it('defaults name and address to empty string when null', async () => {
+        mockClient.listRooms.mockResolvedValue([
+          { name: null, address: null },
+        ]);
+
+        const result = await repository.listRoomsAsync();
+
+        expect(result).toEqual([{ name: '', address: '' }]);
       });
     });
   });

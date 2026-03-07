@@ -1030,4 +1030,79 @@ describe('graph/client/graph-client', () => {
       });
     });
   });
+
+  describe('Room Lists & Rooms', () => {
+    describe('listRoomLists', () => {
+      it('returns room lists', async () => {
+        const mockLists = [
+          { name: 'Building A', address: 'buildinga@example.com' },
+          { name: 'Building B', address: 'buildingb@example.com' },
+        ];
+
+        mockApi.mockReturnValue(
+          createMockRequestBuilder({ value: mockLists })
+        );
+
+        const result = await graphClient.listRoomLists();
+
+        expect(result).toHaveLength(2);
+        expect(result[0].name).toBe('Building A');
+        expect(result[1].address).toBe('buildingb@example.com');
+        expect(mockApi).toHaveBeenCalledWith('/me/findRoomLists');
+      });
+
+      it('returns empty array when no room lists', async () => {
+        mockApi.mockReturnValue(
+          createMockRequestBuilder({ value: [] })
+        );
+
+        const result = await graphClient.listRoomLists();
+
+        expect(result).toHaveLength(0);
+      });
+    });
+
+    describe('listRooms', () => {
+      it('returns all rooms when no filter', async () => {
+        const mockRooms = [
+          { name: 'Room 101', address: 'room101@example.com' },
+        ];
+
+        mockApi.mockReturnValue(
+          createMockRequestBuilder({ value: mockRooms })
+        );
+
+        const result = await graphClient.listRooms();
+
+        expect(result).toHaveLength(1);
+        expect(result[0].name).toBe('Room 101');
+        expect(mockApi).toHaveBeenCalledWith('/me/findRooms');
+      });
+
+      it('filters by room list email', async () => {
+        const mockRooms = [
+          { name: 'Room 201', address: 'room201@example.com' },
+        ];
+
+        mockApi.mockReturnValue(
+          createMockRequestBuilder({ value: mockRooms })
+        );
+
+        const result = await graphClient.listRooms('buildinga@example.com');
+
+        expect(result).toHaveLength(1);
+        expect(mockApi).toHaveBeenCalledWith("/me/findRooms(RoomList='buildinga@example.com')");
+      });
+
+      it('returns empty array when no rooms', async () => {
+        mockApi.mockReturnValue(
+          createMockRequestBuilder({ value: [] })
+        );
+
+        const result = await graphClient.listRooms();
+
+        expect(result).toHaveLength(0);
+      });
+    });
+  });
 });

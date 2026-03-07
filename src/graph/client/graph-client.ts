@@ -1450,6 +1450,31 @@ export class GraphClient {
   }
 
   // ===========================================================================
+  // Room Lists & Rooms
+  // ===========================================================================
+
+  /**
+   * GET /me/findRoomLists
+   */
+  async listRoomLists(): Promise<MicrosoftGraph.EmailAddress[]> {
+    const client = await this.getClient();
+    const response = await client.api('/me/findRoomLists').get() as { value: MicrosoftGraph.EmailAddress[] };
+    return response.value;
+  }
+
+  /**
+   * GET /me/findRooms or /me/findRooms(RoomList='...')
+   */
+  async listRooms(roomListEmail?: string): Promise<MicrosoftGraph.EmailAddress[]> {
+    const client = await this.getClient();
+    const endpoint = roomListEmail != null
+      ? `/me/findRooms(RoomList='${roomListEmail}')`
+      : '/me/findRooms';
+    const response = await client.api(endpoint).get() as { value: MicrosoftGraph.EmailAddress[] };
+    return response.value;
+  }
+
+  // ===========================================================================
   // Mail Tips
   // ===========================================================================
 

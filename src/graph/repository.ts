@@ -2086,6 +2086,32 @@ export class GraphRepository implements IRepository {
     this.idCache.calendarPermissions.delete(permissionId);
   }
 
+  // ===========================================================================
+  // Room Lists & Rooms
+  // ===========================================================================
+
+  /**
+   * Lists all room lists.
+   */
+  async listRoomListsAsync(): Promise<Array<{ name: string; address: string }>> {
+    const lists = await this.client.listRoomLists();
+    return lists.map((item) => ({
+      name: item.name ?? '',
+      address: item.address ?? '',
+    }));
+  }
+
+  /**
+   * Lists rooms, optionally filtered by a room list email.
+   */
+  async listRoomsAsync(roomListEmail?: string): Promise<Array<{ name: string; address: string }>> {
+    const rooms = await this.client.listRooms(roomListEmail);
+    return rooms.map((item) => ({
+      name: item.name ?? '',
+      address: item.address ?? '',
+    }));
+  }
+
   /**
    * Gets the Graph string ID for a folder from the cache.
    */
