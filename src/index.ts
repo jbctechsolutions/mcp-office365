@@ -154,6 +154,12 @@ import {
   UpdateBucketInput,
   PrepareDeleteBucketInput,
   ConfirmDeleteBucketInput,
+  ListPlannerTasksInput,
+  GetPlannerTaskInput,
+  CreatePlannerTaskInput,
+  UpdatePlannerTaskInput,
+  PrepareDeletePlannerTaskInput,
+  ConfirmDeletePlannerTaskInput,
 } from './tools/planner.js';
 import {
   ListEmailsInput,
@@ -3016,6 +3022,86 @@ const TOOLS: Tool[] = [
       required: ['approval_token'],
     },
   },
+  // Planner Task tools
+  {
+    name: 'list_planner_tasks',
+    description: 'List all tasks in a Planner plan (Graph API)',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        plan_id: { type: 'number', description: 'Plan ID from list_plans' },
+      },
+      required: ['plan_id'],
+    },
+  },
+  {
+    name: 'get_planner_task',
+    description: 'Get details for a specific Planner task (Graph API)',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        task_id: { type: 'number', description: 'Task ID from list_planner_tasks' },
+      },
+      required: ['task_id'],
+    },
+  },
+  {
+    name: 'create_planner_task',
+    description: 'Create a new task in a Planner plan (Graph API)',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        plan_id: { type: 'number', description: 'Plan ID from list_plans' },
+        title: { type: 'string', description: 'Task title' },
+        bucket_id: { type: 'number', description: 'Bucket ID from list_buckets' },
+        assignments: { type: 'object', description: 'User assignments. Keys are user IDs, values should be { "@odata.type": "#microsoft.graph.plannerAssignment", "orderHint": " !" }' },
+        priority: { type: 'number', description: 'Priority (0-10)' },
+        start_date: { type: 'string', description: 'Start date in ISO format' },
+        due_date: { type: 'string', description: 'Due date in ISO format' },
+      },
+      required: ['plan_id', 'title'],
+    },
+  },
+  {
+    name: 'update_planner_task',
+    description: 'Update a Planner task (Graph API)',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        task_id: { type: 'number', description: 'Task ID from list_planner_tasks' },
+        title: { type: 'string', description: 'New task title' },
+        bucket_id: { type: 'number', description: 'New bucket ID from list_buckets' },
+        percent_complete: { type: 'number', description: 'Percent complete (0-100)' },
+        priority: { type: 'number', description: 'Priority (0-10)' },
+        start_date: { type: 'string', description: 'Start date in ISO format' },
+        due_date: { type: 'string', description: 'Due date in ISO format' },
+        assignments: { type: 'object', description: 'User assignments. Keys are user IDs, values should be { "@odata.type": "#microsoft.graph.plannerAssignment", "orderHint": " !" }' },
+      },
+      required: ['task_id'],
+    },
+  },
+  {
+    name: 'prepare_delete_planner_task',
+    description: 'Prepare to delete a Planner task. Returns an approval token. (Graph API)',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        task_id: { type: 'number', description: 'Task ID from list_planner_tasks' },
+      },
+      required: ['task_id'],
+    },
+  },
+  {
+    name: 'confirm_delete_planner_task',
+    description: 'Confirm deletion of a Planner task using the approval token from prepare_delete_planner_task. (Graph API)',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        approval_token: { type: 'string', description: 'Approval token from prepare_delete_planner_task' },
+      },
+      required: ['approval_token'],
+    },
+  },
 ];
 
 // =============================================================================
@@ -3240,6 +3326,12 @@ export function createServer(): Server {
     'update_bucket',
     'prepare_delete_bucket',
     'confirm_delete_bucket',
+    'list_planner_tasks',
+    'get_planner_task',
+    'create_planner_task',
+    'update_planner_task',
+    'prepare_delete_planner_task',
+    'confirm_delete_planner_task',
   ]);
 
   // Register tool list handler
@@ -5644,6 +5736,36 @@ async function handleGraphToolCall(
       case 'confirm_delete_bucket': {
         const params = ConfirmDeleteBucketInput.parse(args);
         return await plannerTools.confirmDeleteBucket(params);
+      }
+
+      case 'list_planner_tasks': {
+        const params = ListPlannerTasksInput.parse(args);
+        return await plannerTools.listPlannerTasks(params);
+      }
+
+      case 'get_planner_task': {
+        const params = GetPlannerTaskInput.parse(args);
+        return await plannerTools.getPlannerTask(params);
+      }
+
+      case 'create_planner_task': {
+        const params = CreatePlannerTaskInput.parse(args);
+        return await plannerTools.createPlannerTask(params);
+      }
+
+      case 'update_planner_task': {
+        const params = UpdatePlannerTaskInput.parse(args);
+        return await plannerTools.updatePlannerTask(params);
+      }
+
+      case 'prepare_delete_planner_task': {
+        const params = PrepareDeletePlannerTaskInput.parse(args);
+        return plannerTools.prepareDeletePlannerTask(params);
+      }
+
+      case 'confirm_delete_planner_task': {
+        const params = ConfirmDeletePlannerTaskInput.parse(args);
+        return await plannerTools.confirmDeletePlannerTask(params);
       }
 
       default:

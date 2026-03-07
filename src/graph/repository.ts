@@ -63,6 +63,7 @@ interface IdCache {
   taskAttachments: Map<number, { taskListId: string; taskId: string; attachmentId: string }>;
   plans: Map<number, { planId: string; etag: string }>;
   plannerBuckets: Map<number, { planId: string; bucketId: string; etag: string }>;
+  plannerTasks: Map<number, { taskId: string; etag: string }>;
 }
 
 /**
@@ -99,6 +100,7 @@ export class GraphRepository implements IRepository {
     taskAttachments: new Map(),
     plans: new Map(),
     plannerBuckets: new Map(),
+    plannerTasks: new Map(),
   };
 
   constructor(deviceCodeCallback?: DeviceCodeCallback) {
@@ -2665,6 +2667,155 @@ export class GraphRepository implements IRepository {
     if (cached == null) throw new Error(`Bucket ID ${bucketId} not found in cache. Try listing buckets first.`);
     await this.client.deleteBucket(cached.bucketId, cached.etag);
     this.idCache.plannerBuckets.delete(bucketId);
+  }
+
+  // ===========================================================================
+  // Planner Tasks
+  // ===========================================================================
+
+  /**
+   * Lists all tasks in a plan.
+   */
+  async listPlannerTasksAsync(planId: number): Promise<Array<{
+    id: number; title: string; bucketId: number | null; assignees: string[];
+    percentComplete: number; priority: number; startDateTime: string;
+    dueDateTime: string; createdDateTime: string;
+  }>> {
+    const cached = this.idCache.plans.get(planId);
+    if (cached == null) throw new Error(`Plan ID ${planId} not found in cache. Try listing plans first.`);
+    const tasks = await this.client.listPlannerTasks(cached.planId);
+    return tasks.map((task) => {
+      const graphId = task.id!;
+      const numericId = hashStringToNumber(graphId);
+      const etag = (task as any)['@odata.etag'] ?? '';
+      this.idCache.plannerTasks.set(numericId, { taskId: graphId, etag });
+      // Resolve bucket numeric ID if present
+      let bucketNumericId: number | null = null;
+      if (task.bucketId != null) {
+        bucketNumericId = hashStringToNumber(task.bucketId);
+      }
+      return {
+        id: numericId,
+        title: task.title ?? '',
+        bucketId: bucketNumericId,
+        assignees: task.assignments != null ? Object.keys(task.assignments) : [],
+        percentComplete: task.percentComplete ?? 0,
+        priority: task.priority ?? 5,
+        startDateTime: task.startDateTime ?? '',
+        dueDateTime: task.dueDateTime ?? '',
+        createdDateTime: task.createdDateTime ?? '',
+      };
+    });
+  }
+
+  /**
+   * Gets a specific planner task by cached numeric ID.
+   */
+  async getPlannerTaskAsync(taskId: number): Promise<{
+    id: number; title: string; bucketId: number | null; assignees: string[];
+    percentComplete: number; priority: number; startDateTime: string;
+    dueDateTime: string; createdDateTime: string; conversationThreadId: string;
+    orderHint: string; etag: string;
+  }> {
+    const cached = this.idCache.plannerTasks.get(taskId);
+    if (cached == null) throw new Error(`Task ID ${taskId} not found in cache. Try listing planner tasks first.`);
+    const task = await this.client.getPlannerTask(cached.taskId);
+    const etag = (task as any)['@odata.etag'] ?? '';
+    this.idCache.plannerTasks.set(taskId, { taskId: cached.taskId, etag });
+    let bucketNumericId: number | null = null;
+    if (task.bucketId != null) {
+      bucketNumericId = hashStringToNumber(task.bucketId);
+    }
+    return {
+      id: taskId,
+      title: task.title ?? '',
+      bucketId: bucketNumericId,
+      assignees: task.assignments != null ? Object.keys(task.assignments) : [],
+      percentComplete: task.percentComplete ?? 0,
+      priority: task.priority ?? 5,
+      startDateTime: task.startDateTime ?? '',
+      dueDateTime: task.dueDateTime ?? '',
+      createdDateTime: task.createdDateTime ?? '',
+      conversationThreadId: task.conversationThreadId ?? '',
+      orderHint: task.orderHint ?? '',
+      etag,
+    };
+  }
+
+  /**
+   * Creates a new planner task.
+   */
+  async createPlannerTaskAsync(
+    planId: number,
+    title: string,
+    bucketId?: number,
+    assignments?: Record<string, object>,
+    priority?: number,
+    startDate?: string,
+    dueDate?: string,
+  ): Promise<number> {
+    const cachedPlan = this.idCache.plans.get(planId);
+    if (cachedPlan == null) throw new Error(`Plan ID ${planId} not found in cache. Try listing plans first.`);
+    const body: Record<string, unknown> = { planId: cachedPlan.planId, title };
+    if (bucketId != null) {
+      const cachedBucket = this.idCache.plannerBuckets.get(bucketId);
+      if (cachedBucket == null) throw new Error(`Bucket ID ${bucketId} not found in cache. Try listing buckets first.`);
+      body.bucketId = cachedBucket.bucketId;
+    }
+    if (assignments != null) body.assignments = assignments;
+    if (priority != null) body.priority = priority;
+    if (startDate != null) body.startDateTime = startDate;
+    if (dueDate != null) body.dueDateTime = dueDate;
+    const task = await this.client.createPlannerTask(body);
+    const graphId = task.id!;
+    const numericId = hashStringToNumber(graphId);
+    const etag = (task as any)['@odata.etag'] ?? '';
+    this.idCache.plannerTasks.set(numericId, { taskId: graphId, etag });
+    return numericId;
+  }
+
+  /**
+   * Updates a planner task (requires cached ETag).
+   */
+  async updatePlannerTaskAsync(
+    taskId: number,
+    updates: {
+      title?: string;
+      bucketId?: number;
+      percentComplete?: number;
+      priority?: number;
+      startDate?: string;
+      dueDate?: string;
+      assignments?: Record<string, object>;
+    },
+  ): Promise<void> {
+    const cached = this.idCache.plannerTasks.get(taskId);
+    if (cached == null) throw new Error(`Task ID ${taskId} not found in cache. Try listing planner tasks first.`);
+    const graphUpdates: Record<string, unknown> = {};
+    if (updates.title != null) graphUpdates['title'] = updates.title;
+    if (updates.bucketId != null) {
+      const cachedBucket = this.idCache.plannerBuckets.get(updates.bucketId);
+      if (cachedBucket == null) throw new Error(`Bucket ID ${updates.bucketId} not found in cache. Try listing buckets first.`);
+      graphUpdates['bucketId'] = cachedBucket.bucketId;
+    }
+    if (updates.percentComplete != null) graphUpdates['percentComplete'] = updates.percentComplete;
+    if (updates.priority != null) graphUpdates['priority'] = updates.priority;
+    if (updates.startDate != null) graphUpdates['startDateTime'] = updates.startDate;
+    if (updates.dueDate != null) graphUpdates['dueDateTime'] = updates.dueDate;
+    if (updates.assignments != null) graphUpdates['assignments'] = updates.assignments;
+    const result = await this.client.updatePlannerTask(cached.taskId, graphUpdates, cached.etag);
+    const newEtag = (result as any)['@odata.etag'] ?? cached.etag;
+    this.idCache.plannerTasks.set(taskId, { taskId: cached.taskId, etag: newEtag });
+  }
+
+  /**
+   * Deletes a planner task (requires cached ETag).
+   */
+  async deletePlannerTaskAsync(taskId: number): Promise<void> {
+    const cached = this.idCache.plannerTasks.get(taskId);
+    if (cached == null) throw new Error(`Task ID ${taskId} not found in cache. Try listing planner tasks first.`);
+    await this.client.deletePlannerTask(cached.taskId, cached.etag);
+    this.idCache.plannerTasks.delete(taskId);
   }
 
   /**

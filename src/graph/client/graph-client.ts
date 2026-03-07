@@ -1781,6 +1781,36 @@ export class GraphClient {
   }
 
   // ===========================================================================
+  // Planner Tasks
+  // ===========================================================================
+
+  async listPlannerTasks(planId: string): Promise<MicrosoftGraph.PlannerTask[]> {
+    const client = await this.getClient();
+    const response = await client.api(`/planner/plans/${planId}/tasks`).get() as PageCollection;
+    return response.value as MicrosoftGraph.PlannerTask[];
+  }
+
+  async getPlannerTask(taskId: string): Promise<MicrosoftGraph.PlannerTask> {
+    const client = await this.getClient();
+    return await client.api(`/planner/tasks/${taskId}`).get() as MicrosoftGraph.PlannerTask;
+  }
+
+  async createPlannerTask(task: Record<string, unknown>): Promise<MicrosoftGraph.PlannerTask> {
+    const client = await this.getClient();
+    return await client.api('/planner/tasks').post(task) as MicrosoftGraph.PlannerTask;
+  }
+
+  async updatePlannerTask(taskId: string, updates: Record<string, unknown>, etag: string): Promise<MicrosoftGraph.PlannerTask> {
+    const client = await this.getClient();
+    return await client.api(`/planner/tasks/${taskId}`).header('If-Match', etag).patch(updates) as MicrosoftGraph.PlannerTask;
+  }
+
+  async deletePlannerTask(taskId: string, etag: string): Promise<void> {
+    const client = await this.getClient();
+    await client.api(`/planner/tasks/${taskId}`).header('If-Match', etag).delete();
+  }
+
+  // ===========================================================================
   // People & Presence
   // ===========================================================================
 

@@ -26,6 +26,11 @@ describe('PlannerTools', () => {
       createBucketAsync: vi.fn(),
       updateBucketAsync: vi.fn(),
       deleteBucketAsync: vi.fn(),
+      listPlannerTasksAsync: vi.fn(),
+      getPlannerTaskAsync: vi.fn(),
+      createPlannerTaskAsync: vi.fn(),
+      updatePlannerTaskAsync: vi.fn(),
+      deletePlannerTaskAsync: vi.fn(),
     };
     tokenManager = new ApprovalTokenManager();
     tools = new PlannerTools(repo, tokenManager);
@@ -205,6 +210,160 @@ describe('PlannerTools', () => {
 
       // Second use should fail
       const result = await tools.confirmDeleteBucket({ approval_token });
+
+      const parsed = JSON.parse(result.content[0].text);
+      expect(parsed.success).toBe(false);
+    });
+  });
+
+  // ===========================================================================
+  // Planner Tasks
+  // ===========================================================================
+
+  describe('listPlannerTasks', () => {
+    it('returns tasks for a plan', async () => {
+      const mockTasks = [
+        { id: 100, title: 'Task A', bucketId: 10, assignees: ['user1'], percentComplete: 0, priority: 5, startDateTime: '', dueDateTime: '2026-04-01T00:00:00Z', createdDateTime: '2026-03-01T00:00:00Z' },
+        { id: 101, title: 'Task B', bucketId: null, assignees: [], percentComplete: 50, priority: 3, startDateTime: '2026-03-01T00:00:00Z', dueDateTime: '', createdDateTime: '2026-03-02T00:00:00Z' },
+      ];
+      vi.mocked(repo.listPlannerTasksAsync).mockResolvedValue(mockTasks);
+
+      const result = await tools.listPlannerTasks({ plan_id: 1 });
+
+      expect(repo.listPlannerTasksAsync).toHaveBeenCalledWith(1);
+      const parsed = JSON.parse(result.content[0].text);
+      expect(parsed.tasks).toEqual(mockTasks);
+    });
+  });
+
+  describe('getPlannerTask', () => {
+    it('returns task details including etag', async () => {
+      const mockTask = {
+        id: 100, title: 'Task A', bucketId: 10, assignees: ['user1'],
+        percentComplete: 0, priority: 5, startDateTime: '', dueDateTime: '2026-04-01T00:00:00Z',
+        createdDateTime: '2026-03-01T00:00:00Z', conversationThreadId: 'thread-1',
+        orderHint: '1', etag: 'W/"task-etag"',
+      };
+      vi.mocked(repo.getPlannerTaskAsync).mockResolvedValue(mockTask);
+
+      const result = await tools.getPlannerTask({ task_id: 100 });
+
+      expect(repo.getPlannerTaskAsync).toHaveBeenCalledWith(100);
+      const parsed = JSON.parse(result.content[0].text);
+      expect(parsed.task).toEqual(mockTask);
+      expect(parsed.task.etag).toBe('W/"task-etag"');
+    });
+  });
+
+  describe('createPlannerTask', () => {
+    it('creates a task and returns the ID', async () => {
+      vi.mocked(repo.createPlannerTaskAsync).mockResolvedValue(200);
+
+      const result = await tools.createPlannerTask({ plan_id: 1, title: 'New Task' });
+
+      expect(repo.createPlannerTaskAsync).toHaveBeenCalledWith(1, 'New Task', undefined, undefined, undefined, undefined, undefined);
+      const parsed = JSON.parse(result.content[0].text);
+      expect(parsed.success).toBe(true);
+      expect(parsed.task_id).toBe(200);
+      expect(parsed.message).toBe('Planner task created');
+    });
+
+    it('passes all optional parameters', async () => {
+      vi.mocked(repo.createPlannerTaskAsync).mockResolvedValue(201);
+      const assignments = { 'user-1': { '@odata.type': '#microsoft.graph.plannerAssignment', 'orderHint': ' !' } };
+
+      await tools.createPlannerTask({
+        plan_id: 1, title: 'Full Task', bucket_id: 10,
+        assignments, priority: 3,
+        start_date: '2026-03-01T00:00:00Z', due_date: '2026-04-01T00:00:00Z',
+      });
+
+      expect(repo.createPlannerTaskAsync).toHaveBeenCalledWith(
+        1, 'Full Task', 10, assignments, 3, '2026-03-01T00:00:00Z', '2026-04-01T00:00:00Z',
+      );
+    });
+  });
+
+  describe('updatePlannerTask', () => {
+    it('updates a task title', async () => {
+      vi.mocked(repo.updatePlannerTaskAsync).mockResolvedValue(undefined);
+
+      const result = await tools.updatePlannerTask({ task_id: 100, title: 'Renamed Task' });
+
+      expect(repo.updatePlannerTaskAsync).toHaveBeenCalledWith(100, { title: 'Renamed Task' });
+      const parsed = JSON.parse(result.content[0].text);
+      expect(parsed.success).toBe(true);
+      expect(parsed.message).toBe('Planner task updated');
+    });
+
+    it('updates multiple fields', async () => {
+      vi.mocked(repo.updatePlannerTaskAsync).mockResolvedValue(undefined);
+
+      await tools.updatePlannerTask({
+        task_id: 100, percent_complete: 75, priority: 1, due_date: '2026-05-01T00:00:00Z',
+      });
+
+      expect(repo.updatePlannerTaskAsync).toHaveBeenCalledWith(100, {
+        percentComplete: 75, priority: 1, dueDate: '2026-05-01T00:00:00Z',
+      });
+    });
+
+    it('calls update with empty updates when no fields provided', async () => {
+      vi.mocked(repo.updatePlannerTaskAsync).mockResolvedValue(undefined);
+
+      await tools.updatePlannerTask({ task_id: 100 });
+
+      expect(repo.updatePlannerTaskAsync).toHaveBeenCalledWith(100, {});
+    });
+  });
+
+  describe('prepareDeletePlannerTask', () => {
+    it('generates an approval token', () => {
+      const result = tools.prepareDeletePlannerTask({ task_id: 100 });
+
+      const parsed = JSON.parse(result.content[0].text);
+      expect(parsed.approval_token).toBeDefined();
+      expect(typeof parsed.approval_token).toBe('string');
+      expect(parsed.expires_at).toBeDefined();
+      expect(parsed.task_id).toBe(100);
+      expect(parsed.action).toContain('confirm_delete_planner_task');
+    });
+  });
+
+  describe('confirmDeletePlannerTask', () => {
+    it('deletes the task with a valid token', async () => {
+      vi.mocked(repo.deletePlannerTaskAsync).mockResolvedValue(undefined);
+
+      const prepareResult = tools.prepareDeletePlannerTask({ task_id: 100 });
+      const { approval_token } = JSON.parse(prepareResult.content[0].text);
+
+      const result = await tools.confirmDeletePlannerTask({ approval_token });
+
+      const parsed = JSON.parse(result.content[0].text);
+      expect(parsed.success).toBe(true);
+      expect(parsed.message).toBe('Planner task deleted');
+      expect(repo.deletePlannerTaskAsync).toHaveBeenCalledWith(100);
+    });
+
+    it('returns error for invalid token', async () => {
+      const result = await tools.confirmDeletePlannerTask({ approval_token: 'invalid-token' });
+
+      const parsed = JSON.parse(result.content[0].text);
+      expect(parsed.success).toBe(false);
+      expect(parsed.error).toBe('Token not found or already used');
+    });
+
+    it('returns error when token is reused', async () => {
+      vi.mocked(repo.deletePlannerTaskAsync).mockResolvedValue(undefined);
+
+      const prepareResult = tools.prepareDeletePlannerTask({ task_id: 100 });
+      const { approval_token } = JSON.parse(prepareResult.content[0].text);
+
+      // First use should succeed
+      await tools.confirmDeletePlannerTask({ approval_token });
+
+      // Second use should fail
+      const result = await tools.confirmDeletePlannerTask({ approval_token });
 
       const parsed = JSON.parse(result.content[0].text);
       expect(parsed.success).toBe(false);
