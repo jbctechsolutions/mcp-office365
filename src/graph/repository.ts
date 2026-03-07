@@ -562,6 +562,25 @@ export class GraphRepository implements IRepository {
     return event != null ? mapEventToEventRow(event) : undefined;
   }
 
+  async listEventInstancesAsync(
+    eventId: number,
+    startDate: string,
+    endDate: string
+  ): Promise<EventRow[]> {
+    const graphId = this.idCache.events.get(eventId);
+    if (graphId == null) {
+      throw new Error(`Event ID ${eventId} not found in cache. Try searching for or listing the item first to refresh the cache.`);
+    }
+
+    const instances = await this.client.listEventInstances(graphId, startDate, endDate);
+    for (const inst of instances) {
+      if (inst.id != null) {
+        this.idCache.events.set(hashStringToNumber(inst.id), inst.id);
+      }
+    }
+    return instances.map((e) => mapEventToEventRow(e));
+  }
+
   // ===========================================================================
   // Contacts
   // ===========================================================================

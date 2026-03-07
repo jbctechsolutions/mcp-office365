@@ -653,6 +653,19 @@ const TOOLS: Tool[] = [
       required: ['token_id', 'event_id'],
     },
   },
+  {
+    name: 'list_event_instances',
+    description: 'List instances of a recurring event within a date range. Instance IDs can be used with update_event and delete_event. (Graph API)',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        event_id: { type: 'number', description: 'Recurring event ID' },
+        start_date: { type: 'string', description: 'Start of date range (ISO 8601, e.g. 2024-01-01T00:00:00Z)' },
+        end_date: { type: 'string', description: 'End of date range (ISO 8601, e.g. 2024-12-31T23:59:59Z)' },
+      },
+      required: ['event_id', 'start_date', 'end_date'],
+    },
+  },
   // Contact tools
   {
     name: 'list_contacts',
@@ -2146,6 +2159,7 @@ export function createServer(): Server {
     'confirm_delete_contact_folder',
     'get_contact_photo',
     'set_contact_photo',
+    'list_event_instances',
   ]);
 
   // Register tool list handler
@@ -3035,6 +3049,12 @@ const ConfirmDeleteEventInput = z.strictObject({
   event_id: z.number().int().positive(),
 });
 
+const ListEventInstancesInput = z.strictObject({
+  event_id: z.number().int().positive().describe('Recurring event ID'),
+  start_date: z.string().describe('Start of date range (ISO 8601, e.g. 2024-01-01T00:00:00Z)'),
+  end_date: z.string().describe('End of date range (ISO 8601, e.g. 2024-12-31T23:59:59Z)'),
+});
+
 // =============================================================================
 // Contact Write — Zod Schemas (Graph API)
 // =============================================================================
@@ -3479,6 +3499,12 @@ async function handleGraphToolCall(
         return {
           content: [{ type: 'text', text: `Successfully deleted event ${params.event_id}` }],
         };
+      }
+
+      case 'list_event_instances': {
+        const params = ListEventInstancesInput.parse(args);
+        const instances = await repository.listEventInstancesAsync(params.event_id, params.start_date, params.end_date);
+        return { content: [{ type: 'text', text: JSON.stringify({ instances: instances.map(transformGraphEventRow), count: instances.length }, null, 2) }] };
       }
 
       case 'prepare_delete_event': {

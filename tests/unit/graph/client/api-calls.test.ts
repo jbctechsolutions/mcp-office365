@@ -160,6 +160,7 @@ const VALID_ENDPOINT_PATTERNS = [
   /^\/me\/events\/[^/]+\/accept$/,
   /^\/me\/events\/[^/]+\/decline$/,
   /^\/me\/events\/[^/]+\/tentativelyAccept$/,
+  /^\/me\/events\/[^/]+\/instances$/,
   /^\/me\/calendarView$/,
   // Contacts
   /^\/me\/contacts$/,
@@ -441,6 +442,18 @@ describe('Graph API endpoint and method validation', () => {
       expect(apiCalls).toHaveLength(1);
       expect(apiCalls[0].url).toBe('/me/events/evt-1');
       expect(apiCalls[0].method).toBe('get');
+    });
+
+    it('listEventInstances calls /me/events/{id}/instances with query params', async () => {
+      await client.listEventInstances('evt-1', '2024-01-01T00:00:00Z', '2024-12-31T23:59:59Z');
+
+      expect(apiCalls).toHaveLength(1);
+      expect(apiCalls[0].url).toBe('/me/events/evt-1/instances');
+      expect(apiCalls[0].method).toBe('get');
+      expect(apiCalls[0].queryParams).toEqual({
+        startDateTime: '2024-01-01T00:00:00Z',
+        endDateTime: '2024-12-31T23:59:59Z',
+      });
     });
 
     it('listContacts calls /me/contacts with GET and $orderby displayName', async () => {
@@ -1295,6 +1308,9 @@ describe('Graph API endpoint and method validation', () => {
 
       setupMock({ id: 'evt-1', subject: 'M' });
       await client.getEvent('evt-1');
+
+      setupMock();
+      await client.listEventInstances('evt-1', '2024-01-01T00:00:00Z', '2024-12-31T23:59:59Z');
 
       setupMock();
       await client.listContacts();

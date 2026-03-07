@@ -8,7 +8,7 @@ A [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) server that p
 
 ## Features
 
-- **93 tools** - Full read/write access to mail, calendar, contacts, and tasks
+- **94 tools** - Full read/write access to mail, calendar, contacts, and tasks
 - **Two backends** - AppleScript for classic Outlook, Microsoft Graph API for new Outlook
 - **Two-phase approval** - Destructive operations (delete, send) require explicit confirmation
 - **Works offline** - AppleScript backend requires no network (Graph API requires internet)
@@ -67,17 +67,18 @@ A [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) server that p
 - `create_mail_rule` - Create an inbox mail rule with conditions and actions
 - `prepare_delete_mail_rule` / `confirm_delete_mail_rule` - Delete a mail rule (two-phase)
 
-**Calendar - Reading (4)**
+**Calendar - Reading (5)**
 - `list_calendars` - List all calendars
 - `list_events` - List events with date range filtering
 - `get_event` - Get event details
 - `search_events` - Search events by title
+- `list_event_instances` - List instances of a recurring event within a date range *(Graph API)*
 
 **Calendar - Writing (6)**
 - `create_event` - Create a new calendar event
-- `update_event` - Update event details (title, time, location, etc.)
+- `update_event` - Update event details (title, time, location, etc.); also works on instance IDs from `list_event_instances`
 - `respond_to_event` - Accept, decline, or tentatively accept invitations
-- `delete_event` - Delete a calendar event or recurring series
+- `delete_event` - Delete a calendar event or recurring series; also works on instance IDs from `list_event_instances`
 - `prepare_delete_event` / `confirm_delete_event` - Delete event with two-phase approval *(Graph API)*
 
 **Contacts (9)**

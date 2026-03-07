@@ -65,6 +65,8 @@ vi.mock('../../../src/graph/client/index.js', () => ({
       createForwardDraft: vi.fn(),
       // Attachment operations
       listAttachments: vi.fn(),
+      // Calendar instance operations
+      listEventInstances: vi.fn(),
       // Calendar write operations
       createEvent: vi.fn(),
       updateEvent: vi.fn(),
@@ -767,6 +769,64 @@ describe('graph/repository', () => {
         const result = await repository.listEventsByFolderAsync(99999, 50);
 
         expect(result).toHaveLength(1);
+      });
+    });
+
+    describe('listEventInstancesAsync', () => {
+      it('returns mapped event instances', async () => {
+        // Populate cache with the recurring event
+        mockClient.listEvents.mockResolvedValue([
+          { id: 'evt-recurring', subject: 'Weekly Standup', recurrence: {} },
+        ]);
+        await repository.listEventsAsync(50);
+
+        mockClient.listEventInstances.mockResolvedValue([
+          { id: 'inst-1', subject: 'Weekly Standup', start: { dateTime: '2024-01-08T10:00:00' } },
+          { id: 'inst-2', subject: 'Weekly Standup', start: { dateTime: '2024-01-15T10:00:00' } },
+        ]);
+
+        const result = await repository.listEventInstancesAsync(
+          hashStringToNumber('evt-recurring'),
+          '2024-01-01T00:00:00Z',
+          '2024-01-31T23:59:59Z'
+        );
+
+        expect(result).toHaveLength(2);
+        expect(mockClient.listEventInstances).toHaveBeenCalledWith(
+          'evt-recurring',
+          '2024-01-01T00:00:00Z',
+          '2024-01-31T23:59:59Z'
+        );
+      });
+
+      it('caches instance IDs', async () => {
+        // Populate cache with the recurring event
+        mockClient.listEvents.mockResolvedValue([
+          { id: 'evt-recurring', subject: 'Weekly Standup' },
+        ]);
+        await repository.listEventsAsync(50);
+
+        mockClient.listEventInstances.mockResolvedValue([
+          { id: 'inst-1', subject: 'Weekly Standup' },
+        ]);
+
+        await repository.listEventInstancesAsync(
+          hashStringToNumber('evt-recurring'),
+          '2024-01-01T00:00:00Z',
+          '2024-01-31T23:59:59Z'
+        );
+
+        // The instance ID should now be cached, so getEventAsync should work
+        mockClient.getEvent.mockResolvedValue({ id: 'inst-1', subject: 'Weekly Standup' });
+        const event = await repository.getEventAsync(hashStringToNumber('inst-1'));
+        expect(event).toBeDefined();
+        expect(mockClient.getEvent).toHaveBeenCalledWith('inst-1');
+      });
+
+      it('throws for unknown event ID', async () => {
+        await expect(
+          repository.listEventInstancesAsync(999999, '2024-01-01T00:00:00Z', '2024-01-31T23:59:59Z')
+        ).rejects.toThrow('not found in cache');
       });
     });
   });

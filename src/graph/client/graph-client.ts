@@ -448,6 +448,23 @@ export class GraphClient {
     }
   }
 
+  /**
+   * Lists instances of a recurring event within a date range.
+   */
+  async listEventInstances(
+    eventId: string,
+    startDateTime: string,
+    endDateTime: string
+  ): Promise<MicrosoftGraph.Event[]> {
+    const client = await this.getClient();
+    const response = await client
+      .api(`/me/events/${eventId}/instances`)
+      .query({ startDateTime, endDateTime })
+      .select('id,subject,start,end,location,isAllDay,isCancelled,organizer,recurrence,bodyPreview')
+      .get() as PageCollection;
+    return response.value as MicrosoftGraph.Event[];
+  }
+
   // ===========================================================================
   // Calendar Write Operations
   // ===========================================================================
