@@ -1642,6 +1642,46 @@ export class GraphClient {
     const response = await client.api(`/me/chats/${chatId}/members`).get() as PageCollection;
     return response.value as MicrosoftGraph.ConversationMember[];
   }
+
+  // ===========================================================================
+  // Checklist Items
+  // ===========================================================================
+
+  /**
+   * Lists checklist items on a task.
+   */
+  async listChecklistItems(taskListId: string, taskId: string): Promise<MicrosoftGraph.ChecklistItem[]> {
+    const client = await this.getClient();
+    const response = await client.api(`/me/todo/lists/${taskListId}/tasks/${taskId}/checklistItems`).get() as PageCollection;
+    return response.value as MicrosoftGraph.ChecklistItem[];
+  }
+
+  /**
+   * Creates a checklist item on a task.
+   */
+  async createChecklistItem(taskListId: string, taskId: string, displayName: string, isChecked: boolean = false): Promise<MicrosoftGraph.ChecklistItem> {
+    const client = await this.getClient();
+    return await client.api(`/me/todo/lists/${taskListId}/tasks/${taskId}/checklistItems`).post({
+      displayName,
+      isChecked,
+    }) as MicrosoftGraph.ChecklistItem;
+  }
+
+  /**
+   * Updates a checklist item.
+   */
+  async updateChecklistItem(taskListId: string, taskId: string, checklistItemId: string, updates: Record<string, unknown>): Promise<void> {
+    const client = await this.getClient();
+    await client.api(`/me/todo/lists/${taskListId}/tasks/${taskId}/checklistItems/${checklistItemId}`).patch(updates);
+  }
+
+  /**
+   * Deletes a checklist item.
+   */
+  async deleteChecklistItem(taskListId: string, taskId: string, checklistItemId: string): Promise<void> {
+    const client = await this.getClient();
+    await client.api(`/me/todo/lists/${taskListId}/tasks/${taskId}/checklistItems/${checklistItemId}`).delete();
+  }
 }
 
 /**

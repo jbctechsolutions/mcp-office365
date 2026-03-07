@@ -58,6 +58,7 @@ interface IdCache {
   channelMessages: Map<number, { teamId: string; channelId: string; messageId: string }>;
   chats: Map<number, string>;
   chatMessages: Map<number, { chatId: string; messageId: string }>;
+  checklistItems: Map<number, { taskListId: string; taskId: string; checklistItemId: string }>;
 }
 
 /**
@@ -89,6 +90,7 @@ export class GraphRepository implements IRepository {
     channelMessages: new Map(),
     chats: new Map(),
     chatMessages: new Map(),
+    checklistItems: new Map(),
   };
 
   constructor(deviceCodeCallback?: DeviceCodeCallback) {
@@ -1740,6 +1742,55 @@ export class GraphRepository implements IRepository {
     if (graphId == null) throw new Error(`Task list ID ${listId} not found in cache. Try searching for or listing the item first to refresh the cache.`);
     await this.client.deleteTaskList(graphId);
     this.idCache.taskLists.delete(listId);
+  }
+
+  // ===========================================================================
+  // Checklist Items
+  // ===========================================================================
+
+  async listChecklistItemsAsync(taskId: number): Promise<Array<{
+    id: number; displayName: string; isChecked: boolean; createdDateTime: string;
+  }>> {
+    const taskInfo = this.idCache.tasks.get(taskId);
+    if (taskInfo == null) throw new Error(`Task ID ${taskId} not found in cache. Try listing tasks first.`);
+    const items = await this.client.listChecklistItems(taskInfo.taskListId, taskInfo.taskId);
+    return items.map((item) => {
+      const graphId = item.id!;
+      const numericId = hashStringToNumber(graphId);
+      this.idCache.checklistItems.set(numericId, { taskListId: taskInfo.taskListId, taskId: taskInfo.taskId, checklistItemId: graphId });
+      return {
+        id: numericId,
+        displayName: item.displayName ?? '',
+        isChecked: item.isChecked ?? false,
+        createdDateTime: item.createdDateTime ?? '',
+      };
+    });
+  }
+
+  async createChecklistItemAsync(taskId: number, displayName: string, isChecked: boolean = false): Promise<number> {
+    const taskInfo = this.idCache.tasks.get(taskId);
+    if (taskInfo == null) throw new Error(`Task ID ${taskId} not found in cache. Try listing tasks first.`);
+    const item = await this.client.createChecklistItem(taskInfo.taskListId, taskInfo.taskId, displayName, isChecked);
+    const graphId = item.id!;
+    const numericId = hashStringToNumber(graphId);
+    this.idCache.checklistItems.set(numericId, { taskListId: taskInfo.taskListId, taskId: taskInfo.taskId, checklistItemId: graphId });
+    return numericId;
+  }
+
+  async updateChecklistItemAsync(checklistItemId: number, updates: { displayName?: string; isChecked?: boolean }): Promise<void> {
+    const cached = this.idCache.checklistItems.get(checklistItemId);
+    if (cached == null) throw new Error(`Checklist item ID ${checklistItemId} not found in cache. Try listing checklist items first.`);
+    const graphUpdates: Record<string, unknown> = {};
+    if (updates.displayName != null) graphUpdates['displayName'] = updates.displayName;
+    if (updates.isChecked != null) graphUpdates['isChecked'] = updates.isChecked;
+    await this.client.updateChecklistItem(cached.taskListId, cached.taskId, cached.checklistItemId, graphUpdates);
+  }
+
+  async deleteChecklistItemAsync(checklistItemId: number): Promise<void> {
+    const cached = this.idCache.checklistItems.get(checklistItemId);
+    if (cached == null) throw new Error(`Checklist item ID ${checklistItemId} not found in cache. Try listing checklist items first.`);
+    await this.client.deleteChecklistItem(cached.taskListId, cached.taskId, cached.checklistItemId);
+    this.idCache.checklistItems.delete(checklistItemId);
   }
 
   // ===========================================================================

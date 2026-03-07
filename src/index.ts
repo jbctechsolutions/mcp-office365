@@ -89,6 +89,14 @@ import {
   ConfirmDeleteFocusedOverrideInput,
 } from './tools/focused-overrides.js';
 import {
+  ChecklistItemsTools,
+  ListChecklistItemsInput,
+  CreateChecklistItemInput,
+  UpdateChecklistItemInput,
+  PrepareDeleteChecklistItemInput,
+  ConfirmDeleteChecklistItemInput,
+} from './tools/checklist-items.js';
+import {
   TeamsTools,
   ListChannelsInput,
   GetChannelInput,
@@ -2620,6 +2628,66 @@ const TOOLS: Tool[] = [
       required: ['chat_id'],
     },
   },
+  // Checklist Items tools
+  {
+    name: 'list_checklist_items',
+    description: 'List checklist items (subtasks) on a To Do task (Graph API)',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        task_id: { type: 'number', description: 'Task ID from list_tasks or search_tasks' },
+      },
+      required: ['task_id'],
+    },
+  },
+  {
+    name: 'create_checklist_item',
+    description: 'Create a checklist item (subtask) on a To Do task (Graph API)',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        task_id: { type: 'number', description: 'Task ID' },
+        display_name: { type: 'string', description: 'Checklist item text' },
+        is_checked: { type: 'boolean', description: 'Whether the item is checked (default: false)' },
+      },
+      required: ['task_id', 'display_name'],
+    },
+  },
+  {
+    name: 'update_checklist_item',
+    description: 'Update a checklist item (toggle check, rename) on a To Do task (Graph API)',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        checklist_item_id: { type: 'number', description: 'Checklist item ID' },
+        display_name: { type: 'string', description: 'New text' },
+        is_checked: { type: 'boolean', description: 'Toggle checked state' },
+      },
+      required: ['checklist_item_id'],
+    },
+  },
+  {
+    name: 'prepare_delete_checklist_item',
+    description: 'Prepare to delete a checklist item. Returns an approval token. Call confirm_delete_checklist_item to execute. (Graph API)',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        checklist_item_id: { type: 'number', description: 'Checklist item ID to delete' },
+      },
+      required: ['checklist_item_id'],
+    },
+  },
+  {
+    name: 'confirm_delete_checklist_item',
+    description: 'Confirm deletion of a checklist item with approval token (Graph API)',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        approval_token: { type: 'string', description: 'The approval token from prepare_delete_checklist_item' },
+      },
+      required: ['approval_token'],
+    },
+  },
 ];
 
 // =============================================================================
@@ -2664,6 +2732,7 @@ export function createServer(): Server {
   let calendarPermissionsTools: CalendarPermissionsTools | null = null;
   let focusedOverridesTools: FocusedOverridesTools | null = null;
   let teamsTools: TeamsTools | null = null;
+  let checklistItemsTools: ChecklistItemsTools | null = null;
   let calendarWriter: ICalendarWriter | null = null;
   let calendarManager: ICalendarManager | null = null;
   let mailSender: IMailSender | null = null;
@@ -2720,6 +2789,7 @@ export function createServer(): Server {
     calendarPermissionsTools = new CalendarPermissionsTools(graphRepository, tokenManager);
     focusedOverridesTools = new FocusedOverridesTools(graphRepository, tokenManager);
     teamsTools = new TeamsTools(graphRepository, tokenManager);
+    checklistItemsTools = new ChecklistItemsTools(graphRepository, tokenManager);
 
     initialized = true;
   });
@@ -2804,6 +2874,11 @@ export function createServer(): Server {
     'prepare_send_chat_message',
     'confirm_send_chat_message',
     'list_chat_members',
+    'list_checklist_items',
+    'create_checklist_item',
+    'update_checklist_item',
+    'prepare_delete_checklist_item',
+    'confirm_delete_checklist_item',
   ]);
 
   // Register tool list handler
@@ -2821,7 +2896,7 @@ export function createServer(): Server {
 
       // Graph API mode - handle async operations directly
       if (useGraphApi && graphRepository != null) {
-        return await handleGraphToolCall(name, args, graphRepository, graphContentReaders!, orgTools!, sendTools!, schedulingTools!, rulesTools!, categoriesTools!, calendarPermissionsTools!, focusedOverridesTools!, teamsTools!, tokenManager);
+        return await handleGraphToolCall(name, args, graphRepository, graphContentReaders!, orgTools!, sendTools!, schedulingTools!, rulesTools!, categoriesTools!, calendarPermissionsTools!, focusedOverridesTools!, teamsTools!, checklistItemsTools!, tokenManager);
       }
 
       // AppleScript mode - use sync tool interfaces
@@ -3895,6 +3970,7 @@ async function handleGraphToolCall(
   calendarPermissionsTools: CalendarPermissionsTools,
   focusedOverridesTools: FocusedOverridesTools,
   teamsTools: TeamsTools,
+  checklistItemsTools: ChecklistItemsTools,
   tokenManager: ApprovalTokenManager
 ): Promise<ToolResult> {
   // Handle mailbox organization tools (shared between backends)
@@ -5044,6 +5120,32 @@ async function handleGraphToolCall(
       case 'list_chat_members': {
         const params = ListChatMembersInput.parse(args);
         return await teamsTools.listChatMembers(params);
+      }
+
+      // Checklist Items tools
+      case 'list_checklist_items': {
+        const params = ListChecklistItemsInput.parse(args);
+        return await checklistItemsTools.listChecklistItems(params);
+      }
+
+      case 'create_checklist_item': {
+        const params = CreateChecklistItemInput.parse(args);
+        return await checklistItemsTools.createChecklistItem(params);
+      }
+
+      case 'update_checklist_item': {
+        const params = UpdateChecklistItemInput.parse(args);
+        return await checklistItemsTools.updateChecklistItem(params);
+      }
+
+      case 'prepare_delete_checklist_item': {
+        const params = PrepareDeleteChecklistItemInput.parse(args);
+        return checklistItemsTools.prepareDeleteChecklistItem(params);
+      }
+
+      case 'confirm_delete_checklist_item': {
+        const params = ConfirmDeleteChecklistItemInput.parse(args);
+        return await checklistItemsTools.confirmDeleteChecklistItem(params);
       }
 
       default:
