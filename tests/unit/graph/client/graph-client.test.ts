@@ -983,4 +983,51 @@ describe('graph/client/graph-client', () => {
       expect(result).toBe(mimeContent);
     });
   });
+
+  describe('Calendar Groups', () => {
+    describe('listCalendarGroups', () => {
+      it('returns calendar groups', async () => {
+        const mockGroups = [
+          { id: 'cg-1', name: 'My Calendars', classId: '0006' },
+          { id: 'cg-2', name: 'Other Calendars', classId: '0006' },
+        ];
+
+        mockApi.mockReturnValue(
+          createMockRequestBuilder({ value: mockGroups })
+        );
+
+        const result = await graphClient.listCalendarGroups();
+
+        expect(result).toHaveLength(2);
+        expect(result[0].name).toBe('My Calendars');
+        expect(result[1].name).toBe('Other Calendars');
+        expect(mockApi).toHaveBeenCalledWith('/me/calendarGroups');
+      });
+
+      it('returns empty array when no groups', async () => {
+        mockApi.mockReturnValue(
+          createMockRequestBuilder({ value: [] })
+        );
+
+        const result = await graphClient.listCalendarGroups();
+
+        expect(result).toHaveLength(0);
+      });
+    });
+
+    describe('createCalendarGroup', () => {
+      it('creates a calendar group and returns it', async () => {
+        const mockCreated = { id: 'cg-new', name: 'Work', classId: '0006' };
+        const builder = createMockRequestBuilder(mockCreated);
+        builder.post = vi.fn().mockResolvedValue(mockCreated);
+        mockApi.mockReturnValue(builder);
+
+        const result = await graphClient.createCalendarGroup('Work');
+
+        expect(mockApi).toHaveBeenCalledWith('/me/calendarGroups');
+        expect(result.name).toBe('Work');
+        expect(result.id).toBe('cg-new');
+      });
+    });
+  });
 });

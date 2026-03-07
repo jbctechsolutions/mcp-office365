@@ -114,6 +114,9 @@ vi.mock('../../../src/graph/client/index.js', () => ({
       getMessageMime: vi.fn(),
       // Mail tips operations
       getMailTips: vi.fn(),
+      // Calendar group operations
+      listCalendarGroups: vi.fn(),
+      createCalendarGroup: vi.fn(),
     };
   }),
 }));
@@ -3649,6 +3652,83 @@ describe('graph/repository', () => {
         const result = await repository.getMailTipsAsync(['test@example.com']);
 
         expect(result[0].automaticReplies).toBeNull();
+      });
+    });
+  });
+
+  describe('Calendar Groups', () => {
+    describe('listCalendarGroupsAsync', () => {
+      it('returns mapped calendar groups', async () => {
+        mockClient.listCalendarGroups.mockResolvedValue([
+          { id: 'cg-1', name: 'My Calendars', classId: '0006' },
+          { id: 'cg-2', name: 'Other Calendars', classId: '0006' },
+        ]);
+
+        const result = await repository.listCalendarGroupsAsync();
+
+        expect(result).toHaveLength(2);
+        expect(result[0].id).toBe(hashStringToNumber('cg-1'));
+        expect(result[0].name).toBe('My Calendars');
+        expect(result[0].classId).toBe('0006');
+        expect(result[1].id).toBe(hashStringToNumber('cg-2'));
+        expect(result[1].name).toBe('Other Calendars');
+      });
+
+      it('caches IDs for later lookup', async () => {
+        mockClient.listCalendarGroups.mockResolvedValue([
+          { id: 'cg-1', name: 'My Calendars', classId: '0006' },
+        ]);
+
+        await repository.listCalendarGroupsAsync();
+
+        const cache = (repository as any).idCache.calendarGroups;
+        expect(cache.get(hashStringToNumber('cg-1'))).toBe('cg-1');
+      });
+
+      it('handles empty results', async () => {
+        mockClient.listCalendarGroups.mockResolvedValue([]);
+
+        const result = await repository.listCalendarGroupsAsync();
+
+        expect(result).toHaveLength(0);
+      });
+
+      it('handles missing name and classId', async () => {
+        mockClient.listCalendarGroups.mockResolvedValue([
+          { id: 'cg-1' },
+        ]);
+
+        const result = await repository.listCalendarGroupsAsync();
+
+        expect(result[0].name).toBe('');
+        expect(result[0].classId).toBe('');
+      });
+    });
+
+    describe('createCalendarGroupAsync', () => {
+      it('creates a calendar group and returns numeric ID', async () => {
+        mockClient.createCalendarGroup.mockResolvedValue({
+          id: 'cg-new',
+          name: 'Work',
+          classId: '0006',
+        });
+
+        const result = await repository.createCalendarGroupAsync('Work');
+
+        expect(result).toBe(hashStringToNumber('cg-new'));
+        expect(mockClient.createCalendarGroup).toHaveBeenCalledWith('Work');
+      });
+
+      it('caches the new calendar group ID', async () => {
+        mockClient.createCalendarGroup.mockResolvedValue({
+          id: 'cg-new',
+          name: 'Personal',
+        });
+
+        await repository.createCalendarGroupAsync('Personal');
+
+        const cache = (repository as any).idCache.calendarGroups;
+        expect(cache.get(hashStringToNumber('cg-new'))).toBe('cg-new');
       });
     });
   });

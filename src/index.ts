@@ -2250,6 +2250,27 @@ const TOOLS: Tool[] = [
       required: ['email_id'],
     },
   },
+  // Calendar Group tools
+  {
+    name: 'list_calendar_groups',
+    description: 'List all calendar groups (Graph API)',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {},
+      required: [],
+    },
+  },
+  {
+    name: 'create_calendar_group',
+    description: 'Create a new calendar group (Graph API)',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        name: { type: 'string', description: 'Calendar group name' },
+      },
+      required: ['name'],
+    },
+  },
 ];
 
 // =============================================================================
@@ -2402,6 +2423,8 @@ export function createServer(): Server {
     'get_mail_tips',
     'get_message_headers',
     'get_message_mime',
+    'list_calendar_groups',
+    'create_calendar_group',
   ]);
 
   // Register tool list handler
@@ -3442,6 +3465,10 @@ const GetMessageMimeInput = z.strictObject({
   email_id: z.number().int().positive().describe('Email ID'),
 });
 
+const CreateCalendarGroupInput = z.strictObject({
+  name: z.string().min(1).describe('Calendar group name'),
+});
+
 const CreateContactFolderInput = z.strictObject({
   name: z.string().min(1).describe('Contact folder name'),
 });
@@ -4475,6 +4502,18 @@ async function handleGraphToolCall(
         const params = GetMessageMimeInput.parse(args);
         const result = await repository.getMessageMimeAsync(params.email_id);
         return { content: [{ type: 'text', text: JSON.stringify({ success: true, file_path: result.filePath }, null, 2) }] };
+      }
+
+      // Calendar group tools
+      case 'list_calendar_groups': {
+        const groups = await repository.listCalendarGroupsAsync();
+        return { content: [{ type: 'text', text: JSON.stringify({ calendar_groups: groups }, null, 2) }] };
+      }
+
+      case 'create_calendar_group': {
+        const params = CreateCalendarGroupInput.parse(args);
+        const groupId = await repository.createCalendarGroupAsync(params.name);
+        return { content: [{ type: 'text', text: JSON.stringify({ success: true, calendar_group_id: groupId, message: 'Calendar group created' }, null, 2) }] };
       }
 
       default:

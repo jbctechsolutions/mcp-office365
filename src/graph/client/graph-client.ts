@@ -1395,6 +1395,29 @@ export class GraphClient {
   }
 
   // ===========================================================================
+  // Calendar Groups
+  // ===========================================================================
+
+  /**
+   * Lists all calendar groups.
+   */
+  async listCalendarGroups(): Promise<MicrosoftGraph.CalendarGroup[]> {
+    const client = await this.getClient();
+    const response = await client.api('/me/calendarGroups').get() as PageCollection;
+    return response.value as MicrosoftGraph.CalendarGroup[];
+  }
+
+  /**
+   * Creates a new calendar group.
+   */
+  async createCalendarGroup(name: string): Promise<MicrosoftGraph.CalendarGroup> {
+    const client = await this.getClient();
+    const result = await client.api('/me/calendarGroups').post({ name }) as MicrosoftGraph.CalendarGroup;
+    this.cache.clear();
+    return result;
+  }
+
+  // ===========================================================================
   // Mail Tips
   // ===========================================================================
 

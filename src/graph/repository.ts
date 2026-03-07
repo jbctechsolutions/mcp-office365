@@ -50,6 +50,7 @@ interface IdCache {
   contactFolders: Map<number, string>;
   categories: Map<number, string>;
   focusedOverrides: Map<number, string>;
+  calendarGroups: Map<number, string>;
 }
 
 /**
@@ -73,6 +74,7 @@ export class GraphRepository implements IRepository {
     contactFolders: new Map(),
     categories: new Map(),
     focusedOverrides: new Map(),
+    calendarGroups: new Map(),
   };
 
   constructor(deviceCodeCallback?: DeviceCodeCallback) {
@@ -1981,6 +1983,38 @@ export class GraphRepository implements IRepository {
       externalMemberCount: tip.externalMemberCount ?? 0,
       maxMessageSize: tip.maxMessageSize ?? 0,
     }));
+  }
+
+  // ===========================================================================
+  // Calendar Groups
+  // ===========================================================================
+
+  /**
+   * Lists all calendar groups.
+   */
+  async listCalendarGroupsAsync(): Promise<Array<{ id: number; name: string; classId: string }>> {
+    const groups = await this.client.listCalendarGroups();
+    return groups.map((group) => {
+      const graphId = group.id!;
+      const numericId = hashStringToNumber(graphId);
+      this.idCache.calendarGroups.set(numericId, graphId);
+      return {
+        id: numericId,
+        name: group.name ?? '',
+        classId: group.classId?.toString() ?? '',
+      };
+    });
+  }
+
+  /**
+   * Creates a new calendar group.
+   */
+  async createCalendarGroupAsync(name: string): Promise<number> {
+    const created = await this.client.createCalendarGroup(name);
+    const graphId = created.id!;
+    const numericId = hashStringToNumber(graphId);
+    this.idCache.calendarGroups.set(numericId, graphId);
+    return numericId;
   }
 
   /**
