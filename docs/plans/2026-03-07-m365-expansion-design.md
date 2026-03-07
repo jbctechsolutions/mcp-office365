@@ -245,3 +245,16 @@ Note: Planner uses ETags for concurrency. Every PATCH requires `If-Match` header
 | **Total** | | **~75** | **4** |
 
 Current: 94 tools. After expansion: ~169 tools.
+
+---
+
+## Future: Phase 6 -- Planner Visualization
+
+After all phases are complete, add tools to generate visual charts from Planner data:
+
+- **Gantt charts** -- timeline view of planner tasks with dependencies, assignments, and progress
+- **Kanban boards** -- bucket-based card view with task status and assignees
+- **Burndown/burnup charts** -- progress tracking over time
+- **Resource allocation** -- workload distribution across team members
+
+Implementation: Generate SVG or HTML output from Planner task data. Could use a lightweight charting library or template-based SVG generation. Returns file path to the generated chart. This is a post-MVP enhancement -- build after all M365 CRUD tools are stable.
