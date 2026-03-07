@@ -252,6 +252,17 @@ describe('Graph API $select field validation', () => {
       }
     });
 
+    it('listConversationMessages uses only valid Message fields', async () => {
+      await client.listConversationMessages('conv-1', 10);
+
+      const msgSelects = selectCalls.filter(c => c.url.includes('/messages'));
+      expect(msgSelects.length).toBeGreaterThan(0);
+
+      for (const call of msgSelects) {
+        validateSelectFields(call.fields, VALID_MESSAGE_FIELDS, 'Message');
+      }
+    });
+
     it('getMessage uses only valid Message fields', async () => {
       mockApi.mockImplementation((url: string) => {
         const builder = createTrackingRequestBuilder({ id: 'msg-1', subject: 'Test' });

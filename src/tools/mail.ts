@@ -70,6 +70,11 @@ export const GetEmailsInput = z.strictObject({
   strip_html: z.boolean().default(false).describe('Strip HTML tags from body'),
 });
 
+export const ListConversationInput = z.strictObject({
+  message_id: z.number().int().positive().describe('Any message ID from the conversation thread'),
+  limit: z.number().int().min(1).max(100).default(25).describe('Maximum messages to return'),
+});
+
 export const GetUnreadCountInput = z.strictObject({
   folder_id: z
     .number()

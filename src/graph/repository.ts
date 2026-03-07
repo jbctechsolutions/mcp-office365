@@ -38,6 +38,7 @@ import { downloadAttachment } from './attachments.js';
 interface IdCache {
   folders: Map<number, string>;
   messages: Map<number, string>;
+  conversations: Map<number, string>;
   events: Map<number, string>;
   contacts: Map<number, string>;
   tasks: Map<number, { taskListId: string; taskId: string }>;
@@ -55,6 +56,7 @@ export class GraphRepository implements IRepository {
   private readonly idCache: IdCache = {
     folders: new Map(),
     messages: new Map(),
+    conversations: new Map(),
     events: new Map(),
     contacts: new Map(),
     tasks: new Map(),
@@ -144,6 +146,9 @@ export class GraphRepository implements IRepository {
         const numericId = hashStringToNumber(message.id);
         this.idCache.messages.set(numericId, message.id);
       }
+      if (message.conversationId != null) {
+        this.idCache.conversations.set(hashStringToNumber(message.conversationId), message.conversationId);
+      }
     }
 
     return messages.map((m) => mapMessageToEmailRow(m, folderId));
@@ -175,6 +180,9 @@ export class GraphRepository implements IRepository {
         const numericId = hashStringToNumber(message.id);
         this.idCache.messages.set(numericId, message.id);
       }
+      if (message.conversationId != null) {
+        this.idCache.conversations.set(hashStringToNumber(message.conversationId), message.conversationId);
+      }
     }
 
     return messages.map((m) => mapMessageToEmailRow(m, folderId));
@@ -191,6 +199,9 @@ export class GraphRepository implements IRepository {
       if (message.id != null) {
         const numericId = hashStringToNumber(message.id);
         this.idCache.messages.set(numericId, message.id);
+      }
+      if (message.conversationId != null) {
+        this.idCache.conversations.set(hashStringToNumber(message.conversationId), message.conversationId);
       }
     }
 
@@ -223,6 +234,9 @@ export class GraphRepository implements IRepository {
         const numericId = hashStringToNumber(message.id);
         this.idCache.messages.set(numericId, message.id);
       }
+      if (message.conversationId != null) {
+        this.idCache.conversations.set(hashStringToNumber(message.conversationId), message.conversationId);
+      }
     }
 
     return messages.map((m) => mapMessageToEmailRow(m, folderId));
@@ -251,7 +265,7 @@ export class GraphRepository implements IRepository {
       const folder = folders[i]!;
       const graphFolderId = this.idCache.folders.get(folder.id);
       if (graphFolderId == null) continue;
-      let messages: Array<{ id?: string | null }>;
+      let messages: Array<{ id?: string | null; conversationId?: string | null }>;
       try {
         messages = await this.client.listMessages(graphFolderId, MESSAGE_LIMIT_PER_FOLDER, 0);
       } catch {
@@ -263,6 +277,9 @@ export class GraphRepository implements IRepository {
           const numericId = hashStringToNumber(message.id);
           this.idCache.messages.set(numericId, message.id);
           if (numericId === targetId) return true;
+        }
+        if (message.conversationId != null) {
+          this.idCache.conversations.set(hashStringToNumber(message.conversationId), message.conversationId);
         }
       }
     }
@@ -310,6 +327,36 @@ export class GraphRepository implements IRepository {
 
     const folder = await this.client.getMailFolder(graphId);
     return folder?.unreadItemCount ?? 0;
+  }
+
+  // ===========================================================================
+  // Conversation / Thread
+  // ===========================================================================
+
+  /**
+   * Lists all messages in a conversation thread.
+   *
+   * Looks up the message to get its conversationId, resolves the Graph string
+   * conversationId from cache, then queries for all messages with that ID.
+   */
+  async listConversationAsync(messageId: number, limit: number): Promise<EmailRow[]> {
+    const email = await this.getEmailAsync(messageId);
+    if (email == null) throw new Error(`Message ID ${messageId} not found`);
+    if (email.conversationId == null) throw new Error('Message has no conversation ID');
+
+    const graphConversationId = this.idCache.conversations.get(email.conversationId);
+    if (graphConversationId == null) throw new Error('Conversation ID not found in cache. Try fetching the email first to populate the cache.');
+
+    const messages = await this.client.listConversationMessages(graphConversationId, limit);
+    for (const msg of messages) {
+      if (msg.id != null) {
+        this.idCache.messages.set(hashStringToNumber(msg.id), msg.id);
+      }
+      if (msg.conversationId != null) {
+        this.idCache.conversations.set(hashStringToNumber(msg.conversationId), msg.conversationId);
+      }
+    }
+    return messages.map((m) => mapMessageToEmailRow(m));
   }
 
   // ===========================================================================

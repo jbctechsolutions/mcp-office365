@@ -14,17 +14,18 @@ A [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) server that p
 - **Works offline** - AppleScript backend requires no network (Graph API requires internet)
 - **Fast and reliable** - Direct communication with Outlook or Microsoft servers
 
-### Available Tools (75)
+### Available Tools (76)
 
 **Accounts (1)**
 - `list_accounts` - List all configured Outlook accounts
 
-**Mail - Reading (6)**
+**Mail - Reading (7)**
 - `list_folders` - List all mail folders with unread counts
 - `list_emails` - List emails in a folder with pagination
 - `search_emails` - Search emails by subject, sender, or content
 - `get_email` - Get full email details including body
 - `get_emails` - Get multiple emails by ID in a single call (max 25)
+- `list_conversation` - List all messages in an email conversation/thread
 - `get_unread_count` - Get unread email count
 
 **Mail - Sending & Drafts (16)** *(Graph API)*

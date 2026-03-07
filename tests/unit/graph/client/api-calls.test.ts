@@ -279,6 +279,17 @@ describe('Graph API endpoint and method validation', () => {
       expect(apiCalls[0].topValue).toBe(30);
     });
 
+    it('listConversationMessages filters by conversationId with asc ordering', async () => {
+      await client.listConversationMessages('AAMkAGQ=', 10);
+
+      expect(apiCalls).toHaveLength(1);
+      expect(apiCalls[0].url).toBe('/me/messages');
+      expect(apiCalls[0].method).toBe('get');
+      expect(apiCalls[0].filterExpr).toContain("conversationId eq 'AAMkAGQ='");
+      expect(apiCalls[0].orderbyExpr).toBe('receivedDateTime asc');
+      expect(apiCalls[0].topValue).toBe(10);
+    });
+
     it('getMessage calls /me/messages/{id} with GET', async () => {
       setupMock({ id: 'msg-1', subject: 'Test' });
       await client.getMessage('msg-1');
@@ -1038,6 +1049,7 @@ describe('Graph API endpoint and method validation', () => {
       await client.listUnreadMessages('f1');
       await client.searchMessages('q');
       await client.searchMessagesInFolder('f1', 'q');
+      await client.listConversationMessages('conv-1', 10);
 
       setupMock({ id: 'msg-1', subject: 'Test' });
       await client.getMessage('msg-1');

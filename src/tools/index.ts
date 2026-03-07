@@ -18,6 +18,7 @@ export {
   SearchEmailsInput,
   GetEmailInput,
   GetEmailsInput,
+  ListConversationInput,
   GetUnreadCountInput,
   ListAttachmentsInput,
   DownloadAttachmentInput,

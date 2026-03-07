@@ -68,6 +68,7 @@ import {
   SearchEmailsInput,
   GetEmailInput,
   GetEmailsInput,
+  ListConversationInput,
   GetUnreadCountInput,
   ListAttachmentsInput,
   DownloadAttachmentInput,
@@ -278,6 +279,18 @@ const TOOLS: Tool[] = [
         },
       },
       required: ['email_ids'],
+    },
+  },
+  {
+    name: 'list_conversation',
+    description: 'List all messages in an email conversation/thread, ordered chronologically. Provide any message ID from the thread.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        message_id: { type: 'number', description: 'Any message ID from the conversation' },
+        limit: { type: 'number', description: 'Maximum messages to return (default: 25)', default: 25 },
+      },
+      required: ['message_id'],
     },
   },
   {
@@ -1870,6 +1883,7 @@ export function createServer(): Server {
     'get_signature',
     'check_availability',
     'find_meeting_times',
+    'list_conversation',
   ]);
 
   // Register tool list handler
@@ -2932,6 +2946,13 @@ async function handleGraphToolCall(
           })
         );
         return { content: [{ type: 'text', text: JSON.stringify({ emails: results }, null, 2) }] };
+      }
+
+      case 'list_conversation': {
+        const params = ListConversationInput.parse(args);
+        const emails = await repository.listConversationAsync(params.message_id, params.limit);
+        const result = { emails: emails.map(transformEmailRow) };
+        return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
       }
 
       case 'get_unread_count': {

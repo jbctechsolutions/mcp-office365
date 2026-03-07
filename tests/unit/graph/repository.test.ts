@@ -24,6 +24,7 @@ vi.mock('../../../src/graph/client/index.js', () => ({
       listUnreadMessages: vi.fn(),
       searchMessages: vi.fn(),
       searchMessagesInFolder: vi.fn(),
+      listConversationMessages: vi.fn(),
       getMessage: vi.fn(),
       listCalendars: vi.fn(),
       listEvents: vi.fn(),
@@ -406,6 +407,55 @@ describe('graph/repository', () => {
         const result = await repository.searchEmailsInFolderAsync(99999, 'query', 50);
 
         expect(result).toEqual([]);
+      });
+    });
+  });
+
+  describe('Conversation / Thread', () => {
+    describe('listConversationAsync', () => {
+      it('lists messages in a conversation thread', async () => {
+        // First populate cache with a message that has a conversationId
+        mockClient.searchMessages.mockResolvedValue([
+          { id: 'msg-1', subject: 'Thread start', conversationId: 'conv-abc-123' },
+        ]);
+        await repository.searchEmailsAsync('Thread', 50);
+
+        // Mock getMessage for getEmailAsync lookup
+        mockClient.getMessage.mockResolvedValue({
+          id: 'msg-1', subject: 'Thread start', conversationId: 'conv-abc-123',
+        });
+
+        // Mock the conversation query
+        mockClient.listConversationMessages.mockResolvedValue([
+          { id: 'msg-1', subject: 'Thread start', conversationId: 'conv-abc-123' },
+          { id: 'msg-2', subject: 'Re: Thread start', conversationId: 'conv-abc-123' },
+        ]);
+
+        const result = await repository.listConversationAsync(hashStringToNumber('msg-1'), 25);
+        expect(result).toHaveLength(2);
+        expect(mockClient.listConversationMessages).toHaveBeenCalledWith('conv-abc-123', 25);
+      });
+
+      it('throws when message not found', async () => {
+        mockClient.getMessage.mockResolvedValue(null);
+        mockClient.listMailFolders.mockResolvedValue([]);
+        await expect(repository.listConversationAsync(99999, 25))
+          .rejects.toThrow();
+      });
+
+      it('throws when message has no conversation ID', async () => {
+        // Populate cache with a message that has no conversationId
+        mockClient.searchMessages.mockResolvedValue([
+          { id: 'msg-no-conv', subject: 'No conv' },
+        ]);
+        await repository.searchEmailsAsync('No conv', 50);
+
+        mockClient.getMessage.mockResolvedValue({
+          id: 'msg-no-conv', subject: 'No conv', conversationId: undefined,
+        });
+
+        await expect(repository.listConversationAsync(hashStringToNumber('msg-no-conv'), 25))
+          .rejects.toThrow('no conversation ID');
       });
     });
   });

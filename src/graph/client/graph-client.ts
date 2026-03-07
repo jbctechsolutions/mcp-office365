@@ -218,6 +218,24 @@ export class GraphClient {
   }
 
   /**
+   * Lists messages in a conversation by conversationId.
+   */
+  async listConversationMessages(
+    conversationId: string,
+    limit: number = 50
+  ): Promise<MicrosoftGraph.Message[]> {
+    const client = await this.getClient();
+    const response = await client
+      .api('/me/messages')
+      .filter(`conversationId eq '${conversationId}'`)
+      .select('id,subject,from,toRecipients,ccRecipients,receivedDateTime,sentDateTime,isRead,hasAttachments,importance,flag,bodyPreview,conversationId,internetMessageId,parentFolderId')
+      .orderby('receivedDateTime asc')
+      .top(limit)
+      .get() as PageCollection;
+    return response.value as MicrosoftGraph.Message[];
+  }
+
+  /**
    * Gets a specific message with full body.
    */
   async getMessage(messageId: string): Promise<MicrosoftGraph.Message | null> {
