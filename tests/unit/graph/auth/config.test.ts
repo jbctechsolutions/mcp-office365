@@ -38,8 +38,21 @@ describe('graph/auth/config', () => {
       expect(GRAPH_SCOPES).toContain('offline_access');
     });
 
-    it('has exactly 6 scopes', () => {
-      expect(GRAPH_SCOPES).toHaveLength(6);
+    it('contains M365 expansion scopes', () => {
+      expect(GRAPH_SCOPES).toContain('ChannelMessage.Read.All');
+      expect(GRAPH_SCOPES).toContain('ChannelMessage.Send');
+      expect(GRAPH_SCOPES).toContain('Channel.ReadBasic.All');
+      expect(GRAPH_SCOPES).toContain('Team.ReadBasic.All');
+      expect(GRAPH_SCOPES).toContain('Chat.ReadWrite');
+      expect(GRAPH_SCOPES).toContain('ChatMessage.Send');
+      expect(GRAPH_SCOPES).toContain('People.Read');
+      expect(GRAPH_SCOPES).toContain('User.ReadBasic.All');
+      expect(GRAPH_SCOPES).toContain('Presence.Read.All');
+      expect(GRAPH_SCOPES).toContain('Group.Read.All');
+    });
+
+    it('has exactly 16 scopes', () => {
+      expect(GRAPH_SCOPES).toHaveLength(16);
     });
   });
 

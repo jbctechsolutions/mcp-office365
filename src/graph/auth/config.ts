@@ -31,12 +31,26 @@ const DEFAULT_CLIENT_ID = '8fdcd9d3-8823-48f5-bd59-c3a779053b77';
  * future implementation of email sending and event management features.
  */
 export const GRAPH_SCOPES = [
+  // Outlook
   'Mail.ReadWrite',
   'Calendars.ReadWrite',
   'Contacts.ReadWrite',
   'Tasks.ReadWrite',
   'User.Read',
   'offline_access',
+  // Teams
+  'ChannelMessage.Read.All',
+  'ChannelMessage.Send',
+  'Channel.ReadBasic.All',
+  'Team.ReadBasic.All',
+  'Chat.ReadWrite',
+  'ChatMessage.Send',
+  // People & Presence
+  'People.Read',
+  'User.ReadBasic.All',
+  'Presence.Read.All',
+  // Planner
+  'Group.Read.All',
 ] as const;
 
 /**
