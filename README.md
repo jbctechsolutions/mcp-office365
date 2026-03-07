@@ -14,7 +14,7 @@ A [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) server that p
 - **Works offline** - AppleScript backend requires no network (Graph API requires internet)
 - **Fast and reliable** - Direct communication with Outlook or Microsoft servers
 
-### Available Tools (78)
+### Available Tools (80)
 
 **Accounts (1)**
 - `list_accounts` - List all configured Outlook accounts
@@ -82,6 +82,10 @@ A [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) server that p
 
 **Mail Tips (1)** *(Graph API)*
 - `get_mail_tips` - Get mail tips (automatic replies, mailbox full, delivery restrictions, max message size) for email addresses
+
+**Message Headers & MIME (2)** *(Graph API)*
+- `get_message_headers` - Get internet message headers (SPF, DKIM, routing, etc.) for an email
+- `get_message_mime` - Download the full MIME content (.eml) of an email to a local file
 
 **Calendar - Reading (5)**
 - `list_calendars` - List all calendars

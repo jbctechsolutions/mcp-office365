@@ -1371,6 +1371,30 @@ export class GraphClient {
   }
 
   // ===========================================================================
+  // Message Headers & MIME
+  // ===========================================================================
+
+  /**
+   * Gets internet message headers for a message.
+   */
+  async getMessageHeaders(messageId: string): Promise<Array<{ name: string; value: string }>> {
+    const client = await this.getClient();
+    const message = await client
+      .api(`/me/messages/${messageId}`)
+      .select('internetMessageHeaders')
+      .get() as MicrosoftGraph.Message;
+    return (message.internetMessageHeaders ?? []) as Array<{ name: string; value: string }>;
+  }
+
+  /**
+   * Gets the MIME content of a message.
+   */
+  async getMessageMime(messageId: string): Promise<string> {
+    const client = await this.getClient();
+    return await client.api(`/me/messages/${messageId}/$value`).get() as string;
+  }
+
+  // ===========================================================================
   // Mail Tips
   // ===========================================================================
 

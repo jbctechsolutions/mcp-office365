@@ -1935,6 +1935,32 @@ export class GraphRepository implements IRepository {
   }
 
   // ===========================================================================
+  // Message Headers & MIME
+  // ===========================================================================
+
+  /**
+   * Gets internet message headers for an email.
+   */
+  async getMessageHeadersAsync(emailId: number): Promise<Array<{ name: string; value: string }>> {
+    const graphId = this.idCache.messages.get(emailId);
+    if (graphId == null) throw new Error(`Email ID ${emailId} not found in cache. Try searching for or listing the item first to refresh the cache.`);
+    return await this.client.getMessageHeaders(graphId);
+  }
+
+  /**
+   * Gets the MIME content of a message and saves it as an .eml file.
+   */
+  async getMessageMimeAsync(emailId: number): Promise<{ filePath: string }> {
+    const graphId = this.idCache.messages.get(emailId);
+    if (graphId == null) throw new Error(`Email ID ${emailId} not found in cache. Try searching for or listing the item first to refresh the cache.`);
+    const mime = await this.client.getMessageMime(graphId);
+    const downloadDir = getDownloadDir();
+    const filePath = path.join(downloadDir, `email-${emailId}.eml`);
+    fs.writeFileSync(filePath, mime, 'utf-8');
+    return { filePath };
+  }
+
+  // ===========================================================================
   // Mail Tips
   // ===========================================================================
 

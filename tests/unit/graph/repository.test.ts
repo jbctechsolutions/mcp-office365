@@ -109,6 +109,9 @@ vi.mock('../../../src/graph/client/index.js', () => ({
       // Contact photo operations
       getContactPhoto: vi.fn(),
       setContactPhoto: vi.fn(),
+      // Message headers & MIME operations
+      getMessageHeaders: vi.fn(),
+      getMessageMime: vi.fn(),
       // Mail tips operations
       getMailTips: vi.fn(),
     };
@@ -3501,6 +3504,74 @@ describe('graph/repository', () => {
 
       it('throws for unknown contact ID', async () => {
         await expect(repository.setContactPhotoAsync(999999, '/tmp/photo.jpg')).rejects.toThrow('not found in cache');
+      });
+    });
+  });
+
+  // ===========================================================================
+  // Message Headers & MIME
+  // ===========================================================================
+
+  describe('Message Headers & MIME', () => {
+    const graphMsgId = 'AAMkAGTest123';
+    const numericId = hashStringToNumber(graphMsgId);
+
+    // Helper to populate the message cache by listing emails in a folder
+    async function populateMessageCache(): Promise<void> {
+      const folderId = 'folder-inbox';
+      const folderNumericId = hashStringToNumber(folderId);
+      mockClient.listMailFolders.mockResolvedValue([
+        { id: folderId, displayName: 'Inbox', totalItemCount: 1, unreadItemCount: 0 },
+      ]);
+      mockClient.listMessages.mockResolvedValue([
+        { id: graphMsgId, subject: 'Test', from: { emailAddress: { address: 'a@b.com' } }, receivedDateTime: '2026-01-01T00:00:00Z', isRead: false, hasAttachments: false, importance: 'normal', flag: { flagStatus: 'notFlagged' } },
+      ]);
+      await repository.listEmailsAsync(folderNumericId, 10, 0);
+    }
+
+    describe('getMessageHeadersAsync', () => {
+      it('returns internet message headers for a cached email', async () => {
+        await populateMessageCache();
+        const mockHeaders = [
+          { name: 'Received', value: 'from mx.example.com' },
+          { name: 'Authentication-Results', value: 'spf=pass' },
+        ];
+        mockClient.getMessageHeaders.mockResolvedValue(mockHeaders);
+
+        const result = await repository.getMessageHeadersAsync(numericId);
+
+        expect(result).toEqual(mockHeaders);
+        expect(mockClient.getMessageHeaders).toHaveBeenCalledWith(graphMsgId);
+      });
+
+      it('throws when email ID is not in cache', async () => {
+        await expect(repository.getMessageHeadersAsync(999999)).rejects.toThrow(
+          'Email ID 999999 not found in cache'
+        );
+      });
+    });
+
+    describe('getMessageMimeAsync', () => {
+      it('downloads MIME content and returns file path', async () => {
+        await populateMessageCache();
+        const mimeContent = 'MIME-Version: 1.0\r\nContent-Type: text/plain\r\n\r\nHello';
+        mockClient.getMessageMime.mockResolvedValue(mimeContent);
+
+        const result = await repository.getMessageMimeAsync(numericId);
+
+        expect(result.filePath).toBe(`/tmp/mcp-outlook-attachments/email-${numericId}.eml`);
+        expect(mockClient.getMessageMime).toHaveBeenCalledWith(graphMsgId);
+        expect(fs.writeFileSync).toHaveBeenCalledWith(
+          `/tmp/mcp-outlook-attachments/email-${numericId}.eml`,
+          mimeContent,
+          'utf-8'
+        );
+      });
+
+      it('throws when email ID is not in cache', async () => {
+        await expect(repository.getMessageMimeAsync(999999)).rejects.toThrow(
+          'Email ID 999999 not found in cache'
+        );
       });
     });
   });

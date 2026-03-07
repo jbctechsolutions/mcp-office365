@@ -939,4 +939,48 @@ describe('graph/client/graph-client', () => {
       expect(result).toEqual(mockResponse);
     });
   });
+
+  describe('Message Headers & MIME', () => {
+    it('getMessageHeaders returns internet message headers', async () => {
+      const mockHeaders = [
+        { name: 'Received', value: 'from mx.example.com' },
+        { name: 'Authentication-Results', value: 'spf=pass' },
+        { name: 'DKIM-Signature', value: 'v=1; a=rsa-sha256' },
+      ];
+      const mockResponse: MicrosoftGraph.Message = {
+        internetMessageHeaders: mockHeaders,
+      };
+      const builder = createMockRequestBuilder(mockResponse);
+      mockApi.mockReturnValue(builder);
+
+      const result = await graphClient.getMessageHeaders('msg-123');
+
+      expect(mockApi).toHaveBeenCalledWith('/me/messages/msg-123');
+      expect(builder.select).toHaveBeenCalledWith('internetMessageHeaders');
+      expect(result).toEqual(mockHeaders);
+    });
+
+    it('getMessageHeaders returns empty array when no headers', async () => {
+      const mockResponse: MicrosoftGraph.Message = {
+        internetMessageHeaders: undefined,
+      };
+      const builder = createMockRequestBuilder(mockResponse);
+      mockApi.mockReturnValue(builder);
+
+      const result = await graphClient.getMessageHeaders('msg-456');
+
+      expect(result).toEqual([]);
+    });
+
+    it('getMessageMime returns raw MIME content', async () => {
+      const mimeContent = 'MIME-Version: 1.0\r\nContent-Type: text/plain\r\n\r\nHello World';
+      const builder = createMockRequestBuilder(mimeContent);
+      mockApi.mockReturnValue(builder);
+
+      const result = await graphClient.getMessageMime('msg-789');
+
+      expect(mockApi).toHaveBeenCalledWith('/me/messages/msg-789/$value');
+      expect(result).toBe(mimeContent);
+    });
+  });
 });

@@ -2227,6 +2227,29 @@ const TOOLS: Tool[] = [
       required: ['email_addresses'],
     },
   },
+  // Message headers & MIME tools
+  {
+    name: 'get_message_headers',
+    description: 'Get internet message headers (SPF, DKIM, routing, etc.) for an email (Graph API)',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        email_id: { type: 'number', description: 'Email ID' },
+      },
+      required: ['email_id'],
+    },
+  },
+  {
+    name: 'get_message_mime',
+    description: 'Download the full MIME content (.eml) of an email to a local file (Graph API)',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        email_id: { type: 'number', description: 'Email ID' },
+      },
+      required: ['email_id'],
+    },
+  },
 ];
 
 // =============================================================================
@@ -2377,6 +2400,8 @@ export function createServer(): Server {
     'set_contact_photo',
     'list_event_instances',
     'get_mail_tips',
+    'get_message_headers',
+    'get_message_mime',
   ]);
 
   // Register tool list handler
@@ -3409,6 +3434,14 @@ const GetMailTipsInput = z.strictObject({
   email_addresses: z.array(z.string().email()).min(1).max(20).describe('Email addresses to check'),
 });
 
+const GetMessageHeadersInput = z.strictObject({
+  email_id: z.number().int().positive().describe('Email ID'),
+});
+
+const GetMessageMimeInput = z.strictObject({
+  email_id: z.number().int().positive().describe('Email ID'),
+});
+
 const CreateContactFolderInput = z.strictObject({
   name: z.string().min(1).describe('Contact folder name'),
 });
@@ -4430,6 +4463,18 @@ async function handleGraphToolCall(
         const params = GetMailTipsInput.parse(args);
         const tips = await repository.getMailTipsAsync(params.email_addresses);
         return { content: [{ type: 'text', text: JSON.stringify({ mail_tips: tips }, null, 2) }] };
+      }
+
+      case 'get_message_headers': {
+        const params = GetMessageHeadersInput.parse(args);
+        const headers = await repository.getMessageHeadersAsync(params.email_id);
+        return { content: [{ type: 'text', text: JSON.stringify({ headers }, null, 2) }] };
+      }
+
+      case 'get_message_mime': {
+        const params = GetMessageMimeInput.parse(args);
+        const result = await repository.getMessageMimeAsync(params.email_id);
+        return { content: [{ type: 'text', text: JSON.stringify({ success: true, file_path: result.filePath }, null, 2) }] };
       }
 
       default:
