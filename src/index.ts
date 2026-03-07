@@ -97,6 +97,12 @@ import {
   PrepareDeleteChannelInput,
   ConfirmDeleteChannelInput,
   ListTeamMembersInput,
+  ListChannelMessagesInput,
+  GetChannelMessageInput,
+  PrepareSendChannelMessageInput,
+  ConfirmSendChannelMessageInput,
+  PrepareReplyChannelMessageInput,
+  ConfirmReplyChannelMessageInput,
 } from './tools/teams.js';
 import {
   ListEmailsInput,
@@ -2469,6 +2475,77 @@ const TOOLS: Tool[] = [
       required: ['team_id'],
     },
   },
+  {
+    name: 'list_channel_messages',
+    description: 'List recent messages in a channel (Graph API)',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        channel_id: { type: 'number', description: 'Channel ID from list_channels' },
+        limit: { type: 'number', description: 'Max messages to return (default 25, max 50)' },
+      },
+      required: ['channel_id'],
+    },
+  },
+  {
+    name: 'get_channel_message',
+    description: 'Get a specific channel message with its replies (Graph API)',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        message_id: { type: 'number', description: 'Message ID from list_channel_messages' },
+      },
+      required: ['message_id'],
+    },
+  },
+  {
+    name: 'prepare_send_channel_message',
+    description: 'Prepare to send a message to a channel. Returns an approval token. Call confirm_send_channel_message to execute. (Graph API)',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        channel_id: { type: 'number', description: 'Channel ID to send message to' },
+        body: { type: 'string', description: 'Message body' },
+        content_type: { type: 'string', enum: ['text', 'html'], description: 'Content type (default: html)' },
+      },
+      required: ['channel_id', 'body'],
+    },
+  },
+  {
+    name: 'confirm_send_channel_message',
+    description: 'Confirm sending a channel message with approval token (Graph API)',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        approval_token: { type: 'string', description: 'The approval token from prepare_send_channel_message' },
+      },
+      required: ['approval_token'],
+    },
+  },
+  {
+    name: 'prepare_reply_channel_message',
+    description: 'Prepare to reply to a channel message. Returns an approval token. Call confirm_reply_channel_message to execute. (Graph API)',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        message_id: { type: 'number', description: 'Message ID to reply to' },
+        body: { type: 'string', description: 'Reply body' },
+        content_type: { type: 'string', enum: ['text', 'html'], description: 'Content type (default: html)' },
+      },
+      required: ['message_id', 'body'],
+    },
+  },
+  {
+    name: 'confirm_reply_channel_message',
+    description: 'Confirm replying to a channel message with approval token (Graph API)',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        approval_token: { type: 'string', description: 'The approval token from prepare_reply_channel_message' },
+      },
+      required: ['approval_token'],
+    },
+  },
 ];
 
 // =============================================================================
@@ -2641,6 +2718,12 @@ export function createServer(): Server {
     'prepare_delete_channel',
     'confirm_delete_channel',
     'list_team_members',
+    'list_channel_messages',
+    'get_channel_message',
+    'prepare_send_channel_message',
+    'confirm_send_channel_message',
+    'prepare_reply_channel_message',
+    'confirm_reply_channel_message',
   ]);
 
   // Register tool list handler
@@ -4821,6 +4904,36 @@ async function handleGraphToolCall(
       case 'list_team_members': {
         const params = ListTeamMembersInput.parse(args);
         return await teamsTools.listTeamMembers(params);
+      }
+
+      case 'list_channel_messages': {
+        const params = ListChannelMessagesInput.parse(args);
+        return await teamsTools.listChannelMessages(params);
+      }
+
+      case 'get_channel_message': {
+        const params = GetChannelMessageInput.parse(args);
+        return await teamsTools.getChannelMessage(params);
+      }
+
+      case 'prepare_send_channel_message': {
+        const params = PrepareSendChannelMessageInput.parse(args);
+        return teamsTools.prepareSendChannelMessage(params);
+      }
+
+      case 'confirm_send_channel_message': {
+        const params = ConfirmSendChannelMessageInput.parse(args);
+        return await teamsTools.confirmSendChannelMessage(params);
+      }
+
+      case 'prepare_reply_channel_message': {
+        const params = PrepareReplyChannelMessageInput.parse(args);
+        return teamsTools.prepareReplyChannelMessage(params);
+      }
+
+      case 'confirm_reply_channel_message': {
+        const params = ConfirmReplyChannelMessageInput.parse(args);
+        return await teamsTools.confirmReplyChannelMessage(params);
       }
 
       default:

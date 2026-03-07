@@ -55,6 +55,7 @@ interface IdCache {
   calendarPermissions: Map<number, { calendarId: string; permissionId: string }>;
   teams: Map<number, string>;
   channels: Map<number, { teamId: string; channelId: string }>;
+  channelMessages: Map<number, { teamId: string; channelId: string; messageId: string }>;
 }
 
 /**
@@ -83,6 +84,7 @@ export class GraphRepository implements IRepository {
     calendarPermissions: new Map(),
     teams: new Map(),
     channels: new Map(),
+    channelMessages: new Map(),
   };
 
   constructor(deviceCodeCallback?: DeviceCodeCallback) {
@@ -2213,6 +2215,99 @@ export class GraphRepository implements IRepository {
       email: (m as any).email ?? '',
       roles: m.roles ?? [],
     }));
+  }
+
+  // ===========================================================================
+  // Channel Messages
+  // ===========================================================================
+
+  /**
+   * Lists recent messages in a channel.
+   */
+  async listChannelMessagesAsync(channelId: number, limit: number = 25): Promise<Array<{
+    id: number; senderName: string; senderEmail: string; bodyPreview: string;
+    bodyContent: string; contentType: string; createdDateTime: string;
+  }>> {
+    const cached = this.idCache.channels.get(channelId);
+    if (cached == null) throw new Error(`Channel ID ${channelId} not found in cache. Try listing channels first.`);
+    const messages = await this.client.listChannelMessages(cached.teamId, cached.channelId, limit);
+    return messages.map((msg) => {
+      const graphId = msg.id!;
+      const numericId = hashStringToNumber(graphId);
+      this.idCache.channelMessages.set(numericId, { teamId: cached.teamId, channelId: cached.channelId, messageId: graphId });
+      return {
+        id: numericId,
+        senderName: msg.from?.user?.displayName ?? msg.from?.application?.displayName ?? '',
+        senderEmail: (msg.from?.user as any)?.email ?? '',
+        bodyPreview: msg.body?.content?.substring(0, 200) ?? '',
+        bodyContent: msg.body?.content ?? '',
+        contentType: msg.body?.contentType ?? 'html',
+        createdDateTime: msg.createdDateTime ?? '',
+      };
+    });
+  }
+
+  /**
+   * Gets a specific channel message with its replies.
+   */
+  async getChannelMessageAsync(messageId: number): Promise<{
+    id: number; senderName: string; senderEmail: string; bodyContent: string;
+    contentType: string; createdDateTime: string;
+    replies: Array<{ id: number; senderName: string; senderEmail: string; bodyContent: string; contentType: string; createdDateTime: string }>;
+  }> {
+    const cached = this.idCache.channelMessages.get(messageId);
+    if (cached == null) throw new Error(`Message ID ${messageId} not found in cache. Try listing channel messages first.`);
+    const [msg, repliesRaw] = await Promise.all([
+      this.client.getChannelMessage(cached.teamId, cached.channelId, cached.messageId),
+      this.client.listChannelMessageReplies(cached.teamId, cached.channelId, cached.messageId),
+    ]);
+    const replies = repliesRaw.map((r) => {
+      const rGraphId = r.id!;
+      const rNumericId = hashStringToNumber(rGraphId);
+      return {
+        id: rNumericId,
+        senderName: r.from?.user?.displayName ?? r.from?.application?.displayName ?? '',
+        senderEmail: (r.from?.user as any)?.email ?? '',
+        bodyContent: r.body?.content ?? '',
+        contentType: r.body?.contentType ?? 'html',
+        createdDateTime: r.createdDateTime ?? '',
+      };
+    });
+    return {
+      id: messageId,
+      senderName: msg.from?.user?.displayName ?? msg.from?.application?.displayName ?? '',
+      senderEmail: (msg.from?.user as any)?.email ?? '',
+      bodyContent: msg.body?.content ?? '',
+      contentType: msg.body?.contentType ?? 'html',
+      createdDateTime: msg.createdDateTime ?? '',
+      replies,
+    };
+  }
+
+  /**
+   * Sends a new message to a channel.
+   */
+  async sendChannelMessageAsync(channelId: number, body: string, contentType: string = 'html'): Promise<number> {
+    const cached = this.idCache.channels.get(channelId);
+    if (cached == null) throw new Error(`Channel ID ${channelId} not found in cache. Try listing channels first.`);
+    const msg = await this.client.sendChannelMessage(cached.teamId, cached.channelId, body, contentType);
+    const graphId = msg.id!;
+    const numericId = hashStringToNumber(graphId);
+    this.idCache.channelMessages.set(numericId, { teamId: cached.teamId, channelId: cached.channelId, messageId: graphId });
+    return numericId;
+  }
+
+  /**
+   * Replies to a channel message.
+   */
+  async replyToChannelMessageAsync(messageId: number, body: string, contentType: string = 'html'): Promise<number> {
+    const cached = this.idCache.channelMessages.get(messageId);
+    if (cached == null) throw new Error(`Message ID ${messageId} not found in cache. Try listing channel messages first.`);
+    const reply = await this.client.replyToChannelMessage(cached.teamId, cached.channelId, cached.messageId, body, contentType);
+    const graphId = reply.id!;
+    const numericId = hashStringToNumber(graphId);
+    this.idCache.channelMessages.set(numericId, { teamId: cached.teamId, channelId: cached.channelId, messageId: graphId });
+    return numericId;
   }
 
   /**

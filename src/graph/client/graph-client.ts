@@ -1554,6 +1554,56 @@ export class GraphClient {
     const response = await client.api(`/teams/${teamId}/members`).get() as PageCollection;
     return response.value as MicrosoftGraph.ConversationMember[];
   }
+
+  // ===========================================================================
+  // Channel Messages
+  // ===========================================================================
+
+  /**
+   * Lists recent messages in a channel.
+   */
+  async listChannelMessages(teamId: string, channelId: string, top: number = 25): Promise<MicrosoftGraph.ChatMessage[]> {
+    const client = await this.getClient();
+    const response = await client.api(`/teams/${teamId}/channels/${channelId}/messages`).top(top).get() as PageCollection;
+    return response.value as MicrosoftGraph.ChatMessage[];
+  }
+
+  /**
+   * Gets a specific channel message.
+   */
+  async getChannelMessage(teamId: string, channelId: string, messageId: string): Promise<MicrosoftGraph.ChatMessage> {
+    const client = await this.getClient();
+    return await client.api(`/teams/${teamId}/channels/${channelId}/messages/${messageId}`).get() as MicrosoftGraph.ChatMessage;
+  }
+
+  /**
+   * Lists replies to a channel message.
+   */
+  async listChannelMessageReplies(teamId: string, channelId: string, messageId: string): Promise<MicrosoftGraph.ChatMessage[]> {
+    const client = await this.getClient();
+    const response = await client.api(`/teams/${teamId}/channels/${channelId}/messages/${messageId}/replies`).get() as PageCollection;
+    return response.value as MicrosoftGraph.ChatMessage[];
+  }
+
+  /**
+   * Sends a new message to a channel.
+   */
+  async sendChannelMessage(teamId: string, channelId: string, body: string, contentType: string = 'html'): Promise<MicrosoftGraph.ChatMessage> {
+    const client = await this.getClient();
+    return await client.api(`/teams/${teamId}/channels/${channelId}/messages`).post({
+      body: { contentType, content: body },
+    }) as MicrosoftGraph.ChatMessage;
+  }
+
+  /**
+   * Replies to a channel message.
+   */
+  async replyToChannelMessage(teamId: string, channelId: string, messageId: string, body: string, contentType: string = 'html'): Promise<MicrosoftGraph.ChatMessage> {
+    const client = await this.getClient();
+    return await client.api(`/teams/${teamId}/channels/${channelId}/messages/${messageId}/replies`).post({
+      body: { contentType, content: body },
+    }) as MicrosoftGraph.ChatMessage;
+  }
 }
 
 /**

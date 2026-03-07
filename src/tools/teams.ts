@@ -49,6 +49,35 @@ export const ListTeamMembersInput = z.strictObject({
   team_id: z.number().int().positive().describe('Team ID'),
 });
 
+export const ListChannelMessagesInput = z.strictObject({
+  channel_id: z.number().int().positive().describe('Channel ID from list_channels'),
+  limit: z.number().int().min(1).max(50).optional().describe('Max messages to return (default 25, max 50)'),
+});
+
+export const GetChannelMessageInput = z.strictObject({
+  message_id: z.number().int().positive().describe('Message ID from list_channel_messages'),
+});
+
+export const PrepareSendChannelMessageInput = z.strictObject({
+  channel_id: z.number().int().positive().describe('Channel ID to send message to'),
+  body: z.string().min(1).describe('Message body'),
+  content_type: z.enum(['text', 'html']).optional().describe('Content type (default: html)'),
+});
+
+export const ConfirmSendChannelMessageInput = z.strictObject({
+  approval_token: z.string().describe('Approval token from prepare_send_channel_message'),
+});
+
+export const PrepareReplyChannelMessageInput = z.strictObject({
+  message_id: z.number().int().positive().describe('Message ID to reply to'),
+  body: z.string().min(1).describe('Reply body'),
+  content_type: z.enum(['text', 'html']).optional().describe('Content type (default: html)'),
+});
+
+export const ConfirmReplyChannelMessageInput = z.strictObject({
+  approval_token: z.string().describe('Approval token from prepare_reply_channel_message'),
+});
+
 // =============================================================================
 // Type Exports
 // =============================================================================
@@ -60,6 +89,12 @@ export type UpdateChannelParams = z.infer<typeof UpdateChannelInput>;
 export type PrepareDeleteChannelParams = z.infer<typeof PrepareDeleteChannelInput>;
 export type ConfirmDeleteChannelParams = z.infer<typeof ConfirmDeleteChannelInput>;
 export type ListTeamMembersParams = z.infer<typeof ListTeamMembersInput>;
+export type ListChannelMessagesParams = z.infer<typeof ListChannelMessagesInput>;
+export type GetChannelMessageParams = z.infer<typeof GetChannelMessageInput>;
+export type PrepareSendChannelMessageParams = z.infer<typeof PrepareSendChannelMessageInput>;
+export type ConfirmSendChannelMessageParams = z.infer<typeof ConfirmSendChannelMessageInput>;
+export type PrepareReplyChannelMessageParams = z.infer<typeof PrepareReplyChannelMessageInput>;
+export type ConfirmReplyChannelMessageParams = z.infer<typeof ConfirmReplyChannelMessageInput>;
 
 // =============================================================================
 // Repository Interface
@@ -73,6 +108,17 @@ export interface ITeamsRepository {
   updateChannelAsync(channelId: number, updates: { name?: string; description?: string }): Promise<void>;
   deleteChannelAsync(channelId: number): Promise<void>;
   listTeamMembersAsync(teamId: number): Promise<Array<{ id: string; displayName: string; email: string; roles: string[] }>>;
+  listChannelMessagesAsync(channelId: number, limit?: number): Promise<Array<{
+    id: number; senderName: string; senderEmail: string; bodyPreview: string;
+    bodyContent: string; contentType: string; createdDateTime: string;
+  }>>;
+  getChannelMessageAsync(messageId: number): Promise<{
+    id: number; senderName: string; senderEmail: string; bodyContent: string;
+    contentType: string; createdDateTime: string;
+    replies: Array<{ id: number; senderName: string; senderEmail: string; bodyContent: string; contentType: string; createdDateTime: string }>;
+  }>;
+  sendChannelMessageAsync(channelId: number, body: string, contentType?: string): Promise<number>;
+  replyToChannelMessageAsync(messageId: number, body: string, contentType?: string): Promise<number>;
 }
 
 // =============================================================================
@@ -228,6 +274,162 @@ export class TeamsTools {
       content: [{
         type: 'text' as const,
         text: JSON.stringify({ members }, null, 2),
+      }],
+    };
+  }
+
+  // ===========================================================================
+  // Channel Messages
+  // ===========================================================================
+
+  async listChannelMessages(params: ListChannelMessagesParams): Promise<{
+    content: Array<{ type: 'text'; text: string }>;
+  }> {
+    const messages = await this.repo.listChannelMessagesAsync(params.channel_id, params.limit);
+    return {
+      content: [{
+        type: 'text' as const,
+        text: JSON.stringify({ messages }, null, 2),
+      }],
+    };
+  }
+
+  async getChannelMessage(params: GetChannelMessageParams): Promise<{
+    content: Array<{ type: 'text'; text: string }>;
+  }> {
+    const message = await this.repo.getChannelMessageAsync(params.message_id);
+    return {
+      content: [{
+        type: 'text' as const,
+        text: JSON.stringify({ message }, null, 2),
+      }],
+    };
+  }
+
+  prepareSendChannelMessage(params: PrepareSendChannelMessageParams): {
+    content: Array<{ type: 'text'; text: string }>;
+  } {
+    const contentType = params.content_type ?? 'html';
+    const token = this.tokenManager.generateToken({
+      operation: 'send_channel_message',
+      targetType: 'channel_message',
+      targetId: params.channel_id,
+      targetHash: String(params.channel_id),
+      metadata: { body: params.body, contentType },
+    });
+    return {
+      content: [{
+        type: 'text' as const,
+        text: JSON.stringify({
+          approval_token: token.tokenId,
+          expires_at: new Date(token.expiresAt).toISOString(),
+          channel_id: params.channel_id,
+          body_preview: params.body.substring(0, 200),
+          content_type: contentType,
+          action: 'Call confirm_send_channel_message with the approval_token to send.',
+        }, null, 2),
+      }],
+    };
+  }
+
+  async confirmSendChannelMessage(params: ConfirmSendChannelMessageParams): Promise<{
+    content: Array<{ type: 'text'; text: string }>;
+  }> {
+    const token = this.tokenManager.lookupToken(params.approval_token);
+    if (token == null) {
+      return {
+        content: [{
+          type: 'text' as const,
+          text: JSON.stringify({ success: false, error: 'Token not found or already used' }, null, 2),
+        }],
+      };
+    }
+    const result = this.tokenManager.consumeToken(params.approval_token, 'send_channel_message', token.targetId);
+    if (!result.valid) {
+      const errorMessages: Record<string, string> = {
+        NOT_FOUND: 'Token not found or already used',
+        EXPIRED: 'Token has expired. Please call prepare_send_channel_message again.',
+        OPERATION_MISMATCH: 'Token was not generated for send_channel_message',
+        TARGET_MISMATCH: 'Token was generated for a different channel',
+        ALREADY_CONSUMED: 'Token has already been used',
+      };
+      return {
+        content: [{
+          type: 'text' as const,
+          text: JSON.stringify({ success: false, error: errorMessages[result.error ?? ''] ?? 'Invalid token' }, null, 2),
+        }],
+      };
+    }
+    const { body, contentType } = result.token!.metadata as { body: string; contentType: string };
+    const messageId = await this.repo.sendChannelMessageAsync(result.token!.targetId, body, contentType);
+    return {
+      content: [{
+        type: 'text' as const,
+        text: JSON.stringify({ success: true, message_id: messageId, message: 'Message sent' }, null, 2),
+      }],
+    };
+  }
+
+  prepareReplyChannelMessage(params: PrepareReplyChannelMessageParams): {
+    content: Array<{ type: 'text'; text: string }>;
+  } {
+    const contentType = params.content_type ?? 'html';
+    const token = this.tokenManager.generateToken({
+      operation: 'reply_channel_message',
+      targetType: 'channel_message',
+      targetId: params.message_id,
+      targetHash: String(params.message_id),
+      metadata: { body: params.body, contentType },
+    });
+    return {
+      content: [{
+        type: 'text' as const,
+        text: JSON.stringify({
+          approval_token: token.tokenId,
+          expires_at: new Date(token.expiresAt).toISOString(),
+          message_id: params.message_id,
+          body_preview: params.body.substring(0, 200),
+          content_type: contentType,
+          action: 'Call confirm_reply_channel_message with the approval_token to send the reply.',
+        }, null, 2),
+      }],
+    };
+  }
+
+  async confirmReplyChannelMessage(params: ConfirmReplyChannelMessageParams): Promise<{
+    content: Array<{ type: 'text'; text: string }>;
+  }> {
+    const token = this.tokenManager.lookupToken(params.approval_token);
+    if (token == null) {
+      return {
+        content: [{
+          type: 'text' as const,
+          text: JSON.stringify({ success: false, error: 'Token not found or already used' }, null, 2),
+        }],
+      };
+    }
+    const result = this.tokenManager.consumeToken(params.approval_token, 'reply_channel_message', token.targetId);
+    if (!result.valid) {
+      const errorMessages: Record<string, string> = {
+        NOT_FOUND: 'Token not found or already used',
+        EXPIRED: 'Token has expired. Please call prepare_reply_channel_message again.',
+        OPERATION_MISMATCH: 'Token was not generated for reply_channel_message',
+        TARGET_MISMATCH: 'Token was generated for a different message',
+        ALREADY_CONSUMED: 'Token has already been used',
+      };
+      return {
+        content: [{
+          type: 'text' as const,
+          text: JSON.stringify({ success: false, error: errorMessages[result.error ?? ''] ?? 'Invalid token' }, null, 2),
+        }],
+      };
+    }
+    const { body, contentType } = result.token!.metadata as { body: string; contentType: string };
+    const replyId = await this.repo.replyToChannelMessageAsync(result.token!.targetId, body, contentType);
+    return {
+      content: [{
+        type: 'text' as const,
+        text: JSON.stringify({ success: true, reply_id: replyId, message: 'Reply sent' }, null, 2),
       }],
     };
   }

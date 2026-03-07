@@ -25,6 +25,10 @@ describe('TeamsTools', () => {
       updateChannelAsync: vi.fn(),
       deleteChannelAsync: vi.fn(),
       listTeamMembersAsync: vi.fn(),
+      listChannelMessagesAsync: vi.fn(),
+      getChannelMessageAsync: vi.fn(),
+      sendChannelMessageAsync: vi.fn(),
+      replyToChannelMessageAsync: vi.fn(),
     };
     tokenManager = new ApprovalTokenManager();
     tools = new TeamsTools(repo, tokenManager);
@@ -178,6 +182,203 @@ describe('TeamsTools', () => {
       expect(repo.listTeamMembersAsync).toHaveBeenCalledWith(1);
       const parsed = JSON.parse(result.content[0].text);
       expect(parsed.members).toEqual(mockMembers);
+    });
+  });
+
+  // ===========================================================================
+  // Channel Messages
+  // ===========================================================================
+
+  describe('listChannelMessages', () => {
+    it('returns messages from the repository', async () => {
+      const mockMessages = [
+        {
+          id: 100, senderName: 'Alice', senderEmail: 'alice@example.com',
+          bodyPreview: 'Hello world', bodyContent: 'Hello world',
+          contentType: 'text', createdDateTime: '2026-01-01T00:00:00Z',
+        },
+        {
+          id: 200, senderName: 'Bob', senderEmail: 'bob@example.com',
+          bodyPreview: 'Hi there', bodyContent: 'Hi there',
+          contentType: 'text', createdDateTime: '2026-01-01T01:00:00Z',
+        },
+      ];
+      vi.mocked(repo.listChannelMessagesAsync).mockResolvedValue(mockMessages);
+
+      const result = await tools.listChannelMessages({ channel_id: 10 });
+
+      expect(repo.listChannelMessagesAsync).toHaveBeenCalledWith(10, undefined);
+      const parsed = JSON.parse(result.content[0].text);
+      expect(parsed.messages).toEqual(mockMessages);
+    });
+
+    it('passes limit parameter', async () => {
+      vi.mocked(repo.listChannelMessagesAsync).mockResolvedValue([]);
+
+      await tools.listChannelMessages({ channel_id: 10, limit: 5 });
+
+      expect(repo.listChannelMessagesAsync).toHaveBeenCalledWith(10, 5);
+    });
+  });
+
+  describe('getChannelMessage', () => {
+    it('returns message with replies', async () => {
+      const mockMessage = {
+        id: 100, senderName: 'Alice', senderEmail: 'alice@example.com',
+        bodyContent: '<p>Hello</p>', contentType: 'html',
+        createdDateTime: '2026-01-01T00:00:00Z',
+        replies: [
+          {
+            id: 101, senderName: 'Bob', senderEmail: 'bob@example.com',
+            bodyContent: '<p>Hi back</p>', contentType: 'html',
+            createdDateTime: '2026-01-01T01:00:00Z',
+          },
+        ],
+      };
+      vi.mocked(repo.getChannelMessageAsync).mockResolvedValue(mockMessage);
+
+      const result = await tools.getChannelMessage({ message_id: 100 });
+
+      expect(repo.getChannelMessageAsync).toHaveBeenCalledWith(100);
+      const parsed = JSON.parse(result.content[0].text);
+      expect(parsed.message).toEqual(mockMessage);
+      expect(parsed.message.replies).toHaveLength(1);
+    });
+  });
+
+  describe('prepareSendChannelMessage', () => {
+    it('generates an approval token with preview', () => {
+      const result = tools.prepareSendChannelMessage({
+        channel_id: 10, body: 'Hello channel!', content_type: 'text',
+      });
+
+      const parsed = JSON.parse(result.content[0].text);
+      expect(parsed.approval_token).toBeDefined();
+      expect(typeof parsed.approval_token).toBe('string');
+      expect(parsed.expires_at).toBeDefined();
+      expect(parsed.channel_id).toBe(10);
+      expect(parsed.body_preview).toBe('Hello channel!');
+      expect(parsed.content_type).toBe('text');
+      expect(parsed.action).toContain('confirm_send_channel_message');
+    });
+
+    it('defaults content_type to html', () => {
+      const result = tools.prepareSendChannelMessage({
+        channel_id: 10, body: '<p>Hello</p>',
+      });
+
+      const parsed = JSON.parse(result.content[0].text);
+      expect(parsed.content_type).toBe('html');
+    });
+  });
+
+  describe('confirmSendChannelMessage', () => {
+    it('sends message with valid token', async () => {
+      vi.mocked(repo.sendChannelMessageAsync).mockResolvedValue(999);
+
+      const prepareResult = tools.prepareSendChannelMessage({
+        channel_id: 10, body: 'Hello!', content_type: 'text',
+      });
+      const { approval_token } = JSON.parse(prepareResult.content[0].text);
+
+      const result = await tools.confirmSendChannelMessage({ approval_token });
+
+      const parsed = JSON.parse(result.content[0].text);
+      expect(parsed.success).toBe(true);
+      expect(parsed.message_id).toBe(999);
+      expect(parsed.message).toBe('Message sent');
+      expect(repo.sendChannelMessageAsync).toHaveBeenCalledWith(10, 'Hello!', 'text');
+    });
+
+    it('returns error for invalid token', async () => {
+      const result = await tools.confirmSendChannelMessage({ approval_token: 'bad-token' });
+
+      const parsed = JSON.parse(result.content[0].text);
+      expect(parsed.success).toBe(false);
+      expect(parsed.error).toBe('Token not found or already used');
+    });
+
+    it('returns error for already consumed token', async () => {
+      vi.mocked(repo.sendChannelMessageAsync).mockResolvedValue(999);
+
+      const prepareResult = tools.prepareSendChannelMessage({
+        channel_id: 10, body: 'Hello!',
+      });
+      const { approval_token } = JSON.parse(prepareResult.content[0].text);
+
+      await tools.confirmSendChannelMessage({ approval_token });
+      const result = await tools.confirmSendChannelMessage({ approval_token });
+
+      const parsed = JSON.parse(result.content[0].text);
+      expect(parsed.success).toBe(false);
+    });
+  });
+
+  describe('prepareReplyChannelMessage', () => {
+    it('generates an approval token with preview', () => {
+      const result = tools.prepareReplyChannelMessage({
+        message_id: 100, body: 'Nice post!', content_type: 'text',
+      });
+
+      const parsed = JSON.parse(result.content[0].text);
+      expect(parsed.approval_token).toBeDefined();
+      expect(typeof parsed.approval_token).toBe('string');
+      expect(parsed.expires_at).toBeDefined();
+      expect(parsed.message_id).toBe(100);
+      expect(parsed.body_preview).toBe('Nice post!');
+      expect(parsed.content_type).toBe('text');
+      expect(parsed.action).toContain('confirm_reply_channel_message');
+    });
+
+    it('defaults content_type to html', () => {
+      const result = tools.prepareReplyChannelMessage({
+        message_id: 100, body: '<p>Reply</p>',
+      });
+
+      const parsed = JSON.parse(result.content[0].text);
+      expect(parsed.content_type).toBe('html');
+    });
+  });
+
+  describe('confirmReplyChannelMessage', () => {
+    it('sends reply with valid token', async () => {
+      vi.mocked(repo.replyToChannelMessageAsync).mockResolvedValue(888);
+
+      const prepareResult = tools.prepareReplyChannelMessage({
+        message_id: 100, body: 'Great idea!', content_type: 'text',
+      });
+      const { approval_token } = JSON.parse(prepareResult.content[0].text);
+
+      const result = await tools.confirmReplyChannelMessage({ approval_token });
+
+      const parsed = JSON.parse(result.content[0].text);
+      expect(parsed.success).toBe(true);
+      expect(parsed.reply_id).toBe(888);
+      expect(parsed.message).toBe('Reply sent');
+      expect(repo.replyToChannelMessageAsync).toHaveBeenCalledWith(100, 'Great idea!', 'text');
+    });
+
+    it('returns error for invalid token', async () => {
+      const result = await tools.confirmReplyChannelMessage({ approval_token: 'bad-token' });
+
+      const parsed = JSON.parse(result.content[0].text);
+      expect(parsed.success).toBe(false);
+      expect(parsed.error).toBe('Token not found or already used');
+    });
+
+    it('returns error for already consumed token', async () => {
+      vi.mocked(repo.replyToChannelMessageAsync).mockResolvedValue(888);
+
+      const prepareResult = tools.prepareReplyChannelMessage({
+        message_id: 100, body: 'Reply!',
+      });
+      const { approval_token } = JSON.parse(prepareResult.content[0].text);
+
+      await tools.confirmReplyChannelMessage({ approval_token });
+      const result = await tools.confirmReplyChannelMessage({ approval_token });
+
+      const parsed = JSON.parse(result.content[0].text);
+      expect(parsed.success).toBe(false);
     });
   });
 });
