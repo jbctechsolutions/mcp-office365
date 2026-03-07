@@ -279,6 +279,26 @@ describe('Graph API endpoint and method validation', () => {
       expect(apiCalls[0].topValue).toBe(30);
     });
 
+    it('searchMessagesKql passes raw KQL query to search without quotes', async () => {
+      await client.searchMessagesKql('from:alice AND hasAttachments:true', 20);
+
+      expect(apiCalls).toHaveLength(1);
+      expect(apiCalls[0].url).toBe('/me/messages');
+      expect(apiCalls[0].method).toBe('get');
+      expect(apiCalls[0].searchExpr).toBe('from:alice AND hasAttachments:true');
+      expect(apiCalls[0].topValue).toBe(20);
+    });
+
+    it('searchMessagesKqlInFolder passes raw KQL with folder scope', async () => {
+      await client.searchMessagesKqlInFolder('folder-123', 'subject:"report"', 10);
+
+      expect(apiCalls).toHaveLength(1);
+      expect(apiCalls[0].url).toBe('/me/mailFolders/folder-123/messages');
+      expect(apiCalls[0].method).toBe('get');
+      expect(apiCalls[0].searchExpr).toBe('subject:"report"');
+      expect(apiCalls[0].topValue).toBe(10);
+    });
+
     it('listConversationMessages filters by conversationId with asc ordering', async () => {
       await client.listConversationMessages('AAMkAGQ=', 10);
 
@@ -1049,6 +1069,8 @@ describe('Graph API endpoint and method validation', () => {
       await client.listUnreadMessages('f1');
       await client.searchMessages('q');
       await client.searchMessagesInFolder('f1', 'q');
+      await client.searchMessagesKql('from:alice');
+      await client.searchMessagesKqlInFolder('f1', 'subject:"test"');
       await client.listConversationMessages('conv-1', 10);
 
       setupMock({ id: 'msg-1', subject: 'Test' });

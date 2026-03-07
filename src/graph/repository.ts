@@ -242,6 +242,42 @@ export class GraphRepository implements IRepository {
     return messages.map((m) => mapMessageToEmailRow(m, folderId));
   }
 
+  /**
+   * Advanced search using raw KQL query syntax.
+   */
+  async searchEmailsAdvancedAsync(query: string, limit: number): Promise<EmailRow[]> {
+    const messages = await this.client.searchMessagesKql(query, limit);
+    for (const msg of messages) {
+      if (msg.id != null) {
+        this.idCache.messages.set(hashStringToNumber(msg.id), msg.id);
+      }
+      if (msg.conversationId != null) {
+        this.idCache.conversations.set(hashStringToNumber(msg.conversationId), msg.conversationId);
+      }
+    }
+    return messages.map((m) => mapMessageToEmailRow(m));
+  }
+
+  /**
+   * Advanced search in a specific folder using raw KQL query syntax.
+   */
+  async searchEmailsAdvancedInFolderAsync(folderId: number, query: string, limit: number): Promise<EmailRow[]> {
+    const graphFolderId = this.idCache.folders.get(folderId);
+    if (graphFolderId == null) {
+      throw new Error(`Folder ID ${folderId} not found in cache. Try searching for or listing the item first to refresh the cache.`);
+    }
+    const messages = await this.client.searchMessagesKqlInFolder(graphFolderId, query, limit);
+    for (const msg of messages) {
+      if (msg.id != null) {
+        this.idCache.messages.set(hashStringToNumber(msg.id), msg.id);
+      }
+      if (msg.conversationId != null) {
+        this.idCache.conversations.set(hashStringToNumber(msg.conversationId), msg.conversationId);
+      }
+    }
+    return messages.map((m) => mapMessageToEmailRow(m));
+  }
+
   getEmail(_id: number): EmailRow | undefined {
     throw new Error('Use getEmailAsync() for Graph repository');
   }

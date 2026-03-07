@@ -24,6 +24,8 @@ vi.mock('../../../src/graph/client/index.js', () => ({
       listUnreadMessages: vi.fn(),
       searchMessages: vi.fn(),
       searchMessagesInFolder: vi.fn(),
+      searchMessagesKql: vi.fn(),
+      searchMessagesKqlInFolder: vi.fn(),
       listConversationMessages: vi.fn(),
       getMessage: vi.fn(),
       listCalendars: vi.fn(),
@@ -407,6 +409,41 @@ describe('graph/repository', () => {
         const result = await repository.searchEmailsInFolderAsync(99999, 'query', 50);
 
         expect(result).toEqual([]);
+      });
+    });
+
+    describe('searchEmailsAdvancedAsync', () => {
+      it('calls searchMessagesKql and caches results', async () => {
+        mockClient.searchMessagesKql.mockResolvedValue([
+          { id: 'msg-kql-1', subject: 'KQL result', conversationId: 'conv-kql' },
+        ]);
+
+        const results = await repository.searchEmailsAdvancedAsync('from:alice', 50);
+        expect(results).toHaveLength(1);
+        expect(mockClient.searchMessagesKql).toHaveBeenCalledWith('from:alice', 50);
+        expect(results[0].subject).toBe('KQL result');
+      });
+    });
+
+    describe('searchEmailsAdvancedInFolderAsync', () => {
+      it('calls searchMessagesKqlInFolder with resolved folder ID', async () => {
+        // Populate folder cache
+        mockClient.listMailFolders.mockResolvedValue([{ id: 'folder-abc', displayName: 'Inbox' }]);
+        await repository.listFoldersAsync();
+
+        mockClient.searchMessagesKqlInFolder.mockResolvedValue([
+          { id: 'msg-kql-2', subject: 'Folder KQL result' },
+        ]);
+
+        const folderId = hashStringToNumber('folder-abc');
+        const results = await repository.searchEmailsAdvancedInFolderAsync(folderId, 'subject:"test"', 25);
+        expect(results).toHaveLength(1);
+        expect(mockClient.searchMessagesKqlInFolder).toHaveBeenCalledWith('folder-abc', 'subject:"test"', 25);
+      });
+
+      it('throws when folder not in cache', async () => {
+        await expect(repository.searchEmailsAdvancedInFolderAsync(99999, 'test', 50))
+          .rejects.toThrow('Folder ID 99999 not found in cache');
       });
     });
   });

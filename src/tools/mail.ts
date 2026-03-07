@@ -57,6 +57,14 @@ export const SearchEmailsInput = z.strictObject({
     .describe('Maximum number of emails to return (1-100)'),
 });
 
+export const SearchEmailsAdvancedInput = z.strictObject({
+  query: z.string().min(1).describe(
+    'KQL search query. Examples: from:alice, subject:"quarterly report", hasAttachments:true, received>=2024-01-01. Combine with AND/OR.'
+  ),
+  folder_id: z.number().int().positive().optional().describe('Optional folder ID to search within'),
+  limit: z.number().int().min(1).max(100).default(50).describe('Maximum results (1-100)'),
+});
+
 export const GetEmailInput = z.strictObject({
   email_id: z.number().int().positive().describe('The email ID to retrieve'),
   include_body: z.boolean().default(true).describe('Include the email body in the response'),

@@ -66,6 +66,7 @@ import {
 import {
   ListEmailsInput,
   SearchEmailsInput,
+  SearchEmailsAdvancedInput,
   GetEmailInput,
   GetEmailsInput,
   ListConversationInput,
@@ -228,6 +229,19 @@ const TOOLS: Tool[] = [
           description: 'Maximum number of emails to return (1-100, default 50)',
           default: 50,
         },
+      },
+      required: ['query'],
+    },
+  },
+  {
+    name: 'search_emails_advanced',
+    description: 'Search emails using KQL (Keyword Query Language) for advanced queries. Supports operators: from:, to:, subject:, hasAttachments:true, received>=2024-01-01, AND, OR. (Graph API)',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        query: { type: 'string', description: 'KQL search query (e.g., from:alice AND subject:"report")' },
+        folder_id: { type: 'number', description: 'Optional folder ID to search within' },
+        limit: { type: 'number', description: 'Maximum results (default: 50)', default: 50 },
       },
       required: ['query'],
     },
@@ -1884,6 +1898,7 @@ export function createServer(): Server {
     'check_availability',
     'find_meeting_times',
     'list_conversation',
+    'search_emails_advanced',
   ]);
 
   // Register tool list handler
@@ -2908,6 +2923,15 @@ async function handleGraphToolCall(
         const emails = params.folder_id != null
           ? await repository.searchEmailsInFolderAsync(params.folder_id, params.query, params.limit)
           : await repository.searchEmailsAsync(params.query, params.limit);
+        const result = { emails: emails.map(transformEmailRow) };
+        return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+      }
+
+      case 'search_emails_advanced': {
+        const params = SearchEmailsAdvancedInput.parse(args);
+        const emails = params.folder_id != null
+          ? await repository.searchEmailsAdvancedInFolderAsync(params.folder_id, params.query, params.limit)
+          : await repository.searchEmailsAdvancedAsync(params.query, params.limit);
         const result = { emails: emails.map(transformEmailRow) };
         return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
       }

@@ -218,6 +218,40 @@ export class GraphClient {
   }
 
   /**
+   * Searches messages using raw KQL (Keyword Query Language).
+   * Unlike searchMessages, the query is passed directly without quote-wrapping,
+   * enabling KQL operators like from:, subject:, hasAttachments:, received>=, AND, OR.
+   */
+  async searchMessagesKql(query: string, limit: number = 50): Promise<MicrosoftGraph.Message[]> {
+    const client = await this.getClient();
+    const response = await client
+      .api('/me/messages')
+      .search(query)
+      .select('id,subject,from,toRecipients,ccRecipients,receivedDateTime,sentDateTime,isRead,hasAttachments,importance,flag,bodyPreview,conversationId,internetMessageId,parentFolderId')
+      .top(limit)
+      .get() as PageCollection;
+    return response.value as MicrosoftGraph.Message[];
+  }
+
+  /**
+   * Searches messages in a specific folder using raw KQL.
+   */
+  async searchMessagesKqlInFolder(
+    folderId: string,
+    query: string,
+    limit: number = 50
+  ): Promise<MicrosoftGraph.Message[]> {
+    const client = await this.getClient();
+    const response = await client
+      .api(`/me/mailFolders/${folderId}/messages`)
+      .search(query)
+      .select('id,subject,from,toRecipients,ccRecipients,receivedDateTime,sentDateTime,isRead,hasAttachments,importance,flag,bodyPreview,conversationId,internetMessageId,parentFolderId')
+      .top(limit)
+      .get() as PageCollection;
+    return response.value as MicrosoftGraph.Message[];
+  }
+
+  /**
    * Lists messages in a conversation by conversationId.
    */
   async listConversationMessages(

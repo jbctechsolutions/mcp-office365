@@ -16,6 +16,7 @@ export {
   ListFoldersInput,
   ListEmailsInput,
   SearchEmailsInput,
+  SearchEmailsAdvancedInput,
   GetEmailInput,
   GetEmailsInput,
   ListConversationInput,
