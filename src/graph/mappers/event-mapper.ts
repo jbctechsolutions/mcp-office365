@@ -42,5 +42,6 @@ export function mapEventToEventRow(
     masterRecordId: null, // Not directly available
     recurrenceId: null, // Not directly available
     dataFilePath: createGraphContentPath('event', eventId),
+    onlineMeetingUrl: event.onlineMeeting?.joinUrl ?? null,
   };
 }

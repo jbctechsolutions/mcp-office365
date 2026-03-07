@@ -1397,6 +1397,8 @@ export class GraphRepository implements IRepository {
       };
     };
     calendarId?: number;
+    is_online_meeting?: boolean;
+    online_meeting_provider?: string;
   }): Promise<number> {
     const tz = params.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
 
@@ -1430,6 +1432,11 @@ export class GraphRepository implements IRepository {
 
     if (params.recurrence != null) {
       graphEvent.recurrence = params.recurrence;
+    }
+
+    if (params.is_online_meeting) {
+      graphEvent.isOnlineMeeting = true;
+      graphEvent.onlineMeetingProvider = params.online_meeting_provider ?? 'teamsForBusiness';
     }
 
     const graphCalendarId = params.calendarId != null

@@ -218,6 +218,41 @@ describe('graph/mappers/event-mapper', () => {
       expect(result.subject).toBeNull();
     });
 
+    it('extracts onlineMeetingUrl from onlineMeeting joinUrl', () => {
+      const event: MicrosoftGraph.Event = {
+        id: 'event-online',
+        onlineMeeting: {
+          joinUrl: 'https://teams.microsoft.com/l/meetup-join/abc123',
+        },
+      };
+
+      const result = mapEventToEventRow(event);
+
+      expect(result.onlineMeetingUrl).toBe('https://teams.microsoft.com/l/meetup-join/abc123');
+    });
+
+    it('sets onlineMeetingUrl to null when onlineMeeting is undefined', () => {
+      const event: MicrosoftGraph.Event = {
+        id: 'event-no-online',
+        onlineMeeting: undefined,
+      };
+
+      const result = mapEventToEventRow(event);
+
+      expect(result.onlineMeetingUrl).toBeNull();
+    });
+
+    it('sets onlineMeetingUrl to null when onlineMeeting has no joinUrl', () => {
+      const event: MicrosoftGraph.Event = {
+        id: 'event-no-joinurl',
+        onlineMeeting: {},
+      };
+
+      const result = mapEventToEventRow(event);
+
+      expect(result.onlineMeetingUrl).toBeNull();
+    });
+
     it('stores startDate as Unix timestamp (not Apple timestamp)', () => {
       // Graph API returns dateTime without Z suffix, with separate timeZone
       // "2024-06-15T10:00:00.0000000" in UTC = Unix timestamp 1718442000

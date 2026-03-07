@@ -475,7 +475,7 @@ const TOOLS: Tool[] = [
   },
   {
     name: 'create_event',
-    description: 'Create a new calendar event in Outlook',
+    description: 'Create a new calendar event in Outlook. Supports online Teams meetings via is_online_meeting flag.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -553,6 +553,16 @@ const TOOLS: Tool[] = [
           },
           required: ['frequency'],
         },
+        is_online_meeting: {
+          type: 'boolean',
+          description: 'Create as online Teams meeting (default false)',
+          default: false,
+        },
+        online_meeting_provider: {
+          type: 'string',
+          enum: ['teamsForBusiness', 'skypeForBusiness', 'skypeForConsumer'],
+          description: 'Online meeting provider (default: teamsForBusiness)',
+        },
       },
       required: ['title', 'start_date', 'end_date'],
     },
@@ -607,7 +617,7 @@ const TOOLS: Tool[] = [
   },
   {
     name: 'update_event',
-    description: 'Update a calendar event. All fields are optional - only specified fields will be updated. For recurring events, you can update a single instance or the entire series.',
+    description: 'Update a calendar event. All fields are optional - only specified fields will be updated. Supports online Teams meetings via is_online_meeting flag. For recurring events, you can update a single instance or the entire series.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -644,6 +654,15 @@ const TOOLS: Tool[] = [
         is_all_day: {
           type: 'boolean',
           description: 'Whether event is all day',
+        },
+        is_online_meeting: {
+          type: 'boolean',
+          description: 'Set as online Teams meeting',
+        },
+        online_meeting_provider: {
+          type: 'string',
+          enum: ['teamsForBusiness', 'skypeForBusiness', 'skypeForConsumer'],
+          description: 'Online meeting provider (default: teamsForBusiness)',
         },
       },
       required: ['event_id'],
@@ -3349,6 +3368,8 @@ const GraphCreateEventInput = z.strictObject({
       numberOfOccurrences: z.number().int().positive().optional(),
     }),
   }).optional(),
+  is_online_meeting: z.boolean().optional().describe('Create as online Teams meeting'),
+  online_meeting_provider: z.enum(['teamsForBusiness', 'skypeForBusiness', 'skypeForConsumer']).optional().describe('Online meeting provider (default: teamsForBusiness)'),
 }).refine(
   (data) => new Date(data.start_date).getTime() < new Date(data.end_date).getTime(),
   { message: 'start_date must be before end_date', path: ['start_date'] }
@@ -3382,6 +3403,8 @@ const UpdateEventInput = z.strictObject({
       numberOfOccurrences: z.number().int().positive().optional(),
     }),
   }).optional(),
+  is_online_meeting: z.boolean().optional().describe('Create as online Teams meeting'),
+  online_meeting_provider: z.enum(['teamsForBusiness', 'skypeForBusiness', 'skypeForConsumer']).optional().describe('Online meeting provider (default: teamsForBusiness)'),
 });
 
 const RespondToEventGraphInput = z.strictObject({
@@ -3822,6 +3845,8 @@ async function handleGraphToolCall(
           createParams.recurrence = { pattern, range };
         }
         if (params.calendar_id != null) createParams.calendarId = params.calendar_id;
+        if (params.is_online_meeting != null) createParams.is_online_meeting = params.is_online_meeting;
+        if (params.online_meeting_provider != null) createParams.online_meeting_provider = params.online_meeting_provider;
         const numericId = await repository.createEventAsync(createParams);
 
         const result: CreateEventResult = {
@@ -3861,6 +3886,12 @@ async function handleGraphToolCall(
           }));
         }
         if (params.recurrence != null) updates.recurrence = params.recurrence;
+        if (params.is_online_meeting != null) {
+          updates.isOnlineMeeting = params.is_online_meeting;
+          if (params.is_online_meeting) {
+            updates.onlineMeetingProvider = params.online_meeting_provider ?? 'teamsForBusiness';
+          }
+        }
 
         await repository.updateEventAsync(params.event_id, updates);
         return {
@@ -4740,6 +4771,7 @@ function transformGraphEventRow(row: EventRow): {
   isRecurring: boolean;
   hasReminder: boolean;
   attendeeCount: number | null;
+  onlineMeetingUrl: string | null;
 } {
   return {
     id: row.id,
@@ -4750,6 +4782,7 @@ function transformGraphEventRow(row: EventRow): {
     isRecurring: row.isRecurring === 1,
     hasReminder: row.hasReminder === 1,
     attendeeCount: row.attendeeCount,
+    onlineMeetingUrl: row.onlineMeetingUrl ?? null,
   };
 }
 

@@ -2260,6 +2260,55 @@ describe('graph/repository', () => {
           'cal-work'
         );
       });
+
+      it('sets isOnlineMeeting and default provider when is_online_meeting is true', async () => {
+        mockClient.createEvent.mockResolvedValue({ id: 'event-online' });
+
+        await repository.createEventAsync({
+          subject: 'Teams Meeting',
+          start: '2026-03-01T10:00:00',
+          end: '2026-03-01T11:00:00',
+          timezone: 'UTC',
+          is_online_meeting: true,
+        });
+
+        const callArgs = mockClient.createEvent.mock.calls[0][0];
+        expect(callArgs.isOnlineMeeting).toBe(true);
+        expect(callArgs.onlineMeetingProvider).toBe('teamsForBusiness');
+      });
+
+      it('uses specified online_meeting_provider', async () => {
+        mockClient.createEvent.mockResolvedValue({ id: 'event-skype' });
+
+        await repository.createEventAsync({
+          subject: 'Skype Meeting',
+          start: '2026-03-01T10:00:00',
+          end: '2026-03-01T11:00:00',
+          timezone: 'UTC',
+          is_online_meeting: true,
+          online_meeting_provider: 'skypeForBusiness',
+        });
+
+        const callArgs = mockClient.createEvent.mock.calls[0][0];
+        expect(callArgs.isOnlineMeeting).toBe(true);
+        expect(callArgs.onlineMeetingProvider).toBe('skypeForBusiness');
+      });
+
+      it('does not set online meeting fields when is_online_meeting is false', async () => {
+        mockClient.createEvent.mockResolvedValue({ id: 'event-no-online' });
+
+        await repository.createEventAsync({
+          subject: 'Regular Meeting',
+          start: '2026-03-01T10:00:00',
+          end: '2026-03-01T11:00:00',
+          timezone: 'UTC',
+          is_online_meeting: false,
+        });
+
+        const callArgs = mockClient.createEvent.mock.calls[0][0];
+        expect(callArgs.isOnlineMeeting).toBeUndefined();
+        expect(callArgs.onlineMeetingProvider).toBeUndefined();
+      });
     });
 
     describe('updateEventAsync', () => {
@@ -2285,6 +2334,26 @@ describe('graph/repository', () => {
         await expect(
           repository.updateEventAsync(99999, { subject: 'Nope' })
         ).rejects.toThrow('Event ID 99999 not found in cache. Try searching for or listing the item first to refresh the cache.');
+      });
+
+      it('passes online meeting fields through to updateEvent', async () => {
+        // Populate event cache
+        mockClient.listEvents.mockResolvedValue([
+          { id: 'event-online-upd', subject: 'Existing', start: {}, end: {} },
+        ]);
+        await repository.listEventsAsync(50, 0);
+
+        mockClient.updateEvent.mockResolvedValue(undefined);
+
+        await repository.updateEventAsync(hashStringToNumber('event-online-upd'), {
+          isOnlineMeeting: true,
+          onlineMeetingProvider: 'teamsForBusiness',
+        });
+
+        expect(mockClient.updateEvent).toHaveBeenCalledWith('event-online-upd', {
+          isOnlineMeeting: true,
+          onlineMeetingProvider: 'teamsForBusiness',
+        });
       });
     });
 

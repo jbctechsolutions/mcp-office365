@@ -95,8 +95,8 @@ A [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) server that p
 - `list_event_instances` - List instances of a recurring event within a date range *(Graph API)*
 
 **Calendar - Writing (6)**
-- `create_event` - Create a new calendar event
-- `update_event` - Update event details (title, time, location, etc.); also works on instance IDs from `list_event_instances`
+- `create_event` - Create a new calendar event (supports online Teams meetings via `is_online_meeting`)
+- `update_event` - Update event details (title, time, location, online meeting, etc.); also works on instance IDs from `list_event_instances`
 - `respond_to_event` - Accept, decline, or tentatively accept invitations
 - `delete_event` - Delete a calendar event or recurring series; also works on instance IDs from `list_event_instances`
 - `prepare_delete_event` / `confirm_delete_event` - Delete event with two-phase approval *(Graph API)*

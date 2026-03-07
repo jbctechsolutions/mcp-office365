@@ -156,6 +156,7 @@ function toEventRow(asEvent: parser.AppleScriptEventRow): EventRow {
     masterRecordId: null,
     recurrenceId: null,
     dataFilePath: createEventPath(asEvent.id),
+    onlineMeetingUrl: null,
   };
 }
 

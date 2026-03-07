@@ -65,6 +65,7 @@ export interface EventRow {
   readonly masterRecordId: number | null;
   readonly recurrenceId: number | null;
   readonly dataFilePath: string | null;
+  readonly onlineMeetingUrl: string | null;
 }
 
 export interface ContactRow {
