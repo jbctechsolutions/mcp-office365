@@ -41,12 +41,13 @@ export type OperationType =
   | 'delete_calendar_permission'
   | 'delete_channel'
   | 'send_channel_message'
-  | 'reply_channel_message';
+  | 'reply_channel_message'
+  | 'send_chat_message';
 
 /**
  * Target resource types.
  */
-export type TargetType = 'email' | 'folder' | 'event' | 'contact' | 'task' | 'task_list' | 'rule' | 'contact_folder' | 'category' | 'focused_override' | 'calendar_permission' | 'channel' | 'channel_message';
+export type TargetType = 'email' | 'folder' | 'event' | 'contact' | 'task' | 'task_list' | 'rule' | 'contact_folder' | 'category' | 'focused_override' | 'calendar_permission' | 'channel' | 'channel_message' | 'chat_message';
 
 // =============================================================================
 // Token Types

@@ -29,6 +29,11 @@ describe('TeamsTools', () => {
       getChannelMessageAsync: vi.fn(),
       sendChannelMessageAsync: vi.fn(),
       replyToChannelMessageAsync: vi.fn(),
+      listChatsAsync: vi.fn(),
+      getChatAsync: vi.fn(),
+      listChatMessagesAsync: vi.fn(),
+      sendChatMessageAsync: vi.fn(),
+      listChatMembersAsync: vi.fn(),
     };
     tokenManager = new ApprovalTokenManager();
     tools = new TeamsTools(repo, tokenManager);
@@ -379,6 +384,160 @@ describe('TeamsTools', () => {
 
       const parsed = JSON.parse(result.content[0].text);
       expect(parsed.success).toBe(false);
+    });
+  });
+
+  // ===========================================================================
+  // Chats
+  // ===========================================================================
+
+  describe('listChats', () => {
+    it('returns chats from the repository', async () => {
+      const mockChats = [
+        { id: 1, topic: 'Project Chat', chatType: 'group', lastMessagePreview: 'Hello', createdDateTime: '2026-01-01T00:00:00Z' },
+        { id: 2, topic: '', chatType: 'oneOnOne', lastMessagePreview: 'Hi there', createdDateTime: '2026-01-02T00:00:00Z' },
+      ];
+      vi.mocked(repo.listChatsAsync).mockResolvedValue(mockChats);
+
+      const result = await tools.listChats({});
+
+      expect(repo.listChatsAsync).toHaveBeenCalledWith(undefined);
+      const parsed = JSON.parse(result.content[0].text);
+      expect(parsed.chats).toEqual(mockChats);
+    });
+
+    it('passes limit parameter', async () => {
+      vi.mocked(repo.listChatsAsync).mockResolvedValue([]);
+
+      await tools.listChats({ limit: 10 });
+
+      expect(repo.listChatsAsync).toHaveBeenCalledWith(10);
+    });
+  });
+
+  describe('getChat', () => {
+    it('returns chat details', async () => {
+      const mockChat = {
+        id: 1, topic: 'Project Chat', chatType: 'group', createdDateTime: '2026-01-01T00:00:00Z', webUrl: 'https://teams.microsoft.com/...',
+      };
+      vi.mocked(repo.getChatAsync).mockResolvedValue(mockChat);
+
+      const result = await tools.getChat({ chat_id: 1 });
+
+      expect(repo.getChatAsync).toHaveBeenCalledWith(1);
+      const parsed = JSON.parse(result.content[0].text);
+      expect(parsed.chat).toEqual(mockChat);
+    });
+  });
+
+  describe('listChatMessages', () => {
+    it('returns messages from the repository', async () => {
+      const mockMessages = [
+        {
+          id: 100, senderName: 'Alice', senderEmail: 'alice@example.com',
+          bodyPreview: 'Hello', bodyContent: 'Hello',
+          contentType: 'text', createdDateTime: '2026-01-01T00:00:00Z',
+        },
+      ];
+      vi.mocked(repo.listChatMessagesAsync).mockResolvedValue(mockMessages);
+
+      const result = await tools.listChatMessages({ chat_id: 1 });
+
+      expect(repo.listChatMessagesAsync).toHaveBeenCalledWith(1, undefined);
+      const parsed = JSON.parse(result.content[0].text);
+      expect(parsed.messages).toEqual(mockMessages);
+    });
+
+    it('passes limit parameter', async () => {
+      vi.mocked(repo.listChatMessagesAsync).mockResolvedValue([]);
+
+      await tools.listChatMessages({ chat_id: 1, limit: 5 });
+
+      expect(repo.listChatMessagesAsync).toHaveBeenCalledWith(1, 5);
+    });
+  });
+
+  describe('prepareSendChatMessage', () => {
+    it('generates an approval token with preview', () => {
+      const result = tools.prepareSendChatMessage({
+        chat_id: 1, body: 'Hello chat!', content_type: 'text',
+      });
+
+      const parsed = JSON.parse(result.content[0].text);
+      expect(parsed.approval_token).toBeDefined();
+      expect(typeof parsed.approval_token).toBe('string');
+      expect(parsed.expires_at).toBeDefined();
+      expect(parsed.chat_id).toBe(1);
+      expect(parsed.body_preview).toBe('Hello chat!');
+      expect(parsed.content_type).toBe('text');
+      expect(parsed.action).toContain('confirm_send_chat_message');
+    });
+
+    it('defaults content_type to html', () => {
+      const result = tools.prepareSendChatMessage({
+        chat_id: 1, body: '<p>Hello</p>',
+      });
+
+      const parsed = JSON.parse(result.content[0].text);
+      expect(parsed.content_type).toBe('html');
+    });
+  });
+
+  describe('confirmSendChatMessage', () => {
+    it('sends message with valid token', async () => {
+      vi.mocked(repo.sendChatMessageAsync).mockResolvedValue(999);
+
+      const prepareResult = tools.prepareSendChatMessage({
+        chat_id: 1, body: 'Hello!', content_type: 'text',
+      });
+      const { approval_token } = JSON.parse(prepareResult.content[0].text);
+
+      const result = await tools.confirmSendChatMessage({ approval_token });
+
+      const parsed = JSON.parse(result.content[0].text);
+      expect(parsed.success).toBe(true);
+      expect(parsed.message_id).toBe(999);
+      expect(parsed.message).toBe('Message sent');
+      expect(repo.sendChatMessageAsync).toHaveBeenCalledWith(1, 'Hello!', 'text');
+    });
+
+    it('returns error for invalid token', async () => {
+      const result = await tools.confirmSendChatMessage({ approval_token: 'bad-token' });
+
+      const parsed = JSON.parse(result.content[0].text);
+      expect(parsed.success).toBe(false);
+      expect(parsed.error).toBe('Token not found or already used');
+    });
+
+    it('returns error for already consumed token', async () => {
+      vi.mocked(repo.sendChatMessageAsync).mockResolvedValue(999);
+
+      const prepareResult = tools.prepareSendChatMessage({
+        chat_id: 1, body: 'Hello!',
+      });
+      const { approval_token } = JSON.parse(prepareResult.content[0].text);
+
+      await tools.confirmSendChatMessage({ approval_token });
+      const result = await tools.confirmSendChatMessage({ approval_token });
+
+      const parsed = JSON.parse(result.content[0].text);
+      expect(parsed.success).toBe(false);
+    });
+  });
+
+  describe('listChatMembers', () => {
+    it('returns chat members', async () => {
+      const mockMembers = [
+        { displayName: 'Alice', email: 'alice@example.com', roles: ['owner'] },
+        { displayName: 'Bob', email: 'bob@example.com', roles: [] },
+      ];
+      vi.mocked(repo.listChatMembersAsync).mockResolvedValue(mockMembers);
+
+      const result = await tools.listChatMembers({ chat_id: 1 });
+
+      expect(repo.listChatMembersAsync).toHaveBeenCalledWith(1);
+      const parsed = JSON.parse(result.content[0].text);
+      expect(parsed.members).toEqual(mockMembers);
     });
   });
 });

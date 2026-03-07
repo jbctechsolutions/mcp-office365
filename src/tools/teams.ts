@@ -78,6 +78,33 @@ export const ConfirmReplyChannelMessageInput = z.strictObject({
   approval_token: z.string().describe('Approval token from prepare_reply_channel_message'),
 });
 
+export const ListChatsInput = z.strictObject({
+  limit: z.number().int().min(1).max(50).optional().describe('Max chats to return (default 25, max 50)'),
+});
+
+export const GetChatInput = z.strictObject({
+  chat_id: z.number().int().positive().describe('Chat ID from list_chats'),
+});
+
+export const ListChatMessagesInput = z.strictObject({
+  chat_id: z.number().int().positive().describe('Chat ID from list_chats'),
+  limit: z.number().int().min(1).max(50).optional().describe('Max messages to return (default 25, max 50)'),
+});
+
+export const PrepareSendChatMessageInput = z.strictObject({
+  chat_id: z.number().int().positive().describe('Chat ID to send message to'),
+  body: z.string().min(1).describe('Message body'),
+  content_type: z.enum(['text', 'html']).optional().describe('Content type (default: html)'),
+});
+
+export const ConfirmSendChatMessageInput = z.strictObject({
+  approval_token: z.string().describe('Approval token from prepare_send_chat_message'),
+});
+
+export const ListChatMembersInput = z.strictObject({
+  chat_id: z.number().int().positive().describe('Chat ID from list_chats'),
+});
+
 // =============================================================================
 // Type Exports
 // =============================================================================
@@ -95,6 +122,12 @@ export type PrepareSendChannelMessageParams = z.infer<typeof PrepareSendChannelM
 export type ConfirmSendChannelMessageParams = z.infer<typeof ConfirmSendChannelMessageInput>;
 export type PrepareReplyChannelMessageParams = z.infer<typeof PrepareReplyChannelMessageInput>;
 export type ConfirmReplyChannelMessageParams = z.infer<typeof ConfirmReplyChannelMessageInput>;
+export type ListChatsParams = z.infer<typeof ListChatsInput>;
+export type GetChatParams = z.infer<typeof GetChatInput>;
+export type ListChatMessagesParams = z.infer<typeof ListChatMessagesInput>;
+export type PrepareSendChatMessageParams = z.infer<typeof PrepareSendChatMessageInput>;
+export type ConfirmSendChatMessageParams = z.infer<typeof ConfirmSendChatMessageInput>;
+export type ListChatMembersParams = z.infer<typeof ListChatMembersInput>;
 
 // =============================================================================
 // Repository Interface
@@ -119,6 +152,14 @@ export interface ITeamsRepository {
   }>;
   sendChannelMessageAsync(channelId: number, body: string, contentType?: string): Promise<number>;
   replyToChannelMessageAsync(messageId: number, body: string, contentType?: string): Promise<number>;
+  listChatsAsync(limit?: number): Promise<Array<{ id: number; topic: string; chatType: string; lastMessagePreview: string; createdDateTime: string }>>;
+  getChatAsync(chatId: number): Promise<{ id: number; topic: string; chatType: string; createdDateTime: string; webUrl: string }>;
+  listChatMessagesAsync(chatId: number, limit?: number): Promise<Array<{
+    id: number; senderName: string; senderEmail: string; bodyPreview: string;
+    bodyContent: string; contentType: string; createdDateTime: string;
+  }>>;
+  sendChatMessageAsync(chatId: number, body: string, contentType?: string): Promise<number>;
+  listChatMembersAsync(chatId: number): Promise<Array<{ displayName: string; email: string; roles: string[] }>>;
 }
 
 // =============================================================================
@@ -430,6 +471,122 @@ export class TeamsTools {
       content: [{
         type: 'text' as const,
         text: JSON.stringify({ success: true, reply_id: replyId, message: 'Reply sent' }, null, 2),
+      }],
+    };
+  }
+
+  // ===========================================================================
+  // Chats
+  // ===========================================================================
+
+  async listChats(params: ListChatsParams): Promise<{
+    content: Array<{ type: 'text'; text: string }>;
+  }> {
+    const chats = await this.repo.listChatsAsync(params.limit);
+    return {
+      content: [{
+        type: 'text' as const,
+        text: JSON.stringify({ chats }, null, 2),
+      }],
+    };
+  }
+
+  async getChat(params: GetChatParams): Promise<{
+    content: Array<{ type: 'text'; text: string }>;
+  }> {
+    const chat = await this.repo.getChatAsync(params.chat_id);
+    return {
+      content: [{
+        type: 'text' as const,
+        text: JSON.stringify({ chat }, null, 2),
+      }],
+    };
+  }
+
+  async listChatMessages(params: ListChatMessagesParams): Promise<{
+    content: Array<{ type: 'text'; text: string }>;
+  }> {
+    const messages = await this.repo.listChatMessagesAsync(params.chat_id, params.limit);
+    return {
+      content: [{
+        type: 'text' as const,
+        text: JSON.stringify({ messages }, null, 2),
+      }],
+    };
+  }
+
+  prepareSendChatMessage(params: PrepareSendChatMessageParams): {
+    content: Array<{ type: 'text'; text: string }>;
+  } {
+    const contentType = params.content_type ?? 'html';
+    const token = this.tokenManager.generateToken({
+      operation: 'send_chat_message',
+      targetType: 'chat_message',
+      targetId: params.chat_id,
+      targetHash: String(params.chat_id),
+      metadata: { body: params.body, contentType },
+    });
+    return {
+      content: [{
+        type: 'text' as const,
+        text: JSON.stringify({
+          approval_token: token.tokenId,
+          expires_at: new Date(token.expiresAt).toISOString(),
+          chat_id: params.chat_id,
+          body_preview: params.body.substring(0, 200),
+          content_type: contentType,
+          action: 'Call confirm_send_chat_message with the approval_token to send.',
+        }, null, 2),
+      }],
+    };
+  }
+
+  async confirmSendChatMessage(params: ConfirmSendChatMessageParams): Promise<{
+    content: Array<{ type: 'text'; text: string }>;
+  }> {
+    const token = this.tokenManager.lookupToken(params.approval_token);
+    if (token == null) {
+      return {
+        content: [{
+          type: 'text' as const,
+          text: JSON.stringify({ success: false, error: 'Token not found or already used' }, null, 2),
+        }],
+      };
+    }
+    const result = this.tokenManager.consumeToken(params.approval_token, 'send_chat_message', token.targetId);
+    if (!result.valid) {
+      const errorMessages: Record<string, string> = {
+        NOT_FOUND: 'Token not found or already used',
+        EXPIRED: 'Token has expired. Please call prepare_send_chat_message again.',
+        OPERATION_MISMATCH: 'Token was not generated for send_chat_message',
+        TARGET_MISMATCH: 'Token was generated for a different chat',
+        ALREADY_CONSUMED: 'Token has already been used',
+      };
+      return {
+        content: [{
+          type: 'text' as const,
+          text: JSON.stringify({ success: false, error: errorMessages[result.error ?? ''] ?? 'Invalid token' }, null, 2),
+        }],
+      };
+    }
+    const { body, contentType } = result.token!.metadata as { body: string; contentType: string };
+    const messageId = await this.repo.sendChatMessageAsync(result.token!.targetId, body, contentType);
+    return {
+      content: [{
+        type: 'text' as const,
+        text: JSON.stringify({ success: true, message_id: messageId, message: 'Message sent' }, null, 2),
+      }],
+    };
+  }
+
+  async listChatMembers(params: ListChatMembersParams): Promise<{
+    content: Array<{ type: 'text'; text: string }>;
+  }> {
+    const members = await this.repo.listChatMembersAsync(params.chat_id);
+    return {
+      content: [{
+        type: 'text' as const,
+        text: JSON.stringify({ members }, null, 2),
       }],
     };
   }

@@ -56,6 +56,8 @@ interface IdCache {
   teams: Map<number, string>;
   channels: Map<number, { teamId: string; channelId: string }>;
   channelMessages: Map<number, { teamId: string; channelId: string; messageId: string }>;
+  chats: Map<number, string>;
+  chatMessages: Map<number, { chatId: string; messageId: string }>;
 }
 
 /**
@@ -85,6 +87,8 @@ export class GraphRepository implements IRepository {
     teams: new Map(),
     channels: new Map(),
     channelMessages: new Map(),
+    chats: new Map(),
+    chatMessages: new Map(),
   };
 
   constructor(deviceCodeCallback?: DeviceCodeCallback) {
@@ -2308,6 +2312,87 @@ export class GraphRepository implements IRepository {
     const numericId = hashStringToNumber(graphId);
     this.idCache.channelMessages.set(numericId, { teamId: cached.teamId, channelId: cached.channelId, messageId: graphId });
     return numericId;
+  }
+
+  // ===========================================================================
+  // Chats
+  // ===========================================================================
+
+  async listChatsAsync(limit: number = 25): Promise<Array<{
+    id: number; topic: string; chatType: string; lastMessagePreview: string; createdDateTime: string;
+  }>> {
+    const chats = await this.client.listChats(limit);
+    return chats.map((chat) => {
+      const graphId = chat.id!;
+      const numericId = hashStringToNumber(graphId);
+      this.idCache.chats.set(numericId, graphId);
+      return {
+        id: numericId,
+        topic: chat.topic ?? '',
+        chatType: chat.chatType ?? 'oneOnOne',
+        lastMessagePreview: (chat as any).lastMessagePreview?.body?.content?.substring(0, 200) ?? '',
+        createdDateTime: chat.createdDateTime ?? '',
+      };
+    });
+  }
+
+  async getChatAsync(chatId: number): Promise<{
+    id: number; topic: string; chatType: string; createdDateTime: string; webUrl: string;
+  }> {
+    const graphId = this.idCache.chats.get(chatId);
+    if (graphId == null) throw new Error(`Chat ID ${chatId} not found in cache. Try listing chats first.`);
+    const chat = await this.client.getChat(graphId);
+    return {
+      id: chatId,
+      topic: chat.topic ?? '',
+      chatType: chat.chatType ?? 'oneOnOne',
+      createdDateTime: chat.createdDateTime ?? '',
+      webUrl: (chat as any).webUrl ?? '',
+    };
+  }
+
+  async listChatMessagesAsync(chatId: number, limit: number = 25): Promise<Array<{
+    id: number; senderName: string; senderEmail: string; bodyPreview: string;
+    bodyContent: string; contentType: string; createdDateTime: string;
+  }>> {
+    const graphChatId = this.idCache.chats.get(chatId);
+    if (graphChatId == null) throw new Error(`Chat ID ${chatId} not found in cache. Try listing chats first.`);
+    const messages = await this.client.listChatMessages(graphChatId, limit);
+    return messages.map((msg) => {
+      const graphId = msg.id!;
+      const numericId = hashStringToNumber(graphId);
+      this.idCache.chatMessages.set(numericId, { chatId: graphChatId, messageId: graphId });
+      return {
+        id: numericId,
+        senderName: msg.from?.user?.displayName ?? msg.from?.application?.displayName ?? '',
+        senderEmail: (msg.from?.user as any)?.email ?? '',
+        bodyPreview: msg.body?.content?.substring(0, 200) ?? '',
+        bodyContent: msg.body?.content ?? '',
+        contentType: msg.body?.contentType ?? 'html',
+        createdDateTime: msg.createdDateTime ?? '',
+      };
+    });
+  }
+
+  async sendChatMessageAsync(chatId: number, body: string, contentType: string = 'html'): Promise<number> {
+    const graphChatId = this.idCache.chats.get(chatId);
+    if (graphChatId == null) throw new Error(`Chat ID ${chatId} not found in cache. Try listing chats first.`);
+    const msg = await this.client.sendChatMessage(graphChatId, body, contentType);
+    const graphId = msg.id!;
+    const numericId = hashStringToNumber(graphId);
+    this.idCache.chatMessages.set(numericId, { chatId: graphChatId, messageId: graphId });
+    return numericId;
+  }
+
+  async listChatMembersAsync(chatId: number): Promise<Array<{ displayName: string; email: string; roles: string[] }>> {
+    const graphChatId = this.idCache.chats.get(chatId);
+    if (graphChatId == null) throw new Error(`Chat ID ${chatId} not found in cache. Try listing chats first.`);
+    const members = await this.client.listChatMembers(graphChatId);
+    return members.map((m) => ({
+      displayName: m.displayName ?? '',
+      email: (m as any).email ?? '',
+      roles: m.roles ?? [],
+    }));
   }
 
   /**

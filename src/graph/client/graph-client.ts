@@ -1604,6 +1604,44 @@ export class GraphClient {
       body: { contentType, content: body },
     }) as MicrosoftGraph.ChatMessage;
   }
+
+  // ===========================================================================
+  // Chats
+  // ===========================================================================
+
+  async listChats(top: number = 25): Promise<MicrosoftGraph.Chat[]> {
+    const client = await this.getClient();
+    const response = await client.api('/me/chats')
+      .top(top)
+      .orderby('lastMessagePreview/createdDateTime desc')
+      .expand('lastMessagePreview')
+      .get() as PageCollection;
+    return response.value as MicrosoftGraph.Chat[];
+  }
+
+  async getChat(chatId: string): Promise<MicrosoftGraph.Chat> {
+    const client = await this.getClient();
+    return await client.api(`/me/chats/${chatId}`).get() as MicrosoftGraph.Chat;
+  }
+
+  async listChatMessages(chatId: string, top: number = 25): Promise<MicrosoftGraph.ChatMessage[]> {
+    const client = await this.getClient();
+    const response = await client.api(`/me/chats/${chatId}/messages`).top(top).get() as PageCollection;
+    return response.value as MicrosoftGraph.ChatMessage[];
+  }
+
+  async sendChatMessage(chatId: string, body: string, contentType: string = 'html'): Promise<MicrosoftGraph.ChatMessage> {
+    const client = await this.getClient();
+    return await client.api(`/me/chats/${chatId}/messages`).post({
+      body: { contentType, content: body },
+    }) as MicrosoftGraph.ChatMessage;
+  }
+
+  async listChatMembers(chatId: string): Promise<MicrosoftGraph.ConversationMember[]> {
+    const client = await this.getClient();
+    const response = await client.api(`/me/chats/${chatId}/members`).get() as PageCollection;
+    return response.value as MicrosoftGraph.ConversationMember[];
+  }
 }
 
 /**

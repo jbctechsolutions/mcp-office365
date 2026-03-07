@@ -103,6 +103,12 @@ import {
   ConfirmSendChannelMessageInput,
   PrepareReplyChannelMessageInput,
   ConfirmReplyChannelMessageInput,
+  ListChatsInput,
+  GetChatInput,
+  ListChatMessagesInput,
+  PrepareSendChatMessageInput,
+  ConfirmSendChatMessageInput,
+  ListChatMembersInput,
 } from './tools/teams.js';
 import {
   ListEmailsInput,
@@ -2546,6 +2552,74 @@ const TOOLS: Tool[] = [
       required: ['approval_token'],
     },
   },
+  {
+    name: 'list_chats',
+    description: 'List recent 1:1 and group chats (Graph API)',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        limit: { type: 'number', description: 'Max chats to return (default 25, max 50)' },
+      },
+    },
+  },
+  {
+    name: 'get_chat',
+    description: 'Get details of a specific chat (Graph API)',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        chat_id: { type: 'number', description: 'Chat ID from list_chats' },
+      },
+      required: ['chat_id'],
+    },
+  },
+  {
+    name: 'list_chat_messages',
+    description: 'List recent messages in a chat (Graph API)',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        chat_id: { type: 'number', description: 'Chat ID from list_chats' },
+        limit: { type: 'number', description: 'Max messages to return (default 25, max 50)' },
+      },
+      required: ['chat_id'],
+    },
+  },
+  {
+    name: 'prepare_send_chat_message',
+    description: 'Prepare to send a message in a chat. Returns an approval token. Call confirm_send_chat_message to execute. (Graph API)',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        chat_id: { type: 'number', description: 'Chat ID to send message to' },
+        body: { type: 'string', description: 'Message body' },
+        content_type: { type: 'string', enum: ['text', 'html'], description: 'Content type (default: html)' },
+      },
+      required: ['chat_id', 'body'],
+    },
+  },
+  {
+    name: 'confirm_send_chat_message',
+    description: 'Confirm sending a chat message with approval token (Graph API)',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        approval_token: { type: 'string', description: 'The approval token from prepare_send_chat_message' },
+      },
+      required: ['approval_token'],
+    },
+  },
+  {
+    name: 'list_chat_members',
+    description: 'List members of a chat (Graph API)',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        chat_id: { type: 'number', description: 'Chat ID from list_chats' },
+      },
+      required: ['chat_id'],
+    },
+  },
 ];
 
 // =============================================================================
@@ -2724,6 +2798,12 @@ export function createServer(): Server {
     'confirm_send_channel_message',
     'prepare_reply_channel_message',
     'confirm_reply_channel_message',
+    'list_chats',
+    'get_chat',
+    'list_chat_messages',
+    'prepare_send_chat_message',
+    'confirm_send_chat_message',
+    'list_chat_members',
   ]);
 
   // Register tool list handler
@@ -4934,6 +5014,36 @@ async function handleGraphToolCall(
       case 'confirm_reply_channel_message': {
         const params = ConfirmReplyChannelMessageInput.parse(args);
         return await teamsTools.confirmReplyChannelMessage(params);
+      }
+
+      case 'list_chats': {
+        const params = ListChatsInput.parse(args);
+        return await teamsTools.listChats(params);
+      }
+
+      case 'get_chat': {
+        const params = GetChatInput.parse(args);
+        return await teamsTools.getChat(params);
+      }
+
+      case 'list_chat_messages': {
+        const params = ListChatMessagesInput.parse(args);
+        return await teamsTools.listChatMessages(params);
+      }
+
+      case 'prepare_send_chat_message': {
+        const params = PrepareSendChatMessageInput.parse(args);
+        return teamsTools.prepareSendChatMessage(params);
+      }
+
+      case 'confirm_send_chat_message': {
+        const params = ConfirmSendChatMessageInput.parse(args);
+        return await teamsTools.confirmSendChatMessage(params);
+      }
+
+      case 'list_chat_members': {
+        const params = ListChatMembersInput.parse(args);
+        return await teamsTools.listChatMembers(params);
       }
 
       default:
