@@ -53,6 +53,7 @@ interface IdCache {
  */
 export class GraphRepository implements IRepository {
   private readonly client: GraphClient;
+  private readonly deltaLinks: Map<number, string> = new Map();
   private readonly idCache: IdCache = {
     folders: new Map(),
     messages: new Map(),
@@ -276,6 +277,38 @@ export class GraphRepository implements IRepository {
       }
     }
     return messages.map((m) => mapMessageToEmailRow(m));
+  }
+
+  async checkNewEmailsAsync(folderId: number): Promise<{ emails: EmailRow[]; isInitialSync: boolean }> {
+    const graphFolderId = this.idCache.folders.get(folderId);
+    if (graphFolderId == null) throw new Error(`Folder ID ${folderId} not found in cache. Try searching for or listing the item first to refresh the cache.`);
+
+    const existingDeltaLink = this.deltaLinks.get(folderId);
+    const isInitialSync = existingDeltaLink == null;
+
+    const { messages, deltaLink } = await this.client.getMessagesDelta(
+      graphFolderId,
+      existingDeltaLink
+    );
+
+    if (deltaLink) {
+      this.deltaLinks.set(folderId, deltaLink);
+    }
+
+    for (const msg of messages) {
+      if (msg.id != null) {
+        this.idCache.messages.set(hashStringToNumber(msg.id), msg.id);
+      }
+      if (msg.conversationId != null) {
+        this.idCache.conversations.set(hashStringToNumber(msg.conversationId), msg.conversationId);
+      }
+    }
+
+    const activeMessages = messages.filter((m) => !(m as any)['@removed']);
+    return {
+      emails: activeMessages.map((m) => mapMessageToEmailRow(m)),
+      isInitialSync,
+    };
   }
 
   getEmail(_id: number): EmailRow | undefined {

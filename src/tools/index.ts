@@ -23,6 +23,7 @@ export {
   GetUnreadCountInput,
   ListAttachmentsInput,
   DownloadAttachmentInput,
+  CheckNewEmailsInput,
   type ListFoldersParams,
   type ListEmailsParams,
   type SearchEmailsParams,

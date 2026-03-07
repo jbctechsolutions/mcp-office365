@@ -137,6 +137,7 @@ const VALID_ENDPOINT_PATTERNS = [
   /^\/me\/messages\/[^/]+\/createForward$/,
   /^\/me\/sendMail$/,
   /^\/me\/mailFolders\/[^/]+\/messages$/,
+  /^\/me\/mailFolders\/[^/]+\/messages\/delta$/,
   // Calendars
   /^\/me\/calendars$/,
   /^\/me\/calendars\/[^/]+\/events$/,
@@ -308,6 +309,50 @@ describe('Graph API endpoint and method validation', () => {
       expect(apiCalls[0].filterExpr).toContain("conversationId eq 'AAMkAGQ='");
       expect(apiCalls[0].orderbyExpr).toBe('receivedDateTime asc');
       expect(apiCalls[0].topValue).toBe(10);
+    });
+
+    it('getMessagesDelta initial call uses /me/mailFolders/{id}/messages/delta', async () => {
+      setupMock({ value: [{ id: 'msg-1', subject: 'New' }], '@odata.deltaLink': 'https://graph.microsoft.com/v1.0/delta-token' });
+      const result = await client.getMessagesDelta('folder-1');
+
+      expect(apiCalls).toHaveLength(1);
+      expect(apiCalls[0].url).toBe('/me/mailFolders/folder-1/messages/delta');
+      expect(apiCalls[0].method).toBe('get');
+      expect(apiCalls[0].topValue).toBe(50);
+      expect(result.messages).toHaveLength(1);
+      expect(result.deltaLink).toBe('https://graph.microsoft.com/v1.0/delta-token');
+    });
+
+    it('getMessagesDelta subsequent call uses deltaLink URL directly', async () => {
+      const deltaUrl = 'https://graph.microsoft.com/v1.0/me/mailFolders/folder-1/messages/delta?$deltatoken=abc123';
+      setupMock({ value: [{ id: 'msg-2', subject: 'Changed' }], '@odata.deltaLink': 'https://graph.microsoft.com/v1.0/delta-token-2' });
+      const result = await client.getMessagesDelta('folder-1', deltaUrl);
+
+      expect(apiCalls).toHaveLength(1);
+      expect(apiCalls[0].url).toBe(deltaUrl);
+      expect(apiCalls[0].method).toBe('get');
+      expect(result.messages).toHaveLength(1);
+      expect(result.deltaLink).toBe('https://graph.microsoft.com/v1.0/delta-token-2');
+    });
+
+    it('getMessagesDelta handles pagination with @odata.nextLink', async () => {
+      // First page has nextLink, second page has deltaLink
+      let callCount = 0;
+      mockApi.mockImplementation((url: string) => {
+        callCount++;
+        const response = callCount === 1
+          ? { value: [{ id: 'msg-1' }], '@odata.nextLink': 'https://graph.microsoft.com/v1.0/next-page' }
+          : { value: [{ id: 'msg-2' }], '@odata.deltaLink': 'https://graph.microsoft.com/v1.0/delta-final' };
+        const { builder, call } = createTrackingBuilder(response);
+        call.url = url;
+        return builder;
+      });
+
+      const result = await client.getMessagesDelta('folder-1');
+
+      expect(result.messages).toHaveLength(2);
+      expect(result.messages[0].id).toBe('msg-1');
+      expect(result.messages[1].id).toBe('msg-2');
     });
 
     it('getMessage calls /me/messages/{id} with GET', async () => {
@@ -1072,6 +1117,9 @@ describe('Graph API endpoint and method validation', () => {
       await client.searchMessagesKql('from:alice');
       await client.searchMessagesKqlInFolder('f1', 'subject:"test"');
       await client.listConversationMessages('conv-1', 10);
+
+      setupMock({ value: [{ id: 'msg-d' }], '@odata.deltaLink': 'https://graph.microsoft.com/v1.0/delta' });
+      await client.getMessagesDelta('f1');
 
       setupMock({ id: 'msg-1', subject: 'Test' });
       await client.getMessage('msg-1');

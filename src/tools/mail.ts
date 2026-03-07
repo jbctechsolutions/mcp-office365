@@ -102,6 +102,10 @@ export const DownloadAttachmentInput = z.strictObject({
   save_path: z.string().min(1).describe('Absolute file path where the attachment should be saved'),
 });
 
+export const CheckNewEmailsInput = z.strictObject({
+  folder_id: z.number().int().positive().describe('Folder ID to check for new emails'),
+});
+
 // =============================================================================
 // Type Definitions
 // =============================================================================
@@ -114,6 +118,7 @@ export type GetEmailsParams = z.infer<typeof GetEmailsInput>;
 export type GetUnreadCountParams = z.infer<typeof GetUnreadCountInput>;
 export type ListAttachmentsParams = z.infer<typeof ListAttachmentsInput>;
 export type DownloadAttachmentParams = z.infer<typeof DownloadAttachmentInput>;
+export type CheckNewEmailsParams = z.infer<typeof CheckNewEmailsInput>;
 
 // =============================================================================
 // Transformers

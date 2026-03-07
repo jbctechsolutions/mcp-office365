@@ -73,6 +73,7 @@ import {
   GetUnreadCountInput,
   ListAttachmentsInput,
   DownloadAttachmentInput,
+  CheckNewEmailsInput,
   ListCalendarsInput,
   ListEventsInput,
   GetEventInput,
@@ -244,6 +245,17 @@ const TOOLS: Tool[] = [
         limit: { type: 'number', description: 'Maximum results (default: 50)', default: 50 },
       },
       required: ['query'],
+    },
+  },
+  {
+    name: 'check_new_emails',
+    description: 'Check for new or changed emails since last check using delta sync. First call returns recent messages (initial sync). Subsequent calls return only new/changed messages.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        folder_id: { type: 'number', description: 'Folder ID to check for new emails' },
+      },
+      required: ['folder_id'],
     },
   },
   {
@@ -1899,6 +1911,7 @@ export function createServer(): Server {
     'find_meeting_times',
     'list_conversation',
     'search_emails_advanced',
+    'check_new_emails',
   ]);
 
   // Register tool list handler
@@ -2934,6 +2947,21 @@ async function handleGraphToolCall(
           : await repository.searchEmailsAdvancedAsync(params.query, params.limit);
         const result = { emails: emails.map(transformEmailRow) };
         return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+      }
+
+      case 'check_new_emails': {
+        const params = CheckNewEmailsInput.parse(args);
+        const deltaResult = await repository.checkNewEmailsAsync(params.folder_id);
+        return {
+          content: [{
+            type: 'text',
+            text: JSON.stringify({
+              emails: deltaResult.emails.map(transformEmailRow),
+              is_initial_sync: deltaResult.isInitialSync,
+              count: deltaResult.emails.length,
+            }, null, 2),
+          }],
+        };
       }
 
       case 'get_email': {

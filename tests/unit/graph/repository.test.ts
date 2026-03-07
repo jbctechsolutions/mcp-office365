@@ -27,6 +27,7 @@ vi.mock('../../../src/graph/client/index.js', () => ({
       searchMessagesKql: vi.fn(),
       searchMessagesKqlInFolder: vi.fn(),
       listConversationMessages: vi.fn(),
+      getMessagesDelta: vi.fn(),
       getMessage: vi.fn(),
       listCalendars: vi.fn(),
       listEvents: vi.fn(),
@@ -493,6 +494,99 @@ describe('graph/repository', () => {
 
         await expect(repository.listConversationAsync(hashStringToNumber('msg-no-conv'), 25))
           .rejects.toThrow('no conversation ID');
+      });
+    });
+  });
+
+  describe('Delta Sync', () => {
+    describe('checkNewEmailsAsync', () => {
+      it('returns isInitialSync true on first call', async () => {
+        // Populate folder cache
+        mockClient.listMailFolders.mockResolvedValue([{ id: 'folder-delta', displayName: 'Inbox' }]);
+        await repository.listFoldersAsync();
+
+        mockClient.getMessagesDelta = vi.fn().mockResolvedValue({
+          messages: [
+            { id: 'msg-delta-1', subject: 'New Email', conversationId: 'conv-d1' },
+          ],
+          deltaLink: 'https://graph.microsoft.com/v1.0/delta-token',
+        });
+
+        const folderId = hashStringToNumber('folder-delta');
+        const result = await repository.checkNewEmailsAsync(folderId);
+
+        expect(result.isInitialSync).toBe(true);
+        expect(result.emails).toHaveLength(1);
+        expect(result.emails[0].subject).toBe('New Email');
+        expect(mockClient.getMessagesDelta).toHaveBeenCalledWith('folder-delta', undefined);
+      });
+
+      it('returns isInitialSync false on subsequent calls and passes delta link', async () => {
+        // Populate folder cache
+        mockClient.listMailFolders.mockResolvedValue([{ id: 'folder-delta2', displayName: 'Inbox' }]);
+        await repository.listFoldersAsync();
+
+        const deltaToken = 'https://graph.microsoft.com/v1.0/delta-token-1';
+        mockClient.getMessagesDelta = vi.fn().mockResolvedValue({
+          messages: [{ id: 'msg-d1', subject: 'First' }],
+          deltaLink: deltaToken,
+        });
+
+        const folderId = hashStringToNumber('folder-delta2');
+        await repository.checkNewEmailsAsync(folderId);
+
+        // Second call
+        mockClient.getMessagesDelta.mockResolvedValue({
+          messages: [{ id: 'msg-d2', subject: 'Second' }],
+          deltaLink: 'https://graph.microsoft.com/v1.0/delta-token-2',
+        });
+
+        const result = await repository.checkNewEmailsAsync(folderId);
+        expect(result.isInitialSync).toBe(false);
+        expect(mockClient.getMessagesDelta).toHaveBeenCalledWith('folder-delta2', deltaToken);
+      });
+
+      it('throws when folder not in cache', async () => {
+        await expect(repository.checkNewEmailsAsync(99999))
+          .rejects.toThrow('Folder ID 99999 not found in cache');
+      });
+
+      it('filters out @removed messages', async () => {
+        mockClient.listMailFolders.mockResolvedValue([{ id: 'folder-rm', displayName: 'Inbox' }]);
+        await repository.listFoldersAsync();
+
+        mockClient.getMessagesDelta = vi.fn().mockResolvedValue({
+          messages: [
+            { id: 'msg-active', subject: 'Active' },
+            { id: 'msg-removed', subject: 'Removed', '@removed': { reason: 'deleted' } },
+          ],
+          deltaLink: 'https://graph.microsoft.com/v1.0/delta-rm',
+        });
+
+        const folderId = hashStringToNumber('folder-rm');
+        const result = await repository.checkNewEmailsAsync(folderId);
+        expect(result.emails).toHaveLength(1);
+        expect(result.emails[0].subject).toBe('Active');
+      });
+
+      it('caches message IDs and conversation IDs', async () => {
+        mockClient.listMailFolders.mockResolvedValue([{ id: 'folder-cache', displayName: 'Inbox' }]);
+        await repository.listFoldersAsync();
+
+        mockClient.getMessagesDelta = vi.fn().mockResolvedValue({
+          messages: [
+            { id: 'msg-cache-1', subject: 'Cached', conversationId: 'conv-cache-1' },
+          ],
+          deltaLink: 'https://graph.microsoft.com/v1.0/delta-cache',
+        });
+
+        const folderId = hashStringToNumber('folder-cache');
+        await repository.checkNewEmailsAsync(folderId);
+
+        const msgGraphId = repository.getGraphId('message', hashStringToNumber('msg-cache-1'));
+        expect(msgGraphId).toBe('msg-cache-1');
+        const convGraphId = (repository as any).idCache.conversations.get(hashStringToNumber('conv-cache-1'));
+        expect(convGraphId).toBe('conv-cache-1');
       });
     });
   });

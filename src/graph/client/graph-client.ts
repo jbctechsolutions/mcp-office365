@@ -285,6 +285,39 @@ export class GraphClient {
     }
   }
 
+  /**
+   * Gets message delta for incremental sync.
+   */
+  async getMessagesDelta(
+    folderId: string,
+    deltaLink?: string
+  ): Promise<{ messages: MicrosoftGraph.Message[]; deltaLink: string }> {
+    const client = await this.getClient();
+    let response;
+
+    if (deltaLink != null) {
+      response = await client.api(deltaLink).get() as PageCollection;
+    } else {
+      response = await client
+        .api(`/me/mailFolders/${folderId}/messages/delta`)
+        .select('id,subject,from,toRecipients,ccRecipients,receivedDateTime,sentDateTime,isRead,hasAttachments,importance,flag,bodyPreview,conversationId,internetMessageId,parentFolderId')
+        .top(50)
+        .get() as PageCollection;
+    }
+
+    const messages: MicrosoftGraph.Message[] = [...(response.value ?? [])];
+
+    let nextLink = response['@odata.nextLink'];
+    while (nextLink != null) {
+      const nextPage = await client.api(nextLink).get() as PageCollection;
+      messages.push(...(nextPage.value ?? []));
+      nextLink = nextPage['@odata.nextLink'];
+    }
+
+    const newDeltaLink = response['@odata.deltaLink'] ?? '';
+    return { messages, deltaLink: newDeltaLink };
+  }
+
   // ===========================================================================
   // Calendars
   // ===========================================================================
