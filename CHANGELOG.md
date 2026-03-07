@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [v2.1.0] - 2026-03-07
+
+### Added
+- **20 Microsoft Teams tools** (Phase 2) bringing the total to ~151 tools
+- **Teams & Channels** (8 tools):
+  - `list_teams` — list all joined teams
+  - `list_channels` / `get_channel` — browse and inspect channels
+  - `create_channel` / `update_channel` — create and modify channels
+  - `prepare_delete_channel` / `confirm_delete_channel` — two-phase channel deletion
+  - `list_team_members` — list team membership with roles
+- **Channel Messages** (6 tools):
+  - `list_channel_messages` — list recent messages in a channel (with pagination)
+  - `get_channel_message` — get a message with all its replies
+  - `prepare_send_channel_message` / `confirm_send_channel_message` — two-phase message sending
+  - `prepare_reply_channel_message` / `confirm_reply_channel_message` — two-phase reply sending
+- **Chats** (6 tools):
+  - `list_chats` — list recent 1:1, group, and meeting chats
+  - `get_chat` — get chat details with web URL
+  - `list_chat_messages` — list recent messages in a chat
+  - `prepare_send_chat_message` / `confirm_send_chat_message` — two-phase chat message sending
+  - `list_chat_members` — list chat participants with roles
+
 ## [v2.0.0] - 2026-03-07
 
 ### Breaking Changes
@@ -228,7 +250,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-[Unreleased]: https://github.com/jbctechsolutions/mcp-office365-mac/compare/v1.3.0...HEAD
+[Unreleased]: https://github.com/jbctechsolutions/mcp-office365-mac/compare/v2.1.0...HEAD
+[v2.1.0]: https://github.com/jbctechsolutions/mcp-office365-mac/compare/v2.0.0...v2.1.0
+[v2.0.0]: https://github.com/jbctechsolutions/mcp-office365-mac/compare/v1.5.0...v2.0.0
 [v1.3.0]: https://github.com/jbctechsolutions/mcp-office365-mac/compare/v1.2.1...v1.3.0
 [v1.2.1]: https://github.com/jbctechsolutions/mcp-office365-mac/compare/v1.2.0...v1.2.1
 [v1.2.0]: https://github.com/jbctechsolutions/mcp-office365-mac/compare/v1.1.8...v1.2.0
