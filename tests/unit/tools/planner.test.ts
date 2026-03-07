@@ -31,6 +31,8 @@ describe('PlannerTools', () => {
       createPlannerTaskAsync: vi.fn(),
       updatePlannerTaskAsync: vi.fn(),
       deletePlannerTaskAsync: vi.fn(),
+      getPlannerTaskDetailsAsync: vi.fn(),
+      updatePlannerTaskDetailsAsync: vi.fn(),
     };
     tokenManager = new ApprovalTokenManager();
     tools = new PlannerTools(repo, tokenManager);
@@ -367,6 +369,87 @@ describe('PlannerTools', () => {
 
       const parsed = JSON.parse(result.content[0].text);
       expect(parsed.success).toBe(false);
+    });
+  });
+
+  // ===========================================================================
+  // Planner Task Details
+  // ===========================================================================
+
+  describe('getPlannerTaskDetails', () => {
+    it('returns task details from the repository', async () => {
+      const mockDetails = {
+        id: 1,
+        description: 'Task notes here',
+        checklist: {
+          'guid-1': { title: 'Step 1', isChecked: false },
+          'guid-2': { title: 'Step 2', isChecked: true },
+        },
+        references: {
+          'https%3A//example.com': { alias: 'Example', type: 'Url' },
+        },
+        etag: 'W/"details-etag-123"',
+      };
+      vi.mocked(repo.getPlannerTaskDetailsAsync).mockResolvedValue(mockDetails);
+
+      const result = await tools.getPlannerTaskDetails({ task_id: 1 });
+
+      expect(repo.getPlannerTaskDetailsAsync).toHaveBeenCalledWith(1);
+      expect(result.content).toHaveLength(1);
+      const parsed = JSON.parse(result.content[0].text);
+      expect(parsed.details).toEqual(mockDetails);
+      expect(parsed.details.description).toBe('Task notes here');
+      expect(parsed.details.etag).toBe('W/"details-etag-123"');
+    });
+  });
+
+  describe('updatePlannerTaskDetails', () => {
+    it('updates task details with description', async () => {
+      vi.mocked(repo.updatePlannerTaskDetailsAsync).mockResolvedValue();
+
+      const result = await tools.updatePlannerTaskDetails({
+        task_id: 1,
+        description: 'Updated notes',
+      });
+
+      expect(repo.updatePlannerTaskDetailsAsync).toHaveBeenCalledWith(1, {
+        description: 'Updated notes',
+      });
+      const parsed = JSON.parse(result.content[0].text);
+      expect(parsed.success).toBe(true);
+      expect(parsed.message).toBe('Planner task details updated');
+    });
+
+    it('updates task details with checklist and references', async () => {
+      vi.mocked(repo.updatePlannerTaskDetailsAsync).mockResolvedValue();
+
+      const checklist = {
+        'guid-abc': { title: 'New item', isChecked: false },
+      };
+      const references = {
+        'https%3A//docs.example.com': { alias: 'Docs', type: 'Url' },
+      };
+
+      const result = await tools.updatePlannerTaskDetails({
+        task_id: 2,
+        checklist,
+        references,
+      });
+
+      expect(repo.updatePlannerTaskDetailsAsync).toHaveBeenCalledWith(2, {
+        checklist,
+        references,
+      });
+      const parsed = JSON.parse(result.content[0].text);
+      expect(parsed.success).toBe(true);
+    });
+
+    it('only includes provided fields in updates', async () => {
+      vi.mocked(repo.updatePlannerTaskDetailsAsync).mockResolvedValue();
+
+      await tools.updatePlannerTaskDetails({ task_id: 3 });
+
+      expect(repo.updatePlannerTaskDetailsAsync).toHaveBeenCalledWith(3, {});
     });
   });
 });

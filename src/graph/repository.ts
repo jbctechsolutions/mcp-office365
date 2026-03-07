@@ -64,6 +64,7 @@ interface IdCache {
   plans: Map<number, { planId: string; etag: string }>;
   plannerBuckets: Map<number, { planId: string; bucketId: string; etag: string }>;
   plannerTasks: Map<number, { taskId: string; etag: string }>;
+  plannerTaskDetails: Map<number, { taskId: string; etag: string }>;
 }
 
 /**
@@ -101,6 +102,7 @@ export class GraphRepository implements IRepository {
     plans: new Map(),
     plannerBuckets: new Map(),
     plannerTasks: new Map(),
+    plannerTaskDetails: new Map(),
   };
 
   constructor(deviceCodeCallback?: DeviceCodeCallback) {
@@ -2816,6 +2818,55 @@ export class GraphRepository implements IRepository {
     if (cached == null) throw new Error(`Task ID ${taskId} not found in cache. Try listing planner tasks first.`);
     await this.client.deletePlannerTask(cached.taskId, cached.etag);
     this.idCache.plannerTasks.delete(taskId);
+  }
+
+  // ===========================================================================
+  // Planner Task Details
+  // ===========================================================================
+
+  /**
+   * Gets details for a planner task (description, checklist, references).
+   */
+  async getPlannerTaskDetailsAsync(taskId: number): Promise<{
+    id: number; description: string; checklist: Record<string, unknown>;
+    references: Record<string, unknown>; etag: string;
+  }> {
+    const cached = this.idCache.plannerTasks.get(taskId);
+    if (cached == null) throw new Error(`Task ID ${taskId} not found in cache. Try listing planner tasks first.`);
+    const details = await this.client.getPlannerTaskDetails(cached.taskId);
+    const etag = (details as any)['@odata.etag'] ?? '';
+    this.idCache.plannerTaskDetails.set(taskId, { taskId: cached.taskId, etag });
+    return {
+      id: taskId,
+      description: details.description ?? '',
+      checklist: (details.checklist as Record<string, unknown>) ?? {},
+      references: (details.references as Record<string, unknown>) ?? {},
+      etag,
+    };
+  }
+
+  /**
+   * Updates details for a planner task (requires cached ETag from getPlannerTaskDetailsAsync).
+   */
+  async updatePlannerTaskDetailsAsync(
+    taskId: number,
+    updates: {
+      description?: string;
+      checklist?: Record<string, object>;
+      references?: Record<string, object>;
+    },
+  ): Promise<void> {
+    const cachedTask = this.idCache.plannerTasks.get(taskId);
+    if (cachedTask == null) throw new Error(`Task ID ${taskId} not found in cache. Try listing planner tasks first.`);
+    const cachedDetails = this.idCache.plannerTaskDetails.get(taskId);
+    if (cachedDetails == null) throw new Error(`Task details ETag for task ${taskId} not found in cache. Call get_planner_task_details first.`);
+    const graphUpdates: Record<string, unknown> = {};
+    if (updates.description != null) graphUpdates['description'] = updates.description;
+    if (updates.checklist != null) graphUpdates['checklist'] = updates.checklist;
+    if (updates.references != null) graphUpdates['references'] = updates.references;
+    const result = await this.client.updatePlannerTaskDetails(cachedTask.taskId, graphUpdates, cachedDetails.etag);
+    const newEtag = (result as any)['@odata.etag'] ?? cachedDetails.etag;
+    this.idCache.plannerTaskDetails.set(taskId, { taskId: cachedTask.taskId, etag: newEtag });
   }
 
   /**

@@ -160,6 +160,8 @@ import {
   UpdatePlannerTaskInput,
   PrepareDeletePlannerTaskInput,
   ConfirmDeletePlannerTaskInput,
+  GetPlannerTaskDetailsInput,
+  UpdatePlannerTaskDetailsInput,
 } from './tools/planner.js';
 import {
   ListEmailsInput,
@@ -3102,6 +3104,31 @@ const TOOLS: Tool[] = [
       required: ['approval_token'],
     },
   },
+  {
+    name: 'get_planner_task_details',
+    description: 'Get details for a Planner task (description, checklist, references). (Graph API)',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        task_id: { type: 'number', description: 'Planner task ID' },
+      },
+      required: ['task_id'],
+    },
+  },
+  {
+    name: 'update_planner_task_details',
+    description: 'Update details for a Planner task (description, checklist, references). Requires get_planner_task_details first for ETag. (Graph API)',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        task_id: { type: 'number', description: 'Planner task ID' },
+        description: { type: 'string', description: 'Task description/notes' },
+        checklist: { type: 'object', description: 'Checklist items. Keys are GUIDs, values have title (string) and isChecked (boolean)' },
+        references: { type: 'object', description: 'Reference links. Keys are encoded URLs, values have alias (string) and type (string)' },
+      },
+      required: ['task_id'],
+    },
+  },
 ];
 
 // =============================================================================
@@ -3332,6 +3359,8 @@ export function createServer(): Server {
     'update_planner_task',
     'prepare_delete_planner_task',
     'confirm_delete_planner_task',
+    'get_planner_task_details',
+    'update_planner_task_details',
   ]);
 
   // Register tool list handler
@@ -5766,6 +5795,16 @@ async function handleGraphToolCall(
       case 'confirm_delete_planner_task': {
         const params = ConfirmDeletePlannerTaskInput.parse(args);
         return await plannerTools.confirmDeletePlannerTask(params);
+      }
+
+      case 'get_planner_task_details': {
+        const params = GetPlannerTaskDetailsInput.parse(args);
+        return await plannerTools.getPlannerTaskDetails(params);
+      }
+
+      case 'update_planner_task_details': {
+        const params = UpdatePlannerTaskDetailsInput.parse(args);
+        return await plannerTools.updatePlannerTaskDetails(params);
       }
 
       default:

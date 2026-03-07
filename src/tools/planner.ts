@@ -93,6 +93,17 @@ export const ConfirmDeletePlannerTaskInput = z.strictObject({
   approval_token: z.string().describe('Approval token from prepare_delete_planner_task'),
 });
 
+export const GetPlannerTaskDetailsInput = z.strictObject({
+  task_id: z.number().int().positive().describe('Planner task ID'),
+});
+
+export const UpdatePlannerTaskDetailsInput = z.strictObject({
+  task_id: z.number().int().positive().describe('Planner task ID'),
+  description: z.string().optional().describe('Task description/notes'),
+  checklist: z.record(z.string(), z.object({}).passthrough()).optional().describe('Checklist items. Keys are GUIDs, values have title (string) and isChecked (boolean)'),
+  references: z.record(z.string(), z.object({}).passthrough()).optional().describe('Reference links. Keys are encoded URLs, values have alias (string) and type (string)'),
+});
+
 // =============================================================================
 // Type Exports
 // =============================================================================
@@ -112,6 +123,8 @@ export type CreatePlannerTaskParams = z.infer<typeof CreatePlannerTaskInput>;
 export type UpdatePlannerTaskParams = z.infer<typeof UpdatePlannerTaskInput>;
 export type PrepareDeletePlannerTaskParams = z.infer<typeof PrepareDeletePlannerTaskInput>;
 export type ConfirmDeletePlannerTaskParams = z.infer<typeof ConfirmDeletePlannerTaskInput>;
+export type GetPlannerTaskDetailsParams = z.infer<typeof GetPlannerTaskDetailsInput>;
+export type UpdatePlannerTaskDetailsParams = z.infer<typeof UpdatePlannerTaskDetailsInput>;
 
 // =============================================================================
 // Repository Interface
@@ -148,6 +161,14 @@ export interface IPlannerRepository {
     assignments?: Record<string, object>;
   }): Promise<void>;
   deletePlannerTaskAsync(taskId: number): Promise<void>;
+  getPlannerTaskDetailsAsync(taskId: number): Promise<{
+    id: number; description: string; checklist: Record<string, unknown>;
+    references: Record<string, unknown>; etag: string;
+  }>;
+  updatePlannerTaskDetailsAsync(taskId: number, updates: {
+    description?: string; checklist?: Record<string, object>;
+    references?: Record<string, object>;
+  }): Promise<void>;
 }
 
 // =============================================================================
@@ -455,6 +476,42 @@ export class PlannerTools {
       content: [{
         type: 'text' as const,
         text: JSON.stringify({ success: true, message: 'Planner task deleted' }, null, 2),
+      }],
+    };
+  }
+
+  // ===========================================================================
+  // Planner Task Details
+  // ===========================================================================
+
+  async getPlannerTaskDetails(params: GetPlannerTaskDetailsParams): Promise<{
+    content: Array<{ type: 'text'; text: string }>;
+  }> {
+    const details = await this.repo.getPlannerTaskDetailsAsync(params.task_id);
+    return {
+      content: [{
+        type: 'text' as const,
+        text: JSON.stringify({ details }, null, 2),
+      }],
+    };
+  }
+
+  async updatePlannerTaskDetails(params: UpdatePlannerTaskDetailsParams): Promise<{
+    content: Array<{ type: 'text'; text: string }>;
+  }> {
+    const updates: {
+      description?: string;
+      checklist?: Record<string, object>;
+      references?: Record<string, object>;
+    } = {};
+    if (params.description != null) updates.description = params.description;
+    if (params.checklist != null) updates.checklist = params.checklist;
+    if (params.references != null) updates.references = params.references;
+    await this.repo.updatePlannerTaskDetailsAsync(params.task_id, updates);
+    return {
+      content: [{
+        type: 'text' as const,
+        text: JSON.stringify({ success: true, message: 'Planner task details updated' }, null, 2),
       }],
     };
   }

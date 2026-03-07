@@ -1810,6 +1810,16 @@ export class GraphClient {
     await client.api(`/planner/tasks/${taskId}`).header('If-Match', etag).delete();
   }
 
+  async getPlannerTaskDetails(taskId: string): Promise<MicrosoftGraph.PlannerTaskDetails> {
+    const client = await this.getClient();
+    return await client.api(`/planner/tasks/${taskId}/details`).get() as MicrosoftGraph.PlannerTaskDetails;
+  }
+
+  async updatePlannerTaskDetails(taskId: string, updates: Record<string, unknown>, etag: string): Promise<MicrosoftGraph.PlannerTaskDetails> {
+    const client = await this.getClient();
+    return await client.api(`/planner/tasks/${taskId}/details`).header('If-Match', etag).patch(updates) as MicrosoftGraph.PlannerTaskDetails;
+  }
+
   // ===========================================================================
   // People & Presence
   // ===========================================================================
