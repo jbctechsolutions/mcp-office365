@@ -34,6 +34,9 @@ describe('TeamsTools', () => {
       listChatMessagesAsync: vi.fn(),
       sendChatMessageAsync: vi.fn(),
       listChatMembersAsync: vi.fn(),
+      listMessageReactionsAsync: vi.fn(),
+      addMessageReactionAsync: vi.fn(),
+      removeMessageReactionAsync: vi.fn(),
     };
     tokenManager = new ApprovalTokenManager();
     tools = new TeamsTools(repo, tokenManager);
@@ -538,6 +541,97 @@ describe('TeamsTools', () => {
       expect(repo.listChatMembersAsync).toHaveBeenCalledWith(1);
       const parsed = JSON.parse(result.content[0].text);
       expect(parsed.members).toEqual(mockMembers);
+    });
+  });
+
+  // ===========================================================================
+  // Message Reactions
+  // ===========================================================================
+
+  describe('listMessageReactions', () => {
+    it('returns reactions for a channel message', async () => {
+      const mockReactions = [
+        { reactionType: 'like', user: { displayName: 'Alice' }, createdDateTime: '2026-01-01T00:00:00Z' },
+        { reactionType: 'heart', user: { displayName: 'Bob' }, createdDateTime: '2026-01-01T01:00:00Z' },
+      ];
+      vi.mocked(repo.listMessageReactionsAsync).mockResolvedValue(mockReactions);
+
+      const result = await tools.listMessageReactions({ message_id: 100, message_type: 'channel' });
+
+      expect(repo.listMessageReactionsAsync).toHaveBeenCalledWith(100, 'channel');
+      const parsed = JSON.parse(result.content[0].text);
+      expect(parsed.reactions).toEqual(mockReactions);
+    });
+
+    it('returns reactions for a chat message', async () => {
+      const mockReactions = [
+        { reactionType: 'laugh', user: { displayName: 'Charlie' }, createdDateTime: '2026-01-02T00:00:00Z' },
+      ];
+      vi.mocked(repo.listMessageReactionsAsync).mockResolvedValue(mockReactions);
+
+      const result = await tools.listMessageReactions({ message_id: 200, message_type: 'chat' });
+
+      expect(repo.listMessageReactionsAsync).toHaveBeenCalledWith(200, 'chat');
+      const parsed = JSON.parse(result.content[0].text);
+      expect(parsed.reactions).toEqual(mockReactions);
+    });
+  });
+
+  describe('prepareAddMessageReaction', () => {
+    it('generates an approval token', () => {
+      const result = tools.prepareAddMessageReaction({
+        message_id: 100, message_type: 'channel', reaction_type: 'like',
+      });
+
+      const parsed = JSON.parse(result.content[0].text);
+      expect(parsed.approval_token).toBeDefined();
+      expect(typeof parsed.approval_token).toBe('string');
+      expect(parsed.expires_at).toBeDefined();
+      expect(parsed.message_id).toBe(100);
+      expect(parsed.message_type).toBe('channel');
+      expect(parsed.reaction_type).toBe('like');
+      expect(parsed.action).toContain('confirm_add_message_reaction');
+    });
+  });
+
+  describe('confirmAddMessageReaction', () => {
+    it('adds reaction with valid token', async () => {
+      vi.mocked(repo.addMessageReactionAsync).mockResolvedValue(undefined);
+
+      const prepareResult = tools.prepareAddMessageReaction({
+        message_id: 100, message_type: 'channel', reaction_type: 'like',
+      });
+      const { approval_token } = JSON.parse(prepareResult.content[0].text);
+
+      const result = await tools.confirmAddMessageReaction({ approval_token });
+
+      const parsed = JSON.parse(result.content[0].text);
+      expect(parsed.success).toBe(true);
+      expect(parsed.message).toBe('Reaction added');
+      expect(repo.addMessageReactionAsync).toHaveBeenCalledWith(100, 'channel', 'like');
+    });
+
+    it('rejects invalid token', async () => {
+      const result = await tools.confirmAddMessageReaction({ approval_token: 'invalid-token' });
+
+      const parsed = JSON.parse(result.content[0].text);
+      expect(parsed.success).toBe(false);
+      expect(parsed.error).toBe('Token not found or already used');
+    });
+  });
+
+  describe('removeMessageReaction', () => {
+    it('removes own reaction', async () => {
+      vi.mocked(repo.removeMessageReactionAsync).mockResolvedValue(undefined);
+
+      const result = await tools.removeMessageReaction({
+        message_id: 100, message_type: 'channel', reaction_type: 'like',
+      });
+
+      const parsed = JSON.parse(result.content[0].text);
+      expect(parsed.success).toBe(true);
+      expect(parsed.message).toBe('Reaction removed');
+      expect(repo.removeMessageReactionAsync).toHaveBeenCalledWith(100, 'channel', 'like');
     });
   });
 });
