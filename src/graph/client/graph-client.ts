@@ -1867,6 +1867,48 @@ export class GraphClient {
     const response = await client.api('/communications/getPresencesByUserId').post({ ids: userIds });
     return response.value as MicrosoftGraph.Presence[];
   }
+
+  // ===========================================================================
+  // Online Meetings
+  // ===========================================================================
+
+  async listOnlineMeetings(limit: number = 20): Promise<any[]> {
+    const client = await this.getClient();
+    const response = await client.api('/me/onlineMeetings')
+      .top(limit)
+      .orderby('startDateTime desc')
+      .get();
+    return response.value;
+  }
+
+  async getOnlineMeeting(meetingId: string): Promise<any> {
+    const client = await this.getClient();
+    return await client.api(`/me/onlineMeetings/${meetingId}`).get();
+  }
+
+  async listMeetingRecordings(meetingId: string): Promise<any[]> {
+    const client = await this.getClient();
+    const response = await client.api(`/me/onlineMeetings/${meetingId}/recordings`).get();
+    return response.value;
+  }
+
+  async getMeetingRecordingContent(meetingId: string, recordingId: string): Promise<ArrayBuffer> {
+    const client = await this.getClient();
+    return await client.api(`/me/onlineMeetings/${meetingId}/recordings/${recordingId}/content`).get();
+  }
+
+  async listMeetingTranscripts(meetingId: string): Promise<any[]> {
+    const client = await this.getClient();
+    const response = await client.api(`/me/onlineMeetings/${meetingId}/transcripts`).get();
+    return response.value;
+  }
+
+  async getMeetingTranscriptContent(meetingId: string, transcriptId: string, format: string = 'text/vtt'): Promise<string> {
+    const client = await this.getClient();
+    return await client.api(`/me/onlineMeetings/${meetingId}/transcripts/${transcriptId}/content`)
+      .header('Accept', format)
+      .get();
+  }
 }
 
 /**

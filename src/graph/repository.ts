@@ -65,6 +65,9 @@ interface IdCache {
   plannerBuckets: Map<number, { planId: string; bucketId: string; etag: string }>;
   plannerTasks: Map<number, { taskId: string; etag: string }>;
   plannerTaskDetails: Map<number, { taskId: string; etag: string }>;
+  onlineMeetings: Map<number, string>;
+  recordings: Map<number, { meetingId: string; recordingId: string }>;
+  transcripts: Map<number, { meetingId: string; transcriptId: string }>;
 }
 
 /**
@@ -103,6 +106,9 @@ export class GraphRepository implements IRepository {
     plannerBuckets: new Map(),
     plannerTasks: new Map(),
     plannerTaskDetails: new Map(),
+    onlineMeetings: new Map(),
+    recordings: new Map(),
+    transcripts: new Map(),
   };
 
   constructor(deviceCodeCallback?: DeviceCodeCallback) {
@@ -2867,6 +2873,109 @@ export class GraphRepository implements IRepository {
     const result = await this.client.updatePlannerTaskDetails(cachedTask.taskId, graphUpdates, cachedDetails.etag);
     const newEtag = (result as any)['@odata.etag'] ?? cachedDetails.etag;
     this.idCache.plannerTaskDetails.set(taskId, { taskId: cachedTask.taskId, etag: newEtag });
+  }
+
+  // ===========================================================================
+  // Online Meetings
+  // ===========================================================================
+
+  async listOnlineMeetingsAsync(limit?: number): Promise<Array<{
+    id: number; subject: string; startDateTime: string; endDateTime: string; joinUrl: string;
+  }>> {
+    const meetings = await this.client.listOnlineMeetings(limit ?? 20);
+    return meetings.map((meeting) => {
+      const graphId = meeting.id ?? '';
+      const numericId = hashStringToNumber(graphId);
+      this.idCache.onlineMeetings.set(numericId, graphId);
+      return {
+        id: numericId,
+        subject: meeting.subject ?? '',
+        startDateTime: meeting.startDateTime ?? '',
+        endDateTime: meeting.endDateTime ?? '',
+        joinUrl: meeting.joinWebUrl ?? '',
+      };
+    });
+  }
+
+  async getOnlineMeetingAsync(meetingId: number): Promise<{
+    id: number; subject: string; startDateTime: string; endDateTime: string; joinUrl: string;
+    participants: unknown;
+  } | undefined> {
+    const graphId = this.idCache.onlineMeetings.get(meetingId);
+    if (graphId == null) {
+      // Try to refresh cache
+      await this.listOnlineMeetingsAsync(100);
+      const refreshedId = this.idCache.onlineMeetings.get(meetingId);
+      if (refreshedId == null) return undefined;
+      const meeting = await this.client.getOnlineMeeting(refreshedId);
+      return meeting != null ? {
+        id: meetingId,
+        subject: meeting.subject ?? '',
+        startDateTime: meeting.startDateTime ?? '',
+        endDateTime: meeting.endDateTime ?? '',
+        joinUrl: meeting.joinWebUrl ?? '',
+        participants: meeting.participants ?? null,
+      } : undefined;
+    }
+    const meeting = await this.client.getOnlineMeeting(graphId);
+    return meeting != null ? {
+      id: meetingId,
+      subject: meeting.subject ?? '',
+      startDateTime: meeting.startDateTime ?? '',
+      endDateTime: meeting.endDateTime ?? '',
+      joinUrl: meeting.joinWebUrl ?? '',
+      participants: meeting.participants ?? null,
+    } : undefined;
+  }
+
+  async listMeetingRecordingsAsync(meetingId: number): Promise<Array<{
+    id: number; createdDateTime: string; recordingContentUrl: string;
+  }>> {
+    const graphMeetingId = this.idCache.onlineMeetings.get(meetingId);
+    if (graphMeetingId == null) throw new Error(`Meeting ID ${meetingId} not found in cache. Try listing online meetings first.`);
+    const recordings = await this.client.listMeetingRecordings(graphMeetingId);
+    return recordings.map((recording) => {
+      const graphId = recording.id ?? '';
+      const numericId = hashStringToNumber(graphId);
+      this.idCache.recordings.set(numericId, { meetingId: graphMeetingId, recordingId: graphId });
+      return {
+        id: numericId,
+        createdDateTime: recording.createdDateTime ?? '',
+        recordingContentUrl: recording.recordingContentUrl ?? '',
+      };
+    });
+  }
+
+  async downloadMeetingRecordingAsync(recordingId: number, outputPath: string): Promise<string> {
+    const cached = this.idCache.recordings.get(recordingId);
+    if (cached == null) throw new Error(`Recording ID ${recordingId} not found in cache. Call list_meeting_recordings first.`);
+    const content = await this.client.getMeetingRecordingContent(cached.meetingId, cached.recordingId);
+    fs.writeFileSync(outputPath, Buffer.from(content));
+    return outputPath;
+  }
+
+  async listMeetingTranscriptsAsync(meetingId: number): Promise<Array<{
+    id: number; createdDateTime: string; contentUrl: string;
+  }>> {
+    const graphMeetingId = this.idCache.onlineMeetings.get(meetingId);
+    if (graphMeetingId == null) throw new Error(`Meeting ID ${meetingId} not found in cache. Try listing online meetings first.`);
+    const transcripts = await this.client.listMeetingTranscripts(graphMeetingId);
+    return transcripts.map((transcript) => {
+      const graphId = transcript.id ?? '';
+      const numericId = hashStringToNumber(graphId);
+      this.idCache.transcripts.set(numericId, { meetingId: graphMeetingId, transcriptId: graphId });
+      return {
+        id: numericId,
+        createdDateTime: transcript.createdDateTime ?? '',
+        contentUrl: transcript.contentUrl ?? '',
+      };
+    });
+  }
+
+  async getMeetingTranscriptContentAsync(transcriptId: number, format?: string): Promise<string> {
+    const cached = this.idCache.transcripts.get(transcriptId);
+    if (cached == null) throw new Error(`Transcript ID ${transcriptId} not found in cache. Call list_meeting_transcripts first.`);
+    return await this.client.getMeetingTranscriptContent(cached.meetingId, cached.transcriptId, format ?? 'text/vtt');
   }
 
   /**

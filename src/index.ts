@@ -144,6 +144,15 @@ import {
   GetUsersPresenceInput,
 } from './tools/people.js';
 import {
+  MeetingsTools,
+  ListOnlineMeetingsInput,
+  GetOnlineMeetingInput,
+  ListMeetingRecordingsInput,
+  DownloadMeetingRecordingInput,
+  ListMeetingTranscriptsInput,
+  GetMeetingTranscriptContentInput,
+} from './tools/meetings.js';
+import {
   PlannerTools,
   ListPlansInput,
   GetPlanInput,
@@ -3129,6 +3138,75 @@ const TOOLS: Tool[] = [
       required: ['task_id'],
     },
   },
+  // Online Meetings tools
+  {
+    name: 'list_online_meetings',
+    description: 'List recent online meetings (Teams) for the current user (Graph API)',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        limit: { type: 'number', description: 'Maximum number of meetings to return (default 20)' },
+      },
+      required: [],
+    },
+  },
+  {
+    name: 'get_online_meeting',
+    description: 'Get details for a specific online meeting including participants (Graph API)',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        meeting_id: { type: 'number', description: 'Meeting ID from list_online_meetings' },
+      },
+      required: ['meeting_id'],
+    },
+  },
+  {
+    name: 'list_meeting_recordings',
+    description: 'List recordings for an online meeting (Graph API)',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        meeting_id: { type: 'number', description: 'Meeting ID from list_online_meetings' },
+      },
+      required: ['meeting_id'],
+    },
+  },
+  {
+    name: 'download_meeting_recording',
+    description: 'Download a meeting recording to a local file (Graph API)',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        recording_id: { type: 'number', description: 'Recording ID from list_meeting_recordings' },
+        output_path: { type: 'string', description: 'Local file path to save the recording' },
+      },
+      required: ['recording_id', 'output_path'],
+    },
+  },
+  {
+    name: 'list_meeting_transcripts',
+    description: 'List transcripts for an online meeting (Graph API)',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        meeting_id: { type: 'number', description: 'Meeting ID from list_online_meetings' },
+      },
+      required: ['meeting_id'],
+    },
+  },
+  {
+    name: 'get_meeting_transcript_content',
+    description: 'Get the content of a meeting transcript in VTT or plain text format (Graph API)',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        transcript_id: { type: 'number', description: 'Transcript ID from list_meeting_transcripts' },
+        format: { type: 'string', description: 'Transcript format: text/vtt (default) or text/plain' },
+      },
+      required: ['transcript_id'],
+    },
+  },
 ];
 
 // =============================================================================
@@ -3175,6 +3253,7 @@ export function createServer(): Server {
   let teamsTools: TeamsTools | null = null;
   let peopleTools: PeopleTools | null = null;
   let plannerTools: PlannerTools | null = null;
+  let meetingsTools: MeetingsTools | null = null;
   let checklistItemsTools: ChecklistItemsTools | null = null;
   let linkedResourcesTools: LinkedResourcesTools | null = null;
   let taskAttachmentsTools: TaskAttachmentsTools | null = null;
@@ -3239,6 +3318,7 @@ export function createServer(): Server {
     taskAttachmentsTools = new TaskAttachmentsTools(graphRepository, tokenManager);
     peopleTools = new PeopleTools(graphRepository.getClient());
     plannerTools = new PlannerTools(graphRepository, tokenManager);
+    meetingsTools = new MeetingsTools(graphRepository);
 
     initialized = true;
   });
@@ -3361,6 +3441,12 @@ export function createServer(): Server {
     'confirm_delete_planner_task',
     'get_planner_task_details',
     'update_planner_task_details',
+    'list_online_meetings',
+    'get_online_meeting',
+    'list_meeting_recordings',
+    'download_meeting_recording',
+    'list_meeting_transcripts',
+    'get_meeting_transcript_content',
   ]);
 
   // Register tool list handler
@@ -3378,7 +3464,7 @@ export function createServer(): Server {
 
       // Graph API mode - handle async operations directly
       if (useGraphApi && graphRepository != null) {
-        return await handleGraphToolCall(name, args, graphRepository, graphContentReaders!, orgTools!, sendTools!, schedulingTools!, rulesTools!, categoriesTools!, calendarPermissionsTools!, focusedOverridesTools!, teamsTools!, checklistItemsTools!, linkedResourcesTools!, taskAttachmentsTools!, peopleTools!, plannerTools!, tokenManager);
+        return await handleGraphToolCall(name, args, graphRepository, graphContentReaders!, orgTools!, sendTools!, schedulingTools!, rulesTools!, categoriesTools!, calendarPermissionsTools!, focusedOverridesTools!, teamsTools!, checklistItemsTools!, linkedResourcesTools!, taskAttachmentsTools!, peopleTools!, plannerTools!, meetingsTools!, tokenManager);
       }
 
       // AppleScript mode - use sync tool interfaces
@@ -4459,6 +4545,7 @@ async function handleGraphToolCall(
   taskAttachmentsTools: TaskAttachmentsTools,
   peopleTools: PeopleTools,
   plannerTools: PlannerTools,
+  meetingsTools: MeetingsTools,
   tokenManager: ApprovalTokenManager
 ): Promise<ToolResult> {
   // Handle mailbox organization tools (shared between backends)
@@ -5805,6 +5892,37 @@ async function handleGraphToolCall(
       case 'update_planner_task_details': {
         const params = UpdatePlannerTaskDetailsInput.parse(args);
         return await plannerTools.updatePlannerTaskDetails(params);
+      }
+
+      // Online Meetings tools
+      case 'list_online_meetings': {
+        const params = ListOnlineMeetingsInput.parse(args);
+        return await meetingsTools.listOnlineMeetings(params);
+      }
+
+      case 'get_online_meeting': {
+        const params = GetOnlineMeetingInput.parse(args);
+        return await meetingsTools.getOnlineMeeting(params);
+      }
+
+      case 'list_meeting_recordings': {
+        const params = ListMeetingRecordingsInput.parse(args);
+        return await meetingsTools.listMeetingRecordings(params);
+      }
+
+      case 'download_meeting_recording': {
+        const params = DownloadMeetingRecordingInput.parse(args);
+        return await meetingsTools.downloadMeetingRecording(params);
+      }
+
+      case 'list_meeting_transcripts': {
+        const params = ListMeetingTranscriptsInput.parse(args);
+        return await meetingsTools.listMeetingTranscripts(params);
+      }
+
+      case 'get_meeting_transcript_content': {
+        const params = GetMeetingTranscriptContentInput.parse(args);
+        return await meetingsTools.getMeetingTranscriptContent(params);
       }
 
       default:
