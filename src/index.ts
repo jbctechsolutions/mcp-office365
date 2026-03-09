@@ -164,6 +164,13 @@ import {
   UpdatePlannerTaskDetailsInput,
 } from './tools/planner.js';
 import {
+  PlannerVisualizationTools,
+  GenerateKanbanBoardInput,
+  GenerateGanttChartInput,
+  GeneratePlanSummaryInput,
+  GenerateBurndownChartInput,
+} from './tools/planner-visualization.js';
+import {
   ListEmailsInput,
   SearchEmailsInput,
   SearchEmailsAdvancedInput,
@@ -3129,6 +3136,59 @@ const TOOLS: Tool[] = [
       required: ['task_id'],
     },
   },
+  // Planner Visualization tools
+  {
+    name: 'generate_kanban_board',
+    description: 'Generate a Kanban board visualization for a Planner plan. Returns a file path to the rendered output. (Graph API)',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        plan_id: { type: 'number', description: 'Plan ID from list_plans' },
+        format: { type: 'string', enum: ['html', 'svg', 'markdown', 'mermaid'], description: 'Output format (default: html)' },
+        output_path: { type: 'string', description: 'Custom file path for output (default: temp directory)' },
+      },
+      required: ['plan_id'],
+    },
+  },
+  {
+    name: 'generate_gantt_chart',
+    description: 'Generate a Gantt chart visualization for a Planner plan. Returns a file path to the rendered output. (Graph API)',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        plan_id: { type: 'number', description: 'Plan ID from list_plans' },
+        format: { type: 'string', enum: ['html', 'svg', 'markdown', 'mermaid'], description: 'Output format (default: html)' },
+        output_path: { type: 'string', description: 'Custom file path for output (default: temp directory)' },
+      },
+      required: ['plan_id'],
+    },
+  },
+  {
+    name: 'generate_plan_summary',
+    description: 'Generate a summary visualization for a Planner plan with task statistics. Returns a file path to the rendered output. (Graph API)',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        plan_id: { type: 'number', description: 'Plan ID from list_plans' },
+        format: { type: 'string', enum: ['html', 'svg', 'markdown', 'mermaid'], description: 'Output format (default: html)' },
+        output_path: { type: 'string', description: 'Custom file path for output (default: temp directory)' },
+      },
+      required: ['plan_id'],
+    },
+  },
+  {
+    name: 'generate_burndown_chart',
+    description: 'Generate a burndown chart visualization for a Planner plan. Returns a file path to the rendered output. (Graph API)',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        plan_id: { type: 'number', description: 'Plan ID from list_plans' },
+        format: { type: 'string', enum: ['html', 'svg', 'markdown', 'mermaid'], description: 'Output format (default: html)' },
+        output_path: { type: 'string', description: 'Custom file path for output (default: temp directory)' },
+      },
+      required: ['plan_id'],
+    },
+  },
 ];
 
 // =============================================================================
@@ -3175,6 +3235,7 @@ export function createServer(): Server {
   let teamsTools: TeamsTools | null = null;
   let peopleTools: PeopleTools | null = null;
   let plannerTools: PlannerTools | null = null;
+  let plannerVisualizationTools: PlannerVisualizationTools | null = null;
   let checklistItemsTools: ChecklistItemsTools | null = null;
   let linkedResourcesTools: LinkedResourcesTools | null = null;
   let taskAttachmentsTools: TaskAttachmentsTools | null = null;
@@ -3239,6 +3300,7 @@ export function createServer(): Server {
     taskAttachmentsTools = new TaskAttachmentsTools(graphRepository, tokenManager);
     peopleTools = new PeopleTools(graphRepository.getClient());
     plannerTools = new PlannerTools(graphRepository, tokenManager);
+    plannerVisualizationTools = new PlannerVisualizationTools(graphRepository);
 
     initialized = true;
   });
@@ -3361,6 +3423,10 @@ export function createServer(): Server {
     'confirm_delete_planner_task',
     'get_planner_task_details',
     'update_planner_task_details',
+    'generate_kanban_board',
+    'generate_gantt_chart',
+    'generate_plan_summary',
+    'generate_burndown_chart',
   ]);
 
   // Register tool list handler
@@ -3378,7 +3444,7 @@ export function createServer(): Server {
 
       // Graph API mode - handle async operations directly
       if (useGraphApi && graphRepository != null) {
-        return await handleGraphToolCall(name, args, graphRepository, graphContentReaders!, orgTools!, sendTools!, schedulingTools!, rulesTools!, categoriesTools!, calendarPermissionsTools!, focusedOverridesTools!, teamsTools!, checklistItemsTools!, linkedResourcesTools!, taskAttachmentsTools!, peopleTools!, plannerTools!, tokenManager);
+        return await handleGraphToolCall(name, args, graphRepository, graphContentReaders!, orgTools!, sendTools!, schedulingTools!, rulesTools!, categoriesTools!, calendarPermissionsTools!, focusedOverridesTools!, teamsTools!, checklistItemsTools!, linkedResourcesTools!, taskAttachmentsTools!, peopleTools!, plannerTools!, plannerVisualizationTools!, tokenManager);
       }
 
       // AppleScript mode - use sync tool interfaces
@@ -4459,6 +4525,7 @@ async function handleGraphToolCall(
   taskAttachmentsTools: TaskAttachmentsTools,
   peopleTools: PeopleTools,
   plannerTools: PlannerTools,
+  plannerVisualizationTools: PlannerVisualizationTools,
   tokenManager: ApprovalTokenManager
 ): Promise<ToolResult> {
   // Handle mailbox organization tools (shared between backends)
@@ -5805,6 +5872,27 @@ async function handleGraphToolCall(
       case 'update_planner_task_details': {
         const params = UpdatePlannerTaskDetailsInput.parse(args);
         return await plannerTools.updatePlannerTaskDetails(params);
+      }
+
+      // Planner Visualization tools
+      case 'generate_kanban_board': {
+        const params = GenerateKanbanBoardInput.parse(args);
+        return await plannerVisualizationTools.generateKanbanBoard(params);
+      }
+
+      case 'generate_gantt_chart': {
+        const params = GenerateGanttChartInput.parse(args);
+        return await plannerVisualizationTools.generateGanttChart(params);
+      }
+
+      case 'generate_plan_summary': {
+        const params = GeneratePlanSummaryInput.parse(args);
+        return await plannerVisualizationTools.generatePlanSummary(params);
+      }
+
+      case 'generate_burndown_chart': {
+        const params = GenerateBurndownChartInput.parse(args);
+        return await plannerVisualizationTools.generateBurndownChart(params);
       }
 
       default:
