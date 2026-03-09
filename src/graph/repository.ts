@@ -69,6 +69,8 @@ interface IdCache {
   onlineMeetings: Map<number, string>;
   recordings: Map<number, { meetingId: string; recordingId: string }>;
   transcripts: Map<number, { meetingId: string; transcriptId: string }>;
+
+  driveItems: Map<number, string>;
 }
 
 /**
@@ -110,6 +112,8 @@ export class GraphRepository implements IRepository {
     onlineMeetings: new Map(),
     recordings: new Map(),
     transcripts: new Map(),
+
+    driveItems: new Map(),
   };
 
   constructor(deviceCodeCallback?: DeviceCodeCallback) {
@@ -3035,6 +3039,55 @@ export class GraphRepository implements IRepository {
         id: numericId,
         createdDateTime: recording.createdDateTime ?? '',
         recordingContentUrl: recording.recordingContentUrl ?? '',
+
+  // OneDrive
+  // ===========================================================================
+
+  /**
+   * Lists files/folders in a drive folder (or root).
+   */
+  async listDriveItemsAsync(folderId?: number): Promise<Array<{
+    id: number; name: string; size: number; lastModified: string;
+    isFolder: boolean; webUrl: string;
+  }>> {
+    let graphFolderId: string | undefined;
+    if (folderId != null) {
+      graphFolderId = this.idCache.driveItems.get(folderId);
+      if (graphFolderId == null) throw new Error(`Drive item ID ${folderId} not found in cache. Try listing drive items first.`);
+    }
+    const items = await this.client.listDriveItems(graphFolderId);
+    return items.map((item: any) => {
+      const numericId = hashStringToNumber(item.id);
+      this.idCache.driveItems.set(numericId, item.id);
+      return {
+        id: numericId,
+        name: item.name ?? '',
+        size: item.size ?? 0,
+        lastModified: item.lastModifiedDateTime ?? '',
+        isFolder: item.folder != null,
+        webUrl: item.webUrl ?? '',
+      };
+    });
+  }
+
+  /**
+   * Searches drive items by query.
+   */
+  async searchDriveItemsAsync(query: string, limit?: number): Promise<Array<{
+    id: number; name: string; size: number; lastModified: string;
+    isFolder: boolean; webUrl: string;
+  }>> {
+    const items = await this.client.searchDriveItems(query, limit);
+    return items.map((item: any) => {
+      const numericId = hashStringToNumber(item.id);
+      this.idCache.driveItems.set(numericId, item.id);
+      return {
+        id: numericId,
+        name: item.name ?? '',
+        size: item.size ?? 0,
+        lastModified: item.lastModifiedDateTime ?? '',
+        isFolder: item.folder != null,
+        webUrl: item.webUrl ?? '',
       };
     });
   }
@@ -3061,6 +3114,70 @@ export class GraphRepository implements IRepository {
         id: numericId,
         createdDateTime: transcript.createdDateTime ?? '',
         contentUrl: transcript.contentUrl ?? '',
+
+  /**
+   * Gets metadata for a specific drive item.
+   */
+  async getDriveItemAsync(itemId: number): Promise<{
+    id: number; name: string; size: number; lastModified: string;
+    isFolder: boolean; webUrl: string; mimeType: string; createdBy: string;
+  }> {
+    const graphId = this.idCache.driveItems.get(itemId);
+    if (graphId == null) throw new Error(`Drive item ID ${itemId} not found in cache. Try listing drive items first.`);
+    const item = await this.client.getDriveItem(graphId);
+    return {
+      id: itemId,
+      name: item.name ?? '',
+      size: item.size ?? 0,
+      lastModified: item.lastModifiedDateTime ?? '',
+      isFolder: item.folder != null,
+      webUrl: item.webUrl ?? '',
+      mimeType: item.file?.mimeType ?? '',
+      createdBy: item.createdBy?.user?.displayName ?? '',
+    };
+  }
+
+  /**
+   * Downloads a drive item to a local file.
+   */
+  async downloadFileAsync(itemId: number, outputPath: string): Promise<{ savedPath: string; size: number }> {
+    const graphId = this.idCache.driveItems.get(itemId);
+    if (graphId == null) throw new Error(`Drive item ID ${itemId} not found in cache. Try listing drive items first.`);
+    const content = await this.client.downloadDriveItem(graphId);
+    const buffer = Buffer.from(content);
+    fs.writeFileSync(outputPath, buffer);
+    return { savedPath: outputPath, size: buffer.length };
+  }
+
+  /**
+   * Uploads a local file to OneDrive.
+   */
+  async uploadFileAsync(parentPath: string, fileName: string, localFilePath: string): Promise<number> {
+    const content = fs.readFileSync(localFilePath);
+    const result = await this.client.uploadDriveItem(parentPath, fileName, content);
+    const numericId = hashStringToNumber(result.id);
+    this.idCache.driveItems.set(numericId, result.id);
+    return numericId;
+  }
+
+  /**
+   * Lists recently accessed drive items.
+   */
+  async listRecentFilesAsync(): Promise<Array<{
+    id: number; name: string; size: number; lastModified: string;
+    isFolder: boolean; webUrl: string;
+  }>> {
+    const items = await this.client.listRecentDriveItems();
+    return items.map((item: any) => {
+      const numericId = hashStringToNumber(item.id);
+      this.idCache.driveItems.set(numericId, item.id);
+      return {
+        id: numericId,
+        name: item.name ?? '',
+        size: item.size ?? 0,
+        lastModified: item.lastModifiedDateTime ?? '',
+        isFolder: item.folder != null,
+        webUrl: item.webUrl ?? '',
       };
     });
   }
@@ -3069,6 +3186,53 @@ export class GraphRepository implements IRepository {
     const cached = this.idCache.transcripts.get(transcriptId);
     if (cached == null) throw new Error(`Transcript ID ${transcriptId} not found in cache. Call list_meeting_transcripts first.`);
     return await this.client.getMeetingTranscriptContent(cached.meetingId, cached.transcriptId, format ?? 'text/vtt');
+
+  /**
+   * Lists drive items shared with the user.
+   */
+  async listSharedWithMeAsync(): Promise<Array<{
+    id: number; name: string; size: number; lastModified: string;
+    isFolder: boolean; webUrl: string;
+  }>> {
+    const items = await this.client.listSharedWithMe();
+    return items.map((item: any) => {
+      const numericId = hashStringToNumber(item.id);
+      this.idCache.driveItems.set(numericId, item.id);
+      return {
+        id: numericId,
+        name: item.name ?? '',
+        size: item.size ?? 0,
+        lastModified: item.lastModifiedDateTime ?? '',
+        isFolder: item.folder != null,
+        webUrl: item.webUrl ?? '',
+      };
+    });
+  }
+
+  /**
+   * Creates a sharing link for a drive item.
+   */
+  async createSharingLinkAsync(itemId: number, type: string, scope: string): Promise<{
+    webUrl: string; type: string; scope: string;
+  }> {
+    const graphId = this.idCache.driveItems.get(itemId);
+    if (graphId == null) throw new Error(`Drive item ID ${itemId} not found in cache. Try listing drive items first.`);
+    const result = await this.client.createSharingLink(graphId, type, scope);
+    return {
+      webUrl: result.link?.webUrl ?? '',
+      type: result.link?.type ?? type,
+      scope: result.link?.scope ?? scope,
+    };
+  }
+
+  /**
+   * Deletes a drive item.
+   */
+  async deleteDriveItemAsync(itemId: number): Promise<void> {
+    const graphId = this.idCache.driveItems.get(itemId);
+    if (graphId == null) throw new Error(`Drive item ID ${itemId} not found in cache. Try listing drive items first.`);
+    await this.client.deleteDriveItem(graphId);
+    this.idCache.driveItems.delete(itemId);
   }
 
   /**

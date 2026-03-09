@@ -156,6 +156,19 @@ import {
   ListMeetingTranscriptsInput,
   GetMeetingTranscriptContentInput,
 } from './tools/meetings.js';
+  OneDriveTools,
+  ListDriveItemsInput,
+  SearchDriveItemsInput,
+  GetDriveItemInput,
+  DownloadFileInput,
+  PrepareUploadFileInput,
+  ConfirmUploadFileInput,
+  ListRecentFilesInput,
+  ListSharedWithMeInput,
+  CreateSharingLinkInput,
+  PrepareDeleteDriveItemInput,
+  ConfirmDeleteDriveItemInput,
+} from './tools/onedrive.js';
 import {
   PlannerTools,
   ListPlansInput,
@@ -3318,6 +3331,128 @@ const TOOLS: Tool[] = [
         format: { type: 'string', description: 'Transcript format: text/vtt (default) or text/plain' },
       },
       required: ['transcript_id'],
+  // OneDrive tools
+  {
+    name: 'list_drive_items',
+    description: 'List files and folders in OneDrive. Omit folder_id to list root. (Graph API)',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        folder_id: { type: 'number', description: 'Folder ID from a previous list_drive_items call. Omit to list root.' },
+      },
+      required: [],
+    },
+  },
+  {
+    name: 'search_drive_items',
+    description: 'Search files and folders in OneDrive by name or content (Graph API)',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        query: { type: 'string', description: 'Search query string' },
+        limit: { type: 'number', description: 'Maximum results to return (default 25)' },
+      },
+      required: ['query'],
+    },
+  },
+  {
+    name: 'get_drive_item',
+    description: 'Get metadata for a specific OneDrive file or folder (Graph API)',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        item_id: { type: 'number', description: 'Drive item ID from list_drive_items or search_drive_items' },
+      },
+      required: ['item_id'],
+    },
+  },
+  {
+    name: 'download_file',
+    description: 'Download a file from OneDrive to a local path (Graph API)',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        item_id: { type: 'number', description: 'Drive item ID from list_drive_items or search_drive_items' },
+        output_path: { type: 'string', description: 'Absolute file path where the file should be saved' },
+      },
+      required: ['item_id', 'output_path'],
+    },
+  },
+  {
+    name: 'prepare_upload_file',
+    description: 'Prepare to upload a local file to OneDrive. Returns an approval token. (Graph API)',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        parent_path: { type: 'string', description: 'Parent folder path in OneDrive (e.g., "Documents/Reports")' },
+        file_name: { type: 'string', description: 'Name for the file in OneDrive' },
+        local_file_path: { type: 'string', description: 'Absolute path to the local file to upload' },
+      },
+      required: ['parent_path', 'file_name', 'local_file_path'],
+    },
+  },
+  {
+    name: 'confirm_upload_file',
+    description: 'Confirm file upload to OneDrive using the approval token from prepare_upload_file. (Graph API)',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        approval_token: { type: 'string', description: 'Approval token from prepare_upload_file' },
+      },
+      required: ['approval_token'],
+    },
+  },
+  {
+    name: 'list_recent_files',
+    description: 'List recently accessed files in OneDrive (Graph API)',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {},
+      required: [],
+    },
+  },
+  {
+    name: 'list_shared_with_me',
+    description: 'List files and folders shared with the current user in OneDrive (Graph API)',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {},
+      required: [],
+    },
+  },
+  {
+    name: 'create_sharing_link',
+    description: 'Create a sharing link for a OneDrive file or folder (Graph API)',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        item_id: { type: 'number', description: 'Drive item ID from list_drive_items or search_drive_items' },
+        type: { type: 'string', enum: ['view', 'edit'], description: 'Permission type: view (read-only) or edit (read-write)' },
+        scope: { type: 'string', enum: ['anonymous', 'organization'], description: 'Link scope: anonymous (anyone with link) or organization (org members only)' },
+      },
+      required: ['item_id', 'type', 'scope'],
+    },
+  },
+  {
+    name: 'prepare_delete_drive_item',
+    description: 'Prepare to delete a OneDrive file or folder. Returns an approval token. (Graph API)',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        item_id: { type: 'number', description: 'Drive item ID from list_drive_items or search_drive_items' },
+      },
+      required: ['item_id'],
+    },
+  },
+  {
+    name: 'confirm_delete_drive_item',
+    description: 'Confirm deletion of a OneDrive file or folder using the approval token from prepare_delete_drive_item. (Graph API)',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        approval_token: { type: 'string', description: 'Approval token from prepare_delete_drive_item' },
+      },
+      required: ['approval_token'],
     },
   },
 ];
@@ -3368,6 +3503,7 @@ export function createServer(): Server {
   let plannerTools: PlannerTools | null = null;
   let plannerVisualizationTools: PlannerVisualizationTools | null = null;
   let meetingsTools: MeetingsTools | null = null;
+  let oneDriveTools: OneDriveTools | null = null;
   let checklistItemsTools: ChecklistItemsTools | null = null;
   let linkedResourcesTools: LinkedResourcesTools | null = null;
   let taskAttachmentsTools: TaskAttachmentsTools | null = null;
@@ -3434,6 +3570,7 @@ export function createServer(): Server {
     plannerTools = new PlannerTools(graphRepository, tokenManager);
     plannerVisualizationTools = new PlannerVisualizationTools(graphRepository);
     meetingsTools = new MeetingsTools(graphRepository);
+    oneDriveTools = new OneDriveTools(graphRepository, tokenManager);
 
     initialized = true;
   });
@@ -3570,6 +3707,17 @@ export function createServer(): Server {
     'download_meeting_recording',
     'list_meeting_transcripts',
     'get_meeting_transcript_content',
+    'list_drive_items',
+    'search_drive_items',
+    'get_drive_item',
+    'download_file',
+    'prepare_upload_file',
+    'confirm_upload_file',
+    'list_recent_files',
+    'list_shared_with_me',
+    'create_sharing_link',
+    'prepare_delete_drive_item',
+    'confirm_delete_drive_item',
   ]);
 
   // Register tool list handler
@@ -3588,6 +3736,7 @@ export function createServer(): Server {
       // Graph API mode - handle async operations directly
       if (useGraphApi && graphRepository != null) {
         return await handleGraphToolCall(name, args, graphRepository, graphContentReaders!, orgTools!, sendTools!, schedulingTools!, rulesTools!, categoriesTools!, calendarPermissionsTools!, focusedOverridesTools!, teamsTools!, checklistItemsTools!, linkedResourcesTools!, taskAttachmentsTools!, peopleTools!, plannerTools!, plannerVisualizationTools!, meetingsTools!, tokenManager);
+        return await handleGraphToolCall(name, args, graphRepository, graphContentReaders!, orgTools!, sendTools!, schedulingTools!, rulesTools!, categoriesTools!, calendarPermissionsTools!, focusedOverridesTools!, teamsTools!, checklistItemsTools!, linkedResourcesTools!, taskAttachmentsTools!, peopleTools!, plannerTools!, oneDriveTools!, tokenManager);
       }
 
       // AppleScript mode - use sync tool interfaces
@@ -4670,6 +4819,7 @@ async function handleGraphToolCall(
   plannerTools: PlannerTools,
   plannerVisualizationTools: PlannerVisualizationTools,
   meetingsTools: MeetingsTools,
+  oneDriveTools: OneDriveTools,
   tokenManager: ApprovalTokenManager
 ): Promise<ToolResult> {
   // Handle mailbox organization tools (shared between backends)
@@ -6088,6 +6238,60 @@ async function handleGraphToolCall(
       case 'get_meeting_transcript_content': {
         const params = GetMeetingTranscriptContentInput.parse(args);
         return await meetingsTools.getMeetingTranscriptContent(params);
+      // OneDrive tools
+      case 'list_drive_items': {
+        const params = ListDriveItemsInput.parse(args);
+        return await oneDriveTools.listDriveItems(params);
+      }
+
+      case 'search_drive_items': {
+        const params = SearchDriveItemsInput.parse(args);
+        return await oneDriveTools.searchDriveItems(params);
+      }
+
+      case 'get_drive_item': {
+        const params = GetDriveItemInput.parse(args);
+        return await oneDriveTools.getDriveItem(params);
+      }
+
+      case 'download_file': {
+        const params = DownloadFileInput.parse(args);
+        return await oneDriveTools.downloadFile(params);
+      }
+
+      case 'prepare_upload_file': {
+        const params = PrepareUploadFileInput.parse(args);
+        return oneDriveTools.prepareUploadFile(params);
+      }
+
+      case 'confirm_upload_file': {
+        const params = ConfirmUploadFileInput.parse(args);
+        return await oneDriveTools.confirmUploadFile(params);
+      }
+
+      case 'list_recent_files': {
+        ListRecentFilesInput.parse(args);
+        return await oneDriveTools.listRecentFiles();
+      }
+
+      case 'list_shared_with_me': {
+        ListSharedWithMeInput.parse(args);
+        return await oneDriveTools.listSharedWithMe();
+      }
+
+      case 'create_sharing_link': {
+        const params = CreateSharingLinkInput.parse(args);
+        return await oneDriveTools.createSharingLink(params);
+      }
+
+      case 'prepare_delete_drive_item': {
+        const params = PrepareDeleteDriveItemInput.parse(args);
+        return oneDriveTools.prepareDeleteDriveItem(params);
+      }
+
+      case 'confirm_delete_drive_item': {
+        const params = ConfirmDeleteDriveItemInput.parse(args);
+        return await oneDriveTools.confirmDeleteDriveItem(params);
       }
 
       default:

@@ -48,12 +48,14 @@ export type OperationType =
   | 'delete_task_attachment'
   | 'delete_bucket'
   | 'delete_planner_task'
-  | 'add_message_reaction';
+  | 'add_message_reaction'
+  | 'upload_file'
+  | 'delete_drive_item';
 
 /**
  * Target resource types.
  */
-export type TargetType = 'email' | 'folder' | 'event' | 'contact' | 'task' | 'task_list' | 'rule' | 'contact_folder' | 'category' | 'focused_override' | 'calendar_permission' | 'channel' | 'channel_message' | 'chat_message' | 'checklist_item' | 'linked_resource' | 'task_attachment' | 'bucket' | 'planner_task' | 'message_reaction';
+export type TargetType = 'email' | 'folder' | 'event' | 'contact' | 'task' | 'task_list' | 'rule' | 'contact_folder' | 'category' | 'focused_override' | 'calendar_permission' | 'channel' | 'channel_message' | 'chat_message' | 'checklist_item' | 'linked_resource' | 'task_attachment' | 'bucket' | 'planner_task' | 'message_reaction' | 'drive_item';
 
 // =============================================================================
 // Token Types
