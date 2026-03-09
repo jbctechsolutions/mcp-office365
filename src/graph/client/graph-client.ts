@@ -18,6 +18,7 @@ import { Client, type PageCollection } from '@microsoft/microsoft-graph-client';
 import type * as MicrosoftGraph from '@microsoft/microsoft-graph-types';
 
 import { getAccessToken, type DeviceCodeCallback } from '../auth/index.js';
+import { type BatchRequest, type BatchResponseItem, buildBatchPayload, splitIntoBatches, parseBatchResponse } from './batch.js';
 import { ResponseCache, CacheTTL, createCacheKey } from './cache.js';
 
 /**
@@ -1866,6 +1867,27 @@ export class GraphClient {
     const client = await this.getClient();
     const response = await client.api('/communications/getPresencesByUserId').post({ ids: userIds });
     return response.value as MicrosoftGraph.Presence[];
+  }
+
+  /**
+   * Sends multiple requests in a single $batch call to the Graph API.
+   * Automatically splits into multiple batches if there are more than 20 requests.
+   */
+  async batchRequests(requests: BatchRequest[]): Promise<Map<string, BatchResponseItem>> {
+    const client = await this.getClient();
+    const batches = splitIntoBatches(requests);
+    const allResults = new Map<string, BatchResponseItem>();
+
+    for (const batch of batches) {
+      const payload = buildBatchPayload(batch);
+      const response = await client.api('/$batch').post(payload);
+      const results = parseBatchResponse(response);
+      for (const [id, result] of results) {
+        allResults.set(id, result);
+      }
+    }
+
+    return allResults;
   }
 }
 
