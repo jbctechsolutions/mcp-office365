@@ -156,6 +156,7 @@ import {
   ListMeetingTranscriptsInput,
   GetMeetingTranscriptContentInput,
 } from './tools/meetings.js';
+import {
   OneDriveTools,
   ListDriveItemsInput,
   SearchDriveItemsInput,
@@ -196,6 +197,15 @@ import {
   GeneratePlanSummaryInput,
   GenerateBurndownChartInput,
 } from './tools/planner-visualization.js';
+import {
+  SharePointTools,
+  ListSitesInput,
+  SearchSitesInput,
+  GetSiteInput,
+  ListDocumentLibrariesInput,
+  ListLibraryItemsInput,
+  DownloadLibraryFileInput,
+} from './tools/sharepoint.js';
 import {
   ListEmailsInput,
   SearchEmailsInput,
@@ -3331,6 +3341,8 @@ const TOOLS: Tool[] = [
         format: { type: 'string', description: 'Transcript format: text/vtt (default) or text/plain' },
       },
       required: ['transcript_id'],
+    },
+  },
   // OneDrive tools
   {
     name: 'list_drive_items',
@@ -3455,6 +3467,75 @@ const TOOLS: Tool[] = [
       required: ['approval_token'],
     },
   },
+  // ===========================================================================
+  // SharePoint Document Libraries (Graph API only)
+  // ===========================================================================
+  {
+    name: 'list_sites',
+    description: 'List SharePoint sites the user follows (Graph API)',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {},
+      required: [],
+    },
+  },
+  {
+    name: 'search_sites',
+    description: 'Search for SharePoint sites by keyword (Graph API)',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        query: { type: 'string', description: 'Search keyword for SharePoint sites' },
+      },
+      required: ['query'],
+    },
+  },
+  {
+    name: 'get_site',
+    description: 'Get details for a specific SharePoint site (Graph API)',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        site_id: { type: 'number', description: 'Site ID from list_sites or search_sites' },
+      },
+      required: ['site_id'],
+    },
+  },
+  {
+    name: 'list_document_libraries',
+    description: 'List document libraries (drives) for a SharePoint site (Graph API)',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        site_id: { type: 'number', description: 'Site ID from list_sites or search_sites' },
+      },
+      required: ['site_id'],
+    },
+  },
+  {
+    name: 'list_library_items',
+    description: 'List files and folders in a document library or subfolder (Graph API)',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        library_id: { type: 'number', description: 'Library ID from list_document_libraries' },
+        folder_id: { type: 'number', description: 'Folder ID to browse into (from a previous list_library_items call)' },
+      },
+      required: ['library_id'],
+    },
+  },
+  {
+    name: 'download_library_file',
+    description: 'Download a file from a SharePoint document library to a local path (Graph API)',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        item_id: { type: 'number', description: 'Item ID from list_library_items' },
+        output_path: { type: 'string', description: 'Local file path to save the downloaded file' },
+      },
+      required: ['item_id', 'output_path'],
+    },
+  },
 ];
 
 // =============================================================================
@@ -3504,6 +3585,7 @@ export function createServer(): Server {
   let plannerVisualizationTools: PlannerVisualizationTools | null = null;
   let meetingsTools: MeetingsTools | null = null;
   let oneDriveTools: OneDriveTools | null = null;
+  let sharePointTools: SharePointTools | null = null;
   let checklistItemsTools: ChecklistItemsTools | null = null;
   let linkedResourcesTools: LinkedResourcesTools | null = null;
   let taskAttachmentsTools: TaskAttachmentsTools | null = null;
@@ -3571,6 +3653,7 @@ export function createServer(): Server {
     plannerVisualizationTools = new PlannerVisualizationTools(graphRepository);
     meetingsTools = new MeetingsTools(graphRepository);
     oneDriveTools = new OneDriveTools(graphRepository, tokenManager);
+    sharePointTools = new SharePointTools(graphRepository);
 
     initialized = true;
   });
@@ -3718,6 +3801,12 @@ export function createServer(): Server {
     'create_sharing_link',
     'prepare_delete_drive_item',
     'confirm_delete_drive_item',
+    'list_sites',
+    'search_sites',
+    'get_site',
+    'list_document_libraries',
+    'list_library_items',
+    'download_library_file',
   ]);
 
   // Register tool list handler
@@ -3735,8 +3824,7 @@ export function createServer(): Server {
 
       // Graph API mode - handle async operations directly
       if (useGraphApi && graphRepository != null) {
-        return await handleGraphToolCall(name, args, graphRepository, graphContentReaders!, orgTools!, sendTools!, schedulingTools!, rulesTools!, categoriesTools!, calendarPermissionsTools!, focusedOverridesTools!, teamsTools!, checklistItemsTools!, linkedResourcesTools!, taskAttachmentsTools!, peopleTools!, plannerTools!, plannerVisualizationTools!, meetingsTools!, tokenManager);
-        return await handleGraphToolCall(name, args, graphRepository, graphContentReaders!, orgTools!, sendTools!, schedulingTools!, rulesTools!, categoriesTools!, calendarPermissionsTools!, focusedOverridesTools!, teamsTools!, checklistItemsTools!, linkedResourcesTools!, taskAttachmentsTools!, peopleTools!, plannerTools!, oneDriveTools!, tokenManager);
+        return await handleGraphToolCall(name, args, graphRepository, graphContentReaders!, orgTools!, sendTools!, schedulingTools!, rulesTools!, categoriesTools!, calendarPermissionsTools!, focusedOverridesTools!, teamsTools!, checklistItemsTools!, linkedResourcesTools!, taskAttachmentsTools!, peopleTools!, plannerTools!, plannerVisualizationTools!, meetingsTools!, oneDriveTools!, sharePointTools!, tokenManager);
       }
 
       // AppleScript mode - use sync tool interfaces
@@ -4820,6 +4908,7 @@ async function handleGraphToolCall(
   plannerVisualizationTools: PlannerVisualizationTools,
   meetingsTools: MeetingsTools,
   oneDriveTools: OneDriveTools,
+  sharePointTools: SharePointTools,
   tokenManager: ApprovalTokenManager
 ): Promise<ToolResult> {
   // Handle mailbox organization tools (shared between backends)
@@ -6238,6 +6327,8 @@ async function handleGraphToolCall(
       case 'get_meeting_transcript_content': {
         const params = GetMeetingTranscriptContentInput.parse(args);
         return await meetingsTools.getMeetingTranscriptContent(params);
+      }
+
       // OneDrive tools
       case 'list_drive_items': {
         const params = ListDriveItemsInput.parse(args);
@@ -6292,6 +6383,40 @@ async function handleGraphToolCall(
       case 'confirm_delete_drive_item': {
         const params = ConfirmDeleteDriveItemInput.parse(args);
         return await oneDriveTools.confirmDeleteDriveItem(params);
+      }
+
+      // =====================================================================
+      // SharePoint
+      // =====================================================================
+
+      case 'list_sites': {
+        ListSitesInput.parse(args);
+        return await sharePointTools.listSites();
+      }
+
+      case 'search_sites': {
+        const params = SearchSitesInput.parse(args);
+        return await sharePointTools.searchSites(params);
+      }
+
+      case 'get_site': {
+        const params = GetSiteInput.parse(args);
+        return await sharePointTools.getSite(params);
+      }
+
+      case 'list_document_libraries': {
+        const params = ListDocumentLibrariesInput.parse(args);
+        return await sharePointTools.listDocumentLibraries(params);
+      }
+
+      case 'list_library_items': {
+        const params = ListLibraryItemsInput.parse(args);
+        return await sharePointTools.listLibraryItems(params);
+      }
+
+      case 'download_library_file': {
+        const params = DownloadLibraryFileInput.parse(args);
+        return await sharePointTools.downloadLibraryFile(params);
       }
 
       default:
