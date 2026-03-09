@@ -65,6 +65,9 @@ interface IdCache {
   plannerBuckets: Map<number, { planId: string; bucketId: string; etag: string }>;
   plannerTasks: Map<number, { taskId: string; etag: string }>;
   plannerTaskDetails: Map<number, { taskId: string; etag: string }>;
+  sites: Map<number, string>;
+  documentLibraries: Map<number, { siteId: string; driveId: string }>;
+  driveItems: Map<number, { driveId: string; itemId: string }>;
 }
 
 /**
@@ -103,6 +106,9 @@ export class GraphRepository implements IRepository {
     plannerBuckets: new Map(),
     plannerTasks: new Map(),
     plannerTaskDetails: new Map(),
+    sites: new Map(),
+    documentLibraries: new Map(),
+    driveItems: new Map(),
   };
 
   constructor(deviceCodeCallback?: DeviceCodeCallback) {
@@ -2867,6 +2873,142 @@ export class GraphRepository implements IRepository {
     const result = await this.client.updatePlannerTaskDetails(cachedTask.taskId, graphUpdates, cachedDetails.etag);
     const newEtag = (result as any)['@odata.etag'] ?? cachedDetails.etag;
     this.idCache.plannerTaskDetails.set(taskId, { taskId: cachedTask.taskId, etag: newEtag });
+  }
+
+  // ===========================================================================
+  // SharePoint Sites & Document Libraries
+  // ===========================================================================
+
+  /**
+   * Lists followed SharePoint sites, caching IDs.
+   */
+  async listSitesAsync(): Promise<Array<{ id: number; name: string; webUrl: string; displayName: string }>> {
+    const sites = await this.client.listFollowedSites();
+    const result: Array<{ id: number; name: string; webUrl: string; displayName: string }> = [];
+    for (const site of sites) {
+      if (site.id != null) {
+        const numericId = hashStringToNumber(site.id);
+        this.idCache.sites.set(numericId, site.id);
+        result.push({
+          id: numericId,
+          name: site.name ?? '',
+          webUrl: site.webUrl ?? '',
+          displayName: site.displayName ?? '',
+        });
+      }
+    }
+    return result;
+  }
+
+  /**
+   * Searches SharePoint sites by keyword, caching IDs.
+   */
+  async searchSitesAsync(query: string): Promise<Array<{ id: number; name: string; webUrl: string; displayName: string }>> {
+    const sites = await this.client.searchSites(query);
+    const result: Array<{ id: number; name: string; webUrl: string; displayName: string }> = [];
+    for (const site of sites) {
+      if (site.id != null) {
+        const numericId = hashStringToNumber(site.id);
+        this.idCache.sites.set(numericId, site.id);
+        result.push({
+          id: numericId,
+          name: site.name ?? '',
+          webUrl: site.webUrl ?? '',
+          displayName: site.displayName ?? '',
+        });
+      }
+    }
+    return result;
+  }
+
+  /**
+   * Gets details for a specific SharePoint site.
+   */
+  async getSiteAsync(siteId: number): Promise<{ id: number; name: string; webUrl: string; displayName: string; description: string }> {
+    const graphId = this.idCache.sites.get(siteId);
+    if (graphId == null) throw new Error(`Site ID ${siteId} not found in cache. Try listing or searching sites first.`);
+    const site = await this.client.getSite(graphId);
+    return {
+      id: siteId,
+      name: site.name ?? '',
+      webUrl: site.webUrl ?? '',
+      displayName: site.displayName ?? '',
+      description: site.description ?? '',
+    };
+  }
+
+  /**
+   * Lists document libraries for a SharePoint site, caching IDs.
+   */
+  async listDocumentLibrariesAsync(siteId: number): Promise<Array<{ id: number; name: string; webUrl: string; driveType: string }>> {
+    const graphSiteId = this.idCache.sites.get(siteId);
+    if (graphSiteId == null) throw new Error(`Site ID ${siteId} not found in cache. Try listing or searching sites first.`);
+    const drives = await this.client.listDocumentLibraries(graphSiteId);
+    const result: Array<{ id: number; name: string; webUrl: string; driveType: string }> = [];
+    for (const drive of drives) {
+      if (drive.id != null) {
+        const numericId = hashStringToNumber(drive.id);
+        this.idCache.documentLibraries.set(numericId, { siteId: graphSiteId, driveId: drive.id });
+        result.push({
+          id: numericId,
+          name: drive.name ?? '',
+          webUrl: drive.webUrl ?? '',
+          driveType: drive.driveType ?? '',
+        });
+      }
+    }
+    return result;
+  }
+
+  /**
+   * Lists items in a document library or folder, caching IDs.
+   */
+  async listLibraryItemsAsync(libraryId: number, folderId?: number): Promise<Array<{
+    id: number; name: string; size: number; webUrl: string;
+    lastModifiedDateTime: string; isFolder: boolean;
+  }>> {
+    const libCached = this.idCache.documentLibraries.get(libraryId);
+    if (libCached == null) throw new Error(`Library ID ${libraryId} not found in cache. Try listing document libraries first.`);
+    let folderItemId: string | undefined;
+    if (folderId != null) {
+      const folderCached = this.idCache.driveItems.get(folderId);
+      if (folderCached == null) throw new Error(`Folder ID ${folderId} not found in cache. Try listing library items first.`);
+      folderItemId = folderCached.itemId;
+    }
+    const items = await this.client.listLibraryItems(libCached.driveId, folderItemId);
+    const result: Array<{
+      id: number; name: string; size: number; webUrl: string;
+      lastModifiedDateTime: string; isFolder: boolean;
+    }> = [];
+    for (const item of items) {
+      if (item.id != null) {
+        const numericId = hashStringToNumber(item.id);
+        this.idCache.driveItems.set(numericId, { driveId: libCached.driveId, itemId: item.id });
+        result.push({
+          id: numericId,
+          name: item.name ?? '',
+          size: item.size ?? 0,
+          webUrl: item.webUrl ?? '',
+          lastModifiedDateTime: item.lastModifiedDateTime ?? '',
+          isFolder: item.folder != null,
+        });
+      }
+    }
+    return result;
+  }
+
+  /**
+   * Downloads a file from a document library to the specified path.
+   */
+  async downloadLibraryFileAsync(itemId: number, outputPath: string): Promise<string> {
+    const cached = this.idCache.driveItems.get(itemId);
+    if (cached == null) throw new Error(`Item ID ${itemId} not found in cache. Try listing library items first.`);
+    const content = await this.client.downloadLibraryFile(cached.driveId, cached.itemId);
+    const resolvedPath = path.resolve(outputPath);
+    const dir = path.dirname(resolvedPath);
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(resolvedPath, Buffer.from(content));
+    return resolvedPath;
   }
 
   /**

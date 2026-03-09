@@ -1867,6 +1867,63 @@ export class GraphClient {
     const response = await client.api('/communications/getPresencesByUserId').post({ ids: userIds });
     return response.value as MicrosoftGraph.Presence[];
   }
+
+  // ===========================================================================
+  // SharePoint Sites & Document Libraries
+  // ===========================================================================
+
+  /**
+   * Lists sites the current user follows.
+   */
+  async listFollowedSites(): Promise<any[]> {
+    const client = await this.getClient();
+    const response = await client.api('/me/followedSites').get();
+    return response.value;
+  }
+
+  /**
+   * Searches for SharePoint sites by keyword.
+   */
+  async searchSites(query: string): Promise<any[]> {
+    const client = await this.getClient();
+    const response = await client.api(`/sites?search=${encodeURIComponent(query)}`).get();
+    return response.value;
+  }
+
+  /**
+   * Gets a specific SharePoint site by ID.
+   */
+  async getSite(siteId: string): Promise<any> {
+    const client = await this.getClient();
+    return await client.api(`/sites/${siteId}`).get();
+  }
+
+  /**
+   * Lists document libraries (drives) for a SharePoint site.
+   */
+  async listDocumentLibraries(siteId: string): Promise<any[]> {
+    const client = await this.getClient();
+    const response = await client.api(`/sites/${siteId}/drives`).get();
+    return response.value;
+  }
+
+  /**
+   * Lists items in a document library or folder.
+   */
+  async listLibraryItems(driveId: string, itemId?: string): Promise<any[]> {
+    const client = await this.getClient();
+    const path = itemId ? `/drives/${driveId}/items/${itemId}/children` : `/drives/${driveId}/root/children`;
+    const response = await client.api(path).get();
+    return response.value;
+  }
+
+  /**
+   * Downloads a file from a document library.
+   */
+  async downloadLibraryFile(driveId: string, itemId: string): Promise<ArrayBuffer> {
+    const client = await this.getClient();
+    return await client.api(`/drives/${driveId}/items/${itemId}/content`).get();
+  }
 }
 
 /**

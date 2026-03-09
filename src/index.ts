@@ -164,6 +164,15 @@ import {
   UpdatePlannerTaskDetailsInput,
 } from './tools/planner.js';
 import {
+  SharePointTools,
+  ListSitesInput,
+  SearchSitesInput,
+  GetSiteInput,
+  ListDocumentLibrariesInput,
+  ListLibraryItemsInput,
+  DownloadLibraryFileInput,
+} from './tools/sharepoint.js';
+import {
   ListEmailsInput,
   SearchEmailsInput,
   SearchEmailsAdvancedInput,
@@ -3129,6 +3138,75 @@ const TOOLS: Tool[] = [
       required: ['task_id'],
     },
   },
+  // ===========================================================================
+  // SharePoint Document Libraries (Graph API only)
+  // ===========================================================================
+  {
+    name: 'list_sites',
+    description: 'List SharePoint sites the user follows (Graph API)',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {},
+      required: [],
+    },
+  },
+  {
+    name: 'search_sites',
+    description: 'Search for SharePoint sites by keyword (Graph API)',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        query: { type: 'string', description: 'Search keyword for SharePoint sites' },
+      },
+      required: ['query'],
+    },
+  },
+  {
+    name: 'get_site',
+    description: 'Get details for a specific SharePoint site (Graph API)',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        site_id: { type: 'number', description: 'Site ID from list_sites or search_sites' },
+      },
+      required: ['site_id'],
+    },
+  },
+  {
+    name: 'list_document_libraries',
+    description: 'List document libraries (drives) for a SharePoint site (Graph API)',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        site_id: { type: 'number', description: 'Site ID from list_sites or search_sites' },
+      },
+      required: ['site_id'],
+    },
+  },
+  {
+    name: 'list_library_items',
+    description: 'List files and folders in a document library or subfolder (Graph API)',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        library_id: { type: 'number', description: 'Library ID from list_document_libraries' },
+        folder_id: { type: 'number', description: 'Folder ID to browse into (from a previous list_library_items call)' },
+      },
+      required: ['library_id'],
+    },
+  },
+  {
+    name: 'download_library_file',
+    description: 'Download a file from a SharePoint document library to a local path (Graph API)',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        item_id: { type: 'number', description: 'Item ID from list_library_items' },
+        output_path: { type: 'string', description: 'Local file path to save the downloaded file' },
+      },
+      required: ['item_id', 'output_path'],
+    },
+  },
 ];
 
 // =============================================================================
@@ -3175,6 +3253,7 @@ export function createServer(): Server {
   let teamsTools: TeamsTools | null = null;
   let peopleTools: PeopleTools | null = null;
   let plannerTools: PlannerTools | null = null;
+  let sharePointTools: SharePointTools | null = null;
   let checklistItemsTools: ChecklistItemsTools | null = null;
   let linkedResourcesTools: LinkedResourcesTools | null = null;
   let taskAttachmentsTools: TaskAttachmentsTools | null = null;
@@ -3239,6 +3318,7 @@ export function createServer(): Server {
     taskAttachmentsTools = new TaskAttachmentsTools(graphRepository, tokenManager);
     peopleTools = new PeopleTools(graphRepository.getClient());
     plannerTools = new PlannerTools(graphRepository, tokenManager);
+    sharePointTools = new SharePointTools(graphRepository);
 
     initialized = true;
   });
@@ -3361,6 +3441,12 @@ export function createServer(): Server {
     'confirm_delete_planner_task',
     'get_planner_task_details',
     'update_planner_task_details',
+    'list_sites',
+    'search_sites',
+    'get_site',
+    'list_document_libraries',
+    'list_library_items',
+    'download_library_file',
   ]);
 
   // Register tool list handler
@@ -3378,7 +3464,7 @@ export function createServer(): Server {
 
       // Graph API mode - handle async operations directly
       if (useGraphApi && graphRepository != null) {
-        return await handleGraphToolCall(name, args, graphRepository, graphContentReaders!, orgTools!, sendTools!, schedulingTools!, rulesTools!, categoriesTools!, calendarPermissionsTools!, focusedOverridesTools!, teamsTools!, checklistItemsTools!, linkedResourcesTools!, taskAttachmentsTools!, peopleTools!, plannerTools!, tokenManager);
+        return await handleGraphToolCall(name, args, graphRepository, graphContentReaders!, orgTools!, sendTools!, schedulingTools!, rulesTools!, categoriesTools!, calendarPermissionsTools!, focusedOverridesTools!, teamsTools!, checklistItemsTools!, linkedResourcesTools!, taskAttachmentsTools!, peopleTools!, plannerTools!, sharePointTools!, tokenManager);
       }
 
       // AppleScript mode - use sync tool interfaces
@@ -4459,6 +4545,7 @@ async function handleGraphToolCall(
   taskAttachmentsTools: TaskAttachmentsTools,
   peopleTools: PeopleTools,
   plannerTools: PlannerTools,
+  sharePointTools: SharePointTools,
   tokenManager: ApprovalTokenManager
 ): Promise<ToolResult> {
   // Handle mailbox organization tools (shared between backends)
@@ -5805,6 +5892,40 @@ async function handleGraphToolCall(
       case 'update_planner_task_details': {
         const params = UpdatePlannerTaskDetailsInput.parse(args);
         return await plannerTools.updatePlannerTaskDetails(params);
+      }
+
+      // =====================================================================
+      // SharePoint
+      // =====================================================================
+
+      case 'list_sites': {
+        ListSitesInput.parse(args);
+        return await sharePointTools.listSites();
+      }
+
+      case 'search_sites': {
+        const params = SearchSitesInput.parse(args);
+        return await sharePointTools.searchSites(params);
+      }
+
+      case 'get_site': {
+        const params = GetSiteInput.parse(args);
+        return await sharePointTools.getSite(params);
+      }
+
+      case 'list_document_libraries': {
+        const params = ListDocumentLibrariesInput.parse(args);
+        return await sharePointTools.listDocumentLibraries(params);
+      }
+
+      case 'list_library_items': {
+        const params = ListLibraryItemsInput.parse(args);
+        return await sharePointTools.listLibraryItems(params);
+      }
+
+      case 'download_library_file': {
+        const params = DownloadLibraryFileInput.parse(args);
+        return await sharePointTools.downloadLibraryFile(params);
       }
 
       default:
