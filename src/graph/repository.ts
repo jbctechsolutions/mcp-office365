@@ -20,6 +20,7 @@ import type {
   NoteRow,
 } from '../database/repository.js';
 import { GraphClient } from './client/index.js';
+import type { BatchRequest } from './client/batch.js';
 import {
   mapMailFolderToRow,
   mapCalendarToFolderRow,
@@ -2915,6 +2916,72 @@ export class GraphRepository implements IRepository {
       references: (details.references as Record<string, unknown>) ?? {},
       etag,
     };
+  }
+
+  /**
+   * Lists all tasks in a plan with their details (description, checklist, references)
+   * fetched in batched requests. This avoids N+1 queries when you need both the task
+   * list and each task's details.
+   *
+   * Details are fetched via the Graph $batch API (up to 20 per batch).
+   * Partial failures are handled gracefully: tasks whose detail fetch failed will
+   * have `details` set to `undefined`.
+   */
+  async listPlannerTasksWithDetailsAsync(planId: number): Promise<Array<{
+    id: number; title: string; bucketId: number | null; assignees: string[];
+    percentComplete: number; priority: number; startDateTime: string;
+    dueDateTime: string; createdDateTime: string;
+    details?: {
+      description: string;
+      checklist: Record<string, unknown>;
+      references: Record<string, unknown>;
+      etag: string;
+    };
+  }>> {
+    // Step 1: List all tasks (populates idCache.plannerTasks)
+    const tasks = await this.listPlannerTasksAsync(planId);
+
+    if (tasks.length === 0) return [];
+
+    // Step 2: Build batch requests for each task's details
+    const batchRequests: BatchRequest[] = tasks.map((task) => {
+      const cached = this.idCache.plannerTasks.get(task.id);
+      // cached is guaranteed to exist since listPlannerTasksAsync just populated it
+      const graphTaskId = cached!.taskId;
+      return {
+        id: String(task.id),
+        method: 'GET',
+        url: `/planner/tasks/${graphTaskId}/details`,
+      };
+    });
+
+    // Step 3: Execute batch requests (automatically splits into batches of 20)
+    const batchResults = await this.client.batchRequests(batchRequests);
+
+    // Step 4: Merge details into tasks
+    return tasks.map((task) => {
+      const result = batchResults.get(String(task.id));
+      if (result != null && result.status >= 200 && result.status < 300) {
+        const detailBody = result.body as Record<string, unknown>;
+        const etag = (result.headers?.ETag ?? result.headers?.etag ?? '') as string;
+        // Cache the task detail ETag for later updates
+        const cachedTask = this.idCache.plannerTasks.get(task.id);
+        if (cachedTask != null) {
+          this.idCache.plannerTaskDetails.set(task.id, { taskId: cachedTask.taskId, etag });
+        }
+        return {
+          ...task,
+          details: {
+            description: (detailBody.description as string) ?? '',
+            checklist: (detailBody.checklist as Record<string, unknown>) ?? {},
+            references: (detailBody.references as Record<string, unknown>) ?? {},
+            etag,
+          },
+        };
+      }
+      // Partial failure: return task without details
+      return { ...task, details: undefined };
+    });
   }
 
   /**
