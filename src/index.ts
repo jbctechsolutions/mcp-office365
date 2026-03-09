@@ -144,6 +144,7 @@ import {
   GetUsersPresenceInput,
 } from './tools/people.js';
 import {
+<<<<<<< HEAD
   ExcelTools,
   ListWorksheetsInput,
   GetWorksheetRangeInput,
@@ -152,6 +153,21 @@ import {
   ConfirmUpdateRangeInput,
   GetTableDataInput,
 } from './tools/excel.js';
+=======
+  OneDriveTools,
+  ListDriveItemsInput,
+  SearchDriveItemsInput,
+  GetDriveItemInput,
+  DownloadFileInput,
+  PrepareUploadFileInput,
+  ConfirmUploadFileInput,
+  ListRecentFilesInput,
+  ListSharedWithMeInput,
+  CreateSharingLinkInput,
+  PrepareDeleteDriveItemInput,
+  ConfirmDeleteDriveItemInput,
+} from './tools/onedrive.js';
+>>>>>>> worktree-agent-a6888453
 import {
   PlannerTools,
   ListPlansInput,
@@ -3138,6 +3154,7 @@ const TOOLS: Tool[] = [
       required: ['task_id'],
     },
   },
+<<<<<<< HEAD
   // Excel Online tools
   {
     name: 'list_worksheets',
@@ -3196,11 +3213,81 @@ const TOOLS: Tool[] = [
       type: 'object' as const,
       properties: {
         approval_token: { type: 'string', description: 'Approval token from prepare_update_range' },
+=======
+  // OneDrive tools
+  {
+    name: 'list_drive_items',
+    description: 'List files and folders in OneDrive. Omit folder_id to list root. (Graph API)',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        folder_id: { type: 'number', description: 'Folder ID from a previous list_drive_items call. Omit to list root.' },
+      },
+      required: [],
+    },
+  },
+  {
+    name: 'search_drive_items',
+    description: 'Search files and folders in OneDrive by name or content (Graph API)',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        query: { type: 'string', description: 'Search query string' },
+        limit: { type: 'number', description: 'Maximum results to return (default 25)' },
+      },
+      required: ['query'],
+    },
+  },
+  {
+    name: 'get_drive_item',
+    description: 'Get metadata for a specific OneDrive file or folder (Graph API)',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        item_id: { type: 'number', description: 'Drive item ID from list_drive_items or search_drive_items' },
+      },
+      required: ['item_id'],
+    },
+  },
+  {
+    name: 'download_file',
+    description: 'Download a file from OneDrive to a local path (Graph API)',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        item_id: { type: 'number', description: 'Drive item ID from list_drive_items or search_drive_items' },
+        output_path: { type: 'string', description: 'Absolute file path where the file should be saved' },
+      },
+      required: ['item_id', 'output_path'],
+    },
+  },
+  {
+    name: 'prepare_upload_file',
+    description: 'Prepare to upload a local file to OneDrive. Returns an approval token. (Graph API)',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        parent_path: { type: 'string', description: 'Parent folder path in OneDrive (e.g., "Documents/Reports")' },
+        file_name: { type: 'string', description: 'Name for the file in OneDrive' },
+        local_file_path: { type: 'string', description: 'Absolute path to the local file to upload' },
+      },
+      required: ['parent_path', 'file_name', 'local_file_path'],
+    },
+  },
+  {
+    name: 'confirm_upload_file',
+    description: 'Confirm file upload to OneDrive using the approval token from prepare_upload_file. (Graph API)',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        approval_token: { type: 'string', description: 'Approval token from prepare_upload_file' },
+>>>>>>> worktree-agent-a6888453
       },
       required: ['approval_token'],
     },
   },
   {
+<<<<<<< HEAD
     name: 'get_table_data',
     description: 'Get rows from a named table in an Excel workbook. (Graph API)',
     inputSchema: {
@@ -3210,6 +3297,58 @@ const TOOLS: Tool[] = [
         table_name: { type: 'string', description: 'Name of the Excel table' },
       },
       required: ['file_id', 'table_name'],
+=======
+    name: 'list_recent_files',
+    description: 'List recently accessed files in OneDrive (Graph API)',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {},
+      required: [],
+    },
+  },
+  {
+    name: 'list_shared_with_me',
+    description: 'List files and folders shared with the current user in OneDrive (Graph API)',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {},
+      required: [],
+    },
+  },
+  {
+    name: 'create_sharing_link',
+    description: 'Create a sharing link for a OneDrive file or folder (Graph API)',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        item_id: { type: 'number', description: 'Drive item ID from list_drive_items or search_drive_items' },
+        type: { type: 'string', enum: ['view', 'edit'], description: 'Permission type: view (read-only) or edit (read-write)' },
+        scope: { type: 'string', enum: ['anonymous', 'organization'], description: 'Link scope: anonymous (anyone with link) or organization (org members only)' },
+      },
+      required: ['item_id', 'type', 'scope'],
+    },
+  },
+  {
+    name: 'prepare_delete_drive_item',
+    description: 'Prepare to delete a OneDrive file or folder. Returns an approval token. (Graph API)',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        item_id: { type: 'number', description: 'Drive item ID from list_drive_items or search_drive_items' },
+      },
+      required: ['item_id'],
+    },
+  },
+  {
+    name: 'confirm_delete_drive_item',
+    description: 'Confirm deletion of a OneDrive file or folder using the approval token from prepare_delete_drive_item. (Graph API)',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        approval_token: { type: 'string', description: 'Approval token from prepare_delete_drive_item' },
+      },
+      required: ['approval_token'],
+>>>>>>> worktree-agent-a6888453
     },
   },
 ];
@@ -3258,7 +3397,11 @@ export function createServer(): Server {
   let teamsTools: TeamsTools | null = null;
   let peopleTools: PeopleTools | null = null;
   let plannerTools: PlannerTools | null = null;
+<<<<<<< HEAD
   let excelTools: ExcelTools | null = null;
+=======
+  let oneDriveTools: OneDriveTools | null = null;
+>>>>>>> worktree-agent-a6888453
   let checklistItemsTools: ChecklistItemsTools | null = null;
   let linkedResourcesTools: LinkedResourcesTools | null = null;
   let taskAttachmentsTools: TaskAttachmentsTools | null = null;
@@ -3323,7 +3466,11 @@ export function createServer(): Server {
     taskAttachmentsTools = new TaskAttachmentsTools(graphRepository, tokenManager);
     peopleTools = new PeopleTools(graphRepository.getClient());
     plannerTools = new PlannerTools(graphRepository, tokenManager);
+<<<<<<< HEAD
     excelTools = new ExcelTools(graphRepository, tokenManager);
+=======
+    oneDriveTools = new OneDriveTools(graphRepository, tokenManager);
+>>>>>>> worktree-agent-a6888453
 
     initialized = true;
   });
@@ -3446,12 +3593,26 @@ export function createServer(): Server {
     'confirm_delete_planner_task',
     'get_planner_task_details',
     'update_planner_task_details',
+<<<<<<< HEAD
     'list_worksheets',
     'get_worksheet_range',
     'get_used_range',
     'prepare_update_range',
     'confirm_update_range',
     'get_table_data',
+=======
+    'list_drive_items',
+    'search_drive_items',
+    'get_drive_item',
+    'download_file',
+    'prepare_upload_file',
+    'confirm_upload_file',
+    'list_recent_files',
+    'list_shared_with_me',
+    'create_sharing_link',
+    'prepare_delete_drive_item',
+    'confirm_delete_drive_item',
+>>>>>>> worktree-agent-a6888453
   ]);
 
   // Register tool list handler
@@ -3469,7 +3630,11 @@ export function createServer(): Server {
 
       // Graph API mode - handle async operations directly
       if (useGraphApi && graphRepository != null) {
+<<<<<<< HEAD
         return await handleGraphToolCall(name, args, graphRepository, graphContentReaders!, orgTools!, sendTools!, schedulingTools!, rulesTools!, categoriesTools!, calendarPermissionsTools!, focusedOverridesTools!, teamsTools!, checklistItemsTools!, linkedResourcesTools!, taskAttachmentsTools!, peopleTools!, plannerTools!, excelTools!, tokenManager);
+=======
+        return await handleGraphToolCall(name, args, graphRepository, graphContentReaders!, orgTools!, sendTools!, schedulingTools!, rulesTools!, categoriesTools!, calendarPermissionsTools!, focusedOverridesTools!, teamsTools!, checklistItemsTools!, linkedResourcesTools!, taskAttachmentsTools!, peopleTools!, plannerTools!, oneDriveTools!, tokenManager);
+>>>>>>> worktree-agent-a6888453
       }
 
       // AppleScript mode - use sync tool interfaces
@@ -4550,7 +4715,11 @@ async function handleGraphToolCall(
   taskAttachmentsTools: TaskAttachmentsTools,
   peopleTools: PeopleTools,
   plannerTools: PlannerTools,
+<<<<<<< HEAD
   excelTools: ExcelTools,
+=======
+  oneDriveTools: OneDriveTools,
+>>>>>>> worktree-agent-a6888453
   tokenManager: ApprovalTokenManager
 ): Promise<ToolResult> {
   // Handle mailbox organization tools (shared between backends)
@@ -5899,6 +6068,7 @@ async function handleGraphToolCall(
         return await plannerTools.updatePlannerTaskDetails(params);
       }
 
+<<<<<<< HEAD
       // Excel Online tools
       case 'list_worksheets': {
         const params = ListWorksheetsInput.parse(args);
@@ -5928,6 +6098,62 @@ async function handleGraphToolCall(
       case 'get_table_data': {
         const params = GetTableDataInput.parse(args);
         return await excelTools.getTableData(params);
+=======
+      // OneDrive tools
+      case 'list_drive_items': {
+        const params = ListDriveItemsInput.parse(args);
+        return await oneDriveTools.listDriveItems(params);
+      }
+
+      case 'search_drive_items': {
+        const params = SearchDriveItemsInput.parse(args);
+        return await oneDriveTools.searchDriveItems(params);
+      }
+
+      case 'get_drive_item': {
+        const params = GetDriveItemInput.parse(args);
+        return await oneDriveTools.getDriveItem(params);
+      }
+
+      case 'download_file': {
+        const params = DownloadFileInput.parse(args);
+        return await oneDriveTools.downloadFile(params);
+      }
+
+      case 'prepare_upload_file': {
+        const params = PrepareUploadFileInput.parse(args);
+        return oneDriveTools.prepareUploadFile(params);
+      }
+
+      case 'confirm_upload_file': {
+        const params = ConfirmUploadFileInput.parse(args);
+        return await oneDriveTools.confirmUploadFile(params);
+      }
+
+      case 'list_recent_files': {
+        ListRecentFilesInput.parse(args);
+        return await oneDriveTools.listRecentFiles();
+      }
+
+      case 'list_shared_with_me': {
+        ListSharedWithMeInput.parse(args);
+        return await oneDriveTools.listSharedWithMe();
+      }
+
+      case 'create_sharing_link': {
+        const params = CreateSharingLinkInput.parse(args);
+        return await oneDriveTools.createSharingLink(params);
+      }
+
+      case 'prepare_delete_drive_item': {
+        const params = PrepareDeleteDriveItemInput.parse(args);
+        return oneDriveTools.prepareDeleteDriveItem(params);
+      }
+
+      case 'confirm_delete_drive_item': {
+        const params = ConfirmDeleteDriveItemInput.parse(args);
+        return await oneDriveTools.confirmDeleteDriveItem(params);
+>>>>>>> worktree-agent-a6888453
       }
 
       default:

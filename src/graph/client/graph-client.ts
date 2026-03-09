@@ -1867,6 +1867,7 @@ export class GraphClient {
     const response = await client.api('/communications/getPresencesByUserId').post({ ids: userIds });
     return response.value as MicrosoftGraph.Presence[];
   }
+<<<<<<< HEAD
 
   // ===========================================================================
   // Excel Online (Workbook)
@@ -1913,6 +1914,63 @@ export class GraphClient {
     const response = await client.api(`/me/drive/items/${driveItemId}/workbook/tables/${encodeURIComponent(tableName)}/rows`).get();
     return response.value;
   }
+=======
+  // ===========================================================================
+  // OneDrive
+  // ===========================================================================
+
+  async listDriveItems(itemId?: string): Promise<any[]> {
+    const client = await this.getClient();
+    const path = itemId ? `/me/drive/items/${itemId}/children` : '/me/drive/root/children';
+    const response = await client.api(path).get();
+    return response.value;
+  }
+
+  async searchDriveItems(query: string, limit: number = 25): Promise<any[]> {
+    const client = await this.getClient();
+    const response = await client.api(`/me/drive/root/search(q='${encodeURIComponent(query)}')`).top(limit).get();
+    return response.value;
+  }
+
+  async getDriveItem(itemId: string): Promise<any> {
+    const client = await this.getClient();
+    return await client.api(`/me/drive/items/${itemId}`).get();
+  }
+
+  async downloadDriveItem(itemId: string): Promise<ArrayBuffer> {
+    const client = await this.getClient();
+    return await client.api(`/me/drive/items/${itemId}/content`).get();
+  }
+
+  async uploadDriveItem(parentPath: string, fileName: string, content: Buffer): Promise<any> {
+    const client = await this.getClient();
+    return await client.api(`/me/drive/root:/${parentPath}/${fileName}:/content`)
+      .header('Content-Type', 'application/octet-stream')
+      .put(content);
+  }
+
+  async listRecentDriveItems(): Promise<any[]> {
+    const client = await this.getClient();
+    const response = await client.api('/me/drive/recent').get();
+    return response.value;
+  }
+
+  async listSharedWithMe(): Promise<any[]> {
+    const client = await this.getClient();
+    const response = await client.api('/me/drive/sharedWithMe').get();
+    return response.value;
+  }
+
+  async createSharingLink(itemId: string, type: string, scope: string): Promise<any> {
+    const client = await this.getClient();
+    return await client.api(`/me/drive/items/${itemId}/createLink`).post({ type, scope });
+  }
+
+  async deleteDriveItem(itemId: string): Promise<void> {
+    const client = await this.getClient();
+    await client.api(`/me/drive/items/${itemId}`).delete();
+  }
+>>>>>>> worktree-agent-a6888453
 }
 
 /**
