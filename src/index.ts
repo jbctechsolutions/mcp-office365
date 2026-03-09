@@ -131,6 +131,10 @@ import {
   PrepareSendChatMessageInput,
   ConfirmSendChatMessageInput,
   ListChatMembersInput,
+  ListMessageReactionsInput,
+  PrepareAddMessageReactionInput,
+  ConfirmAddMessageReactionInput,
+  RemoveMessageReactionInput,
 } from './tools/teams.js';
 import {
   PeopleTools,
@@ -2675,6 +2679,55 @@ const TOOLS: Tool[] = [
       required: ['chat_id'],
     },
   },
+  {
+    name: 'list_message_reactions',
+    description: 'List reactions on a channel or chat message (Graph API)',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        message_id: { type: 'number', description: 'Numeric message ID' },
+        message_type: { type: 'string', enum: ['channel', 'chat'], description: 'Whether this is a channel message or chat message' },
+      },
+      required: ['message_id', 'message_type'],
+    },
+  },
+  {
+    name: 'prepare_add_message_reaction',
+    description: 'Prepare to add a reaction to a message. Returns an approval token. Call confirm_add_message_reaction to execute. (Graph API)',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        message_id: { type: 'number', description: 'Numeric message ID' },
+        message_type: { type: 'string', enum: ['channel', 'chat'], description: 'Whether this is a channel message or chat message' },
+        reaction_type: { type: 'string', description: 'Reaction emoji name (e.g., "like", "heart", "laugh", "surprised", "sad", "angry")' },
+      },
+      required: ['message_id', 'message_type', 'reaction_type'],
+    },
+  },
+  {
+    name: 'confirm_add_message_reaction',
+    description: 'Confirm adding a reaction to a message with approval token (Graph API)',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        approval_token: { type: 'string', description: 'The approval token from prepare_add_message_reaction' },
+      },
+      required: ['approval_token'],
+    },
+  },
+  {
+    name: 'remove_message_reaction',
+    description: 'Remove your own reaction from a channel or chat message (Graph API)',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        message_id: { type: 'number', description: 'Numeric message ID' },
+        message_type: { type: 'string', enum: ['channel', 'chat'], description: 'Whether this is a channel message or chat message' },
+        reaction_type: { type: 'string', description: 'Reaction emoji name to remove' },
+      },
+      required: ['message_id', 'message_type', 'reaction_type'],
+    },
+  },
   // Checklist Items tools
   {
     name: 'list_checklist_items',
@@ -3323,6 +3376,10 @@ export function createServer(): Server {
     'prepare_send_chat_message',
     'confirm_send_chat_message',
     'list_chat_members',
+    'list_message_reactions',
+    'prepare_add_message_reaction',
+    'confirm_add_message_reaction',
+    'remove_message_reaction',
     'list_checklist_items',
     'create_checklist_item',
     'update_checklist_item',
@@ -5610,6 +5667,26 @@ async function handleGraphToolCall(
       case 'list_chat_members': {
         const params = ListChatMembersInput.parse(args);
         return await teamsTools.listChatMembers(params);
+      }
+
+      case 'list_message_reactions': {
+        const params = ListMessageReactionsInput.parse(args);
+        return await teamsTools.listMessageReactions(params);
+      }
+
+      case 'prepare_add_message_reaction': {
+        const params = PrepareAddMessageReactionInput.parse(args);
+        return teamsTools.prepareAddMessageReaction(params);
+      }
+
+      case 'confirm_add_message_reaction': {
+        const params = ConfirmAddMessageReactionInput.parse(args);
+        return await teamsTools.confirmAddMessageReaction(params);
+      }
+
+      case 'remove_message_reaction': {
+        const params = RemoveMessageReactionInput.parse(args);
+        return await teamsTools.removeMessageReaction(params);
       }
 
       // Checklist Items tools

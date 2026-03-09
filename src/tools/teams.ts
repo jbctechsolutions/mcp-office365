@@ -105,6 +105,27 @@ export const ListChatMembersInput = z.strictObject({
   chat_id: z.number().int().positive().describe('Chat ID from list_chats'),
 });
 
+export const ListMessageReactionsInput = z.strictObject({
+  message_id: z.number().describe('Numeric message ID'),
+  message_type: z.enum(['channel', 'chat']).describe('Whether this is a channel message or chat message'),
+});
+
+export const PrepareAddMessageReactionInput = z.strictObject({
+  message_id: z.number().describe('Numeric message ID'),
+  message_type: z.enum(['channel', 'chat']).describe('Whether this is a channel message or chat message'),
+  reaction_type: z.string().describe('Reaction emoji name (e.g., "like", "heart", "laugh", "surprised", "sad", "angry")'),
+});
+
+export const ConfirmAddMessageReactionInput = z.strictObject({
+  approval_token: z.string().describe('Approval token from prepare_add_message_reaction'),
+});
+
+export const RemoveMessageReactionInput = z.strictObject({
+  message_id: z.number().describe('Numeric message ID'),
+  message_type: z.enum(['channel', 'chat']).describe('Whether this is a channel message or chat message'),
+  reaction_type: z.string().describe('Reaction emoji name to remove'),
+});
+
 // =============================================================================
 // Type Exports
 // =============================================================================
@@ -128,6 +149,10 @@ export type ListChatMessagesParams = z.infer<typeof ListChatMessagesInput>;
 export type PrepareSendChatMessageParams = z.infer<typeof PrepareSendChatMessageInput>;
 export type ConfirmSendChatMessageParams = z.infer<typeof ConfirmSendChatMessageInput>;
 export type ListChatMembersParams = z.infer<typeof ListChatMembersInput>;
+export type ListMessageReactionsParams = z.infer<typeof ListMessageReactionsInput>;
+export type PrepareAddMessageReactionParams = z.infer<typeof PrepareAddMessageReactionInput>;
+export type ConfirmAddMessageReactionParams = z.infer<typeof ConfirmAddMessageReactionInput>;
+export type RemoveMessageReactionParams = z.infer<typeof RemoveMessageReactionInput>;
 
 // =============================================================================
 // Repository Interface
@@ -160,6 +185,9 @@ export interface ITeamsRepository {
   }>>;
   sendChatMessageAsync(chatId: number, body: string, contentType?: string): Promise<number>;
   listChatMembersAsync(chatId: number): Promise<Array<{ displayName: string; email: string; roles: string[] }>>;
+  listMessageReactionsAsync(messageId: number, messageType: 'channel' | 'chat'): Promise<Array<{ reactionType: string; user: { displayName: string }; createdDateTime: string }>>;
+  addMessageReactionAsync(messageId: number, messageType: 'channel' | 'chat', reactionType: string): Promise<void>;
+  removeMessageReactionAsync(messageId: number, messageType: 'channel' | 'chat', reactionType: string): Promise<void>;
 }
 
 // =============================================================================
@@ -587,6 +615,97 @@ export class TeamsTools {
       content: [{
         type: 'text' as const,
         text: JSON.stringify({ members }, null, 2),
+      }],
+    };
+  }
+
+  // ===========================================================================
+  // Message Reactions
+  // ===========================================================================
+
+  async listMessageReactions(params: ListMessageReactionsParams): Promise<{
+    content: Array<{ type: 'text'; text: string }>;
+  }> {
+    const reactions = await this.repo.listMessageReactionsAsync(params.message_id, params.message_type);
+    return {
+      content: [{
+        type: 'text' as const,
+        text: JSON.stringify({ reactions }, null, 2),
+      }],
+    };
+  }
+
+  prepareAddMessageReaction(params: PrepareAddMessageReactionParams): {
+    content: Array<{ type: 'text'; text: string }>;
+  } {
+    const token = this.tokenManager.generateToken({
+      operation: 'add_message_reaction',
+      targetType: 'message_reaction',
+      targetId: params.message_id,
+      targetHash: String(params.message_id),
+      metadata: { reaction_type: params.reaction_type, message_type: params.message_type },
+    });
+    return {
+      content: [{
+        type: 'text' as const,
+        text: JSON.stringify({
+          approval_token: token.tokenId,
+          expires_at: new Date(token.expiresAt).toISOString(),
+          message_id: params.message_id,
+          message_type: params.message_type,
+          reaction_type: params.reaction_type,
+          action: 'Call confirm_add_message_reaction with the approval_token to add the reaction.',
+        }, null, 2),
+      }],
+    };
+  }
+
+  async confirmAddMessageReaction(params: ConfirmAddMessageReactionParams): Promise<{
+    content: Array<{ type: 'text'; text: string }>;
+  }> {
+    const token = this.tokenManager.lookupToken(params.approval_token);
+    if (token == null) {
+      return {
+        content: [{
+          type: 'text' as const,
+          text: JSON.stringify({ success: false, error: 'Token not found or already used' }, null, 2),
+        }],
+      };
+    }
+    const result = this.tokenManager.consumeToken(params.approval_token, 'add_message_reaction', token.targetId);
+    if (!result.valid) {
+      const errorMessages: Record<string, string> = {
+        NOT_FOUND: 'Token not found or already used',
+        EXPIRED: 'Token has expired. Please call prepare_add_message_reaction again.',
+        OPERATION_MISMATCH: 'Token was not generated for add_message_reaction',
+        TARGET_MISMATCH: 'Token was generated for a different message',
+        ALREADY_CONSUMED: 'Token has already been used',
+      };
+      return {
+        content: [{
+          type: 'text' as const,
+          text: JSON.stringify({ success: false, error: errorMessages[result.error ?? ''] ?? 'Invalid token' }, null, 2),
+        }],
+      };
+    }
+    const { reaction_type, message_type } = result.token!.metadata as { reaction_type: string; message_type: 'channel' | 'chat' };
+    await this.repo.addMessageReactionAsync(result.token!.targetId, message_type, reaction_type);
+    return {
+      content: [{
+        type: 'text' as const,
+        text: JSON.stringify({ success: true, message: 'Reaction added' }, null, 2),
+      }],
+    };
+  }
+
+  async removeMessageReaction(params: RemoveMessageReactionParams): Promise<{
+    content: Array<{ type: 'text'; text: string }>;
+  }> {
+    await this.repo.removeMessageReactionAsync(params.message_id, params.message_type, params.reaction_type);
+    return {
+      content: [{
+        type: 'text' as const,
+        text: JSON.stringify({ success: true, message: 'Reaction removed' }, null, 2),
       }],
     };
   }

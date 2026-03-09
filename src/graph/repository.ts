@@ -2532,6 +2532,63 @@ export class GraphRepository implements IRepository {
     return numericId;
   }
 
+  // ===========================================================================
+  // Message Reactions
+  // ===========================================================================
+
+  async listMessageReactionsAsync(messageId: number, messageType: 'channel' | 'chat'): Promise<Array<{
+    reactionType: string;
+    user: { displayName: string };
+    createdDateTime: string;
+  }>> {
+    if (messageType === 'channel') {
+      const cached = this.idCache.channelMessages.get(messageId);
+      if (cached == null) throw new Error(`Message ID ${messageId} not found in cache. Try listing channel messages first.`);
+      const msg = await this.client.getChannelMessage(cached.teamId, cached.channelId, cached.messageId);
+      const reactions = (msg as any).reactions ?? [];
+      return reactions.map((r: any) => ({
+        reactionType: r.reactionType ?? '',
+        user: { displayName: r.user?.user?.displayName ?? '' },
+        createdDateTime: r.createdDateTime ?? '',
+      }));
+    } else {
+      const cached = this.idCache.chatMessages.get(messageId);
+      if (cached == null) throw new Error(`Message ID ${messageId} not found in cache. Try listing chat messages first.`);
+      const client = await (this.client as any).getClient() as any;
+      const msg = await client.api(`/me/chats/${cached.chatId}/messages/${cached.messageId}`).get();
+      const reactions = msg.reactions ?? [];
+      return reactions.map((r: any) => ({
+        reactionType: r.reactionType ?? '',
+        user: { displayName: r.user?.user?.displayName ?? '' },
+        createdDateTime: r.createdDateTime ?? '',
+      }));
+    }
+  }
+
+  async addMessageReactionAsync(messageId: number, messageType: 'channel' | 'chat', reactionType: string): Promise<void> {
+    if (messageType === 'channel') {
+      const cached = this.idCache.channelMessages.get(messageId);
+      if (cached == null) throw new Error(`Message ID ${messageId} not found in cache. Try listing channel messages first.`);
+      await this.client.setChannelMessageReaction(cached.teamId, cached.channelId, cached.messageId, reactionType);
+    } else {
+      const cached = this.idCache.chatMessages.get(messageId);
+      if (cached == null) throw new Error(`Message ID ${messageId} not found in cache. Try listing chat messages first.`);
+      await this.client.setChatMessageReaction(cached.chatId, cached.messageId, reactionType);
+    }
+  }
+
+  async removeMessageReactionAsync(messageId: number, messageType: 'channel' | 'chat', reactionType: string): Promise<void> {
+    if (messageType === 'channel') {
+      const cached = this.idCache.channelMessages.get(messageId);
+      if (cached == null) throw new Error(`Message ID ${messageId} not found in cache. Try listing channel messages first.`);
+      await this.client.unsetChannelMessageReaction(cached.teamId, cached.channelId, cached.messageId, reactionType);
+    } else {
+      const cached = this.idCache.chatMessages.get(messageId);
+      if (cached == null) throw new Error(`Message ID ${messageId} not found in cache. Try listing chat messages first.`);
+      await this.client.unsetChatMessageReaction(cached.chatId, cached.messageId, reactionType);
+    }
+  }
+
   async listChatMembersAsync(chatId: number): Promise<Array<{ displayName: string; email: string; roles: string[] }>> {
     const graphChatId = this.idCache.chats.get(chatId);
     if (graphChatId == null) throw new Error(`Chat ID ${chatId} not found in cache. Try listing chats first.`);

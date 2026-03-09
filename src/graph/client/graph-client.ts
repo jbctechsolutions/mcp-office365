@@ -1637,6 +1637,32 @@ export class GraphClient {
     }) as MicrosoftGraph.ChatMessage;
   }
 
+  // Channel message reactions
+  async setChannelMessageReaction(teamId: string, channelId: string, messageId: string, reactionType: string): Promise<void> {
+    const client = await this.getClient();
+    await client.api(`/teams/${teamId}/channels/${channelId}/messages/${messageId}/setReaction`)
+      .post({ reactionType });
+  }
+
+  async unsetChannelMessageReaction(teamId: string, channelId: string, messageId: string, reactionType: string): Promise<void> {
+    const client = await this.getClient();
+    await client.api(`/teams/${teamId}/channels/${channelId}/messages/${messageId}/unsetReaction`)
+      .post({ reactionType });
+  }
+
+  // Chat message reactions
+  async setChatMessageReaction(chatId: string, messageId: string, reactionType: string): Promise<void> {
+    const client = await this.getClient();
+    await client.api(`/chats/${chatId}/messages/${messageId}/setReaction`)
+      .post({ reactionType });
+  }
+
+  async unsetChatMessageReaction(chatId: string, messageId: string, reactionType: string): Promise<void> {
+    const client = await this.getClient();
+    await client.api(`/chats/${chatId}/messages/${messageId}/unsetReaction`)
+      .post({ reactionType });
+  }
+
   async listChatMembers(chatId: string): Promise<MicrosoftGraph.ConversationMember[]> {
     const client = await this.getClient();
     const response = await client.api(`/me/chats/${chatId}/members`).get() as PageCollection;
