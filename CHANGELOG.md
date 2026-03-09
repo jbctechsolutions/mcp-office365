@@ -7,6 +7,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [v2.5.0] - 2026-03-09
+
+### Added
+- **Comprehensive README rewrite** with full tool reference for all tools across 27 categories
+- **4 Planner Visualization tools** with 4 output formats (HTML, SVG, Markdown, Mermaid):
+  - `generate_kanban_board` — Kanban view of tasks grouped by bucket with priority colors
+  - `generate_gantt_chart` — Gantt timeline with start/due dates
+  - `generate_plan_summary` — Overview stats, assignee workload, overdue items
+  - `generate_burndown_chart` — Burndown/burnup of completed vs remaining tasks
+- **6 Meeting Recordings & Transcripts tools** (Teams):
+  - `list_online_meetings` / `get_online_meeting` — browse Teams meetings
+  - `list_meeting_recordings` / `download_meeting_recording` — access recordings
+  - `list_meeting_transcripts` / `get_meeting_transcript_content` — access transcripts (VTT/text)
+- **4 Message Reaction tools** (Teams):
+  - `list_message_reactions` — list reactions on channel/chat messages
+  - `prepare_add_message_reaction` / `confirm_add_message_reaction` — two-phase reaction add
+  - `remove_message_reaction` — remove own reaction
+- **11 OneDrive tools**:
+  - `list_drive_items` / `search_drive_items` / `get_drive_item` — browse and search files
+  - `download_file` — download to local filesystem
+  - `prepare_upload_file` / `confirm_upload_file` — two-phase upload
+  - `list_recent_files` / `list_shared_with_me` — quick access to recent and shared files
+  - `create_sharing_link` — create view/edit sharing links
+  - `prepare_delete_drive_item` / `confirm_delete_drive_item` — two-phase delete
+- **6 SharePoint tools**:
+  - `list_sites` / `search_sites` / `get_site` — browse SharePoint sites
+  - `list_document_libraries` / `list_library_items` — navigate document libraries
+  - `download_library_file` — download SharePoint files
+- **6 Excel Online tools**:
+  - `list_worksheets` / `get_worksheet_range` / `get_used_range` — read spreadsheet data
+  - `prepare_update_range` / `confirm_update_range` — two-phase cell updates
+  - `get_table_data` — read named table rows
+- **Graph $batch infrastructure** for future performance optimization
+
+### Changed
+- GitHub repository renamed from `mcp-outlook-mac` to `mcp-office365-mac`
+
 ## [v2.4.0] - 2026-03-07
 
 ### Added
@@ -295,6 +332,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ---
 
 [Unreleased]: https://github.com/jbctechsolutions/mcp-office365-mac/compare/v2.4.0...HEAD
+[v2.5.0]: https://github.com/jbctechsolutions/mcp-office365-mac/compare/v2.4.0...v2.5.0
 [v2.4.0]: https://github.com/jbctechsolutions/mcp-office365-mac/compare/v2.3.0...v2.4.0
 [v2.3.0]: https://github.com/jbctechsolutions/mcp-office365-mac/compare/v2.2.0...v2.3.0
 [v2.2.0]: https://github.com/jbctechsolutions/mcp-office365-mac/compare/v2.1.0...v2.2.0
