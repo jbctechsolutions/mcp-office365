@@ -39,10 +39,10 @@ export function renderKanbanHtml(data: PlanVisualizationData): string {
     let tasksHtml = '';
     for (const task of bucketTasks) {
       const pColor = priorityColor(task.priority);
-      const pLabel = PRIORITY_LABELS[task.priority] ?? `P${task.priority}`;
+      const pLabel: string = PRIORITY_LABELS[task.priority] ?? `P${task.priority}`;
       const assignees = task.assignments.length > 0 ? task.assignments.join(', ') : 'Unassigned';
-      const due = task.dueDateTime
-        ? new Date(task.dueDateTime).toISOString().split('T')[0]
+      const due: string = task.dueDateTime
+        ? (new Date(task.dueDateTime).toISOString().split('T')[0] ?? '')
         : 'No due date';
       tasksHtml += `
         <div class="kanban-card" style="border-left:4px solid ${pColor};background:#fff;border-radius:6px;padding:10px;margin-bottom:8px;box-shadow:0 1px 3px rgba(0,0,0,0.12);cursor:default;" title="Assignees: ${escapeHtml(assignees)}&#10;Due: ${escapeHtml(due)}&#10;Priority: ${escapeHtml(pLabel)}">
