@@ -1959,6 +1959,52 @@ export class GraphClient {
       .get();
   }
 
+
+  // ===========================================================================
+  // Excel Online (Workbook)
+  // ===========================================================================
+
+  /**
+   * Lists worksheets in an Excel workbook.
+   */
+  async listWorksheets(driveItemId: string): Promise<any[]> {
+    const client = await this.getClient();
+    const response = await client.api(`/me/drive/items/${driveItemId}/workbook/worksheets`).get();
+    return response.value;
+  }
+
+  /**
+   * Gets cell values for a specific range in a worksheet.
+   */
+  async getWorksheetRange(driveItemId: string, worksheetName: string, range: string): Promise<any> {
+    const client = await this.getClient();
+    return await client.api(`/me/drive/items/${driveItemId}/workbook/worksheets/${encodeURIComponent(worksheetName)}/range(address='${encodeURIComponent(range)}')`).get();
+  }
+
+  /**
+   * Gets the used range (all data) for a worksheet.
+   */
+  async getUsedRange(driveItemId: string, worksheetName: string): Promise<any> {
+    const client = await this.getClient();
+    return await client.api(`/me/drive/items/${driveItemId}/workbook/worksheets/${encodeURIComponent(worksheetName)}/usedRange`).get();
+  }
+
+  /**
+   * Updates cell values for a specific range in a worksheet.
+   */
+  async updateWorksheetRange(driveItemId: string, worksheetName: string, range: string, values: unknown[][]): Promise<any> {
+    const client = await this.getClient();
+    return await client.api(`/me/drive/items/${driveItemId}/workbook/worksheets/${encodeURIComponent(worksheetName)}/range(address='${encodeURIComponent(range)}')`).patch({ values });
+  }
+
+  /**
+   * Gets rows from a named table in an Excel workbook.
+   */
+  async getTableData(driveItemId: string, tableName: string): Promise<any> {
+    const client = await this.getClient();
+    const response = await client.api(`/me/drive/items/${driveItemId}/workbook/tables/${encodeURIComponent(tableName)}/rows`).get();
+    return response.value;
+  }
   // ===========================================================================
   // OneDrive
   // ===========================================================================

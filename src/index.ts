@@ -157,6 +157,15 @@ import {
   GetMeetingTranscriptContentInput,
 } from './tools/meetings.js';
 import {
+  ExcelTools,
+  ListWorksheetsInput,
+  GetWorksheetRangeInput,
+  GetUsedRangeInput,
+  PrepareUpdateRangeInput,
+  ConfirmUpdateRangeInput,
+  GetTableDataInput,
+} from './tools/excel.js';
+import {
   OneDriveTools,
   ListDriveItemsInput,
   SearchDriveItemsInput,
@@ -3343,6 +3352,68 @@ const TOOLS: Tool[] = [
       required: ['transcript_id'],
     },
   },
+  // Excel Online tools
+  {
+    name: 'list_worksheets',
+    description: 'List all worksheets in an Excel workbook stored in OneDrive or SharePoint. (Graph API)',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        file_id: { type: 'number', description: 'Numeric ID of the Excel file (from OneDrive or SharePoint)' },
+      },
+      required: ['file_id'],
+    },
+  },
+  {
+    name: 'get_worksheet_range',
+    description: 'Get cell values for a specific range in an Excel worksheet. (Graph API)',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        file_id: { type: 'number', description: 'Numeric ID of the Excel file (from OneDrive or SharePoint)' },
+        worksheet_name: { type: 'string', description: 'Name of the worksheet' },
+        range: { type: 'string', description: 'Cell range e.g. "A1:D10"' },
+      },
+      required: ['file_id', 'worksheet_name', 'range'],
+    },
+  },
+  {
+    name: 'get_used_range',
+    description: 'Get all used data in an Excel worksheet (automatically detects the data region). (Graph API)',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        file_id: { type: 'number', description: 'Numeric ID of the Excel file (from OneDrive or SharePoint)' },
+        worksheet_name: { type: 'string', description: 'Name of the worksheet' },
+      },
+      required: ['file_id', 'worksheet_name'],
+    },
+  },
+  {
+    name: 'prepare_update_range',
+    description: 'Prepare to update cell values in an Excel worksheet range. Returns an approval token. (Graph API)',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        file_id: { type: 'number', description: 'Numeric ID of the Excel file (from OneDrive or SharePoint)' },
+        worksheet_name: { type: 'string', description: 'Name of the worksheet' },
+        range: { type: 'string', description: 'Cell range e.g. "A1:D10"' },
+        values: { type: 'array', items: { type: 'array', items: {} }, description: '2D array of cell values' },
+      },
+      required: ['file_id', 'worksheet_name', 'range', 'values'],
+    },
+  },
+  {
+    name: 'confirm_update_range',
+    description: 'Confirm updating cell values in an Excel worksheet range using the approval token from prepare_update_range. (Graph API)',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        approval_token: { type: 'string', description: 'Approval token from prepare_update_range' },
+      },
+      required: ['approval_token'],
+    },
+  },
   // OneDrive tools
   {
     name: 'list_drive_items',
@@ -3412,6 +3483,18 @@ const TOOLS: Tool[] = [
         approval_token: { type: 'string', description: 'Approval token from prepare_upload_file' },
       },
       required: ['approval_token'],
+    },
+  },
+  {
+    name: 'get_table_data',
+    description: 'Get rows from a named table in an Excel workbook. (Graph API)',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        file_id: { type: 'number', description: 'Numeric ID of the Excel file (from OneDrive or SharePoint)' },
+        table_name: { type: 'string', description: 'Name of the Excel table' },
+      },
+      required: ['file_id', 'table_name'],
     },
   },
   {
@@ -3586,6 +3669,7 @@ export function createServer(): Server {
   let meetingsTools: MeetingsTools | null = null;
   let oneDriveTools: OneDriveTools | null = null;
   let sharePointTools: SharePointTools | null = null;
+  let excelTools: ExcelTools | null = null;
   let checklistItemsTools: ChecklistItemsTools | null = null;
   let linkedResourcesTools: LinkedResourcesTools | null = null;
   let taskAttachmentsTools: TaskAttachmentsTools | null = null;
@@ -3654,6 +3738,7 @@ export function createServer(): Server {
     meetingsTools = new MeetingsTools(graphRepository);
     oneDriveTools = new OneDriveTools(graphRepository, tokenManager);
     sharePointTools = new SharePointTools(graphRepository);
+    excelTools = new ExcelTools(graphRepository, tokenManager);
 
     initialized = true;
   });
@@ -3790,6 +3875,12 @@ export function createServer(): Server {
     'download_meeting_recording',
     'list_meeting_transcripts',
     'get_meeting_transcript_content',
+    'list_worksheets',
+    'get_worksheet_range',
+    'get_used_range',
+    'prepare_update_range',
+    'confirm_update_range',
+    'get_table_data',
     'list_drive_items',
     'search_drive_items',
     'get_drive_item',
@@ -3824,7 +3915,7 @@ export function createServer(): Server {
 
       // Graph API mode - handle async operations directly
       if (useGraphApi && graphRepository != null) {
-        return await handleGraphToolCall(name, args, graphRepository, graphContentReaders!, orgTools!, sendTools!, schedulingTools!, rulesTools!, categoriesTools!, calendarPermissionsTools!, focusedOverridesTools!, teamsTools!, checklistItemsTools!, linkedResourcesTools!, taskAttachmentsTools!, peopleTools!, plannerTools!, plannerVisualizationTools!, meetingsTools!, oneDriveTools!, sharePointTools!, tokenManager);
+        return await handleGraphToolCall(name, args, graphRepository, graphContentReaders!, orgTools!, sendTools!, schedulingTools!, rulesTools!, categoriesTools!, calendarPermissionsTools!, focusedOverridesTools!, teamsTools!, checklistItemsTools!, linkedResourcesTools!, taskAttachmentsTools!, peopleTools!, plannerTools!, plannerVisualizationTools!, meetingsTools!, oneDriveTools!, sharePointTools!, excelTools!, tokenManager);
       }
 
       // AppleScript mode - use sync tool interfaces
@@ -4909,6 +5000,7 @@ async function handleGraphToolCall(
   meetingsTools: MeetingsTools,
   oneDriveTools: OneDriveTools,
   sharePointTools: SharePointTools,
+  excelTools: ExcelTools,
   tokenManager: ApprovalTokenManager
 ): Promise<ToolResult> {
   // Handle mailbox organization tools (shared between backends)
@@ -6327,6 +6419,37 @@ async function handleGraphToolCall(
       case 'get_meeting_transcript_content': {
         const params = GetMeetingTranscriptContentInput.parse(args);
         return await meetingsTools.getMeetingTranscriptContent(params);
+      }
+
+      // Excel Online tools
+      case 'list_worksheets': {
+        const params = ListWorksheetsInput.parse(args);
+        return await excelTools.listWorksheets(params);
+      }
+
+      case 'get_worksheet_range': {
+        const params = GetWorksheetRangeInput.parse(args);
+        return await excelTools.getWorksheetRange(params);
+      }
+
+      case 'get_used_range': {
+        const params = GetUsedRangeInput.parse(args);
+        return await excelTools.getUsedRange(params);
+      }
+
+      case 'prepare_update_range': {
+        const params = PrepareUpdateRangeInput.parse(args);
+        return excelTools.prepareUpdateRange(params);
+      }
+
+      case 'confirm_update_range': {
+        const params = ConfirmUpdateRangeInput.parse(args);
+        return await excelTools.confirmUpdateRange(params);
+      }
+
+      case 'get_table_data': {
+        const params = GetTableDataInput.parse(args);
+        return await excelTools.getTableData(params);
       }
 
       // OneDrive tools

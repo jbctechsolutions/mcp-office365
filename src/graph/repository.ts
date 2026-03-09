@@ -3080,6 +3080,37 @@ export class GraphRepository implements IRepository {
   }
 
   // ===========================================================================
+  // Excel Online (Workbook)
+  // ===========================================================================
+
+  async listWorksheetsAsync(fileId: number): Promise<any[]> {
+    const driveItemId = this.idCache.driveItems.get(fileId);
+    if (driveItemId == null) throw new Error(`Drive item ID ${fileId} not found in cache. List OneDrive or SharePoint files first.`);
+    return await this.client.listWorksheets(driveItemId);
+  }
+
+  async getWorksheetRangeAsync(fileId: number, worksheetName: string, range: string): Promise<any> {
+    const driveItemId = this.idCache.driveItems.get(fileId);
+    if (driveItemId == null) throw new Error(`Drive item ID ${fileId} not found in cache. List OneDrive or SharePoint files first.`);
+    return await this.client.getWorksheetRange(driveItemId, worksheetName, range);
+  }
+
+  async getUsedRangeAsync(fileId: number, worksheetName: string): Promise<any> {
+    const driveItemId = this.idCache.driveItems.get(fileId);
+    if (driveItemId == null) throw new Error(`Drive item ID ${fileId} not found in cache. List OneDrive or SharePoint files first.`);
+    return await this.client.getUsedRange(driveItemId, worksheetName);
+  }
+
+  async updateWorksheetRangeAsync(fileId: number, worksheetName: string, range: string, values: unknown[][]): Promise<any> {
+    const driveItemId = this.idCache.driveItems.get(fileId);
+    if (driveItemId == null) throw new Error(`Drive item ID ${fileId} not found in cache. List OneDrive or SharePoint files first.`);
+    return await this.client.updateWorksheetRange(driveItemId, worksheetName, range, values);
+  }
+
+  async getTableDataAsync(fileId: number, tableName: string): Promise<any> {
+    const driveItemId = this.idCache.driveItems.get(fileId);
+    if (driveItemId == null) throw new Error(`Drive item ID ${fileId} not found in cache. List OneDrive or SharePoint files first.`);
+    return await this.client.getTableData(driveItemId, tableName);
   // OneDrive
   // ===========================================================================
 
