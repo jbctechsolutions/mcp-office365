@@ -2892,14 +2892,22 @@ export class GraphRepository implements IRepository {
       plan: {
         id: plan.id,
         title: plan.title,
-        owner: plan.owner,
-        createdDateTime: plan.createdDateTime,
       },
       buckets: buckets.map(b => ({
         id: b.id,
         name: b.name,
+        orderHint: b.orderHint,
       })),
-      tasks,
+      tasks: tasks.map(t => ({
+        id: t.id,
+        title: t.title,
+        bucketId: t.bucketId ?? 0,
+        percentComplete: t.percentComplete,
+        priority: t.priority,
+        startDateTime: t.startDateTime || null,
+        dueDateTime: t.dueDateTime || null,
+        assignments: t.assignees,
+      })),
     };
   }
 

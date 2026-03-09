@@ -19,26 +19,24 @@ const MOCK_DATA: PlanVisualizationData = {
   plan: {
     id: 1,
     title: 'Sprint 42',
-    owner: 'group-abc',
-    createdDateTime: '2026-01-01T00:00:00Z',
   },
   buckets: [
-    { id: 10, name: 'To Do' },
-    { id: 20, name: 'In Progress' },
-    { id: 30, name: 'Done' },
+    { id: 10, name: 'To Do', orderHint: '1' },
+    { id: 20, name: 'In Progress', orderHint: '2' },
+    { id: 30, name: 'Done', orderHint: '3' },
   ],
   tasks: [
     {
-      id: 100, title: 'Design UI', bucketId: 10, assignees: ['user1'],
-      percentComplete: 0, priority: 5, startDateTime: '2026-03-01', dueDateTime: '2026-03-05', createdDateTime: '2026-02-28T00:00:00Z',
+      id: 100, title: 'Design UI', bucketId: 10, assignments: ['user1'],
+      percentComplete: 0, priority: 5, startDateTime: '2026-03-01', dueDateTime: '2026-03-05',
     },
     {
-      id: 101, title: 'Build API', bucketId: 20, assignees: ['user2'],
-      percentComplete: 50, priority: 3, startDateTime: '2026-03-01', dueDateTime: '2026-03-10', createdDateTime: '2026-02-28T00:00:00Z',
+      id: 101, title: 'Build API', bucketId: 20, assignments: ['user2'],
+      percentComplete: 50, priority: 3, startDateTime: '2026-03-01', dueDateTime: '2026-03-10',
     },
     {
-      id: 102, title: 'Write docs', bucketId: 30, assignees: ['user1'],
-      percentComplete: 100, priority: 5, startDateTime: '2026-02-20', dueDateTime: '2026-02-25', createdDateTime: '2026-02-15T00:00:00Z',
+      id: 102, title: 'Write docs', bucketId: 30, assignments: ['user1'],
+      percentComplete: 100, priority: 5, startDateTime: '2026-02-20', dueDateTime: '2026-02-25', completedDateTime: '2026-02-25T00:00:00Z',
     },
   ],
 };
