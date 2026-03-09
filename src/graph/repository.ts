@@ -3111,6 +3111,8 @@ export class GraphRepository implements IRepository {
     const driveItemId = this.idCache.driveItems.get(fileId);
     if (driveItemId == null) throw new Error(`Drive item ID ${fileId} not found in cache. List OneDrive or SharePoint files first.`);
     return await this.client.getTableData(driveItemId, tableName);
+  }
+
   // OneDrive
   // ===========================================================================
 
