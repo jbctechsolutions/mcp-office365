@@ -31,6 +31,7 @@ import {
 } from './mappers/index.js';
 import type { DeviceCodeCallback } from './auth/index.js';
 import { downloadAttachment, getDownloadDir } from './attachments.js';
+import type { PlanVisualizationData } from '../visualization/types.js';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -2867,6 +2868,33 @@ export class GraphRepository implements IRepository {
     const result = await this.client.updatePlannerTaskDetails(cachedTask.taskId, graphUpdates, cachedDetails.etag);
     const newEtag = (result as any)['@odata.etag'] ?? cachedDetails.etag;
     this.idCache.plannerTaskDetails.set(taskId, { taskId: cachedTask.taskId, etag: newEtag });
+  }
+
+  // ===========================================================================
+  // Planner Visualization Data
+  // ===========================================================================
+
+  /**
+   * Assembles plan, buckets, and tasks into a unified visualization data object.
+   */
+  async getPlanVisualizationDataAsync(planId: number): Promise<PlanVisualizationData> {
+    const plan = await this.getPlanAsync(planId);
+    const buckets = await this.listBucketsAsync(planId);
+    const tasks = await this.listPlannerTasksAsync(planId);
+
+    return {
+      plan: {
+        id: plan.id,
+        title: plan.title,
+        owner: plan.owner,
+        createdDateTime: plan.createdDateTime,
+      },
+      buckets: buckets.map(b => ({
+        id: b.id,
+        name: b.name,
+      })),
+      tasks,
+    };
   }
 
   /**
