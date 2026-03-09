@@ -1,396 +1,73 @@
-# Office 365 MCP Server
+# @jbctechsolutions/mcp-office365-mac
 
-[![npm version](https://badge.fury.io/js/mcp-office365-mac.svg)](https://www.npmjs.com/package/mcp-office365-mac)
+[![npm version](https://badge.fury.io/js/%40jbctechsolutions%2Fmcp-office365-mac.svg)](https://www.npmjs.com/package/@jbctechsolutions/mcp-office365-mac)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Node.js Version](https://img.shields.io/node/v/mcp-office365-mac)](https://nodejs.org)
-
-A [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) server that provides full access to Microsoft 365. Read, write, and manage your emails, calendar events, contacts, tasks, and notes directly through MCP tools.
-
-## Features
-
-- **115 tools** - Full read/write access to mail, calendar, contacts, and tasks
-- **Two backends** - AppleScript for classic Outlook, Microsoft Graph API for new Outlook
-- **Two-phase approval** - Destructive operations (delete, send) require explicit confirmation
-- **Works offline** - AppleScript backend requires no network (Graph API requires internet)
-- **Fast and reliable** - Direct communication with Outlook or Microsoft servers
-
-### Available Tools (80)
-
-**Accounts (1)**
-- `list_accounts` - List all configured Outlook accounts
-
-**Mail - Reading (9)**
-- `list_folders` - List all mail folders with unread counts
-- `list_emails` - List emails in a folder with pagination
-- `search_emails` - Search emails by subject, sender, or content
-- `search_emails_advanced` - Advanced email search using KQL (Keyword Query Language) *(Graph API)*
-- `check_new_emails` - Check for new/changed emails since last check (delta sync) *(Graph API)*
-- `get_email` - Get full email details including body
-- `get_emails` - Get multiple emails by ID in a single call (max 25)
-- `list_conversation` - List all messages in an email conversation/thread
-- `get_unread_count` - Get unread email count
-
-**Mail - Sending & Drafts (16)** *(Graph API)*
-- `send_email` - Send an email with attachments and HTML support
-- `create_draft` - Create a new draft email
-- `update_draft` - Update an existing draft
-- `add_draft_attachment` - Add a file attachment to an existing draft *(Graph API)*
-- `add_draft_inline_image` - Add an inline image to an existing draft *(Graph API)*
-- `list_drafts` - List all draft emails
-- `prepare_send_draft` / `confirm_send_draft` - Send a draft (two-phase)
-- `prepare_send_email` / `confirm_send_email` - Compose and send (two-phase)
-- `prepare_reply_email` / `confirm_reply_email` - Reply to a message (two-phase)
-- `prepare_forward_email` / `confirm_forward_email` - Forward a message (two-phase)
-- `reply_as_draft` - Create a reply (or reply-all) as an editable draft
-- `forward_as_draft` - Create a forward as an editable draft
-
-**Attachments (2)**
-- `list_attachments` - List attachment metadata for an email
-- `download_attachment` - Download an email attachment to disk
-
-**Mailbox Organization (24)** *(Graph API)*
-- `mark_email_read` / `mark_email_unread` - Toggle read status
-- `set_email_flag` / `clear_email_flag` - Flag/unflag emails
-- `set_email_categories` - Categorize emails
-- `set_email_importance` - Set email importance/priority level (low, normal, high) *(Graph API)*
-- `create_folder` / `rename_folder` / `move_folder` - Folder management
-- `prepare_delete_email` / `confirm_delete_email` - Delete email (two-phase)
-- `prepare_move_email` / `confirm_move_email` - Move email (two-phase)
-- `prepare_archive_email` / `confirm_archive_email` - Archive email (two-phase)
-- `prepare_junk_email` / `confirm_junk_email` - Mark as junk (two-phase)
-- `prepare_delete_folder` / `confirm_delete_folder` - Delete folder (two-phase)
-- `prepare_empty_folder` / `confirm_empty_folder` - Empty folder (two-phase)
-- `prepare_batch_delete_emails` / `prepare_batch_move_emails` / `confirm_batch_operation` - Batch operations (two-phase)
-
-**Mail Rules (4)** *(Graph API)*
-- `list_mail_rules` - List all inbox mail rules
-- `create_mail_rule` - Create an inbox mail rule with conditions and actions
-- `prepare_delete_mail_rule` / `confirm_delete_mail_rule` - Delete a mail rule (two-phase)
-
-**Master Categories (4)** *(Graph API)*
-- `list_categories` - List all master categories
-- `create_category` - Create a new master category with a color preset
-- `prepare_delete_category` / `confirm_delete_category` - Delete a master category (two-phase)
-
-**Automatic Replies (2)** *(Graph API)*
-- `get_automatic_replies` - Get the current automatic replies (out-of-office) settings
-- `set_automatic_replies` - Set automatic replies (out-of-office) settings
-
-**Mailbox Settings (2)** *(Graph API)*
-- `get_mailbox_settings` - Get the current mailbox settings (language, time zone, date/time formats, working hours)
-- `update_mailbox_settings` - Update mailbox settings (language, time zone, date/time formats)
-
-**Mail Tips (1)** *(Graph API)*
-- `get_mail_tips` - Get mail tips (automatic replies, mailbox full, delivery restrictions, max message size) for email addresses
-
-**Message Headers & MIME (2)** *(Graph API)*
-- `get_message_headers` - Get internet message headers (SPF, DKIM, routing, etc.) for an email
-- `get_message_mime` - Download the full MIME content (.eml) of an email to a local file
-
-**Calendar - Reading (5)**
-- `list_calendars` - List all calendars
-- `list_events` - List events with date range filtering
-- `get_event` - Get event details
-- `search_events` - Search events by title
-- `list_event_instances` - List instances of a recurring event within a date range *(Graph API)*
-
-**Calendar - Writing (6)**
-- `create_event` - Create a new calendar event (supports online Teams meetings via `is_online_meeting`)
-- `update_event` - Update event details (title, time, location, online meeting, etc.); also works on instance IDs from `list_event_instances`
-- `respond_to_event` - Accept, decline, or tentatively accept invitations
-- `delete_event` - Delete a calendar event or recurring series; also works on instance IDs from `list_event_instances`
-- `prepare_delete_event` / `confirm_delete_event` - Delete event with two-phase approval *(Graph API)*
-
-**Calendar Groups (2)** *(Graph API)*
-- `list_calendar_groups` - List all calendar groups
-- `create_calendar_group` - Create a new calendar group
-
-**Calendar Permissions (4)** *(Graph API)*
-- `list_calendar_permissions` - List all sharing permissions for a calendar
-- `create_calendar_permission` - Share a calendar with someone by creating a permission
-- `prepare_delete_calendar_permission` / `confirm_delete_calendar_permission` - Delete a calendar permission (two-phase)
-
-**Room Lists & Rooms (2)** *(Graph API)*
-- `list_room_lists` - List all room lists (building/floor groupings) in the organization
-- `list_rooms` - List meeting rooms, optionally filtered by a room list email
-
-**Contacts (9)**
-- `list_contacts` - List all contacts with pagination
-- `search_contacts` - Search contacts by name
-- `get_contact` - Get contact details
-- `create_contact` - Create a new contact *(Graph API)*
-- `update_contact` - Update contact details *(Graph API)*
-- `prepare_delete_contact` / `confirm_delete_contact` - Delete contact (two-phase) *(Graph API)*
-- `get_contact_photo` - Download a contact's photo *(Graph API)*
-- `set_contact_photo` - Set or update a contact's photo *(Graph API)*
-
-**Contact Folders (4)**
-- `list_contact_folders` - List all contact folders *(Graph API)*
-- `create_contact_folder` - Create a contact folder *(Graph API)*
-- `prepare_delete_contact_folder` / `confirm_delete_contact_folder` - Delete contact folder (two-phase) *(Graph API)*
-
-**Tasks (13)**
-- `list_task_lists` - List all task lists (Microsoft To Do) *(Graph API)*
-- `list_tasks` - List tasks with completion filtering
-- `get_task` - Get task details
-- `search_tasks` - Search tasks by name
-- `create_task` - Create a new task with optional recurrence *(Graph API)*
-- `update_task` - Update task details with optional recurrence *(Graph API)*
-- `complete_task` - Mark a task as complete *(Graph API)*
-- `create_task_list` - Create a new task list *(Graph API)*
-- `rename_task_list` - Rename a task list *(Graph API)*
-- `prepare_delete_task_list` / `confirm_delete_task_list` - Delete task list (two-phase) *(Graph API)*
-- `prepare_delete_task` / `confirm_delete_task` - Delete task (two-phase) *(Graph API)*
-
-**Notes (3)** *(AppleScript only)*
-- `list_notes` - List all notes
-- `get_note` - Get note details
-- `search_notes` - Search notes by content
-
-> **Note**: Notes are only supported with the AppleScript backend. Microsoft Graph API does not provide access to Outlook Notes.
-
-## 🚀 Quick Start
-
-### Option 1: AppleScript Backend (Classic Outlook)
-```bash
-npx -y mcp-office365-mac
-```
-Requires: Classic Outlook for Mac running
-
-### Option 2: Graph API Backend (New Outlook)
-```bash
-# Uses shared Azure AD app - works out of the box
-npx -y mcp-office365-mac
-```
-Set `USE_GRAPH_API=1` in your MCP configuration.
-
-**Pre-authenticate (optional):**
-```bash
-npx @jbctechsolutions/mcp-office365-mac auth
-```
-
-Or just configure the server — it will prompt for authentication on first use.
-
-**For production or work accounts:** See [Custom Azure AD Setup](#custom-azure-ad-setup) below.
-
-## Known Limitations
-
-### AppleScript Backend
-
-**Google Accounts Not Supported**
-
-Google accounts configured in Outlook for Mac cannot be accessed via the AppleScript backend. This is a macOS/Outlook limitation - Google accounts use a proprietary OAuth integration that isn't exposed through AppleScript.
-
-**Supported account types:**
-- Exchange accounts
-- IMAP accounts
-- POP accounts
-
-**Not supported:**
-- Google accounts (native integration)
-
-**Workarounds:**
-1. Configure Google as an IMAP account instead of using the native Google integration
-2. Use the Graph API backend (`USE_GRAPH_API=1`) which has different account handling
-
-**Write Operations**
-
-The AppleScript backend supports calendar event management (create, update, delete, RSVP) and email sending. All other write operations (drafts, mailbox organization, contacts, tasks) are only available via the Graph API backend.
-
-### Microsoft Graph API Backend
-
-**Notes Not Available**
-
-Microsoft Graph API does not provide access to Outlook Notes. If you need access to notes, use the AppleScript backend.
-
-## Backends
-
-### AppleScript (Default)
-
-The default backend uses AppleScript to communicate with Microsoft Outlook for Mac. This works best with classic Outlook and requires Outlook to be running.
-
-### Microsoft Graph API
-
-For "new Outlook" for Mac (cloud-based), use the Microsoft Graph API backend. This connects directly to Microsoft's servers and doesn't require Outlook to be running.
-
-To enable the Graph API backend, set the environment variable:
-
-```bash
-USE_GRAPH_API=1
-```
-
-#### First-Time Authentication
-
-When using the Graph API backend for the first time, you'll need to authenticate:
-
-1. The server will display a device code and URL
-2. Visit https://microsoft.com/devicelogin
-3. Enter the code displayed in the terminal
-4. Sign in with your Microsoft account
-5. Grant the requested permissions
-
-Your authentication tokens are stored securely in `~/.outlook-mcp/tokens.json` and will be refreshed automatically.
-
-#### Required Permissions
-
-The Graph API backend requests these Microsoft Graph permissions:
-- `Mail.ReadWrite` - Read, send, and manage your mail
-- `Calendars.ReadWrite` - Read and manage your calendars
-- `Contacts.ReadWrite` - Read and manage your contacts
-- `Tasks.ReadWrite` - Read and manage your tasks
-- `User.Read` - Read your profile
-- `offline_access` - Maintain access (for token refresh)
-
-#### Security Model - Shared Azure AD App
-
-This project provides a shared Azure AD application for quick-start convenience. **Here's what you should know:**
-
-##### ✅ What the Shared App CAN Access
-
-- **Only data you explicitly consent to** during the device code authentication flow
-- **Only when you're actively using** the MCP server
-- **Tokens are stored locally** on your machine (`~/.outlook-mcp/tokens.json`)
-- **Read/write access** to mail, calendar, contacts, and tasks (with two-phase approval for destructive operations)
-
-##### ❌ What the Shared App CANNOT Access
-
-- **Your data when you're not using the server** - tokens are only used by your local MCP instance
-- **Your password or credentials** - Microsoft handles authentication
-- **Other users' data** - each user authenticates separately with their own account
-
-##### 🔒 How It Works (Technical Details)
-
-```
-Your Device → Shared Azure App ID → Microsoft Authentication
-                                           ↓
-                                    Your Microsoft Account
-                                           ↓
-                                    Access Token (stored locally)
-                                           ↓
-                                    Microsoft Graph API → Your Data
-```
-
-**Key Security Points:**
-- The Azure AD **client ID is public** (not a secret) - it's just an identifier
-- **You authenticate with your own Microsoft account** - the app owner never sees your credentials
-- **Access tokens are issued to you** and stored on your machine - the app owner cannot access them
-- **Delegated permissions** mean the app can only act on your behalf when you're using it
-- **Open source code** - you can audit exactly what the server does with your data
-
-##### 🏢 For Production or Corporate Use
-
-**We recommend creating your own Azure AD app if:**
-- You're using a work/school account with conditional access policies
-- Your organization requires internal app registrations only
-- You want full control over the app lifecycle
-- You need audit logs under your tenant
-
-See [Custom Azure AD Setup](#custom-azure-ad-setup) below for instructions.
-
-##### 🤝 Trust & Transparency
-
-- ✅ **Open Source** - Full code available at [GitHub](https://github.com/jbctechsolutions/mcp-office365-mac)
-- ✅ **Minimal Scopes** - Only requests necessary permissions
-- ✅ **Standard Practice** - Same model used by Postman, Microsoft Graph Explorer, and many open-source tools
-- ✅ **User Control** - You can revoke access anytime in your [Microsoft account settings](https://account.microsoft.com/privacy/app-access)
-- ✅ **Override Option** - Use `OUTLOOK_MCP_CLIENT_ID` environment variable to use your own app
-
-##### ⚠️ Shared App Considerations
-
-**Potential limitations:**
-- If the shared app is revoked or deleted, you'll need to use your own app
-- All users share the app's rate limits (10,000 requests per 10 minutes - sufficient for typical use)
-- Corporate policies may block external multi-tenant apps
-
-**Risk to app owner (JBC Tech Solutions):**
-- Microsoft could revoke the app if abuse is detected
-- No access to your data or liability for your usage
-
-**Cost:** Using the shared app is **free for everyone** - no charges to you or the app owner.
-
-### Custom Azure AD Setup
-
-The server includes a pre-configured shared Azure AD app for quick-start testing. For production use, custom deployments, or work/school accounts with conditional access, create your own:
-
-#### 1. Register Azure AD Application
-
-1. Go to [Azure Portal](https://portal.azure.com) → **Azure Active Directory** → **App registrations** → **New registration**
-2. **Name:** `Outlook MCP Server`
-3. **Supported account types:** "Accounts in any organizational directory and personal Microsoft accounts (Multitenant)"
-4. **Redirect URI:** Leave blank
-5. Click **Register**
-6. Note the **Application (client) ID**
-
-#### 2. Configure Permissions
-
-1. Go to **API permissions** → **Add a permission** → **Microsoft Graph** → **Delegated permissions**
-2. Add these permissions:
-   - `Mail.ReadWrite` - Read, send, and manage mail
-   - `Calendars.ReadWrite` - Manage calendar events
-   - `Contacts.ReadWrite` - Manage contacts
-   - `Tasks.ReadWrite` - Manage tasks
-   - `User.Read` - User profile
-   - `offline_access` - Token refresh
-3. Click **Add permissions**
-
-#### 3. Enable Public Client Flow
-
-1. Go to **Authentication**
-2. **Advanced settings** → **Allow public client flows** → **Yes**
-3. Click **Save**
-
-#### 4. Configure Environment
-
-```json
-{
-  "mcpServers": {
-    "outlook-mac": {
-      "command": "npx",
-      "args": ["-y", "mcp-office365-mac"],
-      "env": {
-        "USE_GRAPH_API": "1",
-        "OUTLOOK_MCP_CLIENT_ID": "your-client-id-here",
-        "OUTLOOK_MCP_TENANT_ID": "common"
-      }
-    }
-  }
-}
-```
-
-#### Tenant Options
-- `common` - Multi-tenant (personal, work, school accounts)
-- `organizations` - Work/school accounts only
-- `consumers` - Personal Microsoft accounts only
-- `{tenant-id}` - Specific Azure AD tenant
-
-#### Trade-offs
-
-| Approach | Pros | Cons |
-|----------|------|------|
-| **Shared App** | Zero setup, works immediately | Shared with others, may not work with conditional access |
-| **Custom App** | Full control, works with conditional access, audit logs | Requires Azure AD setup |
-
-**Cost:** Both options are **free** - Azure AD Free tier is sufficient.
-
-## Installation
-
-### Using npx (recommended)
+[![Node.js Version](https://img.shields.io/node/v/@jbctechsolutions/mcp-office365-mac)](https://nodejs.org)
+
+MCP server for Microsoft 365 on macOS -- mail, calendar, contacts, tasks, teams, people, and planner.
+
+A [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) server that provides **181 tools** for full read/write access to Microsoft 365. Manage your emails, calendar events, contacts, tasks, notes, Teams channels and chats, people directory, and Planner boards directly through MCP.
+
+## Features Overview
+
+| Category | Tools | Description |
+|----------|------:|-------------|
+| Mail -- Reading | 9 | Folders, search, delta sync, conversations, unread counts |
+| Mail -- Sending & Drafts | 16 | Send, draft, reply, forward with two-phase approval |
+| Mail -- Signatures | 2 | Email signature management |
+| Mail -- Organization | 24 | Read/unread, flags, categories, importance, move, delete, batch ops |
+| Mail -- Rules | 4 | Inbox rule management |
+| Mail -- Categories | 4 | Master category management |
+| Mail -- Focused Inbox | 4 | Focused inbox override management |
+| Mail -- Settings & Auto-Replies | 4 | Automatic replies, mailbox settings |
+| Mail -- Tips & Headers | 3 | Mail tips, message headers, MIME export |
+| Attachments | 2 | List and download email attachments |
+| Calendar -- Events | 11 | List, search, create, update, delete, RSVP, recurring instances |
+| Calendar -- Groups | 2 | Calendar group management |
+| Calendar -- Permissions | 4 | Calendar sharing permissions |
+| Calendar -- Rooms | 2 | Room lists and meeting rooms |
+| Contacts & Folders | 13 | CRUD contacts, contact folders, photos |
+| Tasks & Task Lists | 13 | To Do tasks with recurrence, task lists |
+| Checklist Items | 5 | Subtasks on To Do tasks |
+| Linked Resources | 4 | Linked resources on To Do tasks |
+| Task Attachments | 4 | File attachments on To Do tasks |
+| Notes (AppleScript only) | 3 | List, read, and search Outlook notes |
+| Scheduling | 2 | Free/busy availability, meeting time suggestions |
+| Teams -- Channels | 8 | Channel CRUD, team members |
+| Teams -- Channel Messages | 6 | Read and send channel messages with replies |
+| Teams -- Chats | 6 | 1:1 and group chats, send messages |
+| People & Presence | 8 | People search, org chart, presence status |
+| Planner | 17 | Plans, buckets, tasks, task details with ETag |
+| Accounts | 1 | List configured Exchange accounts |
+| **Total** | **181** | |
+
+## Quick Start
+
+### Install and run
 
 ```bash
 npx -y @jbctechsolutions/mcp-office365-mac
 ```
 
-### Using npm
+By default the server uses the **AppleScript backend** (requires classic Outlook for Mac to be running).
+
+To use the **Graph API backend** (new Outlook, or no Outlook installation required), set the environment variable:
 
 ```bash
-npm install -g @jbctechsolutions/mcp-office365-mac
+USE_GRAPH_API=1
 ```
 
-## Configuration
+### Pre-authenticate (optional)
 
-### Claude Desktop
+```bash
+npx @jbctechsolutions/mcp-office365-mac auth
+npx @jbctechsolutions/mcp-office365-mac auth --status
+npx @jbctechsolutions/mcp-office365-mac auth --logout
+```
 
-Add to your Claude Desktop configuration (`~/Library/Application Support/Claude/claude_desktop_config.json`):
+### Claude Desktop configuration
+
+Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
 
 **AppleScript backend (default):**
 ```json
@@ -404,7 +81,7 @@ Add to your Claude Desktop configuration (`~/Library/Application Support/Claude/
 }
 ```
 
-**Graph API backend (for new Outlook):**
+**Graph API backend:**
 ```json
 {
   "mcpServers": {
@@ -419,11 +96,9 @@ Add to your Claude Desktop configuration (`~/Library/Application Support/Claude/
 }
 ```
 
-### Claude Code
+### Claude Code configuration
 
-#### Option 1: Install as Plugin (Recommended)
-
-Add the plugin marketplace to your `~/.claude/settings.json`:
+**Option 1: Plugin (recommended)** -- add to `~/.claude/settings.json`:
 
 ```json
 {
@@ -441,33 +116,8 @@ Add the plugin marketplace to your `~/.claude/settings.json`:
 }
 ```
 
-#### Option 2: Manual Configuration
+**Option 2: Manual** -- add `.mcp.json` to your project or `~/.claude/.mcp.json` globally:
 
-**Project-specific** - Add `.mcp.json` to your project:
-```json
-{
-  "mcpServers": {
-    "outlook-mac": {
-      "command": "npx",
-      "args": ["-y", "@jbctechsolutions/mcp-office365-mac"]
-    }
-  }
-}
-```
-
-**Global** - Create `~/.claude/.mcp.json`:
-```json
-{
-  "mcpServers": {
-    "outlook-mac": {
-      "command": "npx",
-      "args": ["-y", "@jbctechsolutions/mcp-office365-mac"]
-    }
-  }
-}
-```
-
-**Graph API backend (for new Outlook):**
 ```json
 {
   "mcpServers": {
@@ -482,208 +132,540 @@ Add the plugin marketplace to your `~/.claude/settings.json`:
 }
 ```
 
-## Requirements
+## Authentication
 
-### AppleScript Backend
-- macOS
-- Microsoft Outlook for Mac (must be running when using tools)
-- Node.js 18 or later
-- Automation permission for Outlook (you'll be prompted on first use)
+### Device Code Flow (Graph API)
 
-### Graph API Backend
-- macOS, Windows, or Linux (no Outlook installation required)
-- Microsoft account (personal or work/school)
-- Node.js 18 or later
-- Internet connection
-
-## Permissions
-
-### AppleScript Backend
-
-The MCP server communicates with Outlook via AppleScript. On first use, you'll be prompted to grant automation permission. You can also configure this in:
-
-**System Settings > Privacy & Security > Automation**
-
-Make sure your terminal or Claude Desktop is allowed to control Microsoft Outlook.
-
-### Graph API Backend
-
-The Graph API backend requires you to sign in with your Microsoft account and grant permissions to read your mail, calendar, contacts, and tasks. See the [First-Time Authentication](#first-time-authentication) section above.
-
-## Troubleshooting
-
-### AppleScript Backend
-
-#### Outlook not running
-
-The server requires Outlook to be running. Start Microsoft Outlook before using the MCP tools.
-
-#### Permission denied
-
-If you see an automation permission error:
-
-1. Open **System Settings > Privacy & Security > Automation**
-2. Find your terminal app or Claude Desktop
-3. Enable the toggle for Microsoft Outlook
-
-#### Timeout errors
-
-Large mailboxes may cause timeout errors. Try reducing the `limit` parameter in your queries.
-
-### Graph API Backend
-
-#### Pre-authentication
-
-You can authenticate before configuring the MCP server:
-
-```bash
-# Authenticate
-npx @jbctechsolutions/mcp-office365-mac auth
-
-# Check status
-npx @jbctechsolutions/mcp-office365-mac auth --status
-
-# Sign out
-npx @jbctechsolutions/mcp-office365-mac auth --logout
-```
-
-#### Authentication required
-
-If you see "Microsoft Graph authentication required", you need to complete the device code flow:
-
-1. Look for the device code in the terminal output
+1. The server displays a device code and URL
 2. Visit https://microsoft.com/devicelogin
-3. Enter the code and sign in
+3. Enter the code and sign in with your Microsoft account
+4. Grant the requested permissions
 
-#### Rate limited
+Tokens are stored in `~/.outlook-mcp/tokens.json` and refreshed automatically.
 
-Microsoft Graph API has rate limits. If you see rate limit errors, wait a few moments before trying again.
+### Custom Azure AD App Registration
 
-#### Permission denied
+For production, work accounts with conditional access, or full control over the app lifecycle:
 
-If you see permission errors, you may need to re-authenticate or your admin may have restricted access. Sign out and sign in again:
+1. **Register** in [Azure Portal](https://portal.azure.com) > Azure Active Directory > App registrations > New registration
+   - Name: `Outlook MCP Server`
+   - Supported account types: Multitenant + personal accounts
+   - Redirect URI: leave blank
+2. **Add API permissions** (Microsoft Graph > Delegated): see [Required Graph API Permissions](#required-graph-api-permissions) below
+3. **Enable public client flows**: Authentication > Advanced settings > Allow public client flows > Yes
+4. **Configure** with environment variables:
 
-```bash
-# Delete token cache to force re-authentication
-rm ~/.outlook-mcp/tokens.json
+```json
+{
+  "mcpServers": {
+    "outlook-mac": {
+      "command": "npx",
+      "args": ["-y", "@jbctechsolutions/mcp-office365-mac"],
+      "env": {
+        "USE_GRAPH_API": "1",
+        "OUTLOOK_MCP_CLIENT_ID": "your-client-id-here",
+        "OUTLOOK_MCP_TENANT_ID": "common"
+      }
+    }
+  }
+}
 ```
 
-#### Notes not available
+**Tenant options:** `common` (all accounts), `organizations` (work/school only), `consumers` (personal only), or a specific tenant ID.
 
-Outlook Notes are not supported by Microsoft Graph API. If you need access to notes, use the AppleScript backend instead.
+## Tool Reference
 
-## How It Works
+All 181 tools listed below. Tools marked *(Graph API)* require `USE_GRAPH_API=1`. Tools marked *(AppleScript only)* are not available with Graph API.
 
-This MCP server supports two backends:
+<details>
+<summary><strong>Accounts (1)</strong></summary>
 
-### AppleScript Backend (Default)
+| Tool | Description |
+|------|-------------|
+| `list_accounts` | List all Exchange accounts configured in Outlook |
 
-Uses AppleScript to communicate with Microsoft Outlook for Mac:
-- Works best with classic Outlook for Mac
-- Requires Outlook to be running
-- Works offline (no network required)
-- Calendar write ops (create, update, delete, RSVP) and email sending
-- Full support for Notes
+</details>
 
-### Graph API Backend
+<details>
+<summary><strong>Mail -- Reading (9)</strong></summary>
 
-Uses Microsoft Graph API to access your data:
-- Works with "new Outlook" for Mac (or any platform - no Outlook installation required)
-- Connects directly to Microsoft's servers
-- Full read/write operations: mail, drafts, calendar, contacts, tasks, mailbox organization
-- Two-phase approval for destructive operations (delete, send)
-- Supports personal and work/school accounts
-- Does not support Notes (Graph API limitation)
+| Tool | Description |
+|------|-------------|
+| `list_folders` | List all mail folders with message and unread counts |
+| `list_emails` | List emails in a folder with pagination |
+| `search_emails` | Search emails by subject, sender, or content |
+| `search_emails_advanced` | Advanced email search using KQL (Keyword Query Language) *(Graph API)* |
+| `check_new_emails` | Check for new/changed emails since last check via delta sync *(Graph API)* |
+| `get_email` | Get full email details including body |
+| `get_emails` | Get multiple emails by ID in a single call (max 25) |
+| `list_conversation` | List all messages in an email conversation/thread *(Graph API)* |
+| `get_unread_count` | Get unread email count |
+
+</details>
+
+<details>
+<summary><strong>Mail -- Sending & Drafts (16)</strong></summary>
+
+| Tool | Description |
+|------|-------------|
+| `send_email` | Send an email with optional CC, BCC, attachments, and HTML |
+| `create_draft` | Create a draft email for later editing and sending |
+| `update_draft` | Update an existing draft email |
+| `add_draft_attachment` | Add a file attachment to a draft *(Graph API)* |
+| `add_draft_inline_image` | Add an inline image to a draft for HTML body *(Graph API)* |
+| `list_drafts` | List all draft emails |
+| `prepare_send_draft` | Prepare to send a draft (two-phase approval) |
+| `confirm_send_draft` | Confirm and send a draft |
+| `prepare_send_email` | Prepare to send an email immediately (two-phase) |
+| `confirm_send_email` | Confirm and send the email |
+| `prepare_reply_email` | Prepare to reply to an email (two-phase) |
+| `confirm_reply_email` | Confirm and send the reply |
+| `prepare_forward_email` | Prepare to forward an email (two-phase) |
+| `confirm_forward_email` | Confirm and forward the email |
+| `reply_as_draft` | Create a reply (or reply-all) as an editable draft |
+| `forward_as_draft` | Create a forward as an editable draft |
+
+</details>
+
+<details>
+<summary><strong>Mail -- Organization (24)</strong></summary>
+
+| Tool | Description |
+|------|-------------|
+| `mark_email_read` | Mark an email as read |
+| `mark_email_unread` | Mark an email as unread |
+| `set_email_flag` | Set a follow-up flag on an email |
+| `clear_email_flag` | Clear the follow-up flag from an email |
+| `set_email_categories` | Set categories on an email |
+| `set_email_importance` | Set email importance level (low, normal, high) *(Graph API)* |
+| `create_folder` | Create a new mail folder |
+| `rename_folder` | Rename a mail folder |
+| `move_folder` | Move a mail folder under a different parent |
+| `prepare_delete_email` | Prepare to delete an email (two-phase) |
+| `confirm_delete_email` | Confirm email deletion |
+| `prepare_move_email` | Prepare to move an email to another folder (two-phase) |
+| `confirm_move_email` | Confirm email move |
+| `prepare_archive_email` | Prepare to archive an email (two-phase) |
+| `confirm_archive_email` | Confirm email archive |
+| `prepare_junk_email` | Prepare to mark an email as junk (two-phase) |
+| `confirm_junk_email` | Confirm marking as junk |
+| `prepare_delete_folder` | Prepare to delete a mail folder (two-phase) |
+| `confirm_delete_folder` | Confirm folder deletion |
+| `prepare_empty_folder` | Prepare to empty a folder (two-phase) |
+| `confirm_empty_folder` | Confirm emptying folder |
+| `prepare_batch_delete_emails` | Prepare to batch delete multiple emails (two-phase) |
+| `prepare_batch_move_emails` | Prepare to batch move multiple emails (two-phase) |
+| `confirm_batch_operation` | Confirm a batch delete or move operation |
+
+</details>
+
+<details>
+<summary><strong>Mail -- Rules (4)</strong> <em>(Graph API)</em></summary>
+
+| Tool | Description |
+|------|-------------|
+| `list_mail_rules` | List all inbox mail rules |
+| `create_mail_rule` | Create an inbox rule with conditions and actions |
+| `prepare_delete_mail_rule` | Prepare to delete a mail rule (two-phase) |
+| `confirm_delete_mail_rule` | Confirm mail rule deletion |
+
+</details>
+
+<details>
+<summary><strong>Mail -- Categories (4)</strong> <em>(Graph API)</em></summary>
+
+| Tool | Description |
+|------|-------------|
+| `list_categories` | List all master categories |
+| `create_category` | Create a new master category with a color preset |
+| `prepare_delete_category` | Prepare to delete a master category (two-phase) |
+| `confirm_delete_category` | Confirm category deletion |
+
+</details>
+
+<details>
+<summary><strong>Mail -- Focused Inbox (4)</strong> <em>(Graph API)</em></summary>
+
+| Tool | Description |
+|------|-------------|
+| `list_focused_overrides` | List all focused inbox overrides |
+| `create_focused_override` | Create a focused inbox override for a sender |
+| `prepare_delete_focused_override` | Prepare to delete a focused inbox override (two-phase) |
+| `confirm_delete_focused_override` | Confirm focused inbox override deletion |
+
+</details>
+
+<details>
+<summary><strong>Mail -- Settings & Auto-Replies (4)</strong> <em>(Graph API)</em></summary>
+
+| Tool | Description |
+|------|-------------|
+| `get_automatic_replies` | Get automatic replies (out-of-office) settings |
+| `set_automatic_replies` | Set automatic replies (out-of-office) settings |
+| `get_mailbox_settings` | Get mailbox settings (language, time zone, formats, working hours) |
+| `update_mailbox_settings` | Update mailbox settings (language, time zone, formats) |
+
+</details>
+
+<details>
+<summary><strong>Mail -- Tips & Headers (3)</strong> <em>(Graph API)</em></summary>
+
+| Tool | Description |
+|------|-------------|
+| `get_mail_tips` | Get mail tips (auto-replies, mailbox full, restrictions) for addresses |
+| `get_message_headers` | Get internet message headers (SPF, DKIM, routing) |
+| `get_message_mime` | Download the full MIME content (.eml) of an email |
+
+</details>
+
+<details>
+<summary><strong>Attachments (2)</strong></summary>
+
+| Tool | Description |
+|------|-------------|
+| `list_attachments` | List attachment metadata (name, size, type) for an email |
+| `download_attachment` | Download an email attachment to disk |
+
+</details>
+
+<details>
+<summary><strong>Calendar -- Events (11)</strong></summary>
+
+| Tool | Description |
+|------|-------------|
+| `list_calendars` | List all calendar folders |
+| `list_events` | List calendar events with date range filtering |
+| `get_event` | Get event details |
+| `search_events` | Search events by title and/or date range |
+| `create_event` | Create a calendar event (supports Teams online meetings) |
+| `update_event` | Update event details (single instance or series) |
+| `respond_to_event` | Accept, decline, or tentatively accept an invitation |
+| `delete_event` | Delete a calendar event or recurring series |
+| `prepare_delete_event` | Prepare to delete a calendar event (two-phase) *(Graph API)* |
+| `confirm_delete_event` | Confirm calendar event deletion |
+| `list_event_instances` | List instances of a recurring event in a date range *(Graph API)* |
+
+</details>
+
+<details>
+<summary><strong>Calendar -- Groups (2)</strong> <em>(Graph API)</em></summary>
+
+| Tool | Description |
+|------|-------------|
+| `list_calendar_groups` | List all calendar groups |
+| `create_calendar_group` | Create a new calendar group |
+
+</details>
+
+<details>
+<summary><strong>Calendar -- Permissions (4)</strong> <em>(Graph API)</em></summary>
+
+| Tool | Description |
+|------|-------------|
+| `list_calendar_permissions` | List sharing permissions for a calendar |
+| `create_calendar_permission` | Share a calendar by creating a permission |
+| `prepare_delete_calendar_permission` | Prepare to delete a calendar permission (two-phase) |
+| `confirm_delete_calendar_permission` | Confirm calendar permission deletion |
+
+</details>
+
+<details>
+<summary><strong>Calendar -- Rooms (2)</strong> <em>(Graph API)</em></summary>
+
+| Tool | Description |
+|------|-------------|
+| `list_room_lists` | List all room lists (building/floor groupings) |
+| `list_rooms` | List meeting rooms, optionally filtered by room list |
+
+</details>
+
+<details>
+<summary><strong>Contacts & Folders (13)</strong></summary>
+
+| Tool | Description |
+|------|-------------|
+| `list_contacts` | List contacts with pagination |
+| `search_contacts` | Search contacts by name |
+| `get_contact` | Get contact details |
+| `create_contact` | Create a new contact *(Graph API)* |
+| `update_contact` | Update contact details *(Graph API)* |
+| `prepare_delete_contact` | Prepare to delete a contact (two-phase) *(Graph API)* |
+| `confirm_delete_contact` | Confirm contact deletion |
+| `get_contact_photo` | Download a contact's photo *(Graph API)* |
+| `set_contact_photo` | Set or update a contact's photo *(Graph API)* |
+| `list_contact_folders` | List all contact folders *(Graph API)* |
+| `create_contact_folder` | Create a contact folder *(Graph API)* |
+| `prepare_delete_contact_folder` | Prepare to delete a contact folder (two-phase) *(Graph API)* |
+| `confirm_delete_contact_folder` | Confirm contact folder deletion |
+
+</details>
+
+<details>
+<summary><strong>Tasks & Task Lists (13)</strong></summary>
+
+| Tool | Description |
+|------|-------------|
+| `list_task_lists` | List all task lists (Microsoft To Do) *(Graph API)* |
+| `list_tasks` | List tasks with pagination and filtering |
+| `search_tasks` | Search tasks by name |
+| `get_task` | Get task details |
+| `create_task` | Create a task with optional recurrence *(Graph API)* |
+| `update_task` | Update task details with optional recurrence *(Graph API)* |
+| `complete_task` | Mark a task as completed *(Graph API)* |
+| `create_task_list` | Create a new task list *(Graph API)* |
+| `rename_task_list` | Rename a task list *(Graph API)* |
+| `prepare_delete_task` | Prepare to delete a task (two-phase) *(Graph API)* |
+| `confirm_delete_task` | Confirm task deletion |
+| `prepare_delete_task_list` | Prepare to delete a task list (two-phase) *(Graph API)* |
+| `confirm_delete_task_list` | Confirm task list deletion |
+
+</details>
+
+<details>
+<summary><strong>Checklist Items (5)</strong> <em>(Graph API)</em></summary>
+
+| Tool | Description |
+|------|-------------|
+| `list_checklist_items` | List checklist items (subtasks) on a To Do task |
+| `create_checklist_item` | Create a checklist item on a To Do task |
+| `update_checklist_item` | Update a checklist item (toggle check, rename) |
+| `prepare_delete_checklist_item` | Prepare to delete a checklist item (two-phase) |
+| `confirm_delete_checklist_item` | Confirm checklist item deletion |
+
+</details>
+
+<details>
+<summary><strong>Linked Resources (4)</strong> <em>(Graph API)</em></summary>
+
+| Tool | Description |
+|------|-------------|
+| `list_linked_resources` | List linked resources on a To Do task |
+| `create_linked_resource` | Create a linked resource on a To Do task |
+| `prepare_delete_linked_resource` | Prepare to delete a linked resource (two-phase) |
+| `confirm_delete_linked_resource` | Confirm linked resource deletion |
+
+</details>
+
+<details>
+<summary><strong>Task Attachments (4)</strong> <em>(Graph API)</em></summary>
+
+| Tool | Description |
+|------|-------------|
+| `list_task_attachments` | List attachments on a To Do task |
+| `create_task_attachment` | Attach a file to a To Do task (base64 encoded) |
+| `prepare_delete_task_attachment` | Prepare to delete a task attachment (two-phase) |
+| `confirm_delete_task_attachment` | Confirm task attachment deletion |
+
+</details>
+
+<details>
+<summary><strong>Notes (3)</strong> <em>(AppleScript only)</em></summary>
+
+| Tool | Description |
+|------|-------------|
+| `list_notes` | List notes with pagination |
+| `get_note` | Get note details |
+| `search_notes` | Search notes by content |
+
+> Notes are only available with the AppleScript backend. Microsoft Graph API does not provide access to Outlook Notes.
+
+</details>
+
+<details>
+<summary><strong>Scheduling (2)</strong> <em>(Graph API)</em></summary>
+
+| Tool | Description |
+|------|-------------|
+| `check_availability` | Check free/busy availability for people in a time window |
+| `find_meeting_times` | Find available meeting time slots for a group of attendees |
+
+</details>
+
+<details>
+<summary><strong>Mail -- Signatures (2)</strong> <em>(Graph API)</em></summary>
+
+| Tool | Description |
+|------|-------------|
+| `set_signature` | Save an email signature auto-appended to outgoing emails |
+| `get_signature` | Get the currently stored email signature |
+
+</details>
+
+<details>
+<summary><strong>Teams -- Channels (8)</strong> <em>(Graph API)</em></summary>
+
+| Tool | Description |
+|------|-------------|
+| `list_teams` | List all Microsoft Teams the user has joined |
+| `list_channels` | List all channels in a team |
+| `get_channel` | Get details for a specific channel |
+| `create_channel` | Create a new channel in a team |
+| `update_channel` | Update a channel name or description |
+| `prepare_delete_channel` | Prepare to delete a channel (two-phase) |
+| `confirm_delete_channel` | Confirm channel deletion |
+| `list_team_members` | List all members of a team |
+
+</details>
+
+<details>
+<summary><strong>Teams -- Channel Messages (6)</strong> <em>(Graph API)</em></summary>
+
+| Tool | Description |
+|------|-------------|
+| `list_channel_messages` | List recent messages in a channel |
+| `get_channel_message` | Get a specific channel message with its replies |
+| `prepare_send_channel_message` | Prepare to send a message to a channel (two-phase) |
+| `confirm_send_channel_message` | Confirm sending a channel message |
+| `prepare_reply_channel_message` | Prepare to reply to a channel message (two-phase) |
+| `confirm_reply_channel_message` | Confirm replying to a channel message |
+
+</details>
+
+<details>
+<summary><strong>Teams -- Chats (6)</strong> <em>(Graph API)</em></summary>
+
+| Tool | Description |
+|------|-------------|
+| `list_chats` | List recent 1:1 and group chats |
+| `get_chat` | Get details of a specific chat |
+| `list_chat_messages` | List recent messages in a chat |
+| `prepare_send_chat_message` | Prepare to send a message in a chat (two-phase) |
+| `confirm_send_chat_message` | Confirm sending a chat message |
+| `list_chat_members` | List members of a chat |
+
+</details>
+
+<details>
+<summary><strong>People & Presence (8)</strong> <em>(Graph API)</em></summary>
+
+| Tool | Description |
+|------|-------------|
+| `list_relevant_people` | List AI-ranked relevant people for the current user |
+| `search_people` | Search people by name or email |
+| `get_manager` | Get the current user's manager |
+| `get_direct_reports` | Get the current user's direct reports |
+| `get_user_profile` | Get a user's profile information |
+| `get_user_photo` | Get a user's profile photo |
+| `get_user_presence` | Get a user's presence/availability status |
+| `get_users_presence` | Batch get presence status for multiple users |
+
+</details>
+
+<details>
+<summary><strong>Planner (17)</strong> <em>(Graph API)</em></summary>
+
+| Tool | Description |
+|------|-------------|
+| `list_plans` | List all Planner plans the user has access to |
+| `get_plan` | Get details for a specific Planner plan |
+| `create_plan` | Create a new Planner plan in a Microsoft 365 group |
+| `update_plan` | Update a Planner plan title |
+| `list_buckets` | List all buckets in a Planner plan |
+| `create_bucket` | Create a new bucket in a Planner plan |
+| `update_bucket` | Update a Planner bucket name |
+| `prepare_delete_bucket` | Prepare to delete a Planner bucket (two-phase) |
+| `confirm_delete_bucket` | Confirm Planner bucket deletion |
+| `list_planner_tasks` | List all tasks in a Planner plan |
+| `get_planner_task` | Get details for a specific Planner task |
+| `create_planner_task` | Create a new task in a Planner plan |
+| `update_planner_task` | Update a Planner task |
+| `prepare_delete_planner_task` | Prepare to delete a Planner task (two-phase) |
+| `confirm_delete_planner_task` | Confirm Planner task deletion |
+| `get_planner_task_details` | Get task details (description, checklist, references) |
+| `update_planner_task_details` | Update task details (requires ETag from get_planner_task_details) |
+
+</details>
+
+## Architecture
+
+### Dual Backend
+
+The server supports two backends, selected via the `USE_GRAPH_API` environment variable:
+
+- **AppleScript (default)** -- communicates with classic Outlook for Mac via `osascript`. Works offline, no Microsoft account needed. Supports reading mail, calendar, contacts, tasks, and notes, plus calendar write operations and email sending.
+- **Microsoft Graph API** (`USE_GRAPH_API=1`) -- connects to Microsoft 365 cloud services. Full read/write across all categories. No Outlook installation required. Works on macOS, Windows, and Linux.
+
+### Two-Phase Approval
+
+Destructive operations (delete, send, move, forward, etc.) use a prepare/confirm pattern. The `prepare_*` call returns a preview and a short-lived approval token. The `confirm_*` call executes the action only with a valid token. This prevents accidental data loss.
+
+### ID Caching
+
+The server maintains an internal ID mapping layer. AppleScript and Graph API use different ID formats; the caching layer assigns stable numeric IDs so tool callers do not need to track backend-specific identifiers.
+
+### ETag Caching
+
+Planner resources use ETag-based concurrency control. The server caches ETags from read operations and automatically includes them in update/delete requests to prevent conflicts.
+
+### Source Layout
+
+```
+src/
+  applescript/       AppleScript integration (default backend)
+  graph/             Microsoft Graph API integration
+    auth/            MSAL authentication, device code flow, token cache
+    client/          Graph client wrapper with response caching
+    mappers/         Graph-to-internal type mappers
+  tools/             MCP tool implementations (mail-send, mailbox-organization, etc.)
+  types/             TypeScript type definitions
+  utils/             Date parsing, error handling, utilities
+```
+
+## Required Graph API Permissions
+
+These delegated permissions are requested when using the Graph API backend:
+
+| Permission | Purpose |
+|------------|---------|
+| `Mail.ReadWrite` | Read, send, and manage mail |
+| `Calendars.ReadWrite` | Read and manage calendar events |
+| `Contacts.ReadWrite` | Read and manage contacts |
+| `Tasks.ReadWrite` | Read and manage To Do tasks |
+| `User.Read` | Read user profile |
+| `offline_access` | Token refresh (maintain access) |
+| `ChannelMessage.Read.All` | Read Teams channel messages |
+| `ChannelMessage.Send` | Send Teams channel messages |
+| `Channel.ReadBasic.All` | Read Teams channel metadata |
+| `Team.ReadBasic.All` | Read Teams metadata |
+| `Chat.ReadWrite` | Read and send Teams chat messages |
+| `ChatMessage.Send` | Send Teams chat messages |
+| `People.Read` | Read relevant people |
+| `User.ReadBasic.All` | Read basic user profiles and photos |
+| `Presence.Read.All` | Read user presence/availability |
+| `Group.Read.All` | Read Microsoft 365 groups (for Planner) |
 
 ## Environment Variables
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `USE_GRAPH_API` | Set to `1` or `true` to use Microsoft Graph API backend | (unset, uses AppleScript) |
+| `USE_GRAPH_API` | Set to `1` or `true` for Graph API backend | (unset -- uses AppleScript) |
 | `OUTLOOK_MCP_CLIENT_ID` | Override the embedded Azure AD client ID | (embedded) |
-| `OUTLOOK_MCP_TENANT_ID` | Azure AD tenant ID (`common` for multi-tenant) | `common` |
+| `OUTLOOK_MCP_TENANT_ID` | Azure AD tenant ID | `common` |
 
-## Development
+## Known Limitations
 
-```bash
-# Install dependencies
-npm install
+**AppleScript backend:**
+- Google accounts in Outlook are not accessible (macOS/Outlook limitation). Use IMAP configuration or the Graph API backend instead.
+- Write operations limited to calendar events and email sending. All other writes require Graph API.
 
-# Build
-npm run build
+**Graph API backend:**
+- Outlook Notes are not available (Graph API does not expose them). Use AppleScript backend for notes.
 
-# Run tests
-npm test
+## Contributing
 
-# Run with coverage
-npm run test:coverage
+We welcome contributions. Please see our [Contributing Guide](CONTRIBUTING.md) for details.
 
-# Lint
-npm run lint
+**Support policy:** This is a part-time, hobby project. Response times are best-effort (typically 1-2 weeks for bug reports). See [SUPPORT.md](SUPPORT.md) for details.
 
-# Type check
-npm run typecheck
-```
-
-## Architecture
-
-```
-src/
-├── applescript/        # AppleScript integration (default backend)
-│   ├── executor.ts     # osascript wrapper
-│   ├── scripts.ts      # AppleScript templates
-│   ├── parser.ts       # Output parsing
-│   ├── repository.ts   # IRepository implementation
-│   └── content-readers.ts  # Content reader implementations
-├── graph/              # Microsoft Graph API integration (optional backend)
-│   ├── auth/           # Authentication (MSAL, device code flow)
-│   │   ├── config.ts   # Azure AD configuration
-│   │   ├── token-cache.ts  # Token persistence
-│   │   └── device-code-flow.ts  # Authentication flow
-│   ├── client/         # Graph client wrapper
-│   │   ├── graph-client.ts  # API client
-│   │   └── cache.ts    # Response caching
-│   ├── mappers/        # Graph type to row type mappers
-│   ├── repository.ts   # IRepository implementation
-│   └── content-readers.ts  # Content reader implementations
-├── tools/              # MCP tool implementations
-│   ├── mail-send.ts   # Draft/send/reply/forward tools
-│   └── mailbox-organization.ts  # Move, delete, flag, categorize tools
-├── types/              # TypeScript type definitions
-└── utils/              # Utilities (dates, errors, etc.)
-```
-
-## 🤝 Contributing
-
-We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) for details.
-
-**Support Policy:** This is a part-time, hobby project. Response times are best-effort (typically 1-2 weeks for bug reports). See [SUPPORT.md](SUPPORT.md) for details.
-
-### Ways to Contribute
-- 🐛 Report bugs
-- ✨ Suggest features
-- 📝 Improve documentation
-- 🔀 Submit pull requests
-- 💬 Help others in [Discussions](https://github.com/jbctechsolutions/mcp-office365-mac/discussions)
-
-### Code of Conduct
 This project adheres to our [Code of Conduct](CODE_OF_CONDUCT.md).
 
-## 💝 Support This Project
+## Support This Project
 
-If you find this project valuable, consider supporting its development:
+- Star this repository
+- [GitHub Sponsors](https://github.com/sponsors/jbctechsolutions)
+- [Buy Me a Coffee](https://buymeacoffee.com/jbctechsolutions)
+- [PayPal](https://paypal.me/jbctechsolutions)
 
-- ⭐ **Star** this repository
-- 💰 **Sponsor** via [GitHub Sponsors](https://github.com/sponsors/jbctechsolutions)
-- ☕ **Buy Me a Coffee** at [buymeacoffee.com/jbctechsolutions](https://buymeacoffee.com/jbctechsolutions)
-- 💵 **Donate** via [PayPal](https://paypal.me/jbctechsolutions)
+## License
 
-Your support helps maintain and improve this project! 🙏
-
-## 📄 License
-
-MIT License
-
-Copyright (c) 2026 JBC Tech Solutions, LLC
-
-See [LICENSE](LICENSE) file for details.
+MIT License -- Copyright (c) 2026 JBC Tech Solutions, LLC. See [LICENSE](LICENSE) for details.
