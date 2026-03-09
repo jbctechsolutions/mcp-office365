@@ -47,12 +47,13 @@ export type OperationType =
   | 'delete_linked_resource'
   | 'delete_task_attachment'
   | 'delete_bucket'
-  | 'delete_planner_task';
+  | 'delete_planner_task'
+  | 'update_excel_range';
 
 /**
  * Target resource types.
  */
-export type TargetType = 'email' | 'folder' | 'event' | 'contact' | 'task' | 'task_list' | 'rule' | 'contact_folder' | 'category' | 'focused_override' | 'calendar_permission' | 'channel' | 'channel_message' | 'chat_message' | 'checklist_item' | 'linked_resource' | 'task_attachment' | 'bucket' | 'planner_task';
+export type TargetType = 'email' | 'folder' | 'event' | 'contact' | 'task' | 'task_list' | 'rule' | 'contact_folder' | 'category' | 'focused_override' | 'calendar_permission' | 'channel' | 'channel_message' | 'chat_message' | 'checklist_item' | 'linked_resource' | 'task_attachment' | 'bucket' | 'planner_task' | 'excel_range';
 
 // =============================================================================
 // Token Types
