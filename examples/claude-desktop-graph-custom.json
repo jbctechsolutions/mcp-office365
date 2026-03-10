@@ -4,7 +4,6 @@
       "command": "npx",
       "args": ["-y", "mcp-office365"],
       "env": {
-        "USE_GRAPH_API": "1",
         "OUTLOOK_MCP_CLIENT_ID": "your-azure-app-client-id",
         "OUTLOOK_MCP_TENANT_ID": "common"
       }

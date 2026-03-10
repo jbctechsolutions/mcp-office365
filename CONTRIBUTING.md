@@ -58,10 +58,7 @@ Test your changes with Claude Desktop or Claude Code:
   "mcpServers": {
     "office365-dev": {
       "command": "node",
-      "args": ["/path/to/mcp-office365/dist/index.js"],
-      "env": {
-        "USE_GRAPH_API": "1"
-      }
+      "args": ["/path/to/mcp-office365/dist/index.js"]
     }
   }
 }

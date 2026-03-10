@@ -2,10 +2,7 @@
   "mcpServers": {
     "office365": {
       "command": "npx",
-      "args": ["-y", "mcp-office365"],
-      "env": {
-        "USE_GRAPH_API": "1"
-      }
+      "args": ["-y", "mcp-office365"]
     }
   }
 }

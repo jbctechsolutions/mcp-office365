@@ -4,6 +4,7 @@
       "command": "npx",
       "args": ["-y", "mcp-office365"],
       "env": {
+        "USE_APPLESCRIPT": "1",
         "OUTLOOK_PROFILE": "Main Profile"
       }
     }

@@ -6,12 +6,12 @@
 /**
  * Office 365 MCP Server
  *
- * A Model Context Protocol server that provides read-only access to
- * Outlook for Mac via AppleScript or Microsoft Graph API.
+ * A Model Context Protocol server that provides full read/write access to
+ * Microsoft 365 via Microsoft Graph API or legacy AppleScript.
  *
  * Backend selection:
- * - Set USE_GRAPH_API=1 to use Microsoft Graph API (required for new Outlook)
- * - Otherwise, AppleScript is used (works with classic Outlook)
+ * - Graph API is the default (full-featured, cross-platform)
+ * - Set USE_APPLESCRIPT=1 to use legacy AppleScript backend (macOS + classic Outlook only)
  */
 
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
@@ -295,9 +295,15 @@ import {
 
 /**
  * Determines if we should use the Microsoft Graph API backend.
+ * Graph API is the default. Set USE_APPLESCRIPT=1 to use the legacy AppleScript backend.
+ * USE_GRAPH_API is still supported for backwards compatibility but is now the default.
  */
 function shouldUseGraphApi(): boolean {
-  return process.env['USE_GRAPH_API'] === '1' || process.env['USE_GRAPH_API'] === 'true';
+  const useAppleScript = process.env['USE_APPLESCRIPT'] === '1' || process.env['USE_APPLESCRIPT'] === 'true';
+  if (useAppleScript) {
+    return false;
+  }
+  return true;
 }
 
 // =============================================================================

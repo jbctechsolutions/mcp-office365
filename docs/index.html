@@ -921,17 +921,6 @@
       <div class="backends-grid">
         <div class="backend-card fade-in">
           <span class="backend-tag default">Default</span>
-          <h3>AppleScript</h3>
-          <p>Direct integration with Outlook for Mac via AppleScript automation. No cloud credentials required.</p>
-          <ul class="backend-features">
-            <li>Works offline</li>
-            <li>No Azure app registration</li>
-            <li>Classic Outlook for Mac</li>
-            <li>Zero configuration</li>
-          </ul>
-        </div>
-        <div class="backend-card fade-in">
-          <span class="backend-tag cloud">Cloud</span>
           <h3>Microsoft Graph API</h3>
           <p>Full power of the Microsoft Graph REST API. Works on any platform with any Microsoft 365 account.</p>
           <ul class="backend-features">
@@ -939,6 +928,17 @@
             <li>Full read/write access</li>
             <li>OAuth 2.0 device code flow</li>
             <li>All 181 tools available</li>
+          </ul>
+        </div>
+        <div class="backend-card fade-in">
+          <span class="backend-tag cloud">Legacy</span>
+          <h3>AppleScript</h3>
+          <p>Direct integration with classic Outlook for Mac via AppleScript automation. No cloud credentials required.</p>
+          <ul class="backend-features">
+            <li>Works offline</li>
+            <li>No Azure app registration</li>
+            <li>macOS only</li>
+            <li>Set USE_APPLESCRIPT=1</li>
           </ul>
         </div>
       </div>
@@ -990,10 +990,7 @@
   <span class="key">"mcpServers"</span>: {
     <span class="key">"office365"</span>: {
       <span class="key">"command"</span>: <span class="string">"npx"</span>,
-      <span class="key">"args"</span>: [<span class="string">"-y"</span>, <span class="string">"@jbctechsolutions/mcp-office365"</span>],
-      <span class="key">"env"</span>: {
-        <span class="key">"USE_GRAPH_API"</span>: <span class="string">"1"</span>
-      }
+      <span class="key">"args"</span>: [<span class="string">"-y"</span>, <span class="string">"@jbctechsolutions/mcp-office365"</span>]
     }
   }
 }</pre>
@@ -1012,7 +1009,7 @@
                 <span class="code-lang">bash</span>
                 <button class="copy-btn" onclick="copyCode(this)">Copy</button>
               </div>
-              <pre><span class="cmd">claude</span> mcp add office365 <span class="flag">-e</span> USE_GRAPH_API=1 <span class="flag">--</span> npx <span class="flag">-y</span> <span class="pkg">@jbctechsolutions/mcp-office365</span></pre>
+              <pre><span class="cmd">claude</span> mcp add office365 <span class="flag">--</span> npx <span class="flag">-y</span> <span class="pkg">@jbctechsolutions/mcp-office365</span></pre>
             </div>
           </div>
         </div>

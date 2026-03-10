@@ -49,12 +49,12 @@ A [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) server that p
 npx -y @jbctechsolutions/mcp-office365
 ```
 
-By default the server uses the **AppleScript backend** (requires classic Outlook for Mac to be running).
+By default the server uses the **Microsoft Graph API** backend (cross-platform, full read/write access).
 
-To use the **Graph API backend** (new Outlook, or no Outlook installation required), set the environment variable:
+To use the **AppleScript backend** (classic Outlook for Mac only, limited features), set the environment variable:
 
 ```bash
-USE_GRAPH_API=1
+USE_APPLESCRIPT=1
 ```
 
 ### Pre-authenticate (optional)
@@ -69,7 +69,7 @@ npx @jbctechsolutions/mcp-office365 auth --logout
 
 Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
 
-**AppleScript backend (default):**
+**Graph API backend (default):**
 ```json
 {
   "mcpServers": {
@@ -81,7 +81,7 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
 }
 ```
 
-**Graph API backend:**
+**AppleScript backend** (macOS + classic Outlook only):
 ```json
 {
   "mcpServers": {
@@ -89,7 +89,7 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
       "command": "npx",
       "args": ["-y", "@jbctechsolutions/mcp-office365"],
       "env": {
-        "USE_GRAPH_API": "1"
+        "USE_APPLESCRIPT": "1"
       }
     }
   }
@@ -123,10 +123,7 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
   "mcpServers": {
     "office365": {
       "command": "npx",
-      "args": ["-y", "@jbctechsolutions/mcp-office365"],
-      "env": {
-        "USE_GRAPH_API": "1"
-      }
+      "args": ["-y", "@jbctechsolutions/mcp-office365"]
     }
   }
 }
@@ -162,7 +159,6 @@ For production, work accounts with conditional access, or full control over the 
       "command": "npx",
       "args": ["-y", "@jbctechsolutions/mcp-office365"],
       "env": {
-        "USE_GRAPH_API": "1",
         "OUTLOOK_MCP_CLIENT_ID": "your-client-id-here",
         "OUTLOOK_MCP_TENANT_ID": "common"
       }
@@ -580,10 +576,10 @@ All 181 tools listed below. Tools marked *(Graph API)* require `USE_GRAPH_API=1`
 
 ### Dual Backend
 
-The server supports two backends, selected via the `USE_GRAPH_API` environment variable:
+The server supports two backends:
 
-- **AppleScript (default)** -- communicates with classic Outlook for Mac via `osascript`. Works offline, no Microsoft account needed. Supports reading mail, calendar, contacts, tasks, and notes, plus calendar write operations and email sending.
-- **Microsoft Graph API** (`USE_GRAPH_API=1`) -- connects to Microsoft 365 cloud services. Full read/write across all categories. No Outlook installation required. Works on macOS, Windows, and Linux.
+- **Microsoft Graph API (default)** -- connects to Microsoft 365 cloud services. Full read/write across all 181 tools. No Outlook installation required. Works on macOS, Windows, and Linux.
+- **AppleScript** (`USE_APPLESCRIPT=1`) -- communicates with classic Outlook for Mac via `osascript`. Works offline, no Microsoft account needed. Limited to reading mail, calendar, contacts, tasks, and notes, plus calendar write operations and email sending.
 
 ### Two-Phase Approval
 
@@ -601,8 +597,8 @@ Planner resources use ETag-based concurrency control. The server caches ETags fr
 
 ```
 src/
-  applescript/       AppleScript integration (default backend)
-  graph/             Microsoft Graph API integration
+  applescript/       AppleScript integration (legacy backend)
+  graph/             Microsoft Graph API integration (default)
     auth/            MSAL authentication, device code flow, token cache
     client/          Graph client wrapper with response caching
     mappers/         Graph-to-internal type mappers
@@ -638,7 +634,7 @@ These delegated permissions are requested when using the Graph API backend:
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `USE_GRAPH_API` | Set to `1` or `true` for Graph API backend | (unset -- uses AppleScript) |
+| `USE_APPLESCRIPT` | Set to `1` or `true` for legacy AppleScript backend | (unset -- uses Graph API) |
 | `OUTLOOK_MCP_CLIENT_ID` | Override the embedded Azure AD client ID | (embedded) |
 | `OUTLOOK_MCP_TENANT_ID` | Azure AD tenant ID | `common` |
 
