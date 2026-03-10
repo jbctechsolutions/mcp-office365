@@ -2936,7 +2936,7 @@ export class GraphRepository implements IRepository {
       checklist: Record<string, unknown>;
       references: Record<string, unknown>;
       etag: string;
-    };
+    } | undefined;
   }>> {
     // Step 1: List all tasks (populates idCache.plannerTasks)
     const tasks = await this.listPlannerTasksAsync(planId);
