@@ -1,10 +1,10 @@
-# @jbctechsolutions/mcp-office365-mac
+# @jbctechsolutions/mcp-office365
 
-[![npm version](https://badge.fury.io/js/%40jbctechsolutions%2Fmcp-office365-mac.svg)](https://www.npmjs.com/package/@jbctechsolutions/mcp-office365-mac)
+[![npm version](https://badge.fury.io/js/%40jbctechsolutions%2Fmcp-office365.svg)](https://www.npmjs.com/package/@jbctechsolutions/mcp-office365)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Node.js Version](https://img.shields.io/node/v/@jbctechsolutions/mcp-office365-mac)](https://nodejs.org)
+[![Node.js Version](https://img.shields.io/node/v/@jbctechsolutions/mcp-office365)](https://nodejs.org)
 
-MCP server for Microsoft 365 on macOS -- mail, calendar, contacts, tasks, teams, people, and planner.
+MCP server for Microsoft 365 -- mail, calendar, contacts, tasks, teams, people, and planner.
 
 A [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) server that provides **181 tools** for full read/write access to Microsoft 365. Manage your emails, calendar events, contacts, tasks, notes, Teams channels and chats, people directory, and Planner boards directly through MCP.
 
@@ -46,7 +46,7 @@ A [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) server that p
 ### Install and run
 
 ```bash
-npx -y @jbctechsolutions/mcp-office365-mac
+npx -y @jbctechsolutions/mcp-office365
 ```
 
 By default the server uses the **AppleScript backend** (requires classic Outlook for Mac to be running).
@@ -60,9 +60,9 @@ USE_GRAPH_API=1
 ### Pre-authenticate (optional)
 
 ```bash
-npx @jbctechsolutions/mcp-office365-mac auth
-npx @jbctechsolutions/mcp-office365-mac auth --status
-npx @jbctechsolutions/mcp-office365-mac auth --logout
+npx @jbctechsolutions/mcp-office365 auth
+npx @jbctechsolutions/mcp-office365 auth --status
+npx @jbctechsolutions/mcp-office365 auth --logout
 ```
 
 ### Claude Desktop configuration
@@ -73,9 +73,9 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
 ```json
 {
   "mcpServers": {
-    "outlook-mac": {
+    "office365": {
       "command": "npx",
-      "args": ["-y", "@jbctechsolutions/mcp-office365-mac"]
+      "args": ["-y", "@jbctechsolutions/mcp-office365"]
     }
   }
 }
@@ -85,9 +85,9 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
 ```json
 {
   "mcpServers": {
-    "outlook-mac": {
+    "office365": {
       "command": "npx",
-      "args": ["-y", "@jbctechsolutions/mcp-office365-mac"],
+      "args": ["-y", "@jbctechsolutions/mcp-office365"],
       "env": {
         "USE_GRAPH_API": "1"
       }
@@ -106,12 +106,12 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
     "jbctechsolutions": {
       "source": {
         "source": "github",
-        "repo": "jbctechsolutions/mcp-office365-mac"
+        "repo": "jbctechsolutions/mcp-office365"
       }
     }
   },
   "enabledPlugins": {
-    "outlook-mac@jbctechsolutions": true
+    "office365@jbctechsolutions": true
   }
 }
 ```
@@ -121,9 +121,9 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
 ```json
 {
   "mcpServers": {
-    "outlook-mac": {
+    "office365": {
       "command": "npx",
-      "args": ["-y", "@jbctechsolutions/mcp-office365-mac"],
+      "args": ["-y", "@jbctechsolutions/mcp-office365"],
       "env": {
         "USE_GRAPH_API": "1"
       }
@@ -158,9 +158,9 @@ For production, work accounts with conditional access, or full control over the 
 ```json
 {
   "mcpServers": {
-    "outlook-mac": {
+    "office365": {
       "command": "npx",
-      "args": ["-y", "@jbctechsolutions/mcp-office365-mac"],
+      "args": ["-y", "@jbctechsolutions/mcp-office365"],
       "env": {
         "USE_GRAPH_API": "1",
         "OUTLOOK_MCP_CLIENT_ID": "your-client-id-here",

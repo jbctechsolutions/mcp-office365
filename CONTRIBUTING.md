@@ -1,4 +1,4 @@
-# Contributing to Outlook MCP Server
+# Contributing to MCP Office 365
 
 Thank you for your interest in contributing! This document provides guidelines for contributing to the project.
 
@@ -22,8 +22,8 @@ Thank you for your interest in contributing! This document provides guidelines f
 
 1. **Fork and Clone**
    ```bash
-   git clone https://github.com/YOUR_USERNAME/mcp-office365-mac.git
-   cd mcp-office365-mac
+   git clone https://github.com/YOUR_USERNAME/mcp-office365.git
+   cd mcp-office365
    ```
 
 2. **Install Dependencies**
@@ -56,9 +56,9 @@ Test your changes with Claude Desktop or Claude Code:
 ```json
 {
   "mcpServers": {
-    "outlook-mac-dev": {
+    "office365-dev": {
       "command": "node",
-      "args": ["/path/to/mcp-office365-mac/dist/index.js"],
+      "args": ["/path/to/mcp-office365/dist/index.js"],
       "env": {
         "USE_GRAPH_API": "1"
       }
@@ -233,4 +233,4 @@ By contributing, you agree that your contributions will be licensed under the MI
 
 ---
 
-Thank you for contributing to Outlook MCP Server! 🎉
+Thank you for contributing to MCP Office 365! 🎉

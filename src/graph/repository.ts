@@ -360,7 +360,7 @@ export class GraphRepository implements IRepository {
       }
     }
 
-    const activeMessages = messages.filter((m) => !(m as any)['@removed']);
+    const activeMessages = messages.filter((m) => (m as unknown as Record<string, unknown>)['@removed'] == null);
     return {
       emails: activeMessages.map((m) => mapMessageToEmailRow(m)),
       isInitialSync,
@@ -1474,7 +1474,7 @@ export class GraphRepository implements IRepository {
       graphEvent.recurrence = params.recurrence;
     }
 
-    if (params.is_online_meeting) {
+    if (params.is_online_meeting === true) {
       graphEvent.isOnlineMeeting = true;
       graphEvent.onlineMeetingProvider = params.online_meeting_provider ?? 'teamsForBusiness';
     }
@@ -1679,7 +1679,7 @@ export class GraphRepository implements IRepository {
     }
 
     if (params.recurrence != null) {
-      (graphTask as any).recurrence = {
+      (graphTask as unknown as Record<string, unknown>).recurrence = {
         pattern: {
           type: params.recurrence.pattern,
           interval: params.recurrence.interval ?? 1,
@@ -1967,13 +1967,15 @@ export class GraphRepository implements IRepository {
     scheduledEndDateTime: string | null;
   }> {
     const settings = await this.client.getAutomaticReplies();
+    const startDt = settings.scheduledStartDateTime as Record<string, unknown> | undefined;
+    const endDt = settings.scheduledEndDateTime as Record<string, unknown> | undefined;
     return {
-      status: (settings as any).status ?? 'disabled',
-      externalAudience: (settings as any).externalAudience ?? 'none',
-      internalReplyMessage: (settings as any).internalReplyMessage ?? '',
-      externalReplyMessage: (settings as any).externalReplyMessage ?? '',
-      scheduledStartDateTime: (settings as any).scheduledStartDateTime?.dateTime ?? null,
-      scheduledEndDateTime: (settings as any).scheduledEndDateTime?.dateTime ?? null,
+      status: (settings.status as string | undefined) ?? 'disabled',
+      externalAudience: (settings.externalAudience as string | undefined) ?? 'none',
+      internalReplyMessage: (settings.internalReplyMessage as string | undefined) ?? '',
+      externalReplyMessage: (settings.externalReplyMessage as string | undefined) ?? '',
+      scheduledStartDateTime: (startDt?.dateTime as string | undefined) ?? null,
+      scheduledEndDateTime: (endDt?.dateTime as string | undefined) ?? null,
     };
   }
 
@@ -2009,15 +2011,16 @@ export class GraphRepository implements IRepository {
     timeZone: string | null;
     dateFormat: string | null;
     timeFormat: string | null;
-    workingHours: unknown | null;
+    workingHours: unknown;
   }> {
     const settings = await this.client.getMailboxSettings();
+    const lang = settings.language as Record<string, unknown> | undefined;
     return {
-      language: (settings as any).language?.locale ?? null,
-      timeZone: (settings as any).timeZone ?? null,
-      dateFormat: (settings as any).dateFormat ?? null,
-      timeFormat: (settings as any).timeFormat ?? null,
-      workingHours: (settings as any).workingHours ?? null,
+      language: (lang?.locale as string | undefined) ?? null,
+      timeZone: (settings.timeZone as string | undefined) ?? null,
+      dateFormat: (settings.dateFormat as string | undefined) ?? null,
+      timeFormat: (settings.timeFormat as string | undefined) ?? null,
+      workingHours: settings.workingHours ?? null,
     };
   }
 
@@ -2161,14 +2164,19 @@ export class GraphRepository implements IRepository {
     externalMemberCount: number; maxMessageSize: number;
   }>> {
     const tips = await this.client.getMailTips(emailAddresses);
-    return tips.map((tip: any) => ({
-      emailAddress: tip.emailAddress?.address ?? '',
-      automaticReplies: tip.automaticReplies?.message ? { message: tip.automaticReplies.message } : null,
-      mailboxFull: tip.mailboxFull ?? false,
-      deliveryRestricted: tip.deliveryRestricted ?? false,
-      externalMemberCount: tip.externalMemberCount ?? 0,
-      maxMessageSize: tip.maxMessageSize ?? 0,
-    }));
+    return tips.map((tip) => {
+      const t = tip;
+      const emailAddr = t.emailAddress as Record<string, unknown> | undefined;
+      const autoReplies = t.automaticReplies as Record<string, unknown> | undefined;
+      return {
+        emailAddress: (emailAddr?.address as string | undefined) ?? '',
+        automaticReplies: (autoReplies?.message != null && autoReplies.message !== '') ? { message: autoReplies.message as string } : null,
+        mailboxFull: (t.mailboxFull as boolean | undefined) ?? false,
+        deliveryRestricted: (t.deliveryRestricted as boolean | undefined) ?? false,
+        externalMemberCount: (t.externalMemberCount as number | undefined) ?? 0,
+        maxMessageSize: (t.maxMessageSize as number | undefined) ?? 0,
+      };
+    });
   }
 
   // ===========================================================================
@@ -2380,7 +2388,7 @@ export class GraphRepository implements IRepository {
     return members.map((m) => ({
       id: m.id ?? '',
       displayName: m.displayName ?? '',
-      email: (m as any).email ?? '',
+      email: ((m as unknown as Record<string, unknown>).email as string | undefined) ?? '',
       roles: m.roles ?? [],
     }));
   }
@@ -2406,7 +2414,7 @@ export class GraphRepository implements IRepository {
       return {
         id: numericId,
         senderName: msg.from?.user?.displayName ?? msg.from?.application?.displayName ?? '',
-        senderEmail: (msg.from?.user as any)?.email ?? '',
+        senderEmail: ((msg.from?.user as unknown as Record<string, unknown> | undefined)?.email as string | undefined) ?? '',
         bodyPreview: msg.body?.content?.substring(0, 200) ?? '',
         bodyContent: msg.body?.content ?? '',
         contentType: msg.body?.contentType ?? 'html',
@@ -2435,7 +2443,7 @@ export class GraphRepository implements IRepository {
       return {
         id: rNumericId,
         senderName: r.from?.user?.displayName ?? r.from?.application?.displayName ?? '',
-        senderEmail: (r.from?.user as any)?.email ?? '',
+        senderEmail: ((r.from?.user as unknown as Record<string, unknown> | undefined)?.email as string | undefined) ?? '',
         bodyContent: r.body?.content ?? '',
         contentType: r.body?.contentType ?? 'html',
         createdDateTime: r.createdDateTime ?? '',
@@ -2444,7 +2452,7 @@ export class GraphRepository implements IRepository {
     return {
       id: messageId,
       senderName: msg.from?.user?.displayName ?? msg.from?.application?.displayName ?? '',
-      senderEmail: (msg.from?.user as any)?.email ?? '',
+      senderEmail: ((msg.from?.user as unknown as Record<string, unknown> | undefined)?.email as string | undefined) ?? '',
       bodyContent: msg.body?.content ?? '',
       contentType: msg.body?.contentType ?? 'html',
       createdDateTime: msg.createdDateTime ?? '',
@@ -2490,11 +2498,15 @@ export class GraphRepository implements IRepository {
       const graphId = chat.id!;
       const numericId = hashStringToNumber(graphId);
       this.idCache.chats.set(numericId, graphId);
+      const chatRecord = chat as unknown as Record<string, unknown>;
+      const preview = chatRecord.lastMessagePreview as Record<string, unknown> | undefined;
+      const previewBody = preview?.body as Record<string, unknown> | undefined;
+      const previewContent = (previewBody?.content as string | undefined)?.substring(0, 200) ?? '';
       return {
         id: numericId,
         topic: chat.topic ?? '',
         chatType: chat.chatType ?? 'oneOnOne',
-        lastMessagePreview: (chat as any).lastMessagePreview?.body?.content?.substring(0, 200) ?? '',
+        lastMessagePreview: previewContent,
         createdDateTime: chat.createdDateTime ?? '',
       };
     });
@@ -2511,7 +2523,7 @@ export class GraphRepository implements IRepository {
       topic: chat.topic ?? '',
       chatType: chat.chatType ?? 'oneOnOne',
       createdDateTime: chat.createdDateTime ?? '',
-      webUrl: (chat as any).webUrl ?? '',
+      webUrl: ((chat as unknown as Record<string, unknown>).webUrl as string | undefined) ?? '',
     };
   }
 
@@ -2529,7 +2541,7 @@ export class GraphRepository implements IRepository {
       return {
         id: numericId,
         senderName: msg.from?.user?.displayName ?? msg.from?.application?.displayName ?? '',
-        senderEmail: (msg.from?.user as any)?.email ?? '',
+        senderEmail: ((msg.from?.user as unknown as Record<string, unknown> | undefined)?.email as string | undefined) ?? '',
         bodyPreview: msg.body?.content?.substring(0, 200) ?? '',
         bodyContent: msg.body?.content ?? '',
         contentType: msg.body?.contentType ?? 'html',
@@ -2557,27 +2569,29 @@ export class GraphRepository implements IRepository {
     user: { displayName: string };
     createdDateTime: string;
   }>> {
+    const mapReactions = (msg: Record<string, unknown>): Array<{ reactionType: string; user: { displayName: string }; createdDateTime: string }> => {
+      const reactions = (msg.reactions ?? []) as Array<Record<string, unknown>>;
+      return reactions.map((r) => {
+        const userObj = r.user as Record<string, unknown> | undefined;
+        const innerUser = userObj?.user as Record<string, unknown> | undefined;
+        return {
+          reactionType: (r.reactionType as string | undefined) ?? '',
+          user: { displayName: (innerUser?.displayName as string | undefined) ?? '' },
+          createdDateTime: (r.createdDateTime as string | undefined) ?? '',
+        };
+      });
+    };
+
     if (messageType === 'channel') {
       const cached = this.idCache.channelMessages.get(messageId);
       if (cached == null) throw new Error(`Message ID ${messageId} not found in cache. Try listing channel messages first.`);
       const msg = await this.client.getChannelMessage(cached.teamId, cached.channelId, cached.messageId);
-      const reactions = (msg as any).reactions ?? [];
-      return reactions.map((r: any) => ({
-        reactionType: r.reactionType ?? '',
-        user: { displayName: r.user?.user?.displayName ?? '' },
-        createdDateTime: r.createdDateTime ?? '',
-      }));
+      return mapReactions(msg as unknown as Record<string, unknown>);
     } else {
       const cached = this.idCache.chatMessages.get(messageId);
       if (cached == null) throw new Error(`Message ID ${messageId} not found in cache. Try listing chat messages first.`);
-      const client = await (this.client as any).getClient() as any;
-      const msg = await client.api(`/me/chats/${cached.chatId}/messages/${cached.messageId}`).get();
-      const reactions = msg.reactions ?? [];
-      return reactions.map((r: any) => ({
-        reactionType: r.reactionType ?? '',
-        user: { displayName: r.user?.user?.displayName ?? '' },
-        createdDateTime: r.createdDateTime ?? '',
-      }));
+      const msg = await this.client.getChatMessage(cached.chatId, cached.messageId);
+      return mapReactions(msg as unknown as Record<string, unknown>);
     }
   }
 
@@ -2611,7 +2625,7 @@ export class GraphRepository implements IRepository {
     const members = await this.client.listChatMembers(graphChatId);
     return members.map((m) => ({
       displayName: m.displayName ?? '',
-      email: (m as any).email ?? '',
+      email: ((m as unknown as Record<string, unknown>).email as string | undefined) ?? '',
       roles: m.roles ?? [],
     }));
   }
@@ -2628,7 +2642,7 @@ export class GraphRepository implements IRepository {
     return plans.map((plan) => {
       const graphId = plan.id!;
       const numericId = hashStringToNumber(graphId);
-      const etag = (plan as any)['@odata.etag'] ?? '';
+      const etag = ((plan as unknown as Record<string, unknown>)['@odata.etag'] as string | undefined) ?? '';
       this.idCache.plans.set(numericId, { planId: graphId, etag });
       return {
         id: numericId,
@@ -2646,7 +2660,7 @@ export class GraphRepository implements IRepository {
     const cached = this.idCache.plans.get(planId);
     if (cached == null) throw new Error(`Plan ID ${planId} not found in cache. Try listing plans first.`);
     const plan = await this.client.getPlan(cached.planId);
-    const etag = (plan as any)['@odata.etag'] ?? '';
+    const etag = ((plan as unknown as Record<string, unknown>)['@odata.etag'] as string | undefined) ?? '';
     this.idCache.plans.set(planId, { planId: cached.planId, etag });
     return {
       id: planId,
@@ -2664,7 +2678,7 @@ export class GraphRepository implements IRepository {
     const plan = await this.client.createPlan(title, groupId);
     const graphId = plan.id!;
     const numericId = hashStringToNumber(graphId);
-    const etag = (plan as any)['@odata.etag'] ?? '';
+    const etag = ((plan as unknown as Record<string, unknown>)['@odata.etag'] as string | undefined) ?? '';
     this.idCache.plans.set(numericId, { planId: graphId, etag });
     return numericId;
   }
@@ -2678,7 +2692,7 @@ export class GraphRepository implements IRepository {
     const graphUpdates: Record<string, unknown> = {};
     if (updates.title != null) graphUpdates['title'] = updates.title;
     const result = await this.client.updatePlan(cached.planId, graphUpdates, cached.etag);
-    const newEtag = (result as any)['@odata.etag'] ?? cached.etag;
+    const newEtag = ((result as unknown as Record<string, unknown>)['@odata.etag'] as string | undefined) ?? cached.etag;
     this.idCache.plans.set(planId, { planId: cached.planId, etag: newEtag });
   }
 
@@ -2696,7 +2710,7 @@ export class GraphRepository implements IRepository {
     return buckets.map((bucket) => {
       const graphId = bucket.id!;
       const numericId = hashStringToNumber(graphId);
-      const etag = (bucket as any)['@odata.etag'] ?? '';
+      const etag = ((bucket as unknown as Record<string, unknown>)['@odata.etag'] as string | undefined) ?? '';
       this.idCache.plannerBuckets.set(numericId, { planId: cached.planId, bucketId: graphId, etag });
       return {
         id: numericId,
@@ -2716,7 +2730,7 @@ export class GraphRepository implements IRepository {
     const bucket = await this.client.createBucket(cached.planId, name);
     const graphId = bucket.id!;
     const numericId = hashStringToNumber(graphId);
-    const etag = (bucket as any)['@odata.etag'] ?? '';
+    const etag = ((bucket as unknown as Record<string, unknown>)['@odata.etag'] as string | undefined) ?? '';
     this.idCache.plannerBuckets.set(numericId, { planId: cached.planId, bucketId: graphId, etag });
     return numericId;
   }
@@ -2730,7 +2744,7 @@ export class GraphRepository implements IRepository {
     const graphUpdates: Record<string, unknown> = {};
     if (updates.name != null) graphUpdates['name'] = updates.name;
     const result = await this.client.updateBucket(cached.bucketId, graphUpdates, cached.etag);
-    const newEtag = (result as any)['@odata.etag'] ?? cached.etag;
+    const newEtag = ((result as unknown as Record<string, unknown>)['@odata.etag'] as string | undefined) ?? cached.etag;
     this.idCache.plannerBuckets.set(bucketId, { planId: cached.planId, bucketId: cached.bucketId, etag: newEtag });
   }
 
@@ -2762,7 +2776,7 @@ export class GraphRepository implements IRepository {
     return tasks.map((task) => {
       const graphId = task.id!;
       const numericId = hashStringToNumber(graphId);
-      const etag = (task as any)['@odata.etag'] ?? '';
+      const etag = ((task as unknown as Record<string, unknown>)['@odata.etag'] as string | undefined) ?? '';
       this.idCache.plannerTasks.set(numericId, { taskId: graphId, etag });
       // Resolve bucket numeric ID if present
       let bucketNumericId: number | null = null;
@@ -2795,7 +2809,7 @@ export class GraphRepository implements IRepository {
     const cached = this.idCache.plannerTasks.get(taskId);
     if (cached == null) throw new Error(`Task ID ${taskId} not found in cache. Try listing planner tasks first.`);
     const task = await this.client.getPlannerTask(cached.taskId);
-    const etag = (task as any)['@odata.etag'] ?? '';
+    const etag = ((task as unknown as Record<string, unknown>)['@odata.etag'] as string | undefined) ?? '';
     this.idCache.plannerTasks.set(taskId, { taskId: cached.taskId, etag });
     let bucketNumericId: number | null = null;
     if (task.bucketId != null) {
@@ -2844,7 +2858,7 @@ export class GraphRepository implements IRepository {
     const task = await this.client.createPlannerTask(body);
     const graphId = task.id!;
     const numericId = hashStringToNumber(graphId);
-    const etag = (task as any)['@odata.etag'] ?? '';
+    const etag = ((task as unknown as Record<string, unknown>)['@odata.etag'] as string | undefined) ?? '';
     this.idCache.plannerTasks.set(numericId, { taskId: graphId, etag });
     return numericId;
   }
@@ -2879,7 +2893,7 @@ export class GraphRepository implements IRepository {
     if (updates.dueDate != null) graphUpdates['dueDateTime'] = updates.dueDate;
     if (updates.assignments != null) graphUpdates['assignments'] = updates.assignments;
     const result = await this.client.updatePlannerTask(cached.taskId, graphUpdates, cached.etag);
-    const newEtag = (result as any)['@odata.etag'] ?? cached.etag;
+    const newEtag = ((result as unknown as Record<string, unknown>)['@odata.etag'] as string | undefined) ?? cached.etag;
     this.idCache.plannerTasks.set(taskId, { taskId: cached.taskId, etag: newEtag });
   }
 
@@ -2907,7 +2921,7 @@ export class GraphRepository implements IRepository {
     const cached = this.idCache.plannerTasks.get(taskId);
     if (cached == null) throw new Error(`Task ID ${taskId} not found in cache. Try listing planner tasks first.`);
     const details = await this.client.getPlannerTaskDetails(cached.taskId);
-    const etag = (details as any)['@odata.etag'] ?? '';
+    const etag = ((details as unknown as Record<string, unknown>)['@odata.etag'] as string | undefined) ?? '';
     this.idCache.plannerTaskDetails.set(taskId, { taskId: cached.taskId, etag });
     return {
       id: taskId,
@@ -2963,7 +2977,7 @@ export class GraphRepository implements IRepository {
       const result = batchResults.get(String(task.id));
       if (result != null && result.status >= 200 && result.status < 300) {
         const detailBody = result.body as Record<string, unknown>;
-        const etag = (result.headers?.ETag ?? result.headers?.etag ?? '') as string;
+        const etag = result.headers?.ETag ?? result.headers?.etag ?? '';
         // Cache the task detail ETag for later updates
         const cachedTask = this.idCache.plannerTasks.get(task.id);
         if (cachedTask != null) {
@@ -3004,7 +3018,7 @@ export class GraphRepository implements IRepository {
     if (updates.checklist != null) graphUpdates['checklist'] = updates.checklist;
     if (updates.references != null) graphUpdates['references'] = updates.references;
     const result = await this.client.updatePlannerTaskDetails(cachedTask.taskId, graphUpdates, cachedDetails.etag);
-    const newEtag = (result as any)['@odata.etag'] ?? cachedDetails.etag;
+    const newEtag = ((result as unknown as Record<string, unknown>)['@odata.etag'] as string | undefined) ?? cachedDetails.etag;
     this.idCache.plannerTaskDetails.set(taskId, { taskId: cachedTask.taskId, etag: newEtag });
   }
 
@@ -3052,15 +3066,15 @@ export class GraphRepository implements IRepository {
   }>> {
     const meetings = await this.client.listOnlineMeetings(limit ?? 20);
     return meetings.map((meeting) => {
-      const graphId = meeting.id ?? '';
+      const graphId = (meeting.id as string | undefined) ?? '';
       const numericId = hashStringToNumber(graphId);
       this.idCache.onlineMeetings.set(numericId, graphId);
       return {
         id: numericId,
-        subject: meeting.subject ?? '',
-        startDateTime: meeting.startDateTime ?? '',
-        endDateTime: meeting.endDateTime ?? '',
-        joinUrl: meeting.joinWebUrl ?? '',
+        subject: (meeting.subject as string | undefined) ?? '',
+        startDateTime: (meeting.startDateTime as string | undefined) ?? '',
+        endDateTime: (meeting.endDateTime as string | undefined) ?? '',
+        joinUrl: (meeting.joinWebUrl as string | undefined) ?? '',
       };
     });
   }
@@ -3069,6 +3083,15 @@ export class GraphRepository implements IRepository {
     id: number; subject: string; startDateTime: string; endDateTime: string; joinUrl: string;
     participants: unknown;
   } | undefined> {
+    const mapMeeting = (m: Record<string, unknown>): { id: number; subject: string; startDateTime: string; endDateTime: string; joinUrl: string; participants: unknown } => ({
+      id: meetingId,
+      subject: (m.subject as string | undefined) ?? '',
+      startDateTime: (m.startDateTime as string | undefined) ?? '',
+      endDateTime: (m.endDateTime as string | undefined) ?? '',
+      joinUrl: (m.joinWebUrl as string | undefined) ?? '',
+      participants: m.participants ?? null,
+    });
+
     const graphId = this.idCache.onlineMeetings.get(meetingId);
     if (graphId == null) {
       // Try to refresh cache
@@ -3076,24 +3099,10 @@ export class GraphRepository implements IRepository {
       const refreshedId = this.idCache.onlineMeetings.get(meetingId);
       if (refreshedId == null) return undefined;
       const meeting = await this.client.getOnlineMeeting(refreshedId);
-      return meeting != null ? {
-        id: meetingId,
-        subject: meeting.subject ?? '',
-        startDateTime: meeting.startDateTime ?? '',
-        endDateTime: meeting.endDateTime ?? '',
-        joinUrl: meeting.joinWebUrl ?? '',
-        participants: meeting.participants ?? null,
-      } : undefined;
+      return mapMeeting(meeting);
     }
     const meeting = await this.client.getOnlineMeeting(graphId);
-    return meeting != null ? {
-      id: meetingId,
-      subject: meeting.subject ?? '',
-      startDateTime: meeting.startDateTime ?? '',
-      endDateTime: meeting.endDateTime ?? '',
-      joinUrl: meeting.joinWebUrl ?? '',
-      participants: meeting.participants ?? null,
-    } : undefined;
+    return mapMeeting(meeting);
   }
 
   async listMeetingRecordingsAsync(meetingId: number): Promise<Array<{
@@ -3103,13 +3112,13 @@ export class GraphRepository implements IRepository {
     if (graphMeetingId == null) throw new Error(`Meeting ID ${meetingId} not found in cache. Try listing online meetings first.`);
     const recordings = await this.client.listMeetingRecordings(graphMeetingId);
     return recordings.map((recording) => {
-      const graphId = recording.id ?? '';
+      const graphId = (recording.id as string | undefined) ?? '';
       const numericId = hashStringToNumber(graphId);
       this.idCache.recordings.set(numericId, { meetingId: graphMeetingId, recordingId: graphId });
       return {
         id: numericId,
-        createdDateTime: recording.createdDateTime ?? '',
-        recordingContentUrl: recording.recordingContentUrl ?? '',
+        createdDateTime: (recording.createdDateTime as string | undefined) ?? '',
+        recordingContentUrl: (recording.recordingContentUrl as string | undefined) ?? '',
       };
     });
   }
@@ -3129,13 +3138,13 @@ export class GraphRepository implements IRepository {
     if (graphMeetingId == null) throw new Error(`Meeting ID ${meetingId} not found in cache. Try listing online meetings first.`);
     const transcripts = await this.client.listMeetingTranscripts(graphMeetingId);
     return transcripts.map((transcript) => {
-      const graphId = transcript.id ?? '';
+      const graphId = (transcript.id as string | undefined) ?? '';
       const numericId = hashStringToNumber(graphId);
       this.idCache.transcripts.set(numericId, { meetingId: graphMeetingId, transcriptId: graphId });
       return {
         id: numericId,
-        createdDateTime: transcript.createdDateTime ?? '',
-        contentUrl: transcript.contentUrl ?? '',
+        createdDateTime: (transcript.createdDateTime as string | undefined) ?? '',
+        contentUrl: (transcript.contentUrl as string | undefined) ?? '',
       };
     });
   }
@@ -3150,31 +3159,31 @@ export class GraphRepository implements IRepository {
   // Excel Online (Workbook)
   // ===========================================================================
 
-  async listWorksheetsAsync(fileId: number): Promise<any[]> {
+  async listWorksheetsAsync(fileId: number): Promise<Record<string, unknown>[]> {
     const driveItemId = this.idCache.driveItems.get(fileId);
     if (driveItemId == null) throw new Error(`Drive item ID ${fileId} not found in cache. List OneDrive or SharePoint files first.`);
     return await this.client.listWorksheets(driveItemId);
   }
 
-  async getWorksheetRangeAsync(fileId: number, worksheetName: string, range: string): Promise<any> {
+  async getWorksheetRangeAsync(fileId: number, worksheetName: string, range: string): Promise<Record<string, unknown>> {
     const driveItemId = this.idCache.driveItems.get(fileId);
     if (driveItemId == null) throw new Error(`Drive item ID ${fileId} not found in cache. List OneDrive or SharePoint files first.`);
     return await this.client.getWorksheetRange(driveItemId, worksheetName, range);
   }
 
-  async getUsedRangeAsync(fileId: number, worksheetName: string): Promise<any> {
+  async getUsedRangeAsync(fileId: number, worksheetName: string): Promise<Record<string, unknown>> {
     const driveItemId = this.idCache.driveItems.get(fileId);
     if (driveItemId == null) throw new Error(`Drive item ID ${fileId} not found in cache. List OneDrive or SharePoint files first.`);
     return await this.client.getUsedRange(driveItemId, worksheetName);
   }
 
-  async updateWorksheetRangeAsync(fileId: number, worksheetName: string, range: string, values: unknown[][]): Promise<any> {
+  async updateWorksheetRangeAsync(fileId: number, worksheetName: string, range: string, values: unknown[][]): Promise<Record<string, unknown>> {
     const driveItemId = this.idCache.driveItems.get(fileId);
     if (driveItemId == null) throw new Error(`Drive item ID ${fileId} not found in cache. List OneDrive or SharePoint files first.`);
     return await this.client.updateWorksheetRange(driveItemId, worksheetName, range, values);
   }
 
-  async getTableDataAsync(fileId: number, tableName: string): Promise<any> {
+  async getTableDataAsync(fileId: number, tableName: string): Promise<Record<string, unknown>[]> {
     const driveItemId = this.idCache.driveItems.get(fileId);
     if (driveItemId == null) throw new Error(`Drive item ID ${fileId} not found in cache. List OneDrive or SharePoint files first.`);
     return await this.client.getTableData(driveItemId, tableName);
@@ -3196,16 +3205,17 @@ export class GraphRepository implements IRepository {
       if (graphFolderId == null) throw new Error(`Drive item ID ${folderId} not found in cache. Try listing drive items first.`);
     }
     const items = await this.client.listDriveItems(graphFolderId);
-    return items.map((item: any) => {
-      const numericId = hashStringToNumber(item.id);
-      this.idCache.driveItems.set(numericId, item.id);
+    return items.map((item) => {
+      const itemId = item.id as string;
+      const numericId = hashStringToNumber(itemId);
+      this.idCache.driveItems.set(numericId, itemId);
       return {
         id: numericId,
-        name: item.name ?? '',
-        size: item.size ?? 0,
-        lastModified: item.lastModifiedDateTime ?? '',
+        name: (item.name as string | undefined) ?? '',
+        size: (item.size as number | undefined) ?? 0,
+        lastModified: (item.lastModifiedDateTime as string | undefined) ?? '',
         isFolder: item.folder != null,
-        webUrl: item.webUrl ?? '',
+        webUrl: (item.webUrl as string | undefined) ?? '',
       };
     });
   }
@@ -3218,16 +3228,17 @@ export class GraphRepository implements IRepository {
     isFolder: boolean; webUrl: string;
   }>> {
     const items = await this.client.searchDriveItems(query, limit);
-    return items.map((item: any) => {
-      const numericId = hashStringToNumber(item.id);
-      this.idCache.driveItems.set(numericId, item.id);
+    return items.map((item) => {
+      const itemId = item.id as string;
+      const numericId = hashStringToNumber(itemId);
+      this.idCache.driveItems.set(numericId, itemId);
       return {
         id: numericId,
-        name: item.name ?? '',
-        size: item.size ?? 0,
-        lastModified: item.lastModifiedDateTime ?? '',
+        name: (item.name as string | undefined) ?? '',
+        size: (item.size as number | undefined) ?? 0,
+        lastModified: (item.lastModifiedDateTime as string | undefined) ?? '',
         isFolder: item.folder != null,
-        webUrl: item.webUrl ?? '',
+        webUrl: (item.webUrl as string | undefined) ?? '',
       };
     });
   }
@@ -3242,15 +3253,18 @@ export class GraphRepository implements IRepository {
     const graphId = this.idCache.driveItems.get(itemId);
     if (graphId == null) throw new Error(`Drive item ID ${itemId} not found in cache. Try listing drive items first.`);
     const item = await this.client.getDriveItem(graphId);
+    const fileObj = item.file as Record<string, unknown> | undefined;
+    const createdByObj = item.createdBy as Record<string, unknown> | undefined;
+    const createdByUser = createdByObj?.user as Record<string, unknown> | undefined;
     return {
       id: itemId,
-      name: item.name ?? '',
-      size: item.size ?? 0,
-      lastModified: item.lastModifiedDateTime ?? '',
+      name: (item.name as string | undefined) ?? '',
+      size: (item.size as number | undefined) ?? 0,
+      lastModified: (item.lastModifiedDateTime as string | undefined) ?? '',
       isFolder: item.folder != null,
-      webUrl: item.webUrl ?? '',
-      mimeType: item.file?.mimeType ?? '',
-      createdBy: item.createdBy?.user?.displayName ?? '',
+      webUrl: (item.webUrl as string | undefined) ?? '',
+      mimeType: (fileObj?.mimeType as string | undefined) ?? '',
+      createdBy: (createdByUser?.displayName as string | undefined) ?? '',
     };
   }
 
@@ -3272,8 +3286,9 @@ export class GraphRepository implements IRepository {
   async uploadFileAsync(parentPath: string, fileName: string, localFilePath: string): Promise<number> {
     const content = fs.readFileSync(localFilePath);
     const result = await this.client.uploadDriveItem(parentPath, fileName, content);
-    const numericId = hashStringToNumber(result.id);
-    this.idCache.driveItems.set(numericId, result.id);
+    const resultId = result.id as string;
+    const numericId = hashStringToNumber(resultId);
+    this.idCache.driveItems.set(numericId, resultId);
     return numericId;
   }
 
@@ -3285,16 +3300,17 @@ export class GraphRepository implements IRepository {
     isFolder: boolean; webUrl: string;
   }>> {
     const items = await this.client.listRecentDriveItems();
-    return items.map((item: any) => {
-      const numericId = hashStringToNumber(item.id);
-      this.idCache.driveItems.set(numericId, item.id);
+    return items.map((item) => {
+      const itemId = item.id as string;
+      const numericId = hashStringToNumber(itemId);
+      this.idCache.driveItems.set(numericId, itemId);
       return {
         id: numericId,
-        name: item.name ?? '',
-        size: item.size ?? 0,
-        lastModified: item.lastModifiedDateTime ?? '',
+        name: (item.name as string | undefined) ?? '',
+        size: (item.size as number | undefined) ?? 0,
+        lastModified: (item.lastModifiedDateTime as string | undefined) ?? '',
         isFolder: item.folder != null,
-        webUrl: item.webUrl ?? '',
+        webUrl: (item.webUrl as string | undefined) ?? '',
       };
     });
   }
@@ -3307,16 +3323,17 @@ export class GraphRepository implements IRepository {
     isFolder: boolean; webUrl: string;
   }>> {
     const items = await this.client.listSharedWithMe();
-    return items.map((item: any) => {
-      const numericId = hashStringToNumber(item.id);
-      this.idCache.driveItems.set(numericId, item.id);
+    return items.map((item) => {
+      const itemId = item.id as string;
+      const numericId = hashStringToNumber(itemId);
+      this.idCache.driveItems.set(numericId, itemId);
       return {
         id: numericId,
-        name: item.name ?? '',
-        size: item.size ?? 0,
-        lastModified: item.lastModifiedDateTime ?? '',
+        name: (item.name as string | undefined) ?? '',
+        size: (item.size as number | undefined) ?? 0,
+        lastModified: (item.lastModifiedDateTime as string | undefined) ?? '',
         isFolder: item.folder != null,
-        webUrl: item.webUrl ?? '',
+        webUrl: (item.webUrl as string | undefined) ?? '',
       };
     });
   }
@@ -3330,10 +3347,11 @@ export class GraphRepository implements IRepository {
     const graphId = this.idCache.driveItems.get(itemId);
     if (graphId == null) throw new Error(`Drive item ID ${itemId} not found in cache. Try listing drive items first.`);
     const result = await this.client.createSharingLink(graphId, type, scope);
+    const link = result.link as Record<string, unknown> | undefined;
     return {
-      webUrl: result.link?.webUrl ?? '',
-      type: result.link?.type ?? type,
-      scope: result.link?.scope ?? scope,
+      webUrl: (link?.webUrl as string | undefined) ?? '',
+      type: (link?.type as string | undefined) ?? type,
+      scope: (link?.scope as string | undefined) ?? scope,
     };
   }
 
@@ -3358,14 +3376,15 @@ export class GraphRepository implements IRepository {
     const sites = await this.client.listFollowedSites();
     const result: Array<{ id: number; name: string; webUrl: string; displayName: string }> = [];
     for (const site of sites) {
-      if (site.id != null) {
-        const numericId = hashStringToNumber(site.id);
-        this.idCache.sites.set(numericId, site.id);
+      const siteId = site.id as string | undefined;
+      if (siteId != null) {
+        const numericId = hashStringToNumber(siteId);
+        this.idCache.sites.set(numericId, siteId);
         result.push({
           id: numericId,
-          name: site.name ?? '',
-          webUrl: site.webUrl ?? '',
-          displayName: site.displayName ?? '',
+          name: (site.name as string | undefined) ?? '',
+          webUrl: (site.webUrl as string | undefined) ?? '',
+          displayName: (site.displayName as string | undefined) ?? '',
         });
       }
     }
@@ -3379,14 +3398,15 @@ export class GraphRepository implements IRepository {
     const sites = await this.client.searchSites(query);
     const result: Array<{ id: number; name: string; webUrl: string; displayName: string }> = [];
     for (const site of sites) {
-      if (site.id != null) {
-        const numericId = hashStringToNumber(site.id);
-        this.idCache.sites.set(numericId, site.id);
+      const siteId = site.id as string | undefined;
+      if (siteId != null) {
+        const numericId = hashStringToNumber(siteId);
+        this.idCache.sites.set(numericId, siteId);
         result.push({
           id: numericId,
-          name: site.name ?? '',
-          webUrl: site.webUrl ?? '',
-          displayName: site.displayName ?? '',
+          name: (site.name as string | undefined) ?? '',
+          webUrl: (site.webUrl as string | undefined) ?? '',
+          displayName: (site.displayName as string | undefined) ?? '',
         });
       }
     }
@@ -3402,10 +3422,10 @@ export class GraphRepository implements IRepository {
     const site = await this.client.getSite(graphId);
     return {
       id: siteId,
-      name: site.name ?? '',
-      webUrl: site.webUrl ?? '',
-      displayName: site.displayName ?? '',
-      description: site.description ?? '',
+      name: (site.name as string | undefined) ?? '',
+      webUrl: (site.webUrl as string | undefined) ?? '',
+      displayName: (site.displayName as string | undefined) ?? '',
+      description: (site.description as string | undefined) ?? '',
     };
   }
 
@@ -3418,14 +3438,15 @@ export class GraphRepository implements IRepository {
     const drives = await this.client.listDocumentLibraries(graphSiteId);
     const result: Array<{ id: number; name: string; webUrl: string; driveType: string }> = [];
     for (const drive of drives) {
-      if (drive.id != null) {
-        const numericId = hashStringToNumber(drive.id);
-        this.idCache.documentLibraries.set(numericId, { siteId: graphSiteId, driveId: drive.id });
+      const driveId = drive.id as string | undefined;
+      if (driveId != null) {
+        const numericId = hashStringToNumber(driveId);
+        this.idCache.documentLibraries.set(numericId, { siteId: graphSiteId, driveId });
         result.push({
           id: numericId,
-          name: drive.name ?? '',
-          webUrl: drive.webUrl ?? '',
-          driveType: drive.driveType ?? '',
+          name: (drive.name as string | undefined) ?? '',
+          webUrl: (drive.webUrl as string | undefined) ?? '',
+          driveType: (drive.driveType as string | undefined) ?? '',
         });
       }
     }
@@ -3453,15 +3474,16 @@ export class GraphRepository implements IRepository {
       lastModifiedDateTime: string; isFolder: boolean;
     }> = [];
     for (const item of items) {
-      if (item.id != null) {
-        const numericId = hashStringToNumber(item.id);
-        this.idCache.libraryDriveItems.set(numericId, { driveId: libCached.driveId, itemId: item.id });
+      const itemGraphId = item.id as string | undefined;
+      if (itemGraphId != null) {
+        const numericId = hashStringToNumber(itemGraphId);
+        this.idCache.libraryDriveItems.set(numericId, { driveId: libCached.driveId, itemId: itemGraphId });
         result.push({
           id: numericId,
-          name: item.name ?? '',
-          size: item.size ?? 0,
-          webUrl: item.webUrl ?? '',
-          lastModifiedDateTime: item.lastModifiedDateTime ?? '',
+          name: (item.name as string | undefined) ?? '',
+          size: (item.size as number | undefined) ?? 0,
+          webUrl: (item.webUrl as string | undefined) ?? '',
+          lastModifiedDateTime: (item.lastModifiedDateTime as string | undefined) ?? '',
           isFolder: item.folder != null,
         });
       }

@@ -250,7 +250,7 @@ describe('errors', () => {
     it('creates error with correct message', () => {
       const error = new GraphAuthRequiredError();
       expect(error.message).toContain('authentication required');
-      expect(error.message).toContain('npx @jbctechsolutions/mcp-office365-mac auth');
+      expect(error.message).toContain('npx @jbctechsolutions/mcp-office365 auth');
       expect(error.code).toBe(ErrorCode.GRAPH_AUTH_REQUIRED);
       expect(error.name).toBe('GraphAuthRequiredError');
     });

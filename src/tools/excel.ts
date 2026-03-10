@@ -65,11 +65,11 @@ export type GetTableDataParams = z.infer<typeof GetTableDataInput>;
 // =============================================================================
 
 export interface IExcelRepository {
-  listWorksheetsAsync(fileId: number): Promise<any[]>;
-  getWorksheetRangeAsync(fileId: number, worksheetName: string, range: string): Promise<any>;
-  getUsedRangeAsync(fileId: number, worksheetName: string): Promise<any>;
-  updateWorksheetRangeAsync(fileId: number, worksheetName: string, range: string, values: unknown[][]): Promise<any>;
-  getTableDataAsync(fileId: number, tableName: string): Promise<any>;
+  listWorksheetsAsync(fileId: number): Promise<Record<string, unknown>[]>;
+  getWorksheetRangeAsync(fileId: number, worksheetName: string, range: string): Promise<Record<string, unknown>>;
+  getUsedRangeAsync(fileId: number, worksheetName: string): Promise<Record<string, unknown>>;
+  updateWorksheetRangeAsync(fileId: number, worksheetName: string, range: string, values: unknown[][]): Promise<Record<string, unknown>>;
+  getTableDataAsync(fileId: number, tableName: string): Promise<Record<string, unknown>[]>;
 }
 
 // =============================================================================

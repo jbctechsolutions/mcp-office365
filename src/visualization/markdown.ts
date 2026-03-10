@@ -31,7 +31,7 @@ export function renderKanbanMarkdown(data: PlanVisualizationData): string {
       for (const task of bucketTasks) {
         const priority = PRIORITY_LABELS[task.priority] ?? `P${task.priority}`;
         const assignees = task.assignments.length > 0 ? task.assignments.join(', ') : '-';
-        const due = task.dueDateTime
+        const due = task.dueDateTime != null
           ? new Date(task.dueDateTime).toISOString().split('T')[0]
           : '-';
         lines.push(
@@ -52,7 +52,7 @@ export function renderKanbanMarkdown(data: PlanVisualizationData): string {
     for (const task of orphanTasks) {
       const priority = PRIORITY_LABELS[task.priority] ?? `P${task.priority}`;
       const assignees = task.assignments.length > 0 ? task.assignments.join(', ') : '-';
-      const due = task.dueDateTime
+      const due = task.dueDateTime != null
         ? new Date(task.dueDateTime).toISOString().split('T')[0]
         : '-';
       lines.push(
@@ -83,18 +83,18 @@ export function renderGanttMarkdown(data: PlanVisualizationData): string {
     if (bucketTasks.length === 0) continue;
     lines.push(`    section ${bucket.name}`);
     for (const task of bucketTasks) {
-      const start = task.startDateTime
+      const start = task.startDateTime != null
         ? new Date(task.startDateTime).toISOString().split('T')[0]
         : null;
-      const end = task.dueDateTime
+      const end = task.dueDateTime != null
         ? new Date(task.dueDateTime).toISOString().split('T')[0]
         : null;
       const status = task.percentComplete === 100 ? 'done, ' : task.percentComplete > 0 ? 'active, ' : '';
-      if (start && end) {
+      if (start != null && end != null) {
         lines.push(`    ${task.title} :${status}${start}, ${end}`);
-      } else if (start) {
+      } else if (start != null) {
         lines.push(`    ${task.title} :${status}${start}, 7d`);
-      } else if (end) {
+      } else if (end != null) {
         // Estimate start as 7 days before due
         const estimatedStart = new Date(end);
         estimatedStart.setDate(estimatedStart.getDate() - 7);
@@ -179,9 +179,9 @@ export function renderBurndownMarkdown(data: PlanVisualizationData): string {
 
   const allDates = new Set<string>();
   for (const task of data.tasks) {
-    if (task.startDateTime) allDates.add(new Date(task.startDateTime).toISOString().split('T')[0]!);
-    if (task.dueDateTime) allDates.add(new Date(task.dueDateTime).toISOString().split('T')[0]!);
-    if (task.completedDateTime) allDates.add(new Date(task.completedDateTime).toISOString().split('T')[0]!);
+    if (task.startDateTime != null) allDates.add(new Date(task.startDateTime).toISOString().split('T')[0]!);
+    if (task.dueDateTime != null) allDates.add(new Date(task.dueDateTime).toISOString().split('T')[0]!);
+    if (task.completedDateTime != null) allDates.add(new Date(task.completedDateTime).toISOString().split('T')[0]!);
   }
 
   const sortedDates = [...allDates].sort();
@@ -196,7 +196,7 @@ export function renderBurndownMarkdown(data: PlanVisualizationData): string {
   const total = data.tasks.length;
   for (const date of sortedDates) {
     const completedByDate = data.tasks.filter(
-      (t) => t.completedDateTime && new Date(t.completedDateTime).toISOString().split('T')[0]! <= date
+      (t) => t.completedDateTime != null && new Date(t.completedDateTime).toISOString().split('T')[0]! <= date
     ).length;
     lines.push(`| ${date} | ${total - completedByDate} | ${completedByDate} |`);
   }

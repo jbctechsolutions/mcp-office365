@@ -227,7 +227,7 @@ export class GraphAuthRequiredError extends OutlookMcpError {
   constructor() {
     super(
       'Microsoft Graph authentication required. ' +
-        'Run: npx @jbctechsolutions/mcp-office365-mac auth'
+        'Run: npx @jbctechsolutions/mcp-office365 auth'
     );
   }
 }

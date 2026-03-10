@@ -41,7 +41,7 @@ export function renderKanbanHtml(data: PlanVisualizationData): string {
       const pColor = priorityColor(task.priority);
       const pLabel: string = PRIORITY_LABELS[task.priority] ?? `P${task.priority}`;
       const assignees = task.assignments.length > 0 ? task.assignments.join(', ') : 'Unassigned';
-      const due: string = task.dueDateTime
+      const due: string = task.dueDateTime != null
         ? (new Date(task.dueDateTime).toISOString().split('T')[0] ?? '')
         : 'No due date';
       tasksHtml += `
@@ -80,14 +80,14 @@ export function renderKanbanHtml(data: PlanVisualizationData): string {
  */
 export function renderGanttHtml(data: PlanVisualizationData): string {
   // Collect all tasks that have at least one date
-  const tasksWithDates = data.tasks.filter((t) => t.startDateTime || t.dueDateTime);
+  const tasksWithDates = data.tasks.filter((t) => t.startDateTime != null || t.dueDateTime != null);
   const allTasks = tasksWithDates.length > 0 ? tasksWithDates : data.tasks;
 
   // Determine date range
   const dates: Date[] = [];
   for (const task of allTasks) {
-    if (task.startDateTime) dates.push(new Date(task.startDateTime));
-    if (task.dueDateTime) dates.push(new Date(task.dueDateTime));
+    if (task.startDateTime != null) dates.push(new Date(task.startDateTime));
+    if (task.dueDateTime != null) dates.push(new Date(task.dueDateTime));
   }
 
   if (dates.length === 0) {
@@ -125,8 +125,8 @@ export function renderGanttHtml(data: PlanVisualizationData): string {
   let barsHtml = '';
   let rowIndex = 0;
   for (const task of allTasks) {
-    const start = task.startDateTime ? new Date(task.startDateTime) : task.dueDateTime ? new Date(new Date(task.dueDateTime).getTime() - 7 * 86400000) : minDate;
-    const end = task.dueDateTime ? new Date(task.dueDateTime) : new Date(start.getTime() + 7 * 86400000);
+    const start = task.startDateTime != null ? new Date(task.startDateTime) : task.dueDateTime != null ? new Date(new Date(task.dueDateTime).getTime() - 7 * 86400000) : minDate;
+    const end = task.dueDateTime != null ? new Date(task.dueDateTime) : new Date(start.getTime() + 7 * 86400000);
     const startOffset = Math.max(0, (start.getTime() - minDate.getTime()) / (maxDate.getTime() - minDate.getTime())) * chartWidth;
     const barWidth = Math.max(10, ((end.getTime() - start.getTime()) / (maxDate.getTime() - minDate.getTime())) * chartWidth);
     const y = headerHeight + rowIndex * rowHeight;
@@ -188,7 +188,7 @@ export function renderSummaryHtml(data: PlanVisualizationData): string {
     assigneeRows += `<tr><td style="padding:6px 12px;border-bottom:1px solid #eee;">${escapeHtml(assignee)}</td><td style="padding:6px 12px;border-bottom:1px solid #eee;text-align:center;">${count}</td></tr>`;
   }
 
-  const statCard = (label: string, value: number, color: string) =>
+  const statCard = (label: string, value: number, color: string): string =>
     `<div style="background:#fff;border-radius:8px;padding:16px 20px;box-shadow:0 1px 3px rgba(0,0,0,0.1);text-align:center;min-width:120px;">
        <div style="font-size:28px;font-weight:700;color:${color};">${value}</div>
        <div style="font-size:13px;color:#666;margin-top:4px;">${label}</div>
@@ -249,9 +249,9 @@ export function renderSummaryHtml(data: PlanVisualizationData): string {
 export function renderBurndownHtml(data: PlanVisualizationData): string {
   const allDates = new Set<string>();
   for (const task of data.tasks) {
-    if (task.startDateTime) allDates.add(new Date(task.startDateTime).toISOString().split('T')[0]!);
-    if (task.dueDateTime) allDates.add(new Date(task.dueDateTime).toISOString().split('T')[0]!);
-    if (task.completedDateTime) allDates.add(new Date(task.completedDateTime).toISOString().split('T')[0]!);
+    if (task.startDateTime != null) allDates.add(new Date(task.startDateTime).toISOString().split('T')[0]!);
+    if (task.dueDateTime != null) allDates.add(new Date(task.dueDateTime).toISOString().split('T')[0]!);
+    if (task.completedDateTime != null) allDates.add(new Date(task.completedDateTime).toISOString().split('T')[0]!);
   }
 
   const sortedDates = [...allDates].sort();
@@ -268,7 +268,7 @@ export function renderBurndownHtml(data: PlanVisualizationData): string {
   const remaining: number[] = [];
   for (const date of sortedDates) {
     const completedByDate = data.tasks.filter(
-      (t) => t.completedDateTime && new Date(t.completedDateTime).toISOString().split('T')[0]! <= date
+      (t) => t.completedDateTime != null && new Date(t.completedDateTime).toISOString().split('T')[0]! <= date
     ).length;
     remaining.push(total - completedByDate);
   }

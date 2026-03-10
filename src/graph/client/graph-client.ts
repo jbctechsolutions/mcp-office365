@@ -21,6 +21,12 @@ import { getAccessToken, type DeviceCodeCallback } from '../auth/index.js';
 import { type BatchRequest, type BatchResponseItem, buildBatchPayload, splitIntoBatches, parseBatchResponse } from './batch.js';
 import { ResponseCache, CacheTTL, createCacheKey } from './cache.js';
 
+/** Generic shape for a Graph API response containing a `.value` array. */
+interface GraphCollectionResponse<T> { value: T[] }
+
+/** Generic Graph API entity (untyped). */
+type GraphEntity = Record<string, unknown>;
+
 /**
  * Graph client wrapper with caching and token management.
  */
@@ -306,12 +312,12 @@ export class GraphClient {
         .get() as PageCollection;
     }
 
-    const messages: MicrosoftGraph.Message[] = [...(response.value ?? [])];
+    const messages: MicrosoftGraph.Message[] = [...((response.value as MicrosoftGraph.Message[] | undefined) ?? [])];
 
     let nextLink = response['@odata.nextLink'];
     while (nextLink != null) {
       const nextPage = await client.api(nextLink).get() as PageCollection;
-      messages.push(...(nextPage.value ?? []));
+      messages.push(...((nextPage.value as MicrosoftGraph.Message[] | undefined) ?? []));
       nextLink = nextPage['@odata.nextLink'];
     }
 
@@ -1638,6 +1644,11 @@ export class GraphClient {
     }) as MicrosoftGraph.ChatMessage;
   }
 
+  async getChatMessage(chatId: string, messageId: string): Promise<MicrosoftGraph.ChatMessage> {
+    const client = await this.getClient();
+    return await client.api(`/me/chats/${chatId}/messages/${messageId}`).get() as MicrosoftGraph.ChatMessage;
+  }
+
   // Channel message reactions
   async setChannelMessageReaction(teamId: string, channelId: string, messageId: string, reactionType: string): Promise<void> {
     const client = await this.getClient();
@@ -1891,8 +1902,8 @@ export class GraphClient {
 
   async getUsersPresence(userIds: string[]): Promise<MicrosoftGraph.Presence[]> {
     const client = await this.getClient();
-    const response = await client.api('/communications/getPresencesByUserId').post({ ids: userIds });
-    return response.value as MicrosoftGraph.Presence[];
+    const response = await client.api('/communications/getPresencesByUserId').post({ ids: userIds }) as { value: MicrosoftGraph.Presence[] };
+    return response.value;
   }
 
 
@@ -1907,7 +1918,7 @@ export class GraphClient {
 
     for (const batch of batches) {
       const payload = buildBatchPayload(batch);
-      const response = await client.api('/$batch').post(payload);
+      const response = await client.api('/$batch').post(payload) as { responses: BatchResponseItem[] };
       const results = parseBatchResponse(response);
       for (const [id, result] of results) {
         allResults.set(id, result);
@@ -1921,34 +1932,34 @@ export class GraphClient {
   // Online Meetings
   // ===========================================================================
 
-  async listOnlineMeetings(limit: number = 20): Promise<any[]> {
+  async listOnlineMeetings(limit: number = 20): Promise<GraphEntity[]> {
     const client = await this.getClient();
     const response = await client.api('/me/onlineMeetings')
       .top(limit)
       .orderby('startDateTime desc')
-      .get();
+      .get() as GraphCollectionResponse<GraphEntity>;
     return response.value;
   }
 
-  async getOnlineMeeting(meetingId: string): Promise<any> {
+  async getOnlineMeeting(meetingId: string): Promise<GraphEntity> {
     const client = await this.getClient();
-    return await client.api(`/me/onlineMeetings/${meetingId}`).get();
+    return await client.api(`/me/onlineMeetings/${meetingId}`).get() as GraphEntity;
   }
 
-  async listMeetingRecordings(meetingId: string): Promise<any[]> {
+  async listMeetingRecordings(meetingId: string): Promise<GraphEntity[]> {
     const client = await this.getClient();
-    const response = await client.api(`/me/onlineMeetings/${meetingId}/recordings`).get();
+    const response = await client.api(`/me/onlineMeetings/${meetingId}/recordings`).get() as GraphCollectionResponse<GraphEntity>;
     return response.value;
   }
 
   async getMeetingRecordingContent(meetingId: string, recordingId: string): Promise<ArrayBuffer> {
     const client = await this.getClient();
-    return await client.api(`/me/onlineMeetings/${meetingId}/recordings/${recordingId}/content`).get();
+    return await client.api(`/me/onlineMeetings/${meetingId}/recordings/${recordingId}/content`).get() as ArrayBuffer;
   }
 
-  async listMeetingTranscripts(meetingId: string): Promise<any[]> {
+  async listMeetingTranscripts(meetingId: string): Promise<GraphEntity[]> {
     const client = await this.getClient();
-    const response = await client.api(`/me/onlineMeetings/${meetingId}/transcripts`).get();
+    const response = await client.api(`/me/onlineMeetings/${meetingId}/transcripts`).get() as GraphCollectionResponse<GraphEntity>;
     return response.value;
   }
 
@@ -1956,7 +1967,7 @@ export class GraphClient {
     const client = await this.getClient();
     return await client.api(`/me/onlineMeetings/${meetingId}/transcripts/${transcriptId}/content`)
       .header('Accept', format)
-      .get();
+      .get() as string;
   }
 
 
@@ -1967,93 +1978,93 @@ export class GraphClient {
   /**
    * Lists worksheets in an Excel workbook.
    */
-  async listWorksheets(driveItemId: string): Promise<any[]> {
+  async listWorksheets(driveItemId: string): Promise<GraphEntity[]> {
     const client = await this.getClient();
-    const response = await client.api(`/me/drive/items/${driveItemId}/workbook/worksheets`).get();
+    const response = await client.api(`/me/drive/items/${driveItemId}/workbook/worksheets`).get() as GraphCollectionResponse<GraphEntity>;
     return response.value;
   }
 
   /**
    * Gets cell values for a specific range in a worksheet.
    */
-  async getWorksheetRange(driveItemId: string, worksheetName: string, range: string): Promise<any> {
+  async getWorksheetRange(driveItemId: string, worksheetName: string, range: string): Promise<GraphEntity> {
     const client = await this.getClient();
-    return await client.api(`/me/drive/items/${driveItemId}/workbook/worksheets/${encodeURIComponent(worksheetName)}/range(address='${encodeURIComponent(range)}')`).get();
+    return await client.api(`/me/drive/items/${driveItemId}/workbook/worksheets/${encodeURIComponent(worksheetName)}/range(address='${encodeURIComponent(range)}')`).get() as GraphEntity;
   }
 
   /**
    * Gets the used range (all data) for a worksheet.
    */
-  async getUsedRange(driveItemId: string, worksheetName: string): Promise<any> {
+  async getUsedRange(driveItemId: string, worksheetName: string): Promise<GraphEntity> {
     const client = await this.getClient();
-    return await client.api(`/me/drive/items/${driveItemId}/workbook/worksheets/${encodeURIComponent(worksheetName)}/usedRange`).get();
+    return await client.api(`/me/drive/items/${driveItemId}/workbook/worksheets/${encodeURIComponent(worksheetName)}/usedRange`).get() as GraphEntity;
   }
 
   /**
    * Updates cell values for a specific range in a worksheet.
    */
-  async updateWorksheetRange(driveItemId: string, worksheetName: string, range: string, values: unknown[][]): Promise<any> {
+  async updateWorksheetRange(driveItemId: string, worksheetName: string, range: string, values: unknown[][]): Promise<GraphEntity> {
     const client = await this.getClient();
-    return await client.api(`/me/drive/items/${driveItemId}/workbook/worksheets/${encodeURIComponent(worksheetName)}/range(address='${encodeURIComponent(range)}')`).patch({ values });
+    return await client.api(`/me/drive/items/${driveItemId}/workbook/worksheets/${encodeURIComponent(worksheetName)}/range(address='${encodeURIComponent(range)}')`).patch({ values }) as GraphEntity;
   }
 
   /**
    * Gets rows from a named table in an Excel workbook.
    */
-  async getTableData(driveItemId: string, tableName: string): Promise<any> {
+  async getTableData(driveItemId: string, tableName: string): Promise<GraphEntity[]> {
     const client = await this.getClient();
-    const response = await client.api(`/me/drive/items/${driveItemId}/workbook/tables/${encodeURIComponent(tableName)}/rows`).get();
+    const response = await client.api(`/me/drive/items/${driveItemId}/workbook/tables/${encodeURIComponent(tableName)}/rows`).get() as GraphCollectionResponse<GraphEntity>;
     return response.value;
   }
   // ===========================================================================
   // OneDrive
   // ===========================================================================
 
-  async listDriveItems(itemId?: string): Promise<any[]> {
+  async listDriveItems(itemId?: string): Promise<GraphEntity[]> {
     const client = await this.getClient();
-    const path = itemId ? `/me/drive/items/${itemId}/children` : '/me/drive/root/children';
-    const response = await client.api(path).get();
+    const apiPath = itemId != null ? `/me/drive/items/${itemId}/children` : '/me/drive/root/children';
+    const response = await client.api(apiPath).get() as GraphCollectionResponse<GraphEntity>;
     return response.value;
   }
 
-  async searchDriveItems(query: string, limit: number = 25): Promise<any[]> {
+  async searchDriveItems(query: string, limit: number = 25): Promise<GraphEntity[]> {
     const client = await this.getClient();
-    const response = await client.api(`/me/drive/root/search(q='${encodeURIComponent(query)}')`).top(limit).get();
+    const response = await client.api(`/me/drive/root/search(q='${encodeURIComponent(query)}')`).top(limit).get() as GraphCollectionResponse<GraphEntity>;
     return response.value;
   }
 
-  async getDriveItem(itemId: string): Promise<any> {
+  async getDriveItem(itemId: string): Promise<GraphEntity> {
     const client = await this.getClient();
-    return await client.api(`/me/drive/items/${itemId}`).get();
+    return await client.api(`/me/drive/items/${itemId}`).get() as GraphEntity;
   }
 
   async downloadDriveItem(itemId: string): Promise<ArrayBuffer> {
     const client = await this.getClient();
-    return await client.api(`/me/drive/items/${itemId}/content`).get();
+    return await client.api(`/me/drive/items/${itemId}/content`).get() as ArrayBuffer;
   }
 
-  async uploadDriveItem(parentPath: string, fileName: string, content: Buffer): Promise<any> {
+  async uploadDriveItem(parentPath: string, fileName: string, content: Buffer): Promise<GraphEntity> {
     const client = await this.getClient();
     return await client.api(`/me/drive/root:/${parentPath}/${fileName}:/content`)
       .header('Content-Type', 'application/octet-stream')
-      .put(content);
+      .put(content) as GraphEntity;
   }
 
-  async listRecentDriveItems(): Promise<any[]> {
+  async listRecentDriveItems(): Promise<GraphEntity[]> {
     const client = await this.getClient();
-    const response = await client.api('/me/drive/recent').get();
+    const response = await client.api('/me/drive/recent').get() as GraphCollectionResponse<GraphEntity>;
     return response.value;
   }
 
-  async listSharedWithMe(): Promise<any[]> {
+  async listSharedWithMe(): Promise<GraphEntity[]> {
     const client = await this.getClient();
-    const response = await client.api('/me/drive/sharedWithMe').get();
+    const response = await client.api('/me/drive/sharedWithMe').get() as GraphCollectionResponse<GraphEntity>;
     return response.value;
   }
 
-  async createSharingLink(itemId: string, type: string, scope: string): Promise<any> {
+  async createSharingLink(itemId: string, type: string, scope: string): Promise<GraphEntity> {
     const client = await this.getClient();
-    return await client.api(`/me/drive/items/${itemId}/createLink`).post({ type, scope });
+    return await client.api(`/me/drive/items/${itemId}/createLink`).post({ type, scope }) as GraphEntity;
   }
 
   async deleteDriveItem(itemId: string): Promise<void> {
@@ -2068,45 +2079,45 @@ export class GraphClient {
   /**
    * Lists sites the current user follows.
    */
-  async listFollowedSites(): Promise<any[]> {
+  async listFollowedSites(): Promise<GraphEntity[]> {
     const client = await this.getClient();
-    const response = await client.api('/me/followedSites').get();
+    const response = await client.api('/me/followedSites').get() as GraphCollectionResponse<GraphEntity>;
     return response.value;
   }
 
   /**
    * Searches for SharePoint sites by keyword.
    */
-  async searchSites(query: string): Promise<any[]> {
+  async searchSites(query: string): Promise<GraphEntity[]> {
     const client = await this.getClient();
-    const response = await client.api(`/sites?search=${encodeURIComponent(query)}`).get();
+    const response = await client.api(`/sites?search=${encodeURIComponent(query)}`).get() as GraphCollectionResponse<GraphEntity>;
     return response.value;
   }
 
   /**
    * Gets a specific SharePoint site by ID.
    */
-  async getSite(siteId: string): Promise<any> {
+  async getSite(siteId: string): Promise<GraphEntity> {
     const client = await this.getClient();
-    return await client.api(`/sites/${siteId}`).get();
+    return await client.api(`/sites/${siteId}`).get() as GraphEntity;
   }
 
   /**
    * Lists document libraries (drives) for a SharePoint site.
    */
-  async listDocumentLibraries(siteId: string): Promise<any[]> {
+  async listDocumentLibraries(siteId: string): Promise<GraphEntity[]> {
     const client = await this.getClient();
-    const response = await client.api(`/sites/${siteId}/drives`).get();
+    const response = await client.api(`/sites/${siteId}/drives`).get() as GraphCollectionResponse<GraphEntity>;
     return response.value;
   }
 
   /**
    * Lists items in a document library or folder.
    */
-  async listLibraryItems(driveId: string, itemId?: string): Promise<any[]> {
+  async listLibraryItems(driveId: string, itemId?: string): Promise<GraphEntity[]> {
     const client = await this.getClient();
-    const path = itemId ? `/drives/${driveId}/items/${itemId}/children` : `/drives/${driveId}/root/children`;
-    const response = await client.api(path).get();
+    const apiPath = itemId != null ? `/drives/${driveId}/items/${itemId}/children` : `/drives/${driveId}/root/children`;
+    const response = await client.api(apiPath).get() as GraphCollectionResponse<GraphEntity>;
     return response.value;
   }
 
@@ -2115,7 +2126,7 @@ export class GraphClient {
    */
   async downloadLibraryFile(driveId: string, itemId: string): Promise<ArrayBuffer> {
     const client = await this.getClient();
-    return await client.api(`/drives/${driveId}/items/${itemId}/content`).get();
+    return await client.api(`/drives/${driveId}/items/${itemId}/content`).get() as ArrayBuffer;
   }
 }
 

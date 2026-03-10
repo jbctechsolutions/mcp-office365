@@ -24,10 +24,10 @@ export function renderGanttMermaid(data: PlanVisualizationData): string {
     if (bucketTasks.length === 0) continue;
     lines.push(`    section ${bucket.name}`);
     for (const task of bucketTasks) {
-      const start = task.startDateTime
+      const start = task.startDateTime != null
         ? new Date(task.startDateTime).toISOString().split('T')[0]
         : null;
-      const end = task.dueDateTime
+      const end = task.dueDateTime != null
         ? new Date(task.dueDateTime).toISOString().split('T')[0]
         : null;
       const status =
@@ -36,11 +36,11 @@ export function renderGanttMermaid(data: PlanVisualizationData): string {
           : task.percentComplete > 0
             ? 'active, '
             : '';
-      if (start && end) {
+      if (start != null && end != null) {
         lines.push(`    ${task.title} :${status}${start}, ${end}`);
-      } else if (start) {
+      } else if (start != null) {
         lines.push(`    ${task.title} :${status}${start}, 7d`);
-      } else if (end) {
+      } else if (end != null) {
         const estimatedStart = new Date(end);
         estimatedStart.setDate(estimatedStart.getDate() - 7);
         const startStr = estimatedStart.toISOString().split('T')[0];
@@ -131,7 +131,7 @@ export function renderSummaryMermaid(data: PlanVisualizationData): string {
  */
 export function renderBurndownMermaid(data: PlanVisualizationData): string {
   const tasksWithDates = data.tasks.filter(
-    (t) => t.dueDateTime || t.completedDateTime || t.startDateTime
+    (t) => t.dueDateTime != null || t.completedDateTime != null || t.startDateTime != null
   );
 
   if (tasksWithDates.length === 0) {
@@ -140,9 +140,9 @@ export function renderBurndownMermaid(data: PlanVisualizationData): string {
 
   const allDates = new Set<string>();
   for (const task of data.tasks) {
-    if (task.startDateTime) allDates.add(new Date(task.startDateTime).toISOString().split('T')[0]!);
-    if (task.dueDateTime) allDates.add(new Date(task.dueDateTime).toISOString().split('T')[0]!);
-    if (task.completedDateTime) allDates.add(new Date(task.completedDateTime).toISOString().split('T')[0]!);
+    if (task.startDateTime != null) allDates.add(new Date(task.startDateTime).toISOString().split('T')[0]!);
+    if (task.dueDateTime != null) allDates.add(new Date(task.dueDateTime).toISOString().split('T')[0]!);
+    if (task.completedDateTime != null) allDates.add(new Date(task.completedDateTime).toISOString().split('T')[0]!);
   }
 
   const sortedDates = [...allDates].sort();
@@ -152,7 +152,7 @@ export function renderBurndownMermaid(data: PlanVisualizationData): string {
   for (const date of sortedDates) {
     const completedByDate = data.tasks.filter(
       (t) =>
-        t.completedDateTime &&
+        t.completedDateTime != null &&
         new Date(t.completedDateTime).toISOString().split('T')[0]! <= date
     ).length;
     remaining.push(total - completedByDate);

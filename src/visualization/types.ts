@@ -49,10 +49,10 @@ export function getTaskStatus(task: {
   dueDateTime?: string | null;
   completedDateTime?: string | null;
 }): 'completed' | 'in-progress' | 'not-started' | 'overdue' {
-  if (task.percentComplete === 100 || task.completedDateTime) return 'completed';
+  if (task.percentComplete === 100 || task.completedDateTime != null) return 'completed';
   if (
-    task.dueDateTime &&
-    !task.completedDateTime &&
+    task.dueDateTime != null &&
+    task.completedDateTime == null &&
     new Date(task.dueDateTime) < new Date()
   ) {
     return 'overdue';

@@ -1,14 +1,14 @@
 {
-  "name": "outlook-mac",
-  "displayName": "Outlook for Mac",
+  "name": "office365",
+  "displayName": "Microsoft 365",
   "version": "1.0.0",
-  "description": "Access Outlook for Mac data - emails, calendar, contacts, and tasks through the Model Context Protocol",
+  "description": "Access Microsoft 365 data - emails, calendar, contacts, tasks, teams, planner, and more through the Model Context Protocol",
   "author": "JBC Tech Solutions, LLC",
   "license": "MIT",
-  "homepage": "https://github.com/jbctechsolutions/mcp-office365-mac",
+  "homepage": "https://mcp-office365.jbc.dev",
   "repository": {
     "type": "git",
-    "url": "https://github.com/jbctechsolutions/mcp-office365-mac.git"
+    "url": "https://github.com/jbctechsolutions/mcp-office365.git"
   },
   "keywords": [
     "mcp",

@@ -9,9 +9,9 @@
 
 ### Community Support
 - **GitHub Discussions:** Ask questions, share tips, discuss features
-  - https://github.com/jbctechsolutions/mcp-office365-mac/discussions
+  - https://github.com/jbctechsolutions/mcp-office365/discussions
 - **GitHub Issues:** Report bugs or request features
-  - https://github.com/jbctechsolutions/mcp-office365-mac/issues
+  - https://github.com/jbctechsolutions/mcp-office365/issues
 
 ## Support Policy
 
@@ -83,8 +83,8 @@ This project is free and open source. If you find it valuable, consider:
 
 - **General inquiries:** support@jbc.dev
 - **Security issues:** support@jbc.dev (private)
-- **GitHub:** https://github.com/jbctechsolutions/mcp-office365-mac
+- **GitHub:** https://github.com/jbctechsolutions/mcp-office365
 
 ---
 
-Thank you for using Outlook MCP Server! 🙏
+Thank you for using MCP Office 365! 🙏

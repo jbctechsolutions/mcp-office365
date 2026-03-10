@@ -6024,22 +6024,22 @@ async function handleGraphToolCall(
       // Calendar permission tools
       case 'list_calendar_permissions': {
         const params = ListCalendarPermissionsInput.parse(args);
-        return await calendarPermissionsTools!.listCalendarPermissions(params);
+        return await calendarPermissionsTools.listCalendarPermissions(params);
       }
 
       case 'create_calendar_permission': {
         const params = CreateCalendarPermissionInput.parse(args);
-        return await calendarPermissionsTools!.createCalendarPermission(params);
+        return await calendarPermissionsTools.createCalendarPermission(params);
       }
 
       case 'prepare_delete_calendar_permission': {
         const params = PrepareDeleteCalendarPermissionInput.parse(args);
-        return calendarPermissionsTools!.prepareDeleteCalendarPermission(params);
+        return calendarPermissionsTools.prepareDeleteCalendarPermission(params);
       }
 
       case 'confirm_delete_calendar_permission': {
         const params = ConfirmDeleteCalendarPermissionInput.parse(args);
-        return await calendarPermissionsTools!.confirmDeleteCalendarPermission(params);
+        return await calendarPermissionsTools.confirmDeleteCalendarPermission(params);
       }
 
       // Room lists & rooms tools
@@ -6728,7 +6728,7 @@ async function main(): Promise<void> {
 const isMainModule =
   import.meta.url === `file://${process.argv[1]}` ||
   process.argv[1]?.endsWith('dist/index.js') === true ||
-  process.argv[1]?.includes('mcp-office365-mac') === true ||
+  process.argv[1]?.includes('mcp-office365') === true ||
   // When run via npx or bin, process.argv[1] might be undefined or a symlink
   process.argv[1] === undefined ||
   import.meta.url.endsWith('/dist/index.js');

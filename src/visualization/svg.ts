@@ -93,7 +93,7 @@ export function renderGanttSvg(data: PlanVisualizationData): string {
   const padding = 10;
   const svgWidth = labelWidth + chartWidth + padding * 2;
 
-  const allTasks = data.tasks.filter((t) => t.startDateTime || t.dueDateTime);
+  const allTasks = data.tasks.filter((t) => t.startDateTime != null || t.dueDateTime != null);
   if (allTasks.length === 0 && data.tasks.length > 0) {
     // Use all tasks with default dates if none have dates
     allTasks.push(...data.tasks);
@@ -101,8 +101,8 @@ export function renderGanttSvg(data: PlanVisualizationData): string {
 
   const dates: number[] = [];
   for (const task of allTasks) {
-    if (task.startDateTime) dates.push(new Date(task.startDateTime).getTime());
-    if (task.dueDateTime) dates.push(new Date(task.dueDateTime).getTime());
+    if (task.startDateTime != null) dates.push(new Date(task.startDateTime).getTime());
+    if (task.dueDateTime != null) dates.push(new Date(task.dueDateTime).getTime());
   }
 
   if (dates.length === 0) {
@@ -134,12 +134,12 @@ export function renderGanttSvg(data: PlanVisualizationData): string {
     const y = headerHeight + i * rowHeight;
     const pColor = priorityColor(task.priority);
 
-    const startTime = task.startDateTime
+    const startTime = task.startDateTime != null
       ? new Date(task.startDateTime).getTime()
-      : task.dueDateTime
+      : task.dueDateTime != null
         ? new Date(task.dueDateTime).getTime() - 7 * 86400000
         : minTime;
-    const endTime = task.dueDateTime
+    const endTime = task.dueDateTime != null
       ? new Date(task.dueDateTime).getTime()
       : startTime + 7 * 86400000;
 
@@ -243,9 +243,9 @@ export function renderSummarySvg(data: PlanVisualizationData): string {
 export function renderBurndownSvg(data: PlanVisualizationData): string {
   const allDates = new Set<string>();
   for (const task of data.tasks) {
-    if (task.startDateTime) allDates.add(new Date(task.startDateTime).toISOString().split('T')[0]!);
-    if (task.dueDateTime) allDates.add(new Date(task.dueDateTime).toISOString().split('T')[0]!);
-    if (task.completedDateTime) allDates.add(new Date(task.completedDateTime).toISOString().split('T')[0]!);
+    if (task.startDateTime != null) allDates.add(new Date(task.startDateTime).toISOString().split('T')[0]!);
+    if (task.dueDateTime != null) allDates.add(new Date(task.dueDateTime).toISOString().split('T')[0]!);
+    if (task.completedDateTime != null) allDates.add(new Date(task.completedDateTime).toISOString().split('T')[0]!);
   }
 
   const sortedDates = [...allDates].sort();
@@ -259,7 +259,7 @@ export function renderBurndownSvg(data: PlanVisualizationData): string {
   const remaining: number[] = [];
   for (const date of sortedDates) {
     const completedByDate = data.tasks.filter(
-      (t) => t.completedDateTime && new Date(t.completedDateTime).toISOString().split('T')[0]! <= date
+      (t) => t.completedDateTime != null && new Date(t.completedDateTime).toISOString().split('T')[0]! <= date
     ).length;
     remaining.push(total - completedByDate);
   }
