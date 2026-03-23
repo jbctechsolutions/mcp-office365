@@ -51,6 +51,10 @@ export const GRAPH_SCOPES = [
   'Presence.Read.All',
   // Planner
   'Group.Read.All',
+  // OneDrive
+  'Files.ReadWrite',
+  // SharePoint
+  'Sites.Read.All',
 ] as const;
 
 /**

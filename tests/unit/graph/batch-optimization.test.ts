@@ -263,9 +263,10 @@ describe('batch-optimized repository methods', () => {
     });
 
     it('throws when plan ID is not in cache', async () => {
+      mockClient.listPlans.mockResolvedValue([]);
       await expect(
         repository.listPlannerTasksWithDetailsAsync(999999),
-      ).rejects.toThrow('not found in cache');
+      ).rejects.toThrow('not found');
     });
   });
 });

@@ -768,7 +768,7 @@ export class GraphClient {
 
     const response = await client
       .api('/me/todo/lists')
-      .select('id,displayName,isOwner,isShared,wellknownListName')
+      .select('id,displayName,wellknownListName')
       .get() as PageCollection;
 
     const result = response.value as MicrosoftGraph.TodoTaskList[];

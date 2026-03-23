@@ -51,8 +51,8 @@ describe('graph/auth/config', () => {
       expect(GRAPH_SCOPES).toContain('Group.Read.All');
     });
 
-    it('has exactly 16 scopes', () => {
-      expect(GRAPH_SCOPES).toHaveLength(16);
+    it('has exactly 18 scopes', () => {
+      expect(GRAPH_SCOPES).toHaveLength(18);
     });
   });
 
