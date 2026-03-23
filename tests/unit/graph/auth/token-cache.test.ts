@@ -48,14 +48,14 @@ describe('graph/auth/token-cache', () => {
   describe('getTokenCacheDir', () => {
     it('returns path in home directory', () => {
       const dir = getTokenCacheDir();
-      expect(dir).toBe(join('/mock/home', '.outlook-mcp'));
+      expect(dir).toBe(join('/mock/home', '.mcp-office365'));
     });
   });
 
   describe('getTokenCacheFile', () => {
     it('returns tokens.json path', () => {
       const file = getTokenCacheFile();
-      expect(file).toBe(join('/mock/home', '.outlook-mcp', 'tokens.json'));
+      expect(file).toBe(join('/mock/home', '.mcp-office365', 'tokens.json'));
     });
   });
 
@@ -207,7 +207,7 @@ describe('graph/auth/token-cache', () => {
         await plugin.afterCacheAccess(mockContext);
 
         expect(mockMkdirSync).toHaveBeenCalledWith(
-          expect.stringContaining('.outlook-mcp'),
+          expect.stringContaining('.mcp-office365'),
           { recursive: true, mode: 0o700 }
         );
       });

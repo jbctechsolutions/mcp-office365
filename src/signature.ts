@@ -6,7 +6,7 @@
 /**
  * Email signature storage and auto-append logic.
  *
- * Signatures are stored as HTML at ~/.outlook-mcp/signature.html
+ * Signatures are stored as HTML at ~/.mcp-office365/signature.html
  * and auto-appended to email bodies when creating/sending emails.
  */
 
@@ -14,7 +14,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 
-const SIGNATURE_DIR = join(homedir(), '.outlook-mcp');
+const SIGNATURE_DIR = join(homedir(), '.mcp-office365');
 const SIGNATURE_FILE = join(SIGNATURE_DIR, 'signature.html');
 
 /**
