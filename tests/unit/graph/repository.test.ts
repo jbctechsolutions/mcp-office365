@@ -3963,7 +3963,8 @@ describe('graph/repository', () => {
       });
 
       it('throws for uncached team ID', async () => {
-        await expect(repository.listChannelsAsync(999999)).rejects.toThrow('not found in cache');
+        mockClient.listJoinedTeams.mockResolvedValue([]);
+        await expect(repository.listChannelsAsync(999999)).rejects.toThrow('not found');
       });
 
       it('defaults fields to empty/standard when null', async () => {
@@ -4050,7 +4051,8 @@ describe('graph/repository', () => {
       });
 
       it('throws for uncached team ID', async () => {
-        await expect(repository.createChannelAsync(999999, 'Test')).rejects.toThrow('not found in cache');
+        mockClient.listJoinedTeams.mockResolvedValue([]);
+        await expect(repository.createChannelAsync(999999, 'Test')).rejects.toThrow('not found');
       });
     });
 
@@ -4160,7 +4162,8 @@ describe('graph/repository', () => {
       });
 
       it('throws for uncached team ID', async () => {
-        await expect(repository.listTeamMembersAsync(999999)).rejects.toThrow('not found in cache');
+        mockClient.listJoinedTeams.mockResolvedValue([]);
+        await expect(repository.listTeamMembersAsync(999999)).rejects.toThrow('not found');
       });
 
       it('defaults fields to empty when null', async () => {

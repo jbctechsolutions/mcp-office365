@@ -126,6 +126,37 @@ export class GraphRepository implements IRepository {
   }
 
   // ===========================================================================
+  // Cache Resolvers (auto-fetch parent on cache miss)
+  // ===========================================================================
+
+  private async resolveTeamId(teamId: number): Promise<string> {
+    let graphId = this.idCache.teams.get(teamId);
+    if (graphId != null) return graphId;
+    await this.listTeamsAsync();
+    graphId = this.idCache.teams.get(teamId);
+    if (graphId != null) return graphId;
+    throw new Error(`Team ID ${teamId} not found. Verify the ID is correct by calling list_teams.`);
+  }
+
+  private async resolvePlanId(planId: number): Promise<{ planId: string; etag: string }> {
+    let cached = this.idCache.plans.get(planId);
+    if (cached != null) return cached;
+    await this.listPlansAsync();
+    cached = this.idCache.plans.get(planId);
+    if (cached != null) return cached;
+    throw new Error(`Plan ID ${planId} not found. Verify the ID is correct by calling list_plans.`);
+  }
+
+  private async resolveChatId(chatId: number): Promise<string> {
+    let graphId = this.idCache.chats.get(chatId);
+    if (graphId != null) return graphId;
+    await this.listChatsAsync();
+    graphId = this.idCache.chats.get(chatId);
+    if (graphId != null) return graphId;
+    throw new Error(`Chat ID ${chatId} not found. Verify the ID is correct by calling list_chats.`);
+  }
+
+  // ===========================================================================
   // Folders
   // ===========================================================================
 
@@ -2322,8 +2353,7 @@ export class GraphRepository implements IRepository {
    * Lists all channels in a team with cached numeric IDs.
    */
   async listChannelsAsync(teamId: number): Promise<Array<{ id: number; name: string; description: string; membershipType: string }>> {
-    const graphTeamId = this.idCache.teams.get(teamId);
-    if (graphTeamId == null) throw new Error(`Team ID ${teamId} not found in cache. Try listing teams first.`);
+    const graphTeamId = await this.resolveTeamId(teamId);
     const channels = await this.client.listChannels(graphTeamId);
     return channels.map((ch) => {
       const graphId = ch.id!;
@@ -2347,8 +2377,7 @@ export class GraphRepository implements IRepository {
    * Creates a new channel in a team.
    */
   async createChannelAsync(teamId: number, name: string, description?: string): Promise<number> {
-    const graphTeamId = this.idCache.teams.get(teamId);
-    if (graphTeamId == null) throw new Error(`Team ID ${teamId} not found in cache. Try listing teams first.`);
+    const graphTeamId = await this.resolveTeamId(teamId);
     const ch = await this.client.createChannel(graphTeamId, name, description);
     const graphId = ch.id!;
     const numericId = hashStringToNumber(graphId);
@@ -2382,8 +2411,7 @@ export class GraphRepository implements IRepository {
    * Lists members of a team.
    */
   async listTeamMembersAsync(teamId: number): Promise<Array<{ id: string; displayName: string; email: string; roles: string[] }>> {
-    const graphTeamId = this.idCache.teams.get(teamId);
-    if (graphTeamId == null) throw new Error(`Team ID ${teamId} not found in cache. Try listing teams first.`);
+    const graphTeamId = await this.resolveTeamId(teamId);
     const members = await this.client.listTeamMembers(graphTeamId);
     return members.map((m) => ({
       id: m.id ?? '',
@@ -2515,8 +2543,7 @@ export class GraphRepository implements IRepository {
   async getChatAsync(chatId: number): Promise<{
     id: number; topic: string; chatType: string; createdDateTime: string; webUrl: string;
   }> {
-    const graphId = this.idCache.chats.get(chatId);
-    if (graphId == null) throw new Error(`Chat ID ${chatId} not found in cache. Try listing chats first.`);
+    const graphId = await this.resolveChatId(chatId);
     const chat = await this.client.getChat(graphId);
     return {
       id: chatId,
@@ -2531,8 +2558,7 @@ export class GraphRepository implements IRepository {
     id: number; senderName: string; senderEmail: string; bodyPreview: string;
     bodyContent: string; contentType: string; createdDateTime: string;
   }>> {
-    const graphChatId = this.idCache.chats.get(chatId);
-    if (graphChatId == null) throw new Error(`Chat ID ${chatId} not found in cache. Try listing chats first.`);
+    const graphChatId = await this.resolveChatId(chatId);
     const messages = await this.client.listChatMessages(graphChatId, limit);
     return messages.map((msg) => {
       const graphId = msg.id!;
@@ -2551,8 +2577,7 @@ export class GraphRepository implements IRepository {
   }
 
   async sendChatMessageAsync(chatId: number, body: string, contentType: string = 'html'): Promise<number> {
-    const graphChatId = this.idCache.chats.get(chatId);
-    if (graphChatId == null) throw new Error(`Chat ID ${chatId} not found in cache. Try listing chats first.`);
+    const graphChatId = await this.resolveChatId(chatId);
     const msg = await this.client.sendChatMessage(graphChatId, body, contentType);
     const graphId = msg.id!;
     const numericId = hashStringToNumber(graphId);
@@ -2620,8 +2645,7 @@ export class GraphRepository implements IRepository {
   }
 
   async listChatMembersAsync(chatId: number): Promise<Array<{ displayName: string; email: string; roles: string[] }>> {
-    const graphChatId = this.idCache.chats.get(chatId);
-    if (graphChatId == null) throw new Error(`Chat ID ${chatId} not found in cache. Try listing chats first.`);
+    const graphChatId = await this.resolveChatId(chatId);
     const members = await this.client.listChatMembers(graphChatId);
     return members.map((m) => ({
       displayName: m.displayName ?? '',
@@ -2657,8 +2681,7 @@ export class GraphRepository implements IRepository {
    * Gets a specific plan by cached numeric ID.
    */
   async getPlanAsync(planId: number): Promise<{ id: number; title: string; owner: string; createdDateTime: string; etag: string }> {
-    const cached = this.idCache.plans.get(planId);
-    if (cached == null) throw new Error(`Plan ID ${planId} not found in cache. Try listing plans first.`);
+    const cached = await this.resolvePlanId(planId);
     const plan = await this.client.getPlan(cached.planId);
     const etag = ((plan as unknown as Record<string, unknown>)['@odata.etag'] as string | undefined) ?? '';
     this.idCache.plans.set(planId, { planId: cached.planId, etag });
@@ -2687,8 +2710,7 @@ export class GraphRepository implements IRepository {
    * Updates a plan (requires cached ETag).
    */
   async updatePlanAsync(planId: number, updates: { title?: string }): Promise<void> {
-    const cached = this.idCache.plans.get(planId);
-    if (cached == null) throw new Error(`Plan ID ${planId} not found in cache. Try listing plans first.`);
+    const cached = await this.resolvePlanId(planId);
     const graphUpdates: Record<string, unknown> = {};
     if (updates.title != null) graphUpdates['title'] = updates.title;
     const result = await this.client.updatePlan(cached.planId, graphUpdates, cached.etag);
@@ -2704,8 +2726,7 @@ export class GraphRepository implements IRepository {
    * Lists all buckets in a plan.
    */
   async listBucketsAsync(planId: number): Promise<Array<{ id: number; name: string; planId: number; orderHint: string }>> {
-    const cached = this.idCache.plans.get(planId);
-    if (cached == null) throw new Error(`Plan ID ${planId} not found in cache. Try listing plans first.`);
+    const cached = await this.resolvePlanId(planId);
     const buckets = await this.client.listBuckets(cached.planId);
     return buckets.map((bucket) => {
       const graphId = bucket.id!;
@@ -2725,8 +2746,7 @@ export class GraphRepository implements IRepository {
    * Creates a new bucket in a plan.
    */
   async createBucketAsync(planId: number, name: string): Promise<number> {
-    const cached = this.idCache.plans.get(planId);
-    if (cached == null) throw new Error(`Plan ID ${planId} not found in cache. Try listing plans first.`);
+    const cached = await this.resolvePlanId(planId);
     const bucket = await this.client.createBucket(cached.planId, name);
     const graphId = bucket.id!;
     const numericId = hashStringToNumber(graphId);
@@ -2770,8 +2790,7 @@ export class GraphRepository implements IRepository {
     percentComplete: number; priority: number; startDateTime: string;
     dueDateTime: string; createdDateTime: string;
   }>> {
-    const cached = this.idCache.plans.get(planId);
-    if (cached == null) throw new Error(`Plan ID ${planId} not found in cache. Try listing plans first.`);
+    const cached = await this.resolvePlanId(planId);
     const tasks = await this.client.listPlannerTasks(cached.planId);
     return tasks.map((task) => {
       const graphId = task.id!;
@@ -2843,8 +2862,7 @@ export class GraphRepository implements IRepository {
     startDate?: string,
     dueDate?: string,
   ): Promise<number> {
-    const cachedPlan = this.idCache.plans.get(planId);
-    if (cachedPlan == null) throw new Error(`Plan ID ${planId} not found in cache. Try listing plans first.`);
+    const cachedPlan = await this.resolvePlanId(planId);
     const body: Record<string, unknown> = { planId: cachedPlan.planId, title };
     if (bucketId != null) {
       const cachedBucket = this.idCache.plannerBuckets.get(bucketId);
