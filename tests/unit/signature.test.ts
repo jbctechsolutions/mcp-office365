@@ -48,10 +48,10 @@ describe('signature', () => {
 
       expect(result).toBe('<p>-- Joel</p>');
       expect(mockExistsSync).toHaveBeenCalledWith(
-        join('/mock/home', '.outlook-mcp', 'signature.html')
+        join('/mock/home', '.mcp-office365', 'signature.html')
       );
       expect(mockReadFileSync).toHaveBeenCalledWith(
-        join('/mock/home', '.outlook-mcp', 'signature.html'),
+        join('/mock/home', '.mcp-office365', 'signature.html'),
         'utf-8'
       );
     });
@@ -73,7 +73,7 @@ describe('signature', () => {
       writeSignature('<p>Best regards,<br>Joel</p>');
 
       expect(mockWriteFileSync).toHaveBeenCalledWith(
-        join('/mock/home', '.outlook-mcp', 'signature.html'),
+        join('/mock/home', '.mcp-office365', 'signature.html'),
         '<p>Best regards,<br>Joel</p>',
         { encoding: 'utf-8', mode: 0o600 }
       );
@@ -85,7 +85,7 @@ describe('signature', () => {
       writeSignature('<p>Sig</p>');
 
       expect(mockMkdirSync).toHaveBeenCalledWith(
-        join('/mock/home', '.outlook-mcp'),
+        join('/mock/home', '.mcp-office365'),
         { recursive: true, mode: 0o700 }
       );
     });
@@ -96,7 +96,7 @@ describe('signature', () => {
       writeSignature('-- Joel\nSenior Dev', 'text');
 
       expect(mockWriteFileSync).toHaveBeenCalledWith(
-        join('/mock/home', '.outlook-mcp', 'signature.html'),
+        join('/mock/home', '.mcp-office365', 'signature.html'),
         '<pre>-- Joel\nSenior Dev</pre>',
         { encoding: 'utf-8', mode: 0o600 }
       );
@@ -108,7 +108,7 @@ describe('signature', () => {
       writeSignature('<b>Joel</b>', 'html');
 
       expect(mockWriteFileSync).toHaveBeenCalledWith(
-        join('/mock/home', '.outlook-mcp', 'signature.html'),
+        join('/mock/home', '.mcp-office365', 'signature.html'),
         '<b>Joel</b>',
         { encoding: 'utf-8', mode: 0o600 }
       );

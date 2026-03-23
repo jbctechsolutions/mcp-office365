@@ -17,7 +17,7 @@ const {
   mockIsAuthenticated: vi.fn(),
   mockGetAccount: vi.fn(),
   mockSignOut: vi.fn(),
-  mockGetTokenCacheFile: vi.fn(() => '/home/user/.outlook-mcp/tokens.json'),
+  mockGetTokenCacheFile: vi.fn(() => '/home/user/.mcp-office365/tokens.json'),
 }));
 
 vi.mock('../../src/graph/index.js', () => ({

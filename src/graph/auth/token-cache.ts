@@ -6,7 +6,7 @@
 /**
  * MSAL token cache plugin for persistent token storage.
  *
- * Stores tokens in ~/.outlook-mcp/tokens.json for persistence
+ * Stores tokens in ~/.mcp-office365/tokens.json for persistence
  * across application restarts.
  */
 
@@ -18,7 +18,7 @@ import type { ICachePlugin, TokenCacheContext } from '@azure/msal-node';
 /**
  * Directory where tokens are stored.
  */
-const TOKEN_CACHE_DIR = join(homedir(), '.outlook-mcp');
+const TOKEN_CACHE_DIR = join(homedir(), '.mcp-office365');
 
 /**
  * Path to the token cache file.
