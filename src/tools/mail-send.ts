@@ -380,9 +380,33 @@ export class MailSendTools {
         : params.body;
 
     // Format body as Graph API expects: { contentType, content }
+    // For reply/forward drafts, preserve the quoted thread by prepending new content
     if (bodyContent !== undefined) {
       const contentType = params.body_type ?? 'text';
-      updates['body'] = { contentType, content: bodyContent };
+      let finalContent = bodyContent;
+
+      // Fetch the existing draft body to check for quoted thread content
+      const graphId = this.repository.getGraphIdForDraft(params.draft_id);
+      if (graphId != null) {
+        const existingMsg = await this.repository.getGraphClient().getMessage(graphId);
+        const existingBody = existingMsg?.body?.content ?? '';
+        // Detect quoted thread: Outlook uses <div id="appendonsend"> or <div id="divRplyFwdMsg">
+        const replyMarkerMatch = existingBody.match(/<div id="(?:appendonsend|divRplyFwdMsg)"[\s\S]*/i);
+        if (replyMarkerMatch != null) {
+          // Prepend new content before the quoted thread
+          if (contentType === 'html') {
+            finalContent = bodyContent + replyMarkerMatch[0];
+          } else {
+            finalContent = `<pre>${bodyContent}</pre>` + replyMarkerMatch[0];
+          }
+          // Force HTML since the quoted thread is HTML
+          updates['body'] = { contentType: 'html', content: finalContent };
+        } else {
+          updates['body'] = { contentType, content: finalContent };
+        }
+      } else {
+        updates['body'] = { contentType, content: finalContent };
+      }
     } else if (params.body_type !== undefined) {
       // body_type alone without body content — no body update
     }

@@ -1094,11 +1094,14 @@ export class GraphClient {
   /**
    * Creates a reply draft for a message.
    */
-  async createReplyDraft(messageId: string): Promise<MicrosoftGraph.Message> {
+  async createReplyDraft(messageId: string, comment?: string, body?: { contentType: string; content: string }): Promise<MicrosoftGraph.Message> {
     const client = await this.getClient();
+    const postBody: Record<string, unknown> = {};
+    if (comment != null) postBody.comment = comment;
+    if (body != null) postBody.message = { body };
     const result = await client
       .api(`/me/messages/${messageId}/createReply`)
-      .post(null) as MicrosoftGraph.Message;
+      .post(Object.keys(postBody).length > 0 ? postBody : null) as MicrosoftGraph.Message;
     this.cache.clear();
     return result;
   }
@@ -1106,11 +1109,14 @@ export class GraphClient {
   /**
    * Creates a reply-all draft for a message.
    */
-  async createReplyAllDraft(messageId: string): Promise<MicrosoftGraph.Message> {
+  async createReplyAllDraft(messageId: string, comment?: string, body?: { contentType: string; content: string }): Promise<MicrosoftGraph.Message> {
     const client = await this.getClient();
+    const postBody: Record<string, unknown> = {};
+    if (comment != null) postBody.comment = comment;
+    if (body != null) postBody.message = { body };
     const result = await client
       .api(`/me/messages/${messageId}/createReplyAll`)
-      .post(null) as MicrosoftGraph.Message;
+      .post(Object.keys(postBody).length > 0 ? postBody : null) as MicrosoftGraph.Message;
     this.cache.clear();
     return result;
   }

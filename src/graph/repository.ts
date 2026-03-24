@@ -1254,19 +1254,15 @@ export class GraphRepository implements IRepository {
     const graphMessageId = this.idCache.messages.get(messageId);
     if (graphMessageId == null) throw new Error(`Message ID ${messageId} not found in cache. Try searching for or listing the item first to refresh the cache.`);
 
+    // Pass comment/body through createReply so the quoted thread is preserved
+    const body = comment != null ? { contentType: bodyType, content: comment } : undefined;
     const draft = replyAll
-      ? await this.client.createReplyAllDraft(graphMessageId)
-      : await this.client.createReplyDraft(graphMessageId);
+      ? await this.client.createReplyAllDraft(graphMessageId, undefined, body)
+      : await this.client.createReplyDraft(graphMessageId, undefined, body);
 
     const graphId = draft.id!;
     const numericId = hashStringToNumber(graphId);
     this.idCache.messages.set(numericId, graphId);
-
-    if (comment != null) {
-      await this.client.updateDraft(graphId, {
-        body: { contentType: bodyType, content: comment },
-      });
-    }
 
     return { numericId, graphId };
   }

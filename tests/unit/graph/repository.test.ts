@@ -1866,7 +1866,7 @@ describe('graph/repository', () => {
 
         const result = await repository.replyAsDraftAsync(hashStringToNumber('msg-orig'));
 
-        expect(mockClient.createReplyDraft).toHaveBeenCalledWith('msg-orig');
+        expect(mockClient.createReplyDraft).toHaveBeenCalledWith('msg-orig', undefined, undefined);
         expect(result.numericId).toBe(hashStringToNumber('draft-reply-1'));
         expect(result.graphId).toBe('draft-reply-1');
         expect(repository.getGraphId('message', result.numericId)).toBe('draft-reply-1');
@@ -1886,11 +1886,11 @@ describe('graph/repository', () => {
 
         const result = await repository.replyAsDraftAsync(hashStringToNumber('msg-orig2'), true);
 
-        expect(mockClient.createReplyAllDraft).toHaveBeenCalledWith('msg-orig2');
+        expect(mockClient.createReplyAllDraft).toHaveBeenCalledWith('msg-orig2', undefined, undefined);
         expect(result.graphId).toBe('draft-ra-1');
       });
 
-      it('updates draft body when comment is provided', async () => {
+      it('passes comment as body through createReply to preserve quoted thread', async () => {
         mockClient.searchMessages.mockResolvedValue([
           { id: 'msg-comment', subject: 'FYI' },
         ]);
@@ -1901,16 +1901,16 @@ describe('graph/repository', () => {
           subject: 'Re: FYI',
           toRecipients: [],
         });
-        mockClient.updateDraft.mockResolvedValue(undefined);
 
         await repository.replyAsDraftAsync(hashStringToNumber('msg-comment'), false, 'Thanks for sharing!');
 
-        expect(mockClient.updateDraft).toHaveBeenCalledWith('draft-comment-1', {
-          body: { contentType: 'text', content: 'Thanks for sharing!' },
+        expect(mockClient.createReplyDraft).toHaveBeenCalledWith('msg-comment', undefined, {
+          contentType: 'text', content: 'Thanks for sharing!',
         });
+        expect(mockClient.updateDraft).not.toHaveBeenCalled();
       });
 
-      it('uses provided bodyType when updating comment', async () => {
+      it('uses provided bodyType when passing comment', async () => {
         mockClient.searchMessages.mockResolvedValue([
           { id: 'msg-html', subject: 'HTML test' },
         ]);
@@ -1921,13 +1921,13 @@ describe('graph/repository', () => {
           subject: 'Re: HTML test',
           toRecipients: [],
         });
-        mockClient.updateDraft.mockResolvedValue(undefined);
 
         await repository.replyAsDraftAsync(hashStringToNumber('msg-html'), false, '<p>HTML reply</p>', 'html');
 
-        expect(mockClient.updateDraft).toHaveBeenCalledWith('draft-html-1', {
-          body: { contentType: 'html', content: '<p>HTML reply</p>' },
+        expect(mockClient.createReplyDraft).toHaveBeenCalledWith('msg-html', undefined, {
+          contentType: 'html', content: '<p>HTML reply</p>',
         });
+        expect(mockClient.updateDraft).not.toHaveBeenCalled();
       });
 
       it('throws if message not in cache', async () => {
