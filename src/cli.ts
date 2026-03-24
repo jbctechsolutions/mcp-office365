@@ -7,8 +7,9 @@
  * CLI command handlers for standalone authentication management.
  *
  * Usage:
- *   npx @jbctechsolutions/mcp-office365 auth           # Authenticate
+ *   npx @jbctechsolutions/mcp-office365 auth            # Authenticate
  *   npx @jbctechsolutions/mcp-office365 auth --status   # Check status
+ *   npx @jbctechsolutions/mcp-office365 auth --force    # Re-authenticate (clears existing tokens)
  *   npx @jbctechsolutions/mcp-office365 auth --logout   # Sign out
  */
 
@@ -61,6 +62,10 @@ export async function handleAuthCommand(
     return await handleLogout(print);
   }
 
+  if (flags.includes('--force')) {
+    return await handleForceAuth(print);
+  }
+
   return await handleAuth(print);
 }
 
@@ -71,6 +76,33 @@ async function handleAuth(print: PrintFn): Promise<number> {
   print('');
 
   try {
+    await getAccessToken();
+    const account = await getAccount();
+    const username = account?.username ?? 'unknown';
+
+    print('');
+    print(`Authenticated as ${username}`);
+    print(`Tokens saved to ${getTokenCacheFile()}`);
+    print('You can now configure the MCP server in your client.');
+    return 0;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    print('');
+    print(`Authentication failed: ${message}`);
+    return 1;
+  }
+}
+
+async function handleForceAuth(print: PrintFn): Promise<number> {
+  print('');
+  print('Microsoft Graph API Authentication (force re-auth)');
+  print('='.repeat(40));
+  print('');
+
+  try {
+    await signOut();
+    print('Cleared existing tokens.');
+    print('');
     await getAccessToken();
     const account = await getAccount();
     const username = account?.username ?? 'unknown';

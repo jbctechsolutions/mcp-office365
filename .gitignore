@@ -19,3 +19,4 @@ coverage/
 
 # Git worktrees
 .worktrees/
+.dmux/
