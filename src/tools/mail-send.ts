@@ -104,7 +104,7 @@ export const CreateDraftInput = z
     subject: z.string().describe('Email subject'),
     body: z.string().optional().describe('Email body (omit when using body_file)'),
     body_file: z.string().optional().describe('Path to a file containing the email body (alternative to body)'),
-    body_type: z.enum(['text', 'html']).default('text').describe('Body content type'),
+    body_type: z.enum(['text', 'html']).default('html').describe('Body content type'),
     attachments: z.array(AttachmentInput).optional().describe('File attachments'),
     inline_images: z.array(InlineImageInput).optional().describe('Inline images for HTML body (reference via cid: in img tags)'),
     include_signature: z.boolean().default(true).describe('Include email signature (default: true)'),
@@ -171,7 +171,7 @@ export const PrepareSendEmailInput = z
     subject: z.string().describe('Email subject'),
     body: z.string().optional().describe('Email body (omit when using body_file)'),
     body_file: z.string().optional().describe('Path to a file containing the email body (alternative to body)'),
-    body_type: z.enum(['text', 'html']).default('text').describe('Body content type'),
+    body_type: z.enum(['text', 'html']).default('html').describe('Body content type'),
     attachments: z.array(AttachmentInput).optional().describe('File attachments'),
     include_signature: z.boolean().default(true).describe('Include email signature (default: true)'),
   })
@@ -216,7 +216,7 @@ export const ReplyAsDraftInput = z.strictObject({
   message_id: z.number().int().positive().describe('The message ID to reply to'),
   comment: z.string().optional().describe('Initial reply body text'),
   reply_all: z.boolean().default(false).describe('Reply to all recipients (default: false)'),
-  body_type: z.enum(['text', 'html']).default('text').describe('Body content type (default: text)'),
+  body_type: z.enum(['text', 'html']).default('html').describe('Body content type (default: text)'),
   include_signature: z.boolean().default(true).describe('Include email signature (default: true)'),
 });
 
@@ -224,7 +224,7 @@ export const ForwardAsDraftInput = z.strictObject({
   message_id: z.number().int().positive().describe('The message ID to forward'),
   to_recipients: z.array(z.string().email()).optional().describe('Forward recipients'),
   comment: z.string().optional().describe('Initial forward body text'),
-  body_type: z.enum(['text', 'html']).default('text').describe('Body content type (default: text)'),
+  body_type: z.enum(['text', 'html']).default('html').describe('Body content type (default: text)'),
   include_signature: z.boolean().default(true).describe('Include email signature (default: true)'),
 });
 
