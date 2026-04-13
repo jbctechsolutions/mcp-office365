@@ -20,3 +20,9 @@ coverage/
 # Git worktrees
 .worktrees/
 .dmux/
+
+# Local tooling / editor / scratch (not shared)
+.claude/
+.dmux-hooks/
+.serena/
+nimbalyst-local/

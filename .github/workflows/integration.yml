@@ -1,0 +1,86 @@
+name: Integration Tests (Graph API)
+
+on:
+  workflow_dispatch:
+    inputs:
+      platforms:
+        description: 'Platforms to test'
+        required: true
+        default: 'all'
+        type: choice
+        options:
+          - all
+          - ubuntu-only
+          - windows-only
+          - macos-only
+
+concurrency:
+  group: integration-tests
+  cancel-in-progress: true
+
+jobs:
+  integration:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: ${{ fromJSON(
+          inputs.platforms == 'ubuntu-only' && '["ubuntu-latest"]' ||
+          inputs.platforms == 'windows-only' && '["windows-latest"]' ||
+          inputs.platforms == 'macos-only' && '["macos-latest"]' ||
+          '["ubuntu-latest", "windows-latest", "macos-latest"]'
+          ) }}
+
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24.x'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Restore Graph API token cache (Unix)
+        if: runner.os != 'Windows'
+        env:
+          OUTLOOK_MCP_TOKEN_CACHE: ${{ secrets.OUTLOOK_MCP_TOKEN_CACHE }}
+        run: |
+          mkdir -p ~/.outlook-mcp
+          echo "$OUTLOOK_MCP_TOKEN_CACHE" | base64 -d > ~/.outlook-mcp/tokens.json
+          chmod 600 ~/.outlook-mcp/tokens.json
+
+      - name: Restore Graph API token cache (Windows)
+        if: runner.os == 'Windows'
+        env:
+          OUTLOOK_MCP_TOKEN_CACHE: ${{ secrets.OUTLOOK_MCP_TOKEN_CACHE }}
+        shell: pwsh
+        run: |
+          $dir = "$env:USERPROFILE\.outlook-mcp"
+          New-Item -ItemType Directory -Force -Path $dir | Out-Null
+          [System.IO.File]::WriteAllBytes(
+            "$dir\tokens.json",
+            [System.Convert]::FromBase64String($env:OUTLOOK_MCP_TOKEN_CACHE)
+          )
+
+      - name: Run integration tests
+        run: npx vitest run tests/integration/graph --reporter=verbose
+        env:
+          GRAPH_INTEGRATION_TEST: '1'
+
+      - name: Verify token was refreshed (Unix)
+        if: runner.os != 'Windows' && always()
+        run: |
+          if [ -f ~/.outlook-mcp/tokens.json ]; then
+            echo "Token cache exists after test run"
+          else
+            echo "WARNING: Token cache missing after test run"
+          fi
