@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "office365": {
+      "command": "npx",
+      "args": ["-y", "@jbctechsolutions/mcp-office365"],
+      "description": "Access Microsoft 365 data - emails, calendar, contacts, and tasks"
+    }
+  }
+}
