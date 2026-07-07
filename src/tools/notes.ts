@@ -13,6 +13,18 @@ import { z } from 'zod';
 import type { IRepository, NoteRow } from '../database/repository.js';
 import type { NoteSummary, Note } from '../types/index.js';
 import { appleTimestampToIso } from '../utils/dates.js';
+import { defineTool } from '../registry/define-tool.js';
+import { requireAppleScriptToolset } from '../registry/context.js';
+import type { ToolContext, ToolDefinition, ToolResult } from '../registry/types.js';
+
+// Notes are a dual-backend domain: the AppleScript backend serves them via
+// NotesTools; the Graph API has no Notes equivalent, so the graph branch
+// returns an unsupported message. Registered on the AppleScript toolset bag.
+declare module '../registry/types.js' {
+  interface AppleScriptToolsets {
+    notes: NotesTools;
+  }
+}
 
 // =============================================================================
 // Input Schemas
@@ -191,4 +203,71 @@ export function createNotesTools(
   contentReader: INoteContentReader = nullNoteContentReader
 ): NotesTools {
   return new NotesTools(repository, contentReader);
+}
+
+// =============================================================================
+// Registry Definitions (v3 registry-driven architecture, U2 — dual backend)
+// =============================================================================
+
+const NOTES_UNSUPPORTED = 'Notes are not supported by Microsoft Graph API';
+
+function jsonResult(data: unknown): ToolResult {
+  return { content: [{ type: 'text', text: JSON.stringify(data, null, 2) }] };
+}
+
+/**
+ * Registry tool definitions for the notes domain. Each handler branches on the
+ * active backend: AppleScript delegates to NotesTools; Graph returns the
+ * unsupported message (matching the pre-registry dispatch behavior exactly).
+ */
+export function notesToolDefinitions(): ToolDefinition[] {
+  const tools = (ctx: ToolContext): NotesTools => requireAppleScriptToolset(ctx, 'notes');
+
+  return [
+    defineTool({
+      name: 'list_notes',
+      description: 'List notes with pagination',
+      input: ListNotesInput,
+      annotations: { readOnlyHint: true },
+      destructive: false,
+      presets: ['notes'],
+      backends: ['graph', 'applescript'],
+      handler: (ctx, params) => {
+        if (ctx.backend === 'graph') return jsonResult({ notes: [], message: NOTES_UNSUPPORTED });
+        return jsonResult(tools(ctx).listNotes(params));
+      },
+    }),
+    defineTool({
+      name: 'get_note',
+      description: 'Get note details',
+      input: GetNoteInput,
+      annotations: { readOnlyHint: true },
+      destructive: false,
+      presets: ['notes'],
+      backends: ['graph', 'applescript'],
+      handler: (ctx, params) => {
+        if (ctx.backend === 'graph') {
+          return { content: [{ type: 'text', text: NOTES_UNSUPPORTED }], isError: true };
+        }
+        const result = tools(ctx).getNote(params);
+        if (result == null) {
+          return { content: [{ type: 'text', text: 'Note not found' }], isError: true };
+        }
+        return jsonResult(result);
+      },
+    }),
+    defineTool({
+      name: 'search_notes',
+      description: 'Search notes by content',
+      input: SearchNotesInput,
+      annotations: { readOnlyHint: true },
+      destructive: false,
+      presets: ['notes'],
+      backends: ['graph', 'applescript'],
+      handler: (ctx, params) => {
+        if (ctx.backend === 'graph') return jsonResult({ notes: [], message: NOTES_UNSUPPORTED });
+        return jsonResult(tools(ctx).searchNotes(params));
+      },
+    }),
+  ];
 }

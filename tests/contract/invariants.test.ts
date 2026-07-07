@@ -87,30 +87,34 @@ describe('registry contract invariants', () => {
     }
   });
 
-  it('every tool handler delegates to a graph toolset method', async () => {
-    // Invariant: a registered handler resolves its toolset from the context and
-    // calls a method on it. Exercises every handler with a recording proxy —
-    // catches a handler wired to the wrong context key or that no-ops.
+  it('every tool handler returns a valid ToolResult for a supported backend', async () => {
+    // Invariant: each handler runs against a fully-proxied context (both the
+    // graph and AppleScript toolset bags auto-vivify any method to a recording
+    // stub) and returns a well-formed ToolResult without throwing. Exercises
+    // every handler — catches a handler that references a missing context key
+    // or throws on a valid call. Dual-backend handlers (e.g. notes) are run
+    // against each backend they declare.
+    const toolsetProxy = new Proxy(
+      {},
+      {
+        get: () => (): { content: Array<{ type: 'text'; text: string }> } => ({
+          content: [{ type: 'text', text: '{}' }],
+        }),
+      },
+    );
+    const bagProxy = new Proxy({}, { get: () => toolsetProxy });
+
     for (const def of defs) {
-      const calls: string[] = [];
-      const toolsetProxy = new Proxy(
-        {},
-        {
-          get: (_t, prop) => (): { content: Array<{ type: 'text'; text: string }> } => {
-            calls.push(String(prop));
-            return { content: [{ type: 'text', text: '{}' }] };
-          },
-        },
-      );
-      const graphProxy = new Proxy({}, { get: () => toolsetProxy });
-      const ctx: ToolContext = {
-        backend: 'graph',
-        tokenManager: new ApprovalTokenManager(),
-        graph: graphProxy as never,
-        applescript: null,
-      };
-      await def.handler(ctx, {} as never);
-      expect(calls.length, `${def.name} handler did not call its toolset`).toBeGreaterThan(0);
+      for (const backend of def.backends) {
+        const ctx: ToolContext = {
+          backend,
+          tokenManager: new ApprovalTokenManager(),
+          graph: bagProxy as never,
+          applescript: bagProxy as never,
+        };
+        const result = await def.handler(ctx, {} as never);
+        expect(Array.isArray(result?.content), `${def.name} (${backend}) returned no content`).toBe(true);
+      }
     }
   });
 

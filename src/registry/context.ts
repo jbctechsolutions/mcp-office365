@@ -7,7 +7,7 @@
  * Runtime-context helpers for registry tool handlers.
  */
 
-import type { GraphToolsets, ToolContext } from './types.js';
+import type { AppleScriptToolsets, GraphToolsets, ToolContext } from './types.js';
 
 /**
  * Resolves an initialized Graph-backend toolset from the runtime context, or
@@ -26,4 +26,19 @@ export function requireGraphToolset<K extends keyof GraphToolsets>(
     throw new Error('This tool requires the Microsoft Graph API backend.');
   }
   return ctx.graph[key];
+}
+
+/**
+ * Resolves an initialized AppleScript-backend toolset from the runtime context,
+ * or throws when the AppleScript backend is unavailable. The dual-backend
+ * counterpart to {@link requireGraphToolset}.
+ */
+export function requireAppleScriptToolset<K extends keyof AppleScriptToolsets>(
+  ctx: ToolContext,
+  key: K,
+): AppleScriptToolsets[K] {
+  if (ctx.applescript == null) {
+    throw new Error('This tool requires the AppleScript (classic Outlook) backend.');
+  }
+  return ctx.applescript[key];
 }

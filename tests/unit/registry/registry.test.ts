@@ -7,7 +7,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { z } from 'zod';
 import { ToolRegistry, toInputSchema } from '../../../src/registry/registry.js';
 import { defineTool } from '../../../src/registry/define-tool.js';
-import { requireGraphToolset } from '../../../src/registry/context.js';
+import { requireGraphToolset, requireAppleScriptToolset } from '../../../src/registry/context.js';
 import type { ToolContext, ToolDefinition } from '../../../src/registry/types.js';
 import { mailRulesToolDefinitions } from '../../../src/tools/mail-rules.js';
 import { ApprovalTokenManager } from '../../../src/approval/index.js';
@@ -35,9 +35,32 @@ describe('requireGraphToolset', () => {
       backend: 'applescript',
       tokenManager: new ApprovalTokenManager(),
       graph: null,
-      applescript: {},
+      applescript: {} as never,
     };
     expect(() => requireGraphToolset(ctx, 'rules')).toThrow(/Microsoft Graph API backend/);
+  });
+});
+
+describe('requireAppleScriptToolset', () => {
+  it('returns the toolset when the applescript bag is present', () => {
+    const marker = { listNotes: () => [] };
+    const ctx: ToolContext = {
+      backend: 'applescript',
+      tokenManager: new ApprovalTokenManager(),
+      graph: null,
+      applescript: { notes: marker } as never,
+    };
+    expect(requireAppleScriptToolset(ctx, 'notes')).toBe(marker);
+  });
+
+  it('throws a clear error when the applescript backend is unavailable', () => {
+    const ctx: ToolContext = {
+      backend: 'graph',
+      tokenManager: new ApprovalTokenManager(),
+      graph: {} as never,
+      applescript: null,
+    };
+    expect(() => requireAppleScriptToolset(ctx, 'notes')).toThrow(/AppleScript \(classic Outlook\) backend/);
   });
 });
 

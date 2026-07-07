@@ -107,9 +107,6 @@ import {
   ListTasksInput,
   SearchTasksInput,
   GetTaskInput,
-  ListNotesInput,
-  GetNoteInput,
-  SearchNotesInput,
   PrepareDeleteEmailInput,
   ConfirmDeleteEmailInput,
   PrepareMoveEmailInput,
@@ -1041,60 +1038,6 @@ const TOOLS: Tool[] = [
         task_list_id: { type: 'number', description: 'The task list ID to delete' },
       },
       required: ['token_id', 'task_list_id'],
-    },
-  },
-  // Note tools
-  {
-    name: 'list_notes',
-    description: 'List notes with pagination',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        limit: {
-          type: 'number',
-          description: 'Maximum number of notes to return (1-100, default 50)',
-          default: 50,
-        },
-        offset: {
-          type: 'number',
-          description: 'Number of notes to skip (default 0)',
-          default: 0,
-        },
-      },
-      required: [],
-    },
-  },
-  {
-    name: 'get_note',
-    description: 'Get note details',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        note_id: {
-          type: 'number',
-          description: 'The note ID to retrieve',
-        },
-      },
-      required: ['note_id'],
-    },
-  },
-  {
-    name: 'search_notes',
-    description: 'Search notes by content',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        query: {
-          type: 'string',
-          description: 'Search query',
-        },
-        limit: {
-          type: 'number',
-          description: 'Maximum number of notes to return (1-100, default 50)',
-          default: 50,
-        },
-      },
-      required: ['query'],
     },
   },
   // =========================================================================
@@ -2405,7 +2348,7 @@ export function createServer(options: ServerOptions = {}): Server {
               excel: excelTools,
             }
           : null,
-      applescript: useGraphApi ? null : {},
+      applescript: !useGraphApi && notesTools != null ? { notes: notesTools } : null,
     };
   }
 
@@ -3140,27 +3083,6 @@ async function handleAppleScriptToolCall(
     }
 
     // Note tools
-    case 'list_notes': {
-      const params = ListNotesInput.parse(args ?? {});
-      const result = notesTools.listNotes(params);
-      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
-    }
-
-    case 'get_note': {
-      const params = GetNoteInput.parse(args);
-      const result = notesTools.getNote(params);
-      if (result == null) {
-        return { content: [{ type: 'text', text: 'Note not found' }], isError: true };
-      }
-      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
-    }
-
-    case 'search_notes': {
-      const params = SearchNotesInput.parse(args);
-      const result = notesTools.searchNotes(params);
-      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
-    }
-
     // Email sending tool
     case 'send_email': {
       if (mailSender == null) {
@@ -4314,25 +4236,6 @@ async function handleGraphToolCall(
       }
 
       // Note tools - NOT SUPPORTED in Graph API
-      case 'list_notes': {
-        return {
-          content: [{ type: 'text', text: JSON.stringify({ notes: [], message: 'Notes are not supported by Microsoft Graph API' }, null, 2) }],
-        };
-      }
-
-      case 'get_note': {
-        return {
-          content: [{ type: 'text', text: 'Notes are not supported by Microsoft Graph API' }],
-          isError: true,
-        };
-      }
-
-      case 'search_notes': {
-        return {
-          content: [{ type: 'text', text: JSON.stringify({ notes: [], message: 'Notes are not supported by Microsoft Graph API' }, null, 2) }],
-        };
-      }
-
       // Mail rules, master categories, and focused inbox overrides are served
       // by the tool registry (v3, U2).
 

@@ -27,6 +27,7 @@ import { teamsToolDefinitions } from '../tools/teams.js';
 import { plannerToolDefinitions } from '../tools/planner.js';
 import { oneDriveToolDefinitions } from '../tools/onedrive.js';
 import { excelToolDefinitions } from '../tools/excel.js';
+import { notesToolDefinitions } from '../tools/notes.js';
 
 export function allToolDefinitions(): ToolDefinition[] {
   return [
@@ -45,6 +46,7 @@ export function allToolDefinitions(): ToolDefinition[] {
     ...plannerToolDefinitions(),
     ...oneDriveToolDefinitions(),
     ...excelToolDefinitions(),
+    ...notesToolDefinitions(),
     // U2: append each migrated domain's definitions here.
   ];
 }

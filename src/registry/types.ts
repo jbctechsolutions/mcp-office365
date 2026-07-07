@@ -67,12 +67,14 @@ export interface GraphToolsets {}
 
 /**
  * Bag of initialized AppleScript-backend tool instances. The AppleScript
- * backend is frozen (v3): registry-listed, best-effort metadata, no new
- * migrations. Grows only if a frozen domain is registry-migrated.
+ * backend is frozen (v3), but dual-backend tools (mail, calendar, contacts,
+ * tasks, notes, mailbox organization) still register their AppleScript toolset
+ * here so a single registry handler can branch on `ctx.backend`. Like
+ * GraphToolsets, this is a per-file augmentation target — read instances via
+ * `requireAppleScriptToolset(ctx, key)`.
  */
-export interface AppleScriptToolsets {
-  readonly _frozen?: never;
-}
+// eslint-disable-next-line @typescript-eslint/no-empty-interface
+export interface AppleScriptToolsets {}
 
 /**
  * Runtime context passed to a tool handler. Built once per call after the
