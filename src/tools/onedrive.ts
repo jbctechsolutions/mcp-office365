@@ -12,6 +12,15 @@
 
 import { z } from 'zod';
 import type { ApprovalTokenManager } from '../approval/index.js';
+import { defineTool } from '../registry/define-tool.js';
+import { requireGraphToolset } from '../registry/context.js';
+import type { ToolContext, ToolDefinition } from '../registry/types.js';
+
+declare module '../registry/types.js' {
+  interface GraphToolsets {
+    oneDrive: OneDriveTools;
+  }
+}
 
 // =============================================================================
 // Input Schemas
@@ -356,4 +365,128 @@ export class OneDriveTools {
       }],
     };
   }
+}
+
+// =============================================================================
+// Registry Definitions (v3 registry-driven architecture, U2)
+// =============================================================================
+
+/**
+ * Registry tool definitions for the onedrive domain.
+ */
+export function oneDriveToolDefinitions(): ToolDefinition[] {
+  const tools = (ctx: ToolContext): OneDriveTools => requireGraphToolset(ctx, 'oneDrive');
+
+  return [
+    defineTool({
+      name: 'list_drive_items',
+      description: 'List files and folders in OneDrive. Omit folder_id to list root. (Graph API)',
+      input: ListDriveItemsInput,
+      annotations: { readOnlyHint: true, openWorldHint: true },
+      destructive: false,
+      presets: ['files'],
+      backends: ['graph'],
+      handler: (ctx, params) => tools(ctx).listDriveItems(params),
+    }),
+    defineTool({
+      name: 'search_drive_items',
+      description: 'Search files and folders in OneDrive by name or content (Graph API)',
+      input: SearchDriveItemsInput,
+      annotations: { readOnlyHint: true, openWorldHint: true },
+      destructive: false,
+      presets: ['files'],
+      backends: ['graph'],
+      handler: (ctx, params) => tools(ctx).searchDriveItems(params),
+    }),
+    defineTool({
+      name: 'get_drive_item',
+      description: 'Get metadata for a specific OneDrive file or folder (Graph API)',
+      input: GetDriveItemInput,
+      annotations: { readOnlyHint: true, openWorldHint: true },
+      destructive: false,
+      presets: ['files'],
+      backends: ['graph'],
+      handler: (ctx, params) => tools(ctx).getDriveItem(params),
+    }),
+    defineTool({
+      name: 'download_file',
+      description: 'Download a file from OneDrive to a local path (Graph API)',
+      input: DownloadFileInput,
+      annotations: { readOnlyHint: true, openWorldHint: true },
+      destructive: false,
+      presets: ['files'],
+      backends: ['graph'],
+      handler: (ctx, params) => tools(ctx).downloadFile(params),
+    }),
+    defineTool({
+      name: 'prepare_upload_file',
+      description: 'Prepare to upload a local file to OneDrive. Returns an approval token. (Graph API)',
+      input: PrepareUploadFileInput,
+      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+      destructive: true,
+      presets: ['files'],
+      backends: ['graph'],
+      handler: (ctx, params) => tools(ctx).prepareUploadFile(params),
+    }),
+    defineTool({
+      name: 'confirm_upload_file',
+      description: 'Confirm file upload to OneDrive using the approval token from prepare_upload_file. (Graph API)',
+      input: ConfirmUploadFileInput,
+      annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+      destructive: true,
+      presets: ['files'],
+      backends: ['graph'],
+      handler: (ctx, params) => tools(ctx).confirmUploadFile(params),
+    }),
+    defineTool({
+      name: 'list_recent_files',
+      description: 'List recently accessed files in OneDrive (Graph API)',
+      input: ListRecentFilesInput,
+      annotations: { readOnlyHint: true, openWorldHint: true },
+      destructive: false,
+      presets: ['files'],
+      backends: ['graph'],
+      handler: (ctx) => tools(ctx).listRecentFiles(),
+    }),
+    defineTool({
+      name: 'list_shared_with_me',
+      description: 'List files and folders shared with the current user in OneDrive (Graph API)',
+      input: ListSharedWithMeInput,
+      annotations: { readOnlyHint: true, openWorldHint: true },
+      destructive: false,
+      presets: ['files'],
+      backends: ['graph'],
+      handler: (ctx) => tools(ctx).listSharedWithMe(),
+    }),
+    defineTool({
+      name: 'create_sharing_link',
+      description: 'Create a sharing link for a OneDrive file or folder (Graph API)',
+      input: CreateSharingLinkInput,
+      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+      destructive: false,
+      presets: ['files'],
+      backends: ['graph'],
+      handler: (ctx, params) => tools(ctx).createSharingLink(params),
+    }),
+    defineTool({
+      name: 'prepare_delete_drive_item',
+      description: 'Prepare to delete a OneDrive file or folder. Returns an approval token. (Graph API)',
+      input: PrepareDeleteDriveItemInput,
+      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+      destructive: true,
+      presets: ['files'],
+      backends: ['graph'],
+      handler: (ctx, params) => tools(ctx).prepareDeleteDriveItem(params),
+    }),
+    defineTool({
+      name: 'confirm_delete_drive_item',
+      description: 'Confirm deletion of a OneDrive file or folder using the approval token from prepare_delete_drive_item. (Graph API)',
+      input: ConfirmDeleteDriveItemInput,
+      annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+      destructive: true,
+      presets: ['files'],
+      backends: ['graph'],
+      handler: (ctx, params) => tools(ctx).confirmDeleteDriveItem(params),
+    }),
+  ];
 }

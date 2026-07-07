@@ -16,7 +16,8 @@
 import { describe, it, expect } from 'vitest';
 import { ToolRegistry, toInputSchema } from '../../src/registry/registry.js';
 import { allToolDefinitions } from '../../src/registry/all-tools.js';
-import type { Backend, Preset } from '../../src/registry/types.js';
+import type { Backend, Preset, ToolContext } from '../../src/registry/types.js';
+import { ApprovalTokenManager } from '../../src/approval/index.js';
 
 const defs = allToolDefinitions();
 const byName = new Map(defs.map((d) => [d.name, d]));
@@ -83,6 +84,33 @@ describe('registry contract invariants', () => {
         expect(def.destructive, `${def.name} not destructive`).toBe(true);
         expect(confirm!.destructive, `${confirmName} not destructive`).toBe(true);
       }
+    }
+  });
+
+  it('every tool handler delegates to a graph toolset method', async () => {
+    // Invariant: a registered handler resolves its toolset from the context and
+    // calls a method on it. Exercises every handler with a recording proxy —
+    // catches a handler wired to the wrong context key or that no-ops.
+    for (const def of defs) {
+      const calls: string[] = [];
+      const toolsetProxy = new Proxy(
+        {},
+        {
+          get: (_t, prop) => (): { content: Array<{ type: 'text'; text: string }> } => {
+            calls.push(String(prop));
+            return { content: [{ type: 'text', text: '{}' }] };
+          },
+        },
+      );
+      const graphProxy = new Proxy({}, { get: () => toolsetProxy });
+      const ctx: ToolContext = {
+        backend: 'graph',
+        tokenManager: new ApprovalTokenManager(),
+        graph: graphProxy as never,
+        applescript: null,
+      };
+      await def.handler(ctx, {} as never);
+      expect(calls.length, `${def.name} handler did not call its toolset`).toBeGreaterThan(0);
     }
   });
 
