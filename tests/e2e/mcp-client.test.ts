@@ -90,6 +90,36 @@ describe('MCP Client E2E', () => {
       await server.close();
     });
 
+    it('serves registry-migrated tools exactly once with registry-sourced annotations', async () => {
+      // Verifies the ListTools union (registry tools + legacy TOOLS minus the
+      // migrated names) has no duplicates and that migrated tools carry the
+      // metadata from their registry definition, not the legacy TOOLS entry.
+      const server = createServer();
+      const client = new Client({ name: 'test-client', version: '1.0.0' }, { capabilities: {} });
+      const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+      await Promise.all([client.connect(clientTransport), server.connect(serverTransport)]);
+
+      const result = await client.listTools();
+      const names = result.tools.map((t) => t.name);
+
+      // No duplicate tool names across the registry + legacy union.
+      expect(new Set(names).size).toBe(names.length);
+
+      // The 4 migrated mail-rules tools each appear exactly once.
+      for (const name of ['list_mail_rules', 'create_mail_rule', 'prepare_delete_mail_rule', 'confirm_delete_mail_rule']) {
+        expect(names.filter((n) => n === name)).toHaveLength(1);
+      }
+
+      // Registry-sourced annotations are present (legacy TOOLS entries had none).
+      const listRule = result.tools.find((t) => t.name === 'list_mail_rules');
+      expect(listRule?.annotations?.readOnlyHint).toBe(true);
+      const confirmDelete = result.tools.find((t) => t.name === 'confirm_delete_mail_rule');
+      expect(confirmDelete?.annotations?.destructiveHint).toBe(true);
+
+      await client.close();
+      await server.close();
+    });
+
     it('tools have proper schemas', async () => {
       const server = createServer();
       const client = new Client(

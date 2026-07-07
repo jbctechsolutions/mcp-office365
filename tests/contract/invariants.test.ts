@@ -1,0 +1,102 @@
+/**
+ * Copyright (c) 2026 JBC Tech Solutions, LLC
+ * Licensed under the MIT License. See LICENSE file in the project root.
+ */
+
+/**
+ * Contract harness (U3) — invariants asserted over the whole registry.
+ *
+ * These iterate `allToolDefinitions()` and therefore cover every domain the
+ * moment U2 migrates it — no per-domain test wiring. They make the observed
+ * v2 failure classes structurally impossible to reintroduce: schema/handler
+ * drift, unregistered next-action targets, and destructive tools leaking into
+ * read-only mode.
+ */
+
+import { describe, it, expect } from 'vitest';
+import { ToolRegistry, toInputSchema } from '../../src/registry/registry.js';
+import { allToolDefinitions } from '../../src/registry/all-tools.js';
+import type { Backend, Preset } from '../../src/registry/types.js';
+
+const defs = allToolDefinitions();
+const byName = new Map(defs.map((d) => [d.name, d]));
+
+const KNOWN_PRESETS: readonly Preset[] = [
+  'mail', 'calendar', 'contacts', 'tasks', 'notes', 'teams',
+  'planner', 'files', 'sharepoint', 'excel', 'people', 'meetings',
+];
+
+describe('registry contract invariants', () => {
+  it('registers without duplicate names', () => {
+    expect(() => new ToolRegistry().register(defs)).not.toThrow();
+    expect(byName.size).toBe(defs.length);
+  });
+
+  it('every tool has a description and a valid object input schema', () => {
+    for (const def of defs) {
+      expect(def.description.length, `${def.name} description`).toBeGreaterThan(0);
+      const json = toInputSchema(def.input) as Record<string, unknown>;
+      expect(json['type'], `${def.name} inputSchema.type`).toBe('object');
+    }
+  });
+
+  it('every tool carries at least one MCP annotation', () => {
+    for (const def of defs) {
+      expect(Object.keys(def.annotations).length, `${def.name} annotations`).toBeGreaterThan(0);
+    }
+  });
+
+  it('every tool declares at least one backend', () => {
+    const valid: readonly Backend[] = ['graph', 'applescript'];
+    for (const def of defs) {
+      expect(def.backends.length, `${def.name} backends`).toBeGreaterThan(0);
+      for (const b of def.backends) {
+        expect(valid, `${def.name} backend "${b}"`).toContain(b);
+      }
+    }
+  });
+
+  it('every declared preset is a known preset name', () => {
+    for (const def of defs) {
+      for (const p of def.presets) {
+        expect(KNOWN_PRESETS, `${def.name} preset "${p}"`).toContain(p);
+      }
+    }
+  });
+
+  it('read-only tools are not flagged destructive (annotation/flag agreement)', () => {
+    for (const def of defs) {
+      if (def.annotations.readOnlyHint === true) {
+        expect(def.destructive, `${def.name} readOnly but destructive`).toBe(false);
+      }
+    }
+  });
+
+  it('every prepare_ tool has a matching confirm_ tool and both are destructive', () => {
+    // Invariant (e): the two-phase pair must be complete and both halves must
+    // be excluded by --read-only, so a read-only client cannot mint OR redeem.
+    for (const def of defs) {
+      if (def.name.startsWith('prepare_')) {
+        const confirmName = def.name.replace(/^prepare_/, 'confirm_');
+        const confirm = byName.get(confirmName);
+        expect(confirm, `${def.name} missing ${confirmName}`).toBeDefined();
+        expect(def.destructive, `${def.name} not destructive`).toBe(true);
+        expect(confirm!.destructive, `${confirmName} not destructive`).toBe(true);
+      }
+    }
+  });
+
+  it('read-only surface excludes every destructive tool', () => {
+    // Invariant (e), enforced through the live registry filter.
+    const registry = new ToolRegistry();
+    registry.register(defs);
+    const readOnlyNames = new Set(
+      registry.listTools({ backend: 'graph', readOnly: true }).map((t) => t.name),
+    );
+    for (const def of defs) {
+      if (def.destructive && def.backends.includes('graph')) {
+        expect(readOnlyNames.has(def.name), `${def.name} leaked into read-only`).toBe(false);
+      }
+    }
+  });
+});

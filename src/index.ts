@@ -46,7 +46,13 @@ import {
   type GraphRepository,
   type GraphContentReaders,
 } from './graph/index.js';
+import { createRequire } from 'node:module';
+import { ToolRegistry } from './registry/index.js';
+import type { ToolContext, SurfaceOptions } from './registry/index.js';
+import { allToolDefinitions } from './registry/all-tools.js';
 import { parseCliCommand, handleAuthCommand, createAuthMutex } from './cli.js';
+
+const pkg = createRequire(import.meta.url)('../package.json') as { version: string };
 import { createMailTools } from './tools/mail.js';
 import { createCalendarTools } from './tools/calendar.js';
 import { createContactsTools } from './tools/contacts.js';
@@ -3634,11 +3640,17 @@ const TOOLS: Tool[] = [
 /**
  * Creates and configures the MCP server.
  */
-export function createServer(): Server {
+/** Options controlling the exposed tool surface (preset / read-only filters). */
+export interface ServerOptions {
+  readonly presets?: SurfaceOptions['presets'];
+  readonly readOnly?: boolean;
+}
+
+export function createServer(options: ServerOptions = {}): Server {
   const server = new Server(
     {
       name: 'office365-mcp',
-      version: '0.1.0',
+      version: pkg.version,
     },
     {
       capabilities: {
@@ -3649,6 +3661,21 @@ export function createServer(): Server {
 
   // Determine which backend to use
   const useGraphApi = shouldUseGraphApi();
+
+  // Surface options resolved once for this server instance.
+  const surface: SurfaceOptions = {
+    backend: useGraphApi ? 'graph' : 'applescript',
+    ...(options.presets != null ? { presets: options.presets } : {}),
+    ...(options.readOnly != null ? { readOnly: options.readOnly } : {}),
+  };
+
+  // Registry-driven tool surface (v3, U1). Static metadata registers eagerly
+  // so ListTools works before the backend is initialized; handlers bind to
+  // live instances lazily via ToolContext at call time. Domains not yet
+  // migrated fall through to the legacy TOOLS array + dispatch switch below.
+  const registry = new ToolRegistry();
+  registry.register(allToolDefinitions());
+  const registeredNames = new Set(registry.names());
 
   // Shared state (used by both backends)
   const tokenManager = new ApprovalTokenManager();
@@ -3906,10 +3933,24 @@ export function createServer(): Server {
     'download_library_file',
   ]);
 
-  // Register tool list handler
+  /** Builds the runtime context for registry handlers (post-initialization). */
+  function buildToolContext(): ToolContext {
+    return {
+      backend: surface.backend,
+      tokenManager,
+      graph: useGraphApi && rulesTools != null ? { rules: rulesTools } : null,
+      applescript: useGraphApi ? null : {},
+    };
+  }
+
+  // Register tool list handler: registry tools first, then legacy TOOLS not
+  // yet migrated (with the graph-only filter still applied in AppleScript mode).
   server.setRequestHandler(ListToolsRequestSchema, () => {
-    const tools = useGraphApi ? TOOLS : TOOLS.filter((t) => !GRAPH_ONLY_TOOL_NAMES.has(t.name));
-    return { tools };
+    const registryTools = registry.listTools(surface);
+    const legacyTools = TOOLS.filter((t) => !registeredNames.has(t.name)).filter(
+      (t) => useGraphApi || !GRAPH_ONLY_TOOL_NAMES.has(t.name),
+    );
+    return { tools: [...registryTools, ...legacyTools] };
   });
 
   // Register tool call handler (async for Graph API support)
@@ -3918,6 +3959,13 @@ export function createServer(): Server {
 
     try {
       await ensureInitialized();
+
+      // Registry dispatch (v3): returns undefined for names not yet migrated,
+      // which fall through to the legacy dispatch below.
+      const registryResult = await registry.dispatch(name, args, buildToolContext(), surface);
+      if (registryResult !== undefined) {
+        return registryResult;
+      }
 
       // Graph API mode - handle async operations directly
       if (useGraphApi && graphRepository != null) {

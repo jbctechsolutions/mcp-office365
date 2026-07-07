@@ -12,6 +12,8 @@
 
 import { z } from 'zod';
 import type { ApprovalTokenManager } from '../approval/index.js';
+import { defineTool } from '../registry/define-tool.js';
+import type { ToolContext, ToolDefinition } from '../registry/types.js';
 
 // =============================================================================
 // Input Schemas
@@ -198,4 +200,67 @@ export class MailRulesTools {
       }],
     };
   }
+}
+
+// =============================================================================
+// Registry Definitions (v3 registry-driven architecture, U1 pilot)
+// =============================================================================
+
+const NoInput = z.strictObject({});
+
+/**
+ * Registry tool definitions for the mail-rules domain. Handlers close over the
+ * live MailRulesTools instance resolved from the runtime context after the
+ * Graph backend is initialized.
+ */
+export function mailRulesToolDefinitions(): ToolDefinition[] {
+  const rules = (ctx: ToolContext): MailRulesTools => {
+    if (ctx.graph == null) {
+      throw new Error('Mail rules require the Graph API backend.');
+    }
+    return ctx.graph.rules;
+  };
+
+  return [
+    defineTool({
+      name: 'list_mail_rules',
+      description: 'List all inbox mail rules (Graph API)',
+      input: NoInput,
+      annotations: { readOnlyHint: true, openWorldHint: true },
+      destructive: false,
+      presets: ['mail'],
+      backends: ['graph'],
+      handler: (ctx) => rules(ctx).listMailRules(),
+    }),
+    defineTool({
+      name: 'create_mail_rule',
+      description: 'Create an inbox mail rule with conditions and actions (Graph API)',
+      input: CreateMailRuleInput,
+      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+      destructive: false,
+      presets: ['mail'],
+      backends: ['graph'],
+      handler: (ctx, params) => rules(ctx).createMailRule(params),
+    }),
+    defineTool({
+      name: 'prepare_delete_mail_rule',
+      description: 'Prepare to delete a mail rule. Returns a preview and approval token. Call confirm_delete_mail_rule to execute. (Graph API)',
+      input: PrepareDeleteMailRuleInput,
+      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+      destructive: true,
+      presets: ['mail'],
+      backends: ['graph'],
+      handler: (ctx, params) => rules(ctx).prepareDeleteMailRule(params),
+    }),
+    defineTool({
+      name: 'confirm_delete_mail_rule',
+      description: 'Confirm mail rule deletion with approval token (Graph API)',
+      input: ConfirmDeleteMailRuleInput,
+      annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+      destructive: true,
+      presets: ['mail'],
+      backends: ['graph'],
+      handler: (ctx, params) => rules(ctx).confirmDeleteMailRule(params),
+    }),
+  ];
 }

@@ -26,3 +26,6 @@ coverage/
 .dmux-hooks/
 .serena/
 nimbalyst-local/
+
+# Backup files
+*.bak
