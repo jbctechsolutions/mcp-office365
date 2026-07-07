@@ -19,6 +19,10 @@ import { calendarPermissionsToolDefinitions } from '../tools/calendar-permission
 import { checklistItemsToolDefinitions } from '../tools/checklist-items.js';
 import { linkedResourcesToolDefinitions } from '../tools/linked-resources.js';
 import { taskAttachmentsToolDefinitions } from '../tools/task-attachments.js';
+import { peopleToolDefinitions } from '../tools/people.js';
+import { plannerVisualizationToolDefinitions } from '../tools/planner-visualization.js';
+import { meetingsToolDefinitions } from '../tools/meetings.js';
+import { sharePointToolDefinitions } from '../tools/sharepoint.js';
 
 export function allToolDefinitions(): ToolDefinition[] {
   return [
@@ -29,6 +33,10 @@ export function allToolDefinitions(): ToolDefinition[] {
     ...checklistItemsToolDefinitions(),
     ...linkedResourcesToolDefinitions(),
     ...taskAttachmentsToolDefinitions(),
+    ...peopleToolDefinitions(),
+    ...plannerVisualizationToolDefinitions(),
+    ...meetingsToolDefinitions(),
+    ...sharePointToolDefinitions(),
     // U2: append each migrated domain's definitions here.
   ];
 }

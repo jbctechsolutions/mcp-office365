@@ -102,26 +102,8 @@ import {
   ConfirmAddMessageReactionInput,
   RemoveMessageReactionInput,
 } from './tools/teams.js';
-import {
-  PeopleTools,
-  ListRelevantPeopleInput,
-  SearchPeopleInput,
-  GetManagerInput,
-  GetDirectReportsInput,
-  GetUserProfileInput,
-  GetUserPhotoInput,
-  GetUserPresenceInput,
-  GetUsersPresenceInput,
-} from './tools/people.js';
-import {
-  MeetingsTools,
-  ListOnlineMeetingsInput,
-  GetOnlineMeetingInput,
-  ListMeetingRecordingsInput,
-  DownloadMeetingRecordingInput,
-  ListMeetingTranscriptsInput,
-  GetMeetingTranscriptContentInput,
-} from './tools/meetings.js';
+import { PeopleTools } from './tools/people.js';
+import { MeetingsTools } from './tools/meetings.js';
 import {
   ExcelTools,
   ListWorksheetsInput,
@@ -165,22 +147,8 @@ import {
   GetPlannerTaskDetailsInput,
   UpdatePlannerTaskDetailsInput,
 } from './tools/planner.js';
-import {
-  PlannerVisualizationTools,
-  GenerateKanbanBoardInput,
-  GenerateGanttChartInput,
-  GeneratePlanSummaryInput,
-  GenerateBurndownChartInput,
-} from './tools/planner-visualization.js';
-import {
-  SharePointTools,
-  ListSitesInput,
-  SearchSitesInput,
-  GetSiteInput,
-  ListDocumentLibrariesInput,
-  ListLibraryItemsInput,
-  DownloadLibraryFileInput,
-} from './tools/sharepoint.js';
+import { PlannerVisualizationTools } from './tools/planner-visualization.js';
+import { SharePointTools } from './tools/sharepoint.js';
 import {
   ListEmailsInput,
   SearchEmailsInput,
@@ -2543,97 +2511,7 @@ const TOOLS: Tool[] = [
       required: ['message_id', 'message_type', 'reaction_type'],
     },
   },
-  // People API tools
-  {
-    name: 'list_relevant_people',
-    description: 'List AI-ranked relevant people for the current user (Graph API)',
-    inputSchema: {
-      type: 'object' as const,
-      properties: {
-        limit: { type: 'number', description: 'Max people to return (default 25, max 100)' },
-      },
-      required: [],
-    },
-  },
-  {
-    name: 'search_people',
-    description: 'Search people by name or email (Graph API)',
-    inputSchema: {
-      type: 'object' as const,
-      properties: {
-        query: { type: 'string', description: 'Search query (name or email)' },
-        limit: { type: 'number', description: 'Max results to return (default 25, max 100)' },
-      },
-      required: ['query'],
-    },
-  },
-  {
-    name: 'get_manager',
-    description: 'Get the current user\'s manager (Graph API)',
-    inputSchema: {
-      type: 'object' as const,
-      properties: {},
-      required: [],
-    },
-  },
-  {
-    name: 'get_direct_reports',
-    description: 'Get the current user\'s direct reports (Graph API)',
-    inputSchema: {
-      type: 'object' as const,
-      properties: {},
-      required: [],
-    },
-  },
-  {
-    name: 'get_user_profile',
-    description: 'Get a user\'s profile by email address or user ID (Graph API)',
-    inputSchema: {
-      type: 'object' as const,
-      properties: {
-        identifier: { type: 'string', description: 'User email address or user ID' },
-      },
-      required: ['identifier'],
-    },
-  },
-  {
-    name: 'get_user_photo',
-    description: 'Get a user\'s photo and save to disk (Graph API)',
-    inputSchema: {
-      type: 'object' as const,
-      properties: {
-        identifier: { type: 'string', description: 'User email address or user ID' },
-        save_path: { type: 'string', description: 'File path to save the photo (defaults to ~/Downloads/{identifier}_photo.jpg)' },
-      },
-      required: ['identifier'],
-    },
-  },
-  {
-    name: 'get_user_presence',
-    description: 'Get a user\'s presence status (Available, Busy, DoNotDisturb, etc.) (Graph API)',
-    inputSchema: {
-      type: 'object' as const,
-      properties: {
-        identifier: { type: 'string', description: 'User email address or user ID' },
-      },
-      required: ['identifier'],
-    },
-  },
-  {
-    name: 'get_users_presence',
-    description: 'Batch get presence status for multiple users by their IDs (Graph API)',
-    inputSchema: {
-      type: 'object' as const,
-      properties: {
-        user_ids: {
-          type: 'array',
-          items: { type: 'string' },
-          description: 'Array of user IDs (max 650)',
-        },
-      },
-      required: ['user_ids'],
-    },
-  },
+  // People API tools are served by the tool registry (v3, U2).
   // Planner tools
   {
     name: 'list_plans',
@@ -2841,128 +2719,8 @@ const TOOLS: Tool[] = [
       required: ['task_id'],
     },
   },
-  // Planner Visualization tools
-  {
-    name: 'generate_kanban_board',
-    description: 'Generate a Kanban board visualization for a Planner plan. Returns a file path to the rendered output. (Graph API)',
-    inputSchema: {
-      type: 'object' as const,
-      properties: {
-        plan_id: { type: 'number', description: 'Plan ID from list_plans' },
-        format: { type: 'string', enum: ['html', 'svg', 'markdown', 'mermaid'], description: 'Output format (default: html)' },
-        output_path: { type: 'string', description: 'Custom file path for output (default: temp directory)' },
-      },
-      required: ['plan_id'],
-    },
-  },
-  {
-    name: 'generate_gantt_chart',
-    description: 'Generate a Gantt chart visualization for a Planner plan. Returns a file path to the rendered output. (Graph API)',
-    inputSchema: {
-      type: 'object' as const,
-      properties: {
-        plan_id: { type: 'number', description: 'Plan ID from list_plans' },
-        format: { type: 'string', enum: ['html', 'svg', 'markdown', 'mermaid'], description: 'Output format (default: html)' },
-        output_path: { type: 'string', description: 'Custom file path for output (default: temp directory)' },
-      },
-      required: ['plan_id'],
-    },
-  },
-  {
-    name: 'generate_plan_summary',
-    description: 'Generate a summary visualization for a Planner plan with task statistics. Returns a file path to the rendered output. (Graph API)',
-    inputSchema: {
-      type: 'object' as const,
-      properties: {
-        plan_id: { type: 'number', description: 'Plan ID from list_plans' },
-        format: { type: 'string', enum: ['html', 'svg', 'markdown', 'mermaid'], description: 'Output format (default: html)' },
-        output_path: { type: 'string', description: 'Custom file path for output (default: temp directory)' },
-      },
-      required: ['plan_id'],
-    },
-  },
-  {
-    name: 'generate_burndown_chart',
-    description: 'Generate a burndown chart visualization for a Planner plan. Returns a file path to the rendered output. (Graph API)',
-    inputSchema: {
-      type: 'object' as const,
-      properties: {
-        plan_id: { type: 'number', description: 'Plan ID from list_plans' },
-        format: { type: 'string', enum: ['html', 'svg', 'markdown', 'mermaid'], description: 'Output format (default: html)' },
-        output_path: { type: 'string', description: 'Custom file path for output (default: temp directory)' },
-      },
-      required: ['plan_id'],
-    },
-  },
-  // Online Meetings tools
-  {
-    name: 'list_online_meetings',
-    description: 'List recent online meetings (Teams) for the current user (Graph API)',
-    inputSchema: {
-      type: 'object' as const,
-      properties: {
-        limit: { type: 'number', description: 'Maximum number of meetings to return (default 20)' },
-      },
-      required: [],
-    },
-  },
-  {
-    name: 'get_online_meeting',
-    description: 'Get details for a specific online meeting including participants (Graph API)',
-    inputSchema: {
-      type: 'object' as const,
-      properties: {
-        meeting_id: { type: 'number', description: 'Meeting ID from list_online_meetings' },
-      },
-      required: ['meeting_id'],
-    },
-  },
-  {
-    name: 'list_meeting_recordings',
-    description: 'List recordings for an online meeting (Graph API)',
-    inputSchema: {
-      type: 'object' as const,
-      properties: {
-        meeting_id: { type: 'number', description: 'Meeting ID from list_online_meetings' },
-      },
-      required: ['meeting_id'],
-    },
-  },
-  {
-    name: 'download_meeting_recording',
-    description: 'Download a meeting recording to a local file (Graph API)',
-    inputSchema: {
-      type: 'object' as const,
-      properties: {
-        recording_id: { type: 'number', description: 'Recording ID from list_meeting_recordings' },
-        output_path: { type: 'string', description: 'Local file path to save the recording' },
-      },
-      required: ['recording_id', 'output_path'],
-    },
-  },
-  {
-    name: 'list_meeting_transcripts',
-    description: 'List transcripts for an online meeting (Graph API)',
-    inputSchema: {
-      type: 'object' as const,
-      properties: {
-        meeting_id: { type: 'number', description: 'Meeting ID from list_online_meetings' },
-      },
-      required: ['meeting_id'],
-    },
-  },
-  {
-    name: 'get_meeting_transcript_content',
-    description: 'Get the content of a meeting transcript in VTT or plain text format (Graph API)',
-    inputSchema: {
-      type: 'object' as const,
-      properties: {
-        transcript_id: { type: 'number', description: 'Transcript ID from list_meeting_transcripts' },
-        format: { type: 'string', description: 'Transcript format: text/vtt (default) or text/plain' },
-      },
-      required: ['transcript_id'],
-    },
-  },
+  // Planner Visualization tools and Online Meetings tools are served by the
+  // tool registry (v3, U2).
   // Excel Online tools
   {
     name: 'list_worksheets',
@@ -3161,75 +2919,7 @@ const TOOLS: Tool[] = [
       required: ['approval_token'],
     },
   },
-  // ===========================================================================
-  // SharePoint Document Libraries (Graph API only)
-  // ===========================================================================
-  {
-    name: 'list_sites',
-    description: 'List SharePoint sites the user follows (Graph API)',
-    inputSchema: {
-      type: 'object' as const,
-      properties: {},
-      required: [],
-    },
-  },
-  {
-    name: 'search_sites',
-    description: 'Search for SharePoint sites by keyword (Graph API)',
-    inputSchema: {
-      type: 'object' as const,
-      properties: {
-        query: { type: 'string', description: 'Search keyword for SharePoint sites' },
-      },
-      required: ['query'],
-    },
-  },
-  {
-    name: 'get_site',
-    description: 'Get details for a specific SharePoint site (Graph API)',
-    inputSchema: {
-      type: 'object' as const,
-      properties: {
-        site_id: { type: 'number', description: 'Site ID from list_sites or search_sites' },
-      },
-      required: ['site_id'],
-    },
-  },
-  {
-    name: 'list_document_libraries',
-    description: 'List document libraries (drives) for a SharePoint site (Graph API)',
-    inputSchema: {
-      type: 'object' as const,
-      properties: {
-        site_id: { type: 'number', description: 'Site ID from list_sites or search_sites' },
-      },
-      required: ['site_id'],
-    },
-  },
-  {
-    name: 'list_library_items',
-    description: 'List files and folders in a document library or subfolder (Graph API)',
-    inputSchema: {
-      type: 'object' as const,
-      properties: {
-        library_id: { type: 'number', description: 'Library ID from list_document_libraries' },
-        folder_id: { type: 'number', description: 'Folder ID to browse into (from a previous list_library_items call)' },
-      },
-      required: ['library_id'],
-    },
-  },
-  {
-    name: 'download_library_file',
-    description: 'Download a file from a SharePoint document library to a local path (Graph API)',
-    inputSchema: {
-      type: 'object' as const,
-      properties: {
-        item_id: { type: 'number', description: 'Item ID from list_library_items' },
-        output_path: { type: 'string', description: 'Local file path to save the downloaded file' },
-      },
-      required: ['item_id', 'output_path'],
-    },
-  },
+  // SharePoint Document Libraries are served by the tool registry (v3, U2).
 ];
 
 // =============================================================================
@@ -3443,14 +3133,6 @@ export function createServer(options: ServerOptions = {}): Server {
     'prepare_add_message_reaction',
     'confirm_add_message_reaction',
     'remove_message_reaction',
-    'list_relevant_people',
-    'search_people',
-    'get_manager',
-    'get_direct_reports',
-    'get_user_profile',
-    'get_user_photo',
-    'get_user_presence',
-    'get_users_presence',
     'list_plans',
     'get_plan',
     'create_plan',
@@ -3468,16 +3150,6 @@ export function createServer(options: ServerOptions = {}): Server {
     'confirm_delete_planner_task',
     'get_planner_task_details',
     'update_planner_task_details',
-    'generate_kanban_board',
-    'generate_gantt_chart',
-    'generate_plan_summary',
-    'generate_burndown_chart',
-    'list_online_meetings',
-    'get_online_meeting',
-    'list_meeting_recordings',
-    'download_meeting_recording',
-    'list_meeting_transcripts',
-    'get_meeting_transcript_content',
     'list_worksheets',
     'get_worksheet_range',
     'get_used_range',
@@ -3495,12 +3167,6 @@ export function createServer(options: ServerOptions = {}): Server {
     'create_sharing_link',
     'prepare_delete_drive_item',
     'confirm_delete_drive_item',
-    'list_sites',
-    'search_sites',
-    'get_site',
-    'list_document_libraries',
-    'list_library_items',
-    'download_library_file',
   ]);
 
   /** Builds the runtime context for registry handlers (post-initialization). */
@@ -3517,6 +3183,10 @@ export function createServer(options: ServerOptions = {}): Server {
         && checklistItemsTools != null
         && linkedResourcesTools != null
         && taskAttachmentsTools != null
+        && peopleTools != null
+        && plannerVisualizationTools != null
+        && meetingsTools != null
+        && sharePointTools != null
           ? {
               rules: rulesTools,
               categories: categoriesTools,
@@ -3525,6 +3195,10 @@ export function createServer(options: ServerOptions = {}): Server {
               checklistItems: checklistItemsTools,
               linkedResources: linkedResourcesTools,
               taskAttachments: taskAttachmentsTools,
+              people: peopleTools,
+              plannerVisualization: plannerVisualizationTools,
+              meetings: meetingsTools,
+              sharePoint: sharePointTools,
             }
           : null,
       applescript: useGraphApi ? null : {},
@@ -5743,49 +5417,9 @@ async function handleGraphToolCall(
         return await teamsTools.removeMessageReaction(params);
       }
 
-      // Checklist items, linked resources, and task attachments are served
-      // by the tool registry (v3, U2).
-
-      // People API tools
-      case 'list_relevant_people': {
-        const params = ListRelevantPeopleInput.parse(args);
-        return await peopleTools.listRelevantPeople(params);
-      }
-
-      case 'search_people': {
-        const params = SearchPeopleInput.parse(args);
-        return await peopleTools.searchPeople(params);
-      }
-
-      case 'get_manager': {
-        GetManagerInput.parse(args);
-        return await peopleTools.getManager();
-      }
-
-      case 'get_direct_reports': {
-        GetDirectReportsInput.parse(args);
-        return await peopleTools.getDirectReports();
-      }
-
-      case 'get_user_profile': {
-        const params = GetUserProfileInput.parse(args);
-        return await peopleTools.getUserProfile(params);
-      }
-
-      case 'get_user_photo': {
-        const params = GetUserPhotoInput.parse(args);
-        return await peopleTools.getUserPhoto(params);
-      }
-
-      case 'get_user_presence': {
-        const params = GetUserPresenceInput.parse(args);
-        return await peopleTools.getUserPresence(params);
-      }
-
-      case 'get_users_presence': {
-        const params = GetUsersPresenceInput.parse(args);
-        return await peopleTools.getUsersPresence(params);
-      }
+      // Checklist items, linked resources, task attachments, people, planner
+      // visualization, online meetings, and SharePoint are served by the tool
+      // registry (v3, U2).
 
       // Planner tools
       case 'list_plans': {
@@ -5871,58 +5505,6 @@ async function handleGraphToolCall(
       case 'update_planner_task_details': {
         const params = UpdatePlannerTaskDetailsInput.parse(args);
         return await plannerTools.updatePlannerTaskDetails(params);
-      }
-
-      // Planner Visualization tools
-      case 'generate_kanban_board': {
-        const params = GenerateKanbanBoardInput.parse(args);
-        return await plannerVisualizationTools.generateKanbanBoard(params);
-      }
-
-      case 'generate_gantt_chart': {
-        const params = GenerateGanttChartInput.parse(args);
-        return await plannerVisualizationTools.generateGanttChart(params);
-      }
-
-      case 'generate_plan_summary': {
-        const params = GeneratePlanSummaryInput.parse(args);
-        return await plannerVisualizationTools.generatePlanSummary(params);
-      }
-
-      case 'generate_burndown_chart': {
-        const params = GenerateBurndownChartInput.parse(args);
-        return await plannerVisualizationTools.generateBurndownChart(params);
-      }
-
-      // Online Meetings tools
-      case 'list_online_meetings': {
-        const params = ListOnlineMeetingsInput.parse(args);
-        return await meetingsTools.listOnlineMeetings(params);
-      }
-
-      case 'get_online_meeting': {
-        const params = GetOnlineMeetingInput.parse(args);
-        return await meetingsTools.getOnlineMeeting(params);
-      }
-
-      case 'list_meeting_recordings': {
-        const params = ListMeetingRecordingsInput.parse(args);
-        return await meetingsTools.listMeetingRecordings(params);
-      }
-
-      case 'download_meeting_recording': {
-        const params = DownloadMeetingRecordingInput.parse(args);
-        return await meetingsTools.downloadMeetingRecording(params);
-      }
-
-      case 'list_meeting_transcripts': {
-        const params = ListMeetingTranscriptsInput.parse(args);
-        return await meetingsTools.listMeetingTranscripts(params);
-      }
-
-      case 'get_meeting_transcript_content': {
-        const params = GetMeetingTranscriptContentInput.parse(args);
-        return await meetingsTools.getMeetingTranscriptContent(params);
       }
 
       // Excel Online tools
@@ -6012,39 +5594,7 @@ async function handleGraphToolCall(
         return await oneDriveTools.confirmDeleteDriveItem(params);
       }
 
-      // =====================================================================
-      // SharePoint
-      // =====================================================================
-
-      case 'list_sites': {
-        ListSitesInput.parse(args);
-        return await sharePointTools.listSites();
-      }
-
-      case 'search_sites': {
-        const params = SearchSitesInput.parse(args);
-        return await sharePointTools.searchSites(params);
-      }
-
-      case 'get_site': {
-        const params = GetSiteInput.parse(args);
-        return await sharePointTools.getSite(params);
-      }
-
-      case 'list_document_libraries': {
-        const params = ListDocumentLibrariesInput.parse(args);
-        return await sharePointTools.listDocumentLibraries(params);
-      }
-
-      case 'list_library_items': {
-        const params = ListLibraryItemsInput.parse(args);
-        return await sharePointTools.listLibraryItems(params);
-      }
-
-      case 'download_library_file': {
-        const params = DownloadLibraryFileInput.parse(args);
-        return await sharePointTools.downloadLibraryFile(params);
-      }
+      // SharePoint is served by the tool registry (v3, U2).
 
       default:
         return {

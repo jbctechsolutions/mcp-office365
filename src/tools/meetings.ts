@@ -12,6 +12,15 @@
  */
 
 import { z } from 'zod';
+import { defineTool } from '../registry/define-tool.js';
+import { requireGraphToolset } from '../registry/context.js';
+import type { ToolContext, ToolDefinition } from '../registry/types.js';
+
+declare module '../registry/types.js' {
+  interface GraphToolsets {
+    meetings: MeetingsTools;
+  }
+}
 
 // =============================================================================
 // Input Schemas
@@ -167,4 +176,78 @@ export class MeetingsTools {
       }],
     };
   }
+}
+
+// =============================================================================
+// Registry Definitions (v3 registry-driven architecture, U2)
+// =============================================================================
+
+/**
+ * Registry tool definitions for the meetings domain.
+ */
+export function meetingsToolDefinitions(): ToolDefinition[] {
+  const tools = (ctx: ToolContext): MeetingsTools => requireGraphToolset(ctx, 'meetings');
+
+  return [
+    defineTool({
+      name: 'list_online_meetings',
+      description: 'List recent online meetings (Teams) for the current user (Graph API)',
+      input: ListOnlineMeetingsInput,
+      annotations: { readOnlyHint: true, openWorldHint: true },
+      destructive: false,
+      presets: ['meetings'],
+      backends: ['graph'],
+      handler: (ctx, params) => tools(ctx).listOnlineMeetings(params),
+    }),
+    defineTool({
+      name: 'get_online_meeting',
+      description: 'Get details for a specific online meeting including participants (Graph API)',
+      input: GetOnlineMeetingInput,
+      annotations: { readOnlyHint: true, openWorldHint: true },
+      destructive: false,
+      presets: ['meetings'],
+      backends: ['graph'],
+      handler: (ctx, params) => tools(ctx).getOnlineMeeting(params),
+    }),
+    defineTool({
+      name: 'list_meeting_recordings',
+      description: 'List recordings for an online meeting (Graph API)',
+      input: ListMeetingRecordingsInput,
+      annotations: { readOnlyHint: true, openWorldHint: true },
+      destructive: false,
+      presets: ['meetings'],
+      backends: ['graph'],
+      handler: (ctx, params) => tools(ctx).listMeetingRecordings(params),
+    }),
+    defineTool({
+      name: 'download_meeting_recording',
+      description: 'Download a meeting recording to a local file (Graph API)',
+      input: DownloadMeetingRecordingInput,
+      annotations: { readOnlyHint: true, openWorldHint: true },
+      destructive: false,
+      presets: ['meetings'],
+      backends: ['graph'],
+      handler: (ctx, params) => tools(ctx).downloadMeetingRecording(params),
+    }),
+    defineTool({
+      name: 'list_meeting_transcripts',
+      description: 'List transcripts for an online meeting (Graph API)',
+      input: ListMeetingTranscriptsInput,
+      annotations: { readOnlyHint: true, openWorldHint: true },
+      destructive: false,
+      presets: ['meetings'],
+      backends: ['graph'],
+      handler: (ctx, params) => tools(ctx).listMeetingTranscripts(params),
+    }),
+    defineTool({
+      name: 'get_meeting_transcript_content',
+      description: 'Get the content of a meeting transcript in VTT or plain text format (Graph API)',
+      input: GetMeetingTranscriptContentInput,
+      annotations: { readOnlyHint: true, openWorldHint: true },
+      destructive: false,
+      presets: ['meetings'],
+      backends: ['graph'],
+      handler: (ctx, params) => tools(ctx).getMeetingTranscriptContent(params),
+    }),
+  ];
 }

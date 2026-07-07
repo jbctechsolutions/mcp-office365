@@ -14,6 +14,15 @@ import { z } from 'zod';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
+import { defineTool } from '../registry/define-tool.js';
+import { requireGraphToolset } from '../registry/context.js';
+import type { ToolContext, ToolDefinition } from '../registry/types.js';
+
+declare module '../registry/types.js' {
+  interface GraphToolsets {
+    people: PeopleTools;
+  }
+}
 
 // =============================================================================
 // Input Schemas
@@ -313,4 +322,98 @@ export class PeopleTools {
       }],
     };
   }
+}
+
+// =============================================================================
+// Registry Definitions (v3 registry-driven architecture, U2)
+// =============================================================================
+
+/**
+ * Registry tool definitions for the people domain.
+ */
+export function peopleToolDefinitions(): ToolDefinition[] {
+  const tools = (ctx: ToolContext): PeopleTools => requireGraphToolset(ctx, 'people');
+
+  return [
+    defineTool({
+      name: 'list_relevant_people',
+      description: 'List AI-ranked relevant people for the current user (Graph API)',
+      input: ListRelevantPeopleInput,
+      annotations: { readOnlyHint: true, openWorldHint: true },
+      destructive: false,
+      presets: ['people'],
+      backends: ['graph'],
+      handler: (ctx, params) => tools(ctx).listRelevantPeople(params),
+    }),
+    defineTool({
+      name: 'search_people',
+      description: 'Search people by name or email (Graph API)',
+      input: SearchPeopleInput,
+      annotations: { readOnlyHint: true, openWorldHint: true },
+      destructive: false,
+      presets: ['people'],
+      backends: ['graph'],
+      handler: (ctx, params) => tools(ctx).searchPeople(params),
+    }),
+    defineTool({
+      name: 'get_manager',
+      description: 'Get the current user\'s manager (Graph API)',
+      input: GetManagerInput,
+      annotations: { readOnlyHint: true, openWorldHint: true },
+      destructive: false,
+      presets: ['people'],
+      backends: ['graph'],
+      handler: (ctx) => tools(ctx).getManager(),
+    }),
+    defineTool({
+      name: 'get_direct_reports',
+      description: 'Get the current user\'s direct reports (Graph API)',
+      input: GetDirectReportsInput,
+      annotations: { readOnlyHint: true, openWorldHint: true },
+      destructive: false,
+      presets: ['people'],
+      backends: ['graph'],
+      handler: (ctx) => tools(ctx).getDirectReports(),
+    }),
+    defineTool({
+      name: 'get_user_profile',
+      description: 'Get a user\'s profile by email address or user ID (Graph API)',
+      input: GetUserProfileInput,
+      annotations: { readOnlyHint: true, openWorldHint: true },
+      destructive: false,
+      presets: ['people'],
+      backends: ['graph'],
+      handler: (ctx, params) => tools(ctx).getUserProfile(params),
+    }),
+    defineTool({
+      name: 'get_user_photo',
+      description: 'Get a user\'s photo and save to disk (Graph API)',
+      input: GetUserPhotoInput,
+      annotations: { readOnlyHint: true, openWorldHint: true },
+      destructive: false,
+      presets: ['people'],
+      backends: ['graph'],
+      handler: (ctx, params) => tools(ctx).getUserPhoto(params),
+    }),
+    defineTool({
+      name: 'get_user_presence',
+      description: 'Get a user\'s presence status (Available, Busy, DoNotDisturb, etc.) (Graph API)',
+      input: GetUserPresenceInput,
+      annotations: { readOnlyHint: true, openWorldHint: true },
+      destructive: false,
+      presets: ['people'],
+      backends: ['graph'],
+      handler: (ctx, params) => tools(ctx).getUserPresence(params),
+    }),
+    defineTool({
+      name: 'get_users_presence',
+      description: 'Batch get presence status for multiple users by their IDs (Graph API)',
+      input: GetUsersPresenceInput,
+      annotations: { readOnlyHint: true, openWorldHint: true },
+      destructive: false,
+      presets: ['people'],
+      backends: ['graph'],
+      handler: (ctx, params) => tools(ctx).getUsersPresence(params),
+    }),
+  ];
 }
