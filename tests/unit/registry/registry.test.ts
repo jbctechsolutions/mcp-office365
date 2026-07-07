@@ -97,6 +97,31 @@ describe('ToolRegistry', () => {
     expect(result).toEqual({ content: [{ type: 'text', text: '{"rules":[]}' }] });
   });
 
+  it('dispatches a no-input tool when arguments is omitted (undefined)', async () => {
+    // MCP marks `arguments` optional; a no-input tool must not throw on undefined.
+    const registry = new ToolRegistry();
+    registry.register(mailRulesToolDefinitions());
+    const listMailRules = vi.fn().mockResolvedValue({ content: [{ type: 'text', text: '{}' }] });
+    const result = await registry.dispatch('list_mail_rules', undefined, readContext({ listMailRules }), graphSurface);
+    expect(listMailRules).toHaveBeenCalledOnce();
+    expect(result).toBeDefined();
+  });
+
+  it('throws (does not fall through) when a tool is filtered out of the current mode', async () => {
+    const registry = new ToolRegistry();
+    registry.register(mailRulesToolDefinitions());
+    // confirm_delete_mail_rule is destructive; read-only mode filters it out,
+    // so dispatch must reject rather than return undefined into legacy fallback.
+    await expect(
+      registry.dispatch(
+        'confirm_delete_mail_rule',
+        { token_id: '00000000-0000-0000-0000-000000000000', rule_id: 1 },
+        readContext({}),
+        { backend: 'graph', readOnly: true },
+      ),
+    ).rejects.toThrow(/not available in the current mode/);
+  });
+
   it('returns undefined for an unregistered tool so legacy dispatch can take over', async () => {
     const registry = new ToolRegistry();
     registry.register(mailRulesToolDefinitions());

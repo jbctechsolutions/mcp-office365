@@ -121,7 +121,10 @@ export class ToolRegistry {
     if (!this.matches(def, options)) {
       throw new Error(`Tool "${name}" is not available in the current mode.`);
     }
-    const params = def.input.parse(args);
+    // MCP marks `arguments` optional; default to {} so no-input tools
+    // (e.g. list_mail_rules) parse cleanly, matching the codebase-wide
+    // `parse(args ?? {})` convention.
+    const params = def.input.parse(args ?? {});
     return def.handler(ctx, params);
   }
 
