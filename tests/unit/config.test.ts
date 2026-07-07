@@ -31,7 +31,9 @@ describe('createConfig', () => {
     process.env['OUTLOOK_BASE_PATH'] = '/custom/path';
     const config = createConfig();
     expect(config.outlookBasePath).toBe('/custom/path');
-    expect(config.databasePath).toContain('/custom/path');
+    // databasePath is built with path.join, which normalizes separators to the
+    // platform's (backslashes on Windows); normalize before the substring check.
+    expect(config.databasePath.replace(/\\/g, '/')).toContain('/custom/path');
   });
 
   it('returns all required properties', () => {

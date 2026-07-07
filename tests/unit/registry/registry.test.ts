@@ -37,6 +37,11 @@ describe('toInputSchema', () => {
     expect(json['required']).toEqual(['rule_id']);
   });
 
+  it('defaults type to object when the Zod schema produces no type', () => {
+    const json = toInputSchema(z.any()) as Record<string, unknown>;
+    expect(json['type']).toBe('object');
+  });
+
   it('round-trips enum and required/optional fields from the Zod schema', () => {
     // create_mail_rule is the plan's spot-check target.
     const def = mailRulesToolDefinitions().find((d) => d.name === 'create_mail_rule');
@@ -159,5 +164,37 @@ describe('ToolRegistry', () => {
     registry.register(mailRulesToolDefinitions());
     expect(registry.listTools({ backend: 'graph', presets: ['mail'] })).toHaveLength(4);
     expect(registry.listTools({ backend: 'graph', presets: ['calendar'] })).toHaveLength(0);
+  });
+
+  it('exposes has/get/names/isExposed accessors', () => {
+    const registry = new ToolRegistry();
+    registry.register(mailRulesToolDefinitions());
+    expect(registry.has('list_mail_rules')).toBe(true);
+    expect(registry.has('nope')).toBe(false);
+    expect(registry.get('list_mail_rules')?.name).toBe('list_mail_rules');
+    expect(registry.get('nope')).toBeUndefined();
+    expect(registry.names()).toContain('create_mail_rule');
+    expect(registry.isExposed('confirm_delete_mail_rule', graphSurface)).toBe(true);
+    expect(registry.isExposed('confirm_delete_mail_rule', { backend: 'graph', readOnly: true })).toBe(false);
+    expect(registry.isExposed('nope', graphSurface)).toBe(false);
+  });
+
+  it('omits the annotations key for a tool with no annotations', () => {
+    const registry = new ToolRegistry();
+    registry.register([
+      defineTool({
+        name: 'bare_tool',
+        description: 'no annotations',
+        input: z.strictObject({}),
+        annotations: {},
+        destructive: false,
+        presets: [],
+        backends: ['graph'],
+        handler: () => ({ content: [{ type: 'text', text: '' }] }),
+      }),
+    ]);
+    const tool = registry.listTools(graphSurface).find((t) => t.name === 'bare_tool');
+    expect(tool).toBeDefined();
+    expect(tool).not.toHaveProperty('annotations');
   });
 });
