@@ -49,6 +49,7 @@ import {
 import { createRequire } from 'node:module';
 import { ToolRegistry } from './registry/index.js';
 import type { ToolContext, SurfaceOptions } from './registry/index.js';
+import { allToolDefinitions } from './registry/all-tools.js';
 import { parseCliCommand, handleAuthCommand, createAuthMutex } from './cli.js';
 
 const pkg = createRequire(import.meta.url)('../package.json') as { version: string };
@@ -73,7 +74,6 @@ import {
   CreateMailRuleInput,
   PrepareDeleteMailRuleInput,
   ConfirmDeleteMailRuleInput,
-  mailRulesToolDefinitions,
 } from './tools/mail-rules.js';
 import {
   CategoriesTools,
@@ -3674,7 +3674,7 @@ export function createServer(options: ServerOptions = {}): Server {
   // live instances lazily via ToolContext at call time. Domains not yet
   // migrated fall through to the legacy TOOLS array + dispatch switch below.
   const registry = new ToolRegistry();
-  registry.register(mailRulesToolDefinitions());
+  registry.register(allToolDefinitions());
   const registeredNames = new Set(registry.names());
 
   // Shared state (used by both backends)
