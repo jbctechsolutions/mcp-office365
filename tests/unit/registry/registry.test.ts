@@ -7,6 +7,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { z } from 'zod';
 import { ToolRegistry, toInputSchema } from '../../../src/registry/registry.js';
 import { defineTool } from '../../../src/registry/define-tool.js';
+import { requireGraphToolset } from '../../../src/registry/context.js';
 import type { ToolContext, ToolDefinition } from '../../../src/registry/types.js';
 import { mailRulesToolDefinitions } from '../../../src/tools/mail-rules.js';
 import { ApprovalTokenManager } from '../../../src/approval/index.js';
@@ -21,6 +22,24 @@ function readContext(rules: unknown): ToolContext {
 }
 
 const graphSurface = { backend: 'graph' as const };
+
+describe('requireGraphToolset', () => {
+  it('returns the toolset when the graph bag is present', () => {
+    const marker = { listMailRules: () => undefined };
+    const ctx = readContext(marker);
+    expect(requireGraphToolset(ctx, 'rules')).toBe(marker);
+  });
+
+  it('throws a clear error when the graph backend is unavailable', () => {
+    const ctx: ToolContext = {
+      backend: 'applescript',
+      tokenManager: new ApprovalTokenManager(),
+      graph: null,
+      applescript: {},
+    };
+    expect(() => requireGraphToolset(ctx, 'rules')).toThrow(/Microsoft Graph API backend/);
+  });
+});
 
 describe('toInputSchema', () => {
   it('produces an MCP-compatible object schema with no $schema key', () => {

@@ -13,10 +13,12 @@
 
 import type { ToolDefinition } from './types.js';
 import { mailRulesToolDefinitions } from '../tools/mail-rules.js';
+import { categoriesToolDefinitions } from '../tools/categories.js';
 
 export function allToolDefinitions(): ToolDefinition[] {
   return [
     ...mailRulesToolDefinitions(),
+    ...categoriesToolDefinitions(),
     // U2: append each migrated domain's definitions here.
   ];
 }

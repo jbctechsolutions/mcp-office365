@@ -13,7 +13,16 @@
 import { z } from 'zod';
 import type { ApprovalTokenManager } from '../approval/index.js';
 import { defineTool } from '../registry/define-tool.js';
+import { requireGraphToolset } from '../registry/context.js';
 import type { ToolContext, ToolDefinition } from '../registry/types.js';
+
+// Register this domain's toolset on the shared context bag (module
+// augmentation keeps the declaration in this file, not registry/types.ts).
+declare module '../registry/types.js' {
+  interface GraphToolsets {
+    rules: MailRulesTools;
+  }
+}
 
 // =============================================================================
 // Input Schemas
@@ -214,12 +223,7 @@ const NoInput = z.strictObject({});
  * Graph backend is initialized.
  */
 export function mailRulesToolDefinitions(): ToolDefinition[] {
-  const rules = (ctx: ToolContext): MailRulesTools => {
-    if (ctx.graph == null) {
-      throw new Error('Mail rules require the Graph API backend.');
-    }
-    return ctx.graph.rules;
-  };
+  const rules = (ctx: ToolContext): MailRulesTools => requireGraphToolset(ctx, 'rules');
 
   return [
     defineTool({

@@ -20,3 +20,4 @@ export type {
 export { ToolRegistry, toInputSchema } from './registry.js';
 export type { SurfaceOptions } from './registry.js';
 export { defineTool } from './define-tool.js';
+export { requireGraphToolset } from './context.js';

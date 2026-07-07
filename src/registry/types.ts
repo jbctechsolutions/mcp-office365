@@ -16,8 +16,6 @@
 
 import type { z } from 'zod';
 import type { ApprovalTokenManager } from '../approval/index.js';
-// Type-only imports — erased at runtime, so the registry ↔ tools cycle is safe.
-import type { MailRulesTools } from '../tools/mail-rules.js';
 
 /** Which backend(s) expose a tool. */
 export type Backend = 'graph' | 'applescript';
@@ -57,11 +55,15 @@ export interface ToolResult {
 
 /**
  * Bag of initialized Graph-backend tool instances, resolved after the backend
- * is lazily initialized. Grows one field per domain as U2 migrates them.
+ * is lazily initialized.
+ *
+ * This is an augmentation target: each domain module declares its own field
+ * via `declare module '../registry/types.js'`, so migrating a domain never
+ * edits this file — avoiding a 25-domain merge-conflict hotspot. Handlers read
+ * their instance through `requireGraphToolset(ctx, key)`.
  */
-export interface GraphToolsets {
-  readonly rules: MailRulesTools;
-}
+// eslint-disable-next-line @typescript-eslint/no-empty-interface
+export interface GraphToolsets {}
 
 /**
  * Bag of initialized AppleScript-backend tool instances. The AppleScript

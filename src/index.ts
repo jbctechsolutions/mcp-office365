@@ -69,18 +69,8 @@ import {
   CheckAvailabilityInput,
   FindMeetingTimesInput,
 } from './tools/scheduling.js';
-import {
-  MailRulesTools,
-  CreateMailRuleInput,
-  PrepareDeleteMailRuleInput,
-  ConfirmDeleteMailRuleInput,
-} from './tools/mail-rules.js';
-import {
-  CategoriesTools,
-  CreateCategoryInput,
-  PrepareDeleteCategoryInput,
-  ConfirmDeleteCategoryInput,
-} from './tools/categories.js';
+import { MailRulesTools } from './tools/mail-rules.js';
+import { CategoriesTools } from './tools/categories.js';
 import {
   CalendarPermissionsTools,
   ListCalendarPermissionsInput,
@@ -2068,120 +2058,6 @@ const TOOLS: Tool[] = [
       required: ['attendees', 'duration_minutes'],
     },
   },
-  // Mail rules tools
-  {
-    name: 'list_mail_rules',
-    description: 'List all inbox mail rules (Graph API)',
-    inputSchema: {
-      type: 'object' as const,
-      properties: {},
-      required: [],
-    },
-  },
-  {
-    name: 'create_mail_rule',
-    description: 'Create an inbox mail rule with conditions and actions (Graph API)',
-    inputSchema: {
-      type: 'object' as const,
-      properties: {
-        display_name: { type: 'string', description: 'Rule name' },
-        sequence: { type: 'number', description: 'Rule priority order' },
-        is_enabled: { type: 'boolean', default: true, description: 'Whether rule is active' },
-        conditions: {
-          type: 'object',
-          description: 'Conditions that trigger the rule',
-          properties: {
-            from_addresses: { type: 'array', items: { type: 'string' }, description: 'Match sender email addresses' },
-            subject_contains: { type: 'array', items: { type: 'string' }, description: 'Subject contains any of these strings' },
-            body_contains: { type: 'array', items: { type: 'string' }, description: 'Body contains any of these strings' },
-            sender_contains: { type: 'array', items: { type: 'string' }, description: 'Sender field contains these strings' },
-            has_attachments: { type: 'boolean', description: 'Has attachments' },
-            importance: { type: 'string', enum: ['low', 'normal', 'high'], description: 'Match importance level' },
-          },
-        },
-        actions: {
-          type: 'object',
-          description: 'Actions to perform',
-          properties: {
-            move_to_folder: { type: 'number', description: 'Folder ID to move to' },
-            mark_as_read: { type: 'boolean', description: 'Mark as read' },
-            mark_importance: { type: 'string', enum: ['low', 'normal', 'high'], description: 'Set importance' },
-            forward_to: { type: 'array', items: { type: 'string' }, description: 'Forward to these email addresses' },
-            delete: { type: 'boolean', description: 'Delete the message' },
-            stop_processing_rules: { type: 'boolean', description: 'Stop processing more rules' },
-          },
-        },
-      },
-      required: ['display_name', 'conditions', 'actions'],
-    },
-  },
-  {
-    name: 'prepare_delete_mail_rule',
-    description: 'Prepare to delete a mail rule. Returns a preview and approval token. Call confirm_delete_mail_rule to execute. (Graph API)',
-    inputSchema: {
-      type: 'object' as const,
-      properties: {
-        rule_id: { type: 'number', description: 'The rule ID to delete' },
-      },
-      required: ['rule_id'],
-    },
-  },
-  {
-    name: 'confirm_delete_mail_rule',
-    description: 'Confirm mail rule deletion with approval token (Graph API)',
-    inputSchema: {
-      type: 'object' as const,
-      properties: {
-        token_id: { type: 'string', description: 'The approval token from prepare_delete_mail_rule' },
-        rule_id: { type: 'number', description: 'The rule ID to delete' },
-      },
-      required: ['token_id', 'rule_id'],
-    },
-  },
-  // Master categories tools
-  {
-    name: 'list_categories',
-    description: 'List all master categories (Graph API)',
-    inputSchema: {
-      type: 'object' as const,
-      properties: {},
-      required: [],
-    },
-  },
-  {
-    name: 'create_category',
-    description: 'Create a new master category (Graph API)',
-    inputSchema: {
-      type: 'object' as const,
-      properties: {
-        name: { type: 'string', description: 'Category name' },
-        color: { type: 'string', enum: ['preset0','preset1','preset2','preset3','preset4','preset5','preset6','preset7','preset8','preset9','preset10','preset11','preset12','preset13','preset14','preset15','preset16','preset17','preset18','preset19','preset20','preset21','preset22','preset23','preset24','none'], description: 'Category color preset' },
-      },
-      required: ['name', 'color'],
-    },
-  },
-  {
-    name: 'prepare_delete_category',
-    description: 'Prepare to delete a master category. Returns a preview and approval token. Call confirm_delete_category to execute. (Graph API)',
-    inputSchema: {
-      type: 'object' as const,
-      properties: {
-        category_id: { type: 'number', description: 'Category ID to delete' },
-      },
-      required: ['category_id'],
-    },
-  },
-  {
-    name: 'confirm_delete_category',
-    description: 'Confirm category deletion with approval token (Graph API)',
-    inputSchema: {
-      type: 'object' as const,
-      properties: {
-        approval_token: { type: 'string', description: 'The approval token from prepare_delete_category' },
-      },
-      required: ['approval_token'],
-    },
-  },
   // Focused inbox override tools
   {
     name: 'list_focused_overrides',
@@ -3798,14 +3674,6 @@ export function createServer(options: ServerOptions = {}): Server {
     'list_conversation',
     'search_emails_advanced',
     'check_new_emails',
-    'list_mail_rules',
-    'create_mail_rule',
-    'prepare_delete_mail_rule',
-    'confirm_delete_mail_rule',
-    'list_categories',
-    'create_category',
-    'prepare_delete_category',
-    'confirm_delete_category',
     'list_focused_overrides',
     'create_focused_override',
     'prepare_delete_focused_override',
@@ -3938,7 +3806,10 @@ export function createServer(options: ServerOptions = {}): Server {
     return {
       backend: surface.backend,
       tokenManager,
-      graph: useGraphApi && rulesTools != null ? { rules: rulesTools } : null,
+      graph:
+        useGraphApi && rulesTools != null && categoriesTools != null
+          ? { rules: rulesTools, categories: categoriesTools }
+          : null,
       applescript: useGraphApi ? null : {},
     };
   }
@@ -5867,43 +5738,7 @@ async function handleGraphToolCall(
         };
       }
 
-      // Mail rules tools
-      case 'list_mail_rules':
-        return await rulesTools.listMailRules();
-
-      case 'create_mail_rule': {
-        const params = CreateMailRuleInput.parse(args);
-        return await rulesTools.createMailRule(params);
-      }
-
-      case 'prepare_delete_mail_rule': {
-        const params = PrepareDeleteMailRuleInput.parse(args);
-        return rulesTools.prepareDeleteMailRule(params);
-      }
-
-      case 'confirm_delete_mail_rule': {
-        const params = ConfirmDeleteMailRuleInput.parse(args);
-        return await rulesTools.confirmDeleteMailRule(params);
-      }
-
-      // Master categories tools
-      case 'list_categories':
-        return await categoriesTools.listCategories();
-
-      case 'create_category': {
-        const params = CreateCategoryInput.parse(args);
-        return await categoriesTools.createCategory(params);
-      }
-
-      case 'prepare_delete_category': {
-        const params = PrepareDeleteCategoryInput.parse(args);
-        return categoriesTools.prepareDeleteCategory(params);
-      }
-
-      case 'confirm_delete_category': {
-        const params = ConfirmDeleteCategoryInput.parse(args);
-        return await categoriesTools.confirmDeleteCategory(params);
-      }
+      // Mail rules + master categories are served by the tool registry (v3, U2).
 
       // Focused inbox override tools
       case 'list_focused_overrides':
