@@ -61,6 +61,17 @@ describe('toInputSchema', () => {
     expect(json['type']).toBe('object');
   });
 
+  it('treats a field with a default as optional in the advertised schema (io:input)', () => {
+    // A .default() field is optional for the client — the server fills it.
+    const schema = z.strictObject({
+      plan_id: z.number(),
+      format: z.enum(['png', 'svg']).default('png'),
+    });
+    const json = toInputSchema(schema) as Record<string, unknown>;
+    expect(json['required']).toEqual(['plan_id']);
+    expect(json['required']).not.toContain('format');
+  });
+
   it('round-trips enum and required/optional fields from the Zod schema', () => {
     // create_mail_rule is the plan's spot-check target.
     const def = mailRulesToolDefinitions().find((d) => d.name === 'create_mail_rule');

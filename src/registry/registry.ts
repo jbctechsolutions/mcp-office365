@@ -40,7 +40,11 @@ export interface SurfaceOptions {
  * advertised schema stays validation-safe.
  */
 export function toInputSchema(schema: z.ZodType): Tool['inputSchema'] {
-  const json = z.toJSONSchema(schema, { target: 'draft-7' }) as Record<string, unknown>;
+  // `io: 'input'` — the advertised schema describes what a CLIENT sends, so a
+  // field with a `.default()` is optional (the server fills the default at
+  // parse time). Zod 4's default `io: 'output'` would mark defaulted fields as
+  // required, misleading agents into always supplying them.
+  const json = z.toJSONSchema(schema, { target: 'draft-7', io: 'input' }) as Record<string, unknown>;
   delete json['$schema'];
   if (json['type'] == null) {
     json['type'] = 'object';

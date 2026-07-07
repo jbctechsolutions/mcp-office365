@@ -223,7 +223,7 @@ const NoInput = z.strictObject({});
  * Graph backend is initialized.
  */
 export function mailRulesToolDefinitions(): ToolDefinition[] {
-  const rules = (ctx: ToolContext): MailRulesTools => requireGraphToolset(ctx, 'rules');
+  const tools = (ctx: ToolContext): MailRulesTools => requireGraphToolset(ctx, 'rules');
 
   return [
     defineTool({
@@ -234,7 +234,7 @@ export function mailRulesToolDefinitions(): ToolDefinition[] {
       destructive: false,
       presets: ['mail'],
       backends: ['graph'],
-      handler: (ctx) => rules(ctx).listMailRules(),
+      handler: (ctx) => tools(ctx).listMailRules(),
     }),
     defineTool({
       name: 'create_mail_rule',
@@ -244,7 +244,7 @@ export function mailRulesToolDefinitions(): ToolDefinition[] {
       destructive: false,
       presets: ['mail'],
       backends: ['graph'],
-      handler: (ctx, params) => rules(ctx).createMailRule(params),
+      handler: (ctx, params) => tools(ctx).createMailRule(params),
     }),
     defineTool({
       name: 'prepare_delete_mail_rule',
@@ -254,7 +254,7 @@ export function mailRulesToolDefinitions(): ToolDefinition[] {
       destructive: true,
       presets: ['mail'],
       backends: ['graph'],
-      handler: (ctx, params) => rules(ctx).prepareDeleteMailRule(params),
+      handler: (ctx, params) => tools(ctx).prepareDeleteMailRule(params),
     }),
     defineTool({
       name: 'confirm_delete_mail_rule',
@@ -264,7 +264,7 @@ export function mailRulesToolDefinitions(): ToolDefinition[] {
       destructive: true,
       presets: ['mail'],
       backends: ['graph'],
-      handler: (ctx, params) => rules(ctx).confirmDeleteMailRule(params),
+      handler: (ctx, params) => tools(ctx).confirmDeleteMailRule(params),
     }),
   ];
 }
