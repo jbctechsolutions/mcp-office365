@@ -14,11 +14,21 @@
 import type { ToolDefinition } from './types.js';
 import { mailRulesToolDefinitions } from '../tools/mail-rules.js';
 import { categoriesToolDefinitions } from '../tools/categories.js';
+import { focusedOverridesToolDefinitions } from '../tools/focused-overrides.js';
+import { calendarPermissionsToolDefinitions } from '../tools/calendar-permissions.js';
+import { checklistItemsToolDefinitions } from '../tools/checklist-items.js';
+import { linkedResourcesToolDefinitions } from '../tools/linked-resources.js';
+import { taskAttachmentsToolDefinitions } from '../tools/task-attachments.js';
 
 export function allToolDefinitions(): ToolDefinition[] {
   return [
     ...mailRulesToolDefinitions(),
     ...categoriesToolDefinitions(),
+    ...focusedOverridesToolDefinitions(),
+    ...calendarPermissionsToolDefinitions(),
+    ...checklistItemsToolDefinitions(),
+    ...linkedResourcesToolDefinitions(),
+    ...taskAttachmentsToolDefinitions(),
     // U2: append each migrated domain's definitions here.
   ];
 }

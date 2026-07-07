@@ -71,41 +71,11 @@ import {
 } from './tools/scheduling.js';
 import { MailRulesTools } from './tools/mail-rules.js';
 import { CategoriesTools } from './tools/categories.js';
-import {
-  CalendarPermissionsTools,
-  ListCalendarPermissionsInput,
-  CreateCalendarPermissionInput,
-  PrepareDeleteCalendarPermissionInput,
-  ConfirmDeleteCalendarPermissionInput,
-} from './tools/calendar-permissions.js';
-import {
-  FocusedOverridesTools,
-  CreateFocusedOverrideInput,
-  PrepareDeleteFocusedOverrideInput,
-  ConfirmDeleteFocusedOverrideInput,
-} from './tools/focused-overrides.js';
-import {
-  ChecklistItemsTools,
-  ListChecklistItemsInput,
-  CreateChecklistItemInput,
-  UpdateChecklistItemInput,
-  PrepareDeleteChecklistItemInput,
-  ConfirmDeleteChecklistItemInput,
-} from './tools/checklist-items.js';
-import {
-  LinkedResourcesTools,
-  ListLinkedResourcesInput,
-  CreateLinkedResourceInput,
-  PrepareDeleteLinkedResourceInput,
-  ConfirmDeleteLinkedResourceInput,
-} from './tools/linked-resources.js';
-import {
-  TaskAttachmentsTools,
-  ListTaskAttachmentsInput,
-  CreateTaskAttachmentInput,
-  PrepareDeleteTaskAttachmentInput,
-  ConfirmDeleteTaskAttachmentInput,
-} from './tools/task-attachments.js';
+import { CalendarPermissionsTools } from './tools/calendar-permissions.js';
+import { FocusedOverridesTools } from './tools/focused-overrides.js';
+import { ChecklistItemsTools } from './tools/checklist-items.js';
+import { LinkedResourcesTools } from './tools/linked-resources.js';
+import { TaskAttachmentsTools } from './tools/task-attachments.js';
 import {
   TeamsTools,
   ListChannelsInput,
@@ -2058,50 +2028,6 @@ const TOOLS: Tool[] = [
       required: ['attendees', 'duration_minutes'],
     },
   },
-  // Focused inbox override tools
-  {
-    name: 'list_focused_overrides',
-    description: 'List all focused inbox overrides (Graph API)',
-    inputSchema: {
-      type: 'object' as const,
-      properties: {},
-      required: [],
-    },
-  },
-  {
-    name: 'create_focused_override',
-    description: 'Create a focused inbox override for a sender (Graph API)',
-    inputSchema: {
-      type: 'object' as const,
-      properties: {
-        sender_address: { type: 'string', description: 'Sender email address' },
-        classify_as: { type: 'string', enum: ['focused', 'other'], description: 'Classification' },
-      },
-      required: ['sender_address', 'classify_as'],
-    },
-  },
-  {
-    name: 'prepare_delete_focused_override',
-    description: 'Prepare to delete a focused inbox override. Returns a preview and approval token. Call confirm_delete_focused_override to execute. (Graph API)',
-    inputSchema: {
-      type: 'object' as const,
-      properties: {
-        override_id: { type: 'number', description: 'Override ID to delete' },
-      },
-      required: ['override_id'],
-    },
-  },
-  {
-    name: 'confirm_delete_focused_override',
-    description: 'Confirm focused inbox override deletion with approval token (Graph API)',
-    inputSchema: {
-      type: 'object' as const,
-      properties: {
-        approval_token: { type: 'string', description: 'The approval token from prepare_delete_focused_override' },
-      },
-      required: ['approval_token'],
-    },
-  },
   // Automatic replies (OOF) tools
   {
     name: 'get_automatic_replies',
@@ -2312,53 +2238,6 @@ const TOOLS: Tool[] = [
         name: { type: 'string', description: 'Calendar group name' },
       },
       required: ['name'],
-    },
-  },
-  // Calendar Permission tools
-  {
-    name: 'list_calendar_permissions',
-    description: 'List all sharing permissions for a calendar (Graph API)',
-    inputSchema: {
-      type: 'object' as const,
-      properties: {
-        calendar_id: { type: 'number', description: 'Calendar ID' },
-      },
-      required: ['calendar_id'],
-    },
-  },
-  {
-    name: 'create_calendar_permission',
-    description: 'Share a calendar with someone by creating a permission (Graph API)',
-    inputSchema: {
-      type: 'object' as const,
-      properties: {
-        calendar_id: { type: 'number', description: 'Calendar ID' },
-        email_address: { type: 'string', description: 'Email of person to share with' },
-        role: { type: 'string', enum: ['read', 'write', 'delegateWithoutPrivateEventAccess', 'delegateWithPrivateEventAccess'], description: 'Permission level' },
-      },
-      required: ['calendar_id', 'email_address', 'role'],
-    },
-  },
-  {
-    name: 'prepare_delete_calendar_permission',
-    description: 'Prepare to delete a calendar sharing permission. Returns a preview and approval token. Call confirm_delete_calendar_permission to execute. (Graph API)',
-    inputSchema: {
-      type: 'object' as const,
-      properties: {
-        permission_id: { type: 'number', description: 'Calendar permission ID to delete' },
-      },
-      required: ['permission_id'],
-    },
-  },
-  {
-    name: 'confirm_delete_calendar_permission',
-    description: 'Confirm calendar permission deletion with approval token (Graph API)',
-    inputSchema: {
-      type: 'object' as const,
-      properties: {
-        approval_token: { type: 'string', description: 'The approval token from prepare_delete_calendar_permission' },
-      },
-      required: ['approval_token'],
     },
   },
   // Room lists & rooms tools
@@ -2662,162 +2541,6 @@ const TOOLS: Tool[] = [
         reaction_type: { type: 'string', description: 'Reaction emoji name to remove' },
       },
       required: ['message_id', 'message_type', 'reaction_type'],
-    },
-  },
-  // Checklist Items tools
-  {
-    name: 'list_checklist_items',
-    description: 'List checklist items (subtasks) on a To Do task (Graph API)',
-    inputSchema: {
-      type: 'object' as const,
-      properties: {
-        task_id: { type: 'number', description: 'Task ID from list_tasks or search_tasks' },
-      },
-      required: ['task_id'],
-    },
-  },
-  {
-    name: 'create_checklist_item',
-    description: 'Create a checklist item (subtask) on a To Do task (Graph API)',
-    inputSchema: {
-      type: 'object' as const,
-      properties: {
-        task_id: { type: 'number', description: 'Task ID' },
-        display_name: { type: 'string', description: 'Checklist item text' },
-        is_checked: { type: 'boolean', description: 'Whether the item is checked (default: false)' },
-      },
-      required: ['task_id', 'display_name'],
-    },
-  },
-  {
-    name: 'update_checklist_item',
-    description: 'Update a checklist item (toggle check, rename) on a To Do task (Graph API)',
-    inputSchema: {
-      type: 'object' as const,
-      properties: {
-        checklist_item_id: { type: 'number', description: 'Checklist item ID' },
-        display_name: { type: 'string', description: 'New text' },
-        is_checked: { type: 'boolean', description: 'Toggle checked state' },
-      },
-      required: ['checklist_item_id'],
-    },
-  },
-  {
-    name: 'prepare_delete_checklist_item',
-    description: 'Prepare to delete a checklist item. Returns an approval token. Call confirm_delete_checklist_item to execute. (Graph API)',
-    inputSchema: {
-      type: 'object' as const,
-      properties: {
-        checklist_item_id: { type: 'number', description: 'Checklist item ID to delete' },
-      },
-      required: ['checklist_item_id'],
-    },
-  },
-  {
-    name: 'confirm_delete_checklist_item',
-    description: 'Confirm deletion of a checklist item with approval token (Graph API)',
-    inputSchema: {
-      type: 'object' as const,
-      properties: {
-        approval_token: { type: 'string', description: 'The approval token from prepare_delete_checklist_item' },
-      },
-      required: ['approval_token'],
-    },
-  },
-  // Linked Resources tools
-  {
-    name: 'list_linked_resources',
-    description: 'List linked resources on a To Do task (Graph API)',
-    inputSchema: {
-      type: 'object' as const,
-      properties: {
-        task_id: { type: 'number', description: 'Task ID from list_tasks or search_tasks' },
-      },
-      required: ['task_id'],
-    },
-  },
-  {
-    name: 'create_linked_resource',
-    description: 'Create a linked resource on a To Do task (Graph API)',
-    inputSchema: {
-      type: 'object' as const,
-      properties: {
-        task_id: { type: 'number', description: 'Task ID' },
-        web_url: { type: 'string', description: 'URL of the linked resource' },
-        application_name: { type: 'string', description: 'Name of the application' },
-        display_name: { type: 'string', description: 'Display name of the linked resource' },
-      },
-      required: ['task_id', 'web_url', 'application_name'],
-    },
-  },
-  {
-    name: 'prepare_delete_linked_resource',
-    description: 'Prepare to delete a linked resource. Returns an approval token. Call confirm_delete_linked_resource to execute. (Graph API)',
-    inputSchema: {
-      type: 'object' as const,
-      properties: {
-        linked_resource_id: { type: 'number', description: 'Linked resource ID to delete' },
-      },
-      required: ['linked_resource_id'],
-    },
-  },
-  {
-    name: 'confirm_delete_linked_resource',
-    description: 'Confirm deletion of a linked resource with approval token (Graph API)',
-    inputSchema: {
-      type: 'object' as const,
-      properties: {
-        approval_token: { type: 'string', description: 'The approval token from prepare_delete_linked_resource' },
-      },
-      required: ['approval_token'],
-    },
-  },
-  // Task Attachments tools
-  {
-    name: 'list_task_attachments',
-    description: 'List attachments on a To Do task (Graph API)',
-    inputSchema: {
-      type: 'object' as const,
-      properties: {
-        task_id: { type: 'number', description: 'Task ID from list_tasks or search_tasks' },
-      },
-      required: ['task_id'],
-    },
-  },
-  {
-    name: 'create_task_attachment',
-    description: 'Attach a file to a To Do task (small files only, base64 encoded) (Graph API)',
-    inputSchema: {
-      type: 'object' as const,
-      properties: {
-        task_id: { type: 'number', description: 'Task ID' },
-        name: { type: 'string', description: 'File name of the attachment' },
-        content_bytes: { type: 'string', description: 'Base64-encoded file content' },
-        content_type: { type: 'string', description: 'MIME type (default: application/octet-stream)' },
-      },
-      required: ['task_id', 'name', 'content_bytes'],
-    },
-  },
-  {
-    name: 'prepare_delete_task_attachment',
-    description: 'Prepare to delete a task attachment. Returns an approval token. Call confirm_delete_task_attachment to execute. (Graph API)',
-    inputSchema: {
-      type: 'object' as const,
-      properties: {
-        task_attachment_id: { type: 'number', description: 'Task attachment ID to delete' },
-      },
-      required: ['task_attachment_id'],
-    },
-  },
-  {
-    name: 'confirm_delete_task_attachment',
-    description: 'Confirm deletion of a task attachment with approval token (Graph API)',
-    inputSchema: {
-      type: 'object' as const,
-      properties: {
-        approval_token: { type: 'string', description: 'The approval token from prepare_delete_task_attachment' },
-      },
-      required: ['approval_token'],
     },
   },
   // People API tools
@@ -3674,10 +3397,6 @@ export function createServer(options: ServerOptions = {}): Server {
     'list_conversation',
     'search_emails_advanced',
     'check_new_emails',
-    'list_focused_overrides',
-    'create_focused_override',
-    'prepare_delete_focused_override',
-    'confirm_delete_focused_override',
     'list_task_lists',
     'rename_task_list',
     'prepare_delete_task_list',
@@ -3698,10 +3417,6 @@ export function createServer(options: ServerOptions = {}): Server {
     'get_message_mime',
     'list_calendar_groups',
     'create_calendar_group',
-    'list_calendar_permissions',
-    'create_calendar_permission',
-    'prepare_delete_calendar_permission',
-    'confirm_delete_calendar_permission',
     'list_room_lists',
     'list_rooms',
     'list_teams',
@@ -3728,19 +3443,6 @@ export function createServer(options: ServerOptions = {}): Server {
     'prepare_add_message_reaction',
     'confirm_add_message_reaction',
     'remove_message_reaction',
-    'list_checklist_items',
-    'create_checklist_item',
-    'update_checklist_item',
-    'prepare_delete_checklist_item',
-    'confirm_delete_checklist_item',
-    'list_linked_resources',
-    'create_linked_resource',
-    'prepare_delete_linked_resource',
-    'confirm_delete_linked_resource',
-    'list_task_attachments',
-    'create_task_attachment',
-    'prepare_delete_task_attachment',
-    'confirm_delete_task_attachment',
     'list_relevant_people',
     'search_people',
     'get_manager',
@@ -3807,8 +3509,23 @@ export function createServer(options: ServerOptions = {}): Server {
       backend: surface.backend,
       tokenManager,
       graph:
-        useGraphApi && rulesTools != null && categoriesTools != null
-          ? { rules: rulesTools, categories: categoriesTools }
+        useGraphApi
+        && rulesTools != null
+        && categoriesTools != null
+        && focusedOverridesTools != null
+        && calendarPermissionsTools != null
+        && checklistItemsTools != null
+        && linkedResourcesTools != null
+        && taskAttachmentsTools != null
+          ? {
+              rules: rulesTools,
+              categories: categoriesTools,
+              focusedOverrides: focusedOverridesTools,
+              calendarPermissions: calendarPermissionsTools,
+              checklistItems: checklistItemsTools,
+              linkedResources: linkedResourcesTools,
+              taskAttachments: taskAttachmentsTools,
+            }
           : null,
       applescript: useGraphApi ? null : {},
     };
@@ -5738,26 +5455,8 @@ async function handleGraphToolCall(
         };
       }
 
-      // Mail rules + master categories are served by the tool registry (v3, U2).
-
-      // Focused inbox override tools
-      case 'list_focused_overrides':
-        return await focusedOverridesTools.listFocusedOverrides();
-
-      case 'create_focused_override': {
-        const params = CreateFocusedOverrideInput.parse(args);
-        return await focusedOverridesTools.createFocusedOverride(params);
-      }
-
-      case 'prepare_delete_focused_override': {
-        const params = PrepareDeleteFocusedOverrideInput.parse(args);
-        return focusedOverridesTools.prepareDeleteFocusedOverride(params);
-      }
-
-      case 'confirm_delete_focused_override': {
-        const params = ConfirmDeleteFocusedOverrideInput.parse(args);
-        return await focusedOverridesTools.confirmDeleteFocusedOverride(params);
-      }
+      // Mail rules, master categories, and focused inbox overrides are served
+      // by the tool registry (v3, U2).
 
       // Automatic replies (OOF) tools
       case 'get_automatic_replies': {
@@ -5910,26 +5609,7 @@ async function handleGraphToolCall(
         return { content: [{ type: 'text', text: JSON.stringify({ success: true, calendar_group_id: groupId, message: 'Calendar group created' }, null, 2) }] };
       }
 
-      // Calendar permission tools
-      case 'list_calendar_permissions': {
-        const params = ListCalendarPermissionsInput.parse(args);
-        return await calendarPermissionsTools.listCalendarPermissions(params);
-      }
-
-      case 'create_calendar_permission': {
-        const params = CreateCalendarPermissionInput.parse(args);
-        return await calendarPermissionsTools.createCalendarPermission(params);
-      }
-
-      case 'prepare_delete_calendar_permission': {
-        const params = PrepareDeleteCalendarPermissionInput.parse(args);
-        return calendarPermissionsTools.prepareDeleteCalendarPermission(params);
-      }
-
-      case 'confirm_delete_calendar_permission': {
-        const params = ConfirmDeleteCalendarPermissionInput.parse(args);
-        return await calendarPermissionsTools.confirmDeleteCalendarPermission(params);
-      }
+      // Calendar permissions are served by the tool registry (v3, U2).
 
       // Room lists & rooms tools
       case 'list_room_lists': {
@@ -6063,73 +5743,8 @@ async function handleGraphToolCall(
         return await teamsTools.removeMessageReaction(params);
       }
 
-      // Checklist Items tools
-      case 'list_checklist_items': {
-        const params = ListChecklistItemsInput.parse(args);
-        return await checklistItemsTools.listChecklistItems(params);
-      }
-
-      case 'create_checklist_item': {
-        const params = CreateChecklistItemInput.parse(args);
-        return await checklistItemsTools.createChecklistItem(params);
-      }
-
-      case 'update_checklist_item': {
-        const params = UpdateChecklistItemInput.parse(args);
-        return await checklistItemsTools.updateChecklistItem(params);
-      }
-
-      case 'prepare_delete_checklist_item': {
-        const params = PrepareDeleteChecklistItemInput.parse(args);
-        return checklistItemsTools.prepareDeleteChecklistItem(params);
-      }
-
-      case 'confirm_delete_checklist_item': {
-        const params = ConfirmDeleteChecklistItemInput.parse(args);
-        return await checklistItemsTools.confirmDeleteChecklistItem(params);
-      }
-
-      // Linked Resources tools
-      case 'list_linked_resources': {
-        const params = ListLinkedResourcesInput.parse(args);
-        return await linkedResourcesTools.listLinkedResources(params);
-      }
-
-      case 'create_linked_resource': {
-        const params = CreateLinkedResourceInput.parse(args);
-        return await linkedResourcesTools.createLinkedResource(params);
-      }
-
-      case 'prepare_delete_linked_resource': {
-        const params = PrepareDeleteLinkedResourceInput.parse(args);
-        return linkedResourcesTools.prepareDeleteLinkedResource(params);
-      }
-
-      case 'confirm_delete_linked_resource': {
-        const params = ConfirmDeleteLinkedResourceInput.parse(args);
-        return await linkedResourcesTools.confirmDeleteLinkedResource(params);
-      }
-
-      // Task Attachments tools
-      case 'list_task_attachments': {
-        const params = ListTaskAttachmentsInput.parse(args);
-        return await taskAttachmentsTools.listTaskAttachments(params);
-      }
-
-      case 'create_task_attachment': {
-        const params = CreateTaskAttachmentInput.parse(args);
-        return await taskAttachmentsTools.createTaskAttachment(params);
-      }
-
-      case 'prepare_delete_task_attachment': {
-        const params = PrepareDeleteTaskAttachmentInput.parse(args);
-        return taskAttachmentsTools.prepareDeleteTaskAttachment(params);
-      }
-
-      case 'confirm_delete_task_attachment': {
-        const params = ConfirmDeleteTaskAttachmentInput.parse(args);
-        return await taskAttachmentsTools.confirmDeleteTaskAttachment(params);
-      }
+      // Checklist items, linked resources, and task attachments are served
+      // by the tool registry (v3, U2).
 
       // People API tools
       case 'list_relevant_people': {
