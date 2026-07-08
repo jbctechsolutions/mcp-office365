@@ -39,6 +39,12 @@ export const ErrorCode = {
   APPROVAL_INVALID: 'APPROVAL_INVALID',
   TARGET_CHANGED: 'TARGET_CHANGED',
   READ_ONLY_MODE: 'READ_ONLY_MODE',
+  // Durable-ID resolution vocabulary (U5 / D1, D2, D4, D7).
+  ID_UNKNOWN: 'ID_UNKNOWN',
+  ID_STALE: 'ID_STALE',
+  ID_COLLISION: 'ID_COLLISION',
+  ID_FOREIGN_ACCOUNT: 'ID_FOREIGN_ACCOUNT',
+  NUMERIC_ID_UNSUPPORTED: 'NUMERIC_ID_UNSUPPORTED',
 } as const;
 
 export type ErrorCode = (typeof ErrorCode)[keyof typeof ErrorCode];
@@ -417,6 +423,67 @@ export class ReadOnlyModeError extends OutlookMcpError {
       `Tool "${toolName}" is not available in read-only mode.`,
       { retriable: false, suggestion: 'Restart the server without --read-only to use write tools.' },
     );
+  }
+}
+
+// =============================================================================
+// Durable-ID resolution errors (U5)
+// =============================================================================
+
+/** A durable-ID token could not be resolved (unknown / cold composite token). */
+export class IdUnknownError extends OutlookMcpError {
+  readonly code = ErrorCode.ID_UNKNOWN;
+
+  constructor(token: string, hint = 'Re-list the parent collection to get a fresh ID.') {
+    super(`Unknown or unresolvable ID: ${token}.`, { retriable: false, suggestion: hint });
+  }
+}
+
+/** A resolved ID no longer points at a live object (mutable ID drifted). */
+export class IdStaleError extends OutlookMcpError {
+  readonly code = ErrorCode.ID_STALE;
+
+  constructor(token: string) {
+    super(`ID is stale and could not be re-resolved: ${token}.`, {
+      retriable: false,
+      suggestion: 'Re-list the collection to obtain a current ID.',
+    });
+  }
+}
+
+/** Two distinct keys minted the same composite token (D1a) — never mis-resolve. */
+export class IdCollisionError extends OutlookMcpError {
+  readonly code = ErrorCode.ID_COLLISION;
+
+  constructor(token: string) {
+    super(`ID token collision detected for ${token}; refusing to resolve ambiguously.`, {
+      retriable: false,
+      suggestion: 'Re-list the collection to obtain a fresh ID.',
+    });
+  }
+}
+
+/** A token minted under a different signed-in account (D7). */
+export class IdForeignAccountError extends OutlookMcpError {
+  readonly code = ErrorCode.ID_FOREIGN_ACCOUNT;
+
+  constructor(token: string) {
+    super(`ID ${token} belongs to a different account than the one signed in.`, {
+      retriable: false,
+      suggestion: 'Re-list the collection while signed in as the owning account.',
+    });
+  }
+}
+
+/** A legacy numeric (v2 hash) ID was passed on the Graph backend (D4). */
+export class NumericIdUnsupportedError extends OutlookMcpError {
+  readonly code = ErrorCode.NUMERIC_ID_UNSUPPORTED;
+
+  constructor(id: number) {
+    super(`Numeric ID ${id} is not supported on the Graph backend (v2 hash IDs are lossy).`, {
+      retriable: false,
+      suggestion: 'Re-list the collection to obtain a current durable ID.',
+    });
   }
 }
 

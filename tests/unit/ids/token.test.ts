@@ -1,0 +1,119 @@
+/**
+ * Copyright (c) 2026 JBC Tech Solutions, LLC
+ * Licensed under the MIT License. See LICENSE file in the project root.
+ */
+
+import { describe, it, expect } from 'vitest';
+import {
+  mintSelfEncoded,
+  mintComposite,
+  parseToken,
+  canonicalKey,
+  isToken,
+  isKnownPrefix,
+  SELF_ENCODING_PREFIXES,
+  ALIAS_PREFIXES,
+  type EntityType,
+} from '../../../src/ids/token.js';
+
+describe('ids/token — self-encoding', () => {
+  it('round-trips every self-encoding prefix (mint → parse → same Graph ID)', () => {
+    const graphId = 'AAMkAGI2=and/some+weird_chars-123';
+    for (const entity of Object.values(SELF_ENCODING_PREFIXES)) {
+      const token = mintSelfEncoded(entity, graphId);
+      const parsed = parseToken(token);
+      expect(parsed?.kind).toBe('self');
+      expect(parsed?.entityType).toBe(entity);
+      expect(parsed?.graphId).toBe(graphId);
+    }
+  });
+
+  it('is deterministic — the same Graph ID mints a byte-identical token', () => {
+    expect(mintSelfEncoded('message', 'AAA')).toBe(mintSelfEncoded('message', 'AAA'));
+  });
+
+  it('encodes with the expected prefix', () => {
+    expect(mintSelfEncoded('message', 'AAA').startsWith('em_')).toBe(true);
+    expect(mintSelfEncoded('driveItem', 'AAA').startsWith('dr_')).toBe(true);
+  });
+
+  it('preserves Graph IDs containing base64url special chars (_ and -)', () => {
+    // base64url payloads themselves contain _ / -, so a first-underscore split
+    // must not corrupt the payload.
+    const graphId = 'a_b-c_d/e+f=g';
+    const parsed = parseToken(mintSelfEncoded('event', graphId));
+    expect(parsed?.graphId).toBe(graphId);
+  });
+
+  it('rejects minting a self-encoding token for an alias-backed entity', () => {
+    expect(() => mintSelfEncoded('attachment', 'X')).toThrow(/not self-encoding/);
+  });
+});
+
+describe('ids/token — composite / alias-backed', () => {
+  it('round-trips every alias prefix (mint → parse → kind alias)', () => {
+    for (const entity of Object.values(ALIAS_PREFIXES)) {
+      const token = mintComposite(entity, canonicalKey(entity, { a: '1', b: '2' }));
+      const parsed = parseToken(token);
+      expect(parsed?.kind).toBe('alias');
+      expect(parsed?.entityType).toBe(entity);
+      expect(parsed?.graphId).toBeUndefined();
+    }
+  });
+
+  it('is deterministic — the same canonical key mints a byte-identical token', () => {
+    const key = canonicalKey('attachment', { messageId: 'M', attachmentId: 'A' });
+    expect(mintComposite('attachment', key)).toBe(mintComposite('attachment', key));
+  });
+
+  it('canonicalKey is order-independent', () => {
+    const a = canonicalKey('attachment', { messageId: 'M', attachmentId: 'A' });
+    const b = canonicalKey('attachment', { attachmentId: 'A', messageId: 'M' });
+    expect(a).toBe(b);
+    expect(mintComposite('attachment', a)).toBe(mintComposite('attachment', b));
+  });
+
+  it('produces a fixed-length 70-bit digest (14 base32 chars) — no length extension (D1a)', () => {
+    const token = mintComposite('attachment', canonicalKey('attachment', { messageId: 'M', attachmentId: 'A' }));
+    const digest = token.slice(token.indexOf('_') + 1);
+    expect(digest).toHaveLength(14);
+    expect(digest).toMatch(/^[a-z2-7]{14}$/);
+  });
+
+  it('different keys mint different tokens', () => {
+    const t1 = mintComposite('attachment', canonicalKey('attachment', { messageId: 'M1', attachmentId: 'A' }));
+    const t2 = mintComposite('attachment', canonicalKey('attachment', { messageId: 'M2', attachmentId: 'A' }));
+    expect(t1).not.toBe(t2);
+  });
+
+  it('rejects minting a composite token for a self-encoding entity', () => {
+    expect(() => mintComposite('message', 'X')).toThrow(/not alias-backed/);
+  });
+});
+
+describe('ids/token — parse guards', () => {
+  it('returns null for non-token strings', () => {
+    for (const s of ['', 'nope', 'AAMkAGI2', 'xx_', '_payload', 'zz_abc']) {
+      expect(parseToken(s)).toBeNull();
+    }
+  });
+
+  it('isToken / isKnownPrefix agree with parse', () => {
+    expect(isToken(mintSelfEncoded('message', 'AAA'))).toBe(true);
+    expect(isToken('raw-graph-id')).toBe(false);
+    expect(isKnownPrefix('em')).toBe(true);
+    expect(isKnownPrefix('at')).toBe(true);
+    expect(isKnownPrefix('zz')).toBe(false);
+  });
+
+  it('every prefix maps to a distinct entity and back', () => {
+    const entities = new Set<EntityType>([
+      ...Object.values(SELF_ENCODING_PREFIXES),
+      ...Object.values(ALIAS_PREFIXES),
+    ]);
+    // No prefix collisions across the two maps.
+    const prefixes = [...Object.keys(SELF_ENCODING_PREFIXES), ...Object.keys(ALIAS_PREFIXES)];
+    expect(new Set(prefixes).size).toBe(prefixes.length);
+    expect(entities.size).toBeGreaterThan(10);
+  });
+});

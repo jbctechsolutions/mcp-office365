@@ -1,0 +1,203 @@
+/**
+ * Copyright (c) 2026 JBC Tech Solutions, LLC
+ * Licensed under the MIT License. See LICENSE file in the project root.
+ */
+
+/**
+ * Durable-ID tokens (U5 / D1). Two shapes:
+ *
+ * - **Self-encoding** (`em_`, `ev_`, `ct_`, `fd_`, `dr_`, `td_`): the token
+ *   carries the immutable Graph ID directly — `<prefix>_<base64url(graphId)>`.
+ *   Resolution is a decode with zero storage, so it survives a cold/lost
+ *   `state.db` and resolves on any machine (the core cold-state fix).
+ *
+ * - **Alias-backed** (`pl_`, `pt_`, `ch_`, `tm_`, `at_`, composite tuples): the
+ *   token is a short deterministic digest of the entity's canonical key —
+ *   `<prefix>_<base32(sha256(canonicalKey))[0..13]>` (70 bits) — backed by the
+ *   alias table (D3). These are machine-scoped: a cold store yields `ID_UNKNOWN`.
+ *
+ * Determinism is a hard requirement: the same Graph ID / canonical key always
+ * mints a byte-identical token.
+ */
+
+import { createHash } from 'node:crypto';
+
+/** Entity kinds addressable by a durable-ID token. */
+export type EntityType =
+  | 'message'
+  | 'event'
+  | 'contact'
+  | 'folder'
+  | 'driveItem'
+  | 'task'
+  | 'plan'
+  | 'plannerTask'
+  | 'chat'
+  | 'team'
+  | 'attachment'
+  | 'channel'
+  | 'chatMessage'
+  | 'checklistItem';
+
+/** How a token encodes its target. */
+export type TokenKind = 'self' | 'alias';
+
+/** Self-encoding prefixes → entity type (the token carries the Graph ID). */
+export const SELF_ENCODING_PREFIXES: Readonly<Record<string, EntityType>> = {
+  em: 'message',
+  ev: 'event',
+  ct: 'contact',
+  fd: 'folder',
+  dr: 'driveItem',
+  td: 'task',
+};
+
+/** Alias-backed prefixes → entity type (the token is a digest; needs the store). */
+export const ALIAS_PREFIXES: Readonly<Record<string, EntityType>> = {
+  pl: 'plan',
+  pt: 'plannerTask',
+  ch: 'chat',
+  tm: 'team',
+  at: 'attachment',
+  cn: 'channel',
+  cm: 'chatMessage',
+  ci: 'checklistItem',
+};
+
+const ENTITY_TO_PREFIX: Readonly<Record<EntityType, string>> = buildReverse();
+
+function buildReverse(): Record<EntityType, string> {
+  const out = {} as Record<EntityType, string>;
+  for (const [prefix, entity] of Object.entries(SELF_ENCODING_PREFIXES)) {
+    out[entity] = prefix;
+  }
+  for (const [prefix, entity] of Object.entries(ALIAS_PREFIXES)) {
+    out[entity] = prefix;
+  }
+  return out;
+}
+
+/** Crockford-free RFC 4648 base32 alphabet (lowercase for compact tokens). */
+const BASE32_ALPHABET = 'abcdefghijklmnopqrstuvwxyz234567';
+/** 14 base32 chars × 5 bits = 70 bits of the sha256 digest (D1). */
+const COMPOSITE_DIGEST_CHARS = 14;
+
+/** A parsed durable-ID token. */
+export interface ParsedToken {
+  prefix: string;
+  kind: TokenKind;
+  entityType: EntityType;
+  /** For self-encoding tokens: the decoded Graph ID. Absent for alias tokens. */
+  graphId?: string;
+}
+
+/** True when a prefix is a known self-encoding or alias prefix. */
+export function isKnownPrefix(prefix: string): boolean {
+  return prefix in SELF_ENCODING_PREFIXES || prefix in ALIAS_PREFIXES;
+}
+
+/**
+ * Mints a self-encoding token carrying the immutable Graph ID (D1). Determin­istic.
+ */
+export function mintSelfEncoded(entityType: EntityType, graphId: string): string {
+  const prefix = ENTITY_TO_PREFIX[entityType];
+  if (prefix == null || !(prefix in SELF_ENCODING_PREFIXES)) {
+    throw new Error(`Entity type "${entityType}" is not self-encoding.`);
+  }
+  return `${prefix}_${Buffer.from(graphId, 'utf8').toString('base64url')}`;
+}
+
+/**
+ * Mints a short, deterministic alias-backed token from an entity's canonical
+ * key (D1). The caller stores the token → key mapping in the alias table.
+ */
+export function mintComposite(entityType: EntityType, canonicalKey: string): string {
+  const prefix = ENTITY_TO_PREFIX[entityType];
+  if (prefix == null || !(prefix in ALIAS_PREFIXES)) {
+    throw new Error(`Entity type "${entityType}" is not alias-backed.`);
+  }
+  return `${prefix}_${base32Digest(canonicalKey)}`;
+}
+
+/**
+ * Builds a canonical key for a composite entity from its identifying tuple.
+ * Keys are sorted so field order never changes the digest.
+ */
+export function canonicalKey(entityType: EntityType, parts: Readonly<Record<string, string>>): string {
+  const sorted = Object.keys(parts)
+    .sort()
+    .map((k) => `${k}=${parts[k] ?? ''}`)
+    .join('&');
+  return `${entityType}:${sorted}`;
+}
+
+/**
+ * Parses a token into its prefix/kind/entity (and decoded Graph ID for
+ * self-encoding tokens). Returns null when the value is not a well-formed known
+ * token — the caller decides whether to treat that as a raw Graph ID or reject.
+ */
+export function parseToken(token: string): ParsedToken | null {
+  const underscore = token.indexOf('_');
+  if (underscore <= 0) {
+    return null;
+  }
+  const prefix = token.slice(0, underscore);
+  const payload = token.slice(underscore + 1);
+  if (payload.length === 0) {
+    return null;
+  }
+
+  const selfEntity = SELF_ENCODING_PREFIXES[prefix];
+  if (selfEntity !== undefined) {
+    const graphId = decodeBase64Url(payload);
+    if (graphId == null) {
+      return null;
+    }
+    return { prefix, kind: 'self', entityType: selfEntity, graphId };
+  }
+
+  const aliasEntity = ALIAS_PREFIXES[prefix];
+  if (aliasEntity !== undefined) {
+    return { prefix, kind: 'alias', entityType: aliasEntity };
+  }
+
+  return null;
+}
+
+/** True when a string looks like a durable-ID token (known prefix + payload). */
+export function isToken(value: string): boolean {
+  return parseToken(value) !== null;
+}
+
+function base32Digest(input: string): string {
+  const hash = createHash('sha256').update(input, 'utf8').digest();
+  let bits = 0;
+  let value = 0;
+  let output = '';
+  for (const byte of hash) {
+    value = (value << 8) | byte;
+    bits += 8;
+    while (bits >= 5) {
+      output += BASE32_ALPHABET[(value >>> (bits - 5)) & 0x1f];
+      bits -= 5;
+      if (output.length === COMPOSITE_DIGEST_CHARS) {
+        return output;
+      }
+    }
+  }
+  return output;
+}
+
+function decodeBase64Url(payload: string): string | null {
+  // base64url is [A-Za-z0-9_-]; reject anything else so a stray alias-shaped
+  // string isn't silently decoded into garbage.
+  if (!/^[A-Za-z0-9_-]+$/.test(payload)) {
+    return null;
+  }
+  try {
+    const decoded = Buffer.from(payload, 'base64url').toString('utf8');
+    return decoded.length > 0 ? decoded : null;
+  } catch {
+    return null;
+  }
+}

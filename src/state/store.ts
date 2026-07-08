@@ -223,6 +223,38 @@ export class StateStore {
     };
   }
 
+  /**
+   * Returns an alias row regardless of account, or null. Reserved for two
+   * internal uses that must see across accounts: foreign-account disambiguation
+   * during resolution, and collision detection at mint time (D1a). It is NOT a
+   * resolution path — {@link getAlias} (account-scoped) is the only one of those.
+   */
+  getAliasUnscoped(token: string): AliasRow | null {
+    const raw = this.db.prepare('SELECT * FROM aliases WHERE token = ?').get(token) as
+      | RawAliasRow
+      | undefined;
+    if (raw === undefined) {
+      return null;
+    }
+    return {
+      token: raw.token,
+      graphId: raw.graph_id,
+      entityType: raw.entity_type,
+      accountId: raw.account_id,
+      mutable: raw.mutable !== 0,
+      createdAt: raw.created_at,
+    };
+  }
+
+  /**
+   * Returns the account a token was minted under (any account), or null when the
+   * token is unknown. Distinguishes "foreign account" from "unknown" during
+   * resolution so a foreign token yields a typed ID_FOREIGN_ACCOUNT.
+   */
+  getAliasAccount(token: string): string | null {
+    return this.getAliasUnscoped(token)?.accountId ?? null;
+  }
+
   // ---- Approval tokens (D7/D8) --------------------------------------------
 
   /** Stages a two-phase approval token. */
