@@ -20,10 +20,109 @@ import {
   signOut,
   getTokenCacheFile,
 } from './graph/index.js';
+import type { Preset } from './registry/types.js';
 
 export interface CliCommand {
   command: 'auth';
   flags: string[];
+}
+
+/** Valid `--preset` names, mirroring the domain modules. */
+export const VALID_PRESETS: readonly Preset[] = [
+  'mail',
+  'calendar',
+  'contacts',
+  'tasks',
+  'notes',
+  'teams',
+  'planner',
+  'files',
+  'sharepoint',
+  'excel',
+  'people',
+  'meetings',
+];
+
+/** Server-mode CLI options parsed from argv (U10). */
+export interface ServerCliOptions {
+  /** Presets to include; omitted means the full surface (`all`). */
+  readonly presets?: readonly Preset[];
+  /** When true, only non-destructive tools are exposed. */
+  readonly readOnly: boolean;
+}
+
+/**
+ * Parses server-mode flags (`--preset <names>`, `--read-only`) from argv.
+ * `--preset` accepts a comma-separated list and may repeat; `all` (or no
+ * `--preset`) means the full surface. Unknown preset names throw with the valid
+ * list so startup fails loudly rather than silently exposing nothing.
+ */
+export function parseServerOptions(args: string[]): ServerCliOptions {
+  const presetNames: string[] = [];
+  let readOnly = false;
+
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i];
+    if (arg == null) continue;
+    if (arg === '--read-only') {
+      readOnly = true;
+    } else if (arg === '--preset') {
+      const value = args[i + 1];
+      if (value == null || value.startsWith('--')) {
+        throw missingPresetValue();
+      }
+      presetNames.push(...requirePresetNames(value));
+      i++;
+    } else if (arg.startsWith('--preset=')) {
+      presetNames.push(...requirePresetNames(arg.slice('--preset='.length)));
+    }
+    // Unknown args are ignored — argv may carry runner-injected entries.
+  }
+
+  // No --preset flag at all → full surface.
+  if (presetNames.length === 0) {
+    return { readOnly };
+  }
+
+  // Validate every name (the `all` keyword excepted) BEFORE honoring `all`, so a
+  // typo mixed with `all` (e.g. `--preset all,mial`) fails loudly rather than
+  // silently exposing the full surface.
+  const invalid = presetNames.filter(
+    (name) => name !== 'all' && !(VALID_PRESETS as readonly string[]).includes(name),
+  );
+  if (invalid.length > 0) {
+    throw new Error(
+      `Unknown preset(s): ${invalid.join(', ')}. ` +
+        `Valid presets: ${VALID_PRESETS.join(', ')}, all.`,
+    );
+  }
+
+  // `all` (alone or mixed with valid names) exposes the full surface.
+  if (presetNames.includes('all')) {
+    return { readOnly };
+  }
+
+  return { readOnly, presets: presetNames as Preset[] };
+}
+
+function missingPresetValue(): Error {
+  return new Error('--preset requires a comma-separated list of preset names.');
+}
+
+/** Splits a preset value and rejects an empty/whitespace-only list. */
+function requirePresetNames(value: string): string[] {
+  const names = splitPresetList(value);
+  if (names.length === 0) {
+    throw missingPresetValue();
+  }
+  return names;
+}
+
+function splitPresetList(value: string): string[] {
+  return value
+    .split(',')
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
 }
 
 /**

@@ -28,7 +28,13 @@ vi.mock('../../src/graph/index.js', () => ({
   getTokenCacheFile: mockGetTokenCacheFile,
 }));
 
-import { handleAuthCommand, parseCliCommand, createAuthMutex } from '../../src/cli.js';
+import {
+  handleAuthCommand,
+  parseCliCommand,
+  parseServerOptions,
+  VALID_PRESETS,
+  createAuthMutex,
+} from '../../src/cli.js';
 
 describe('CLI Auth', () => {
   beforeEach(() => {
@@ -163,5 +169,73 @@ describe('createAuthMutex', () => {
     await expect(mutex()).resolves.toBeUndefined();
 
     expect(authFn).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('parseServerOptions (U10)', () => {
+  it('defaults to the full surface with read-only off when no flags', () => {
+    expect(parseServerOptions([])).toEqual({ readOnly: false });
+  });
+
+  it('treats "all" (or --preset all) as the full surface', () => {
+    expect(parseServerOptions(['--preset', 'all'])).toEqual({ readOnly: false });
+    // all wins even when combined with a specific preset
+    expect(parseServerOptions(['--preset', 'all,mail'])).toEqual({ readOnly: false });
+  });
+
+  it('parses a comma-separated preset list', () => {
+    expect(parseServerOptions(['--preset', 'mail,calendar'])).toEqual({
+      readOnly: false,
+      presets: ['mail', 'calendar'],
+    });
+  });
+
+  it('supports --preset=<names> and repeated --preset flags', () => {
+    expect(parseServerOptions(['--preset=mail', '--preset', 'tasks'])).toEqual({
+      readOnly: false,
+      presets: ['mail', 'tasks'],
+    });
+  });
+
+  it('parses --read-only', () => {
+    expect(parseServerOptions(['--read-only'])).toEqual({ readOnly: true });
+    expect(parseServerOptions(['--read-only', '--preset', 'mail'])).toEqual({
+      readOnly: true,
+      presets: ['mail'],
+    });
+  });
+
+  it('throws with the valid list on an unknown preset', () => {
+    expect(() => parseServerOptions(['--preset', 'mail,nope'])).toThrow(/Unknown preset\(s\): nope/);
+    expect(() => parseServerOptions(['--preset', 'nope'])).toThrow(/Valid presets:/);
+  });
+
+  it('validates co-listed names even when "all" is present (no silent swallow)', () => {
+    // `all` must not short-circuit past validation of a typo'd sibling.
+    expect(() => parseServerOptions(['--preset', 'all,bogus'])).toThrow(/Unknown preset\(s\): bogus/);
+    expect(() => parseServerOptions(['--preset', 'mial,all'])).toThrow(/Unknown preset\(s\): mial/);
+  });
+
+  it('throws when --preset has no value', () => {
+    expect(() => parseServerOptions(['--preset'])).toThrow(/requires a comma-separated list/);
+    expect(() => parseServerOptions(['--preset', '--read-only'])).toThrow(/requires/);
+  });
+
+  it('throws (does not fail open to full surface) on an empty/whitespace preset value', () => {
+    // Regression: these previously collapsed to the FULL surface silently.
+    expect(() => parseServerOptions(['--preset', ''])).toThrow(/requires/);
+    expect(() => parseServerOptions(['--preset', '   '])).toThrow(/requires/);
+    expect(() => parseServerOptions(['--preset', ',,,'])).toThrow(/requires/);
+    expect(() => parseServerOptions(['--preset='])).toThrow(/requires/);
+  });
+
+  it('ignores unknown args (runner-injected argv)', () => {
+    expect(parseServerOptions(['--inspect', 'foo', '--read-only'])).toEqual({ readOnly: true });
+  });
+
+  it('every valid preset name is accepted', () => {
+    for (const p of VALID_PRESETS) {
+      expect(parseServerOptions(['--preset', p]).presets).toEqual([p]);
+    }
   });
 });

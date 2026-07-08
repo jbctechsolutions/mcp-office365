@@ -48,7 +48,7 @@ import { createRequire } from 'node:module';
 import { ToolRegistry } from './registry/index.js';
 import type { ToolContext, SurfaceOptions } from './registry/index.js';
 import { allToolDefinitions } from './registry/all-tools.js';
-import { parseCliCommand, handleAuthCommand, createAuthMutex } from './cli.js';
+import { parseCliCommand, parseServerOptions, handleAuthCommand, createAuthMutex } from './cli.js';
 
 const pkg = createRequire(import.meta.url)('../package.json') as { version: string };
 import { createMailTools } from './tools/mail.js';
@@ -452,14 +452,29 @@ export function createServer(options: ServerOptions = {}): Server {
 // =============================================================================
 
 async function main(): Promise<void> {
+  const argv = process.argv.slice(2);
+
   // Check for CLI subcommands before starting MCP server
-  const cliCommand = parseCliCommand(process.argv.slice(2));
+  const cliCommand = parseCliCommand(argv);
   if (cliCommand != null) {
     const exitCode = await handleAuthCommand(cliCommand.flags);
     process.exit(exitCode);
   }
 
-  const server = createServer();
+  // Server-mode flags: --preset <names>, --read-only (U10).
+  let options: ServerOptions;
+  try {
+    const parsed = parseServerOptions(argv);
+    options = {
+      readOnly: parsed.readOnly,
+      ...(parsed.presets != null ? { presets: parsed.presets } : {}),
+    };
+  } catch (error) {
+    process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
+    process.exit(1);
+  }
+
+  const server = createServer(options);
   const transport = new StdioServerTransport();
   await server.connect(transport);
 }

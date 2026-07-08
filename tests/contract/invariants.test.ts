@@ -73,6 +73,24 @@ describe('registry contract invariants', () => {
     }
   });
 
+  it('no readOnlyHint:true tool has a mutation-verb name (structural --read-only guard, U10)', () => {
+    // A tool advertised readOnlyHint:true is exposed under --read-only AND
+    // callable, so a mislabeled write would be a trust-boundary hole that the
+    // destructive-flag check above does not catch for non-destructive writes.
+    // Enforce structurally: read-only tools cannot carry a mutating verb prefix.
+    const MUTATION_PREFIXES = [
+      'create_', 'update_', 'delete_', 'send_', 'set_', 'add_', 'remove_',
+      'mark_', 'move_', 'complete_', 'rename_', 'respond_', 'archive_', 'junk_',
+      'empty_', 'clear_', 'upload_', 'forward_', 'reply_', 'prepare_', 'confirm_',
+    ];
+    for (const def of defs) {
+      if (def.annotations.readOnlyHint === true) {
+        const offending = MUTATION_PREFIXES.find((p) => def.name.startsWith(p));
+        expect(offending, `${def.name} is readOnlyHint:true but names a mutation`).toBeUndefined();
+      }
+    }
+  });
+
   it('every prepare_ tool has a matching confirm_ tool and both are destructive', () => {
     // Invariant (e): the two-phase pair must be complete and both halves must
     // be excluded by --read-only, so a read-only client cannot mint OR redeem.
