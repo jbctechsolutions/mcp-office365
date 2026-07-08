@@ -42,32 +42,46 @@ export type EntityType =
 /** How a token encodes its target. */
 export type TokenKind = 'self' | 'alias';
 
+/**
+ * Prefix → entity maps are NULL-PROTOTYPE so a caller-supplied prefix like
+ * `constructor` or `toString` (from an arbitrary ID string) can never match an
+ * inherited `Object.prototype` member and get misclassified as a known token —
+ * `parseToken` must return null for those and let the resolver pass them through
+ * as opaque Graph IDs.
+ */
+
 /** Self-encoding prefixes → entity type (the token carries the Graph ID). */
-export const SELF_ENCODING_PREFIXES: Readonly<Record<string, EntityType>> = {
-  em: 'message',
-  ev: 'event',
-  ct: 'contact',
-  fd: 'folder',
-  dr: 'driveItem',
-  td: 'task',
-};
+export const SELF_ENCODING_PREFIXES: Readonly<Record<string, EntityType>> = Object.assign(
+  Object.create(null) as Record<string, EntityType>,
+  {
+    em: 'message',
+    ev: 'event',
+    ct: 'contact',
+    fd: 'folder',
+    dr: 'driveItem',
+    td: 'task',
+  } satisfies Record<string, EntityType>,
+);
 
 /** Alias-backed prefixes → entity type (the token is a digest; needs the store). */
-export const ALIAS_PREFIXES: Readonly<Record<string, EntityType>> = {
-  pl: 'plan',
-  pt: 'plannerTask',
-  ch: 'chat',
-  tm: 'team',
-  at: 'attachment',
-  cn: 'channel',
-  cm: 'chatMessage',
-  ci: 'checklistItem',
-};
+export const ALIAS_PREFIXES: Readonly<Record<string, EntityType>> = Object.assign(
+  Object.create(null) as Record<string, EntityType>,
+  {
+    pl: 'plan',
+    pt: 'plannerTask',
+    ch: 'chat',
+    tm: 'team',
+    at: 'attachment',
+    cn: 'channel',
+    cm: 'chatMessage',
+    ci: 'checklistItem',
+  } satisfies Record<string, EntityType>,
+);
 
 const ENTITY_TO_PREFIX: Readonly<Record<EntityType, string>> = buildReverse();
 
 function buildReverse(): Record<EntityType, string> {
-  const out = {} as Record<EntityType, string>;
+  const out = Object.create(null) as Record<EntityType, string>;
   for (const [prefix, entity] of Object.entries(SELF_ENCODING_PREFIXES)) {
     out[entity] = prefix;
   }

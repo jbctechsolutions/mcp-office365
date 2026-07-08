@@ -123,6 +123,15 @@ describe('ids/token — parse guards', () => {
     }
   });
 
+  it('does not misclassify Object.prototype member names as known prefixes', () => {
+    // Null-prototype maps mean a prefix like "constructor"/"toString"/"hasOwnProperty"
+    // is not an inherited member — these must parse as non-tokens (opaque IDs).
+    for (const name of ['constructor', 'toString', 'hasOwnProperty', 'valueOf', '__proto__']) {
+      expect(parseToken(`${name}_abc`), name).toBeNull();
+      expect(isKnownPrefix(name), name).toBe(false);
+    }
+  });
+
   it('isToken / isKnownPrefix agree with parse', () => {
     expect(isToken(mintSelfEncoded('message', 'AAA'))).toBe(true);
     expect(isToken('raw-graph-id')).toBe(false);

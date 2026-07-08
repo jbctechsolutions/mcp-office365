@@ -40,22 +40,18 @@ export function registerComposite(store: StateStore, args: RegisterCompositeArgs
   const key = canonicalKey(args.entityType, { ...args.parts, '@account': args.accountId });
   const token = mintComposite(args.entityType, key);
 
-  const existing = store.getAliasUnscoped(token);
-  if (existing !== null && existing.graphId !== args.graphId) {
-    // A differing Graph ID for an immutable entity is a genuine digest collision
-    // (D1a) — refuse. For a mutable ($search-minted) entity it's expected ID
-    // drift (D2), so fall through and let putAlias update the row.
-    if (!existing.mutable && args.mutable !== true) {
-      throw new IdCollisionError(token);
-    }
-  }
-
-  store.putAlias({
+  // The collision check + write happen atomically inside the store (D1a): a
+  // differing Graph ID for an immutable entity is a genuine digest collision and
+  // is refused; a mutable ($search-minted) entity's drifted ID (D2) updates.
+  const result = store.registerAlias({
     token,
     graphId: args.graphId,
     entityType: args.entityType,
     accountId: args.accountId,
     mutable: args.mutable === true,
   });
+  if (result === 'collision') {
+    throw new IdCollisionError(token);
+  }
   return token;
 }
