@@ -19,6 +19,15 @@ import { renderKanbanMarkdown, renderGanttMarkdown, renderSummaryMarkdown, rende
 import { renderKanbanMermaid, renderGanttMermaid, renderSummaryMermaid, renderBurndownMermaid } from '../visualization/mermaid.js';
 import { renderKanbanHtml, renderGanttHtml, renderSummaryHtml, renderBurndownHtml } from '../visualization/html.js';
 import { renderKanbanSvg, renderGanttSvg, renderSummarySvg, renderBurndownSvg } from '../visualization/svg.js';
+import { defineTool } from '../registry/define-tool.js';
+import { requireGraphToolset } from '../registry/context.js';
+import type { ToolContext, ToolDefinition } from '../registry/types.js';
+
+declare module '../registry/types.js' {
+  interface GraphToolsets {
+    plannerVisualization: PlannerVisualizationTools;
+  }
+}
 
 // =============================================================================
 // Input Schemas
@@ -206,4 +215,58 @@ export class PlannerVisualizationTools {
       }],
     };
   }
+}
+
+// =============================================================================
+// Registry Definitions (v3 registry-driven architecture, U2)
+// =============================================================================
+
+/**
+ * Registry tool definitions for the planner-visualization domain.
+ */
+export function plannerVisualizationToolDefinitions(): ToolDefinition[] {
+  const tools = (ctx: ToolContext): PlannerVisualizationTools => requireGraphToolset(ctx, 'plannerVisualization');
+
+  return [
+    defineTool({
+      name: 'generate_kanban_board',
+      description: 'Generate a Kanban board visualization for a Planner plan. Returns a file path to the rendered output. (Graph API)',
+      input: GenerateKanbanBoardInput,
+      annotations: { readOnlyHint: true, openWorldHint: true },
+      destructive: false,
+      presets: ['planner'],
+      backends: ['graph'],
+      handler: (ctx, params) => tools(ctx).generateKanbanBoard(params),
+    }),
+    defineTool({
+      name: 'generate_gantt_chart',
+      description: 'Generate a Gantt chart visualization for a Planner plan. Returns a file path to the rendered output. (Graph API)',
+      input: GenerateGanttChartInput,
+      annotations: { readOnlyHint: true, openWorldHint: true },
+      destructive: false,
+      presets: ['planner'],
+      backends: ['graph'],
+      handler: (ctx, params) => tools(ctx).generateGanttChart(params),
+    }),
+    defineTool({
+      name: 'generate_plan_summary',
+      description: 'Generate a summary visualization for a Planner plan with task statistics. Returns a file path to the rendered output. (Graph API)',
+      input: GeneratePlanSummaryInput,
+      annotations: { readOnlyHint: true, openWorldHint: true },
+      destructive: false,
+      presets: ['planner'],
+      backends: ['graph'],
+      handler: (ctx, params) => tools(ctx).generatePlanSummary(params),
+    }),
+    defineTool({
+      name: 'generate_burndown_chart',
+      description: 'Generate a burndown chart visualization for a Planner plan. Returns a file path to the rendered output. (Graph API)',
+      input: GenerateBurndownChartInput,
+      annotations: { readOnlyHint: true, openWorldHint: true },
+      destructive: false,
+      presets: ['planner'],
+      backends: ['graph'],
+      handler: (ctx, params) => tools(ctx).generateBurndownChart(params),
+    }),
+  ];
 }

@@ -12,6 +12,15 @@
 
 import { z } from 'zod';
 import type { ApprovalTokenManager } from '../approval/index.js';
+import { defineTool } from '../registry/define-tool.js';
+import { requireGraphToolset } from '../registry/context.js';
+import type { ToolContext, ToolDefinition } from '../registry/types.js';
+
+declare module '../registry/types.js' {
+  interface GraphToolsets {
+    taskAttachments: TaskAttachmentsTools;
+  }
+}
 
 // =============================================================================
 // Input Schemas
@@ -160,4 +169,58 @@ export class TaskAttachmentsTools {
       }],
     };
   }
+}
+
+// =============================================================================
+// Registry Definitions (v3 registry-driven architecture, U2)
+// =============================================================================
+
+/**
+ * Registry tool definitions for the task-attachments domain.
+ */
+export function taskAttachmentsToolDefinitions(): ToolDefinition[] {
+  const tools = (ctx: ToolContext): TaskAttachmentsTools => requireGraphToolset(ctx, 'taskAttachments');
+
+  return [
+    defineTool({
+      name: 'list_task_attachments',
+      description: 'List attachments on a To Do task (Graph API)',
+      input: ListTaskAttachmentsInput,
+      annotations: { readOnlyHint: true, openWorldHint: true },
+      destructive: false,
+      presets: ['tasks'],
+      backends: ['graph'],
+      handler: (ctx, params) => tools(ctx).listTaskAttachments(params),
+    }),
+    defineTool({
+      name: 'create_task_attachment',
+      description: 'Attach a file to a To Do task (small files only, base64 encoded) (Graph API)',
+      input: CreateTaskAttachmentInput,
+      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+      destructive: false,
+      presets: ['tasks'],
+      backends: ['graph'],
+      handler: (ctx, params) => tools(ctx).createTaskAttachment(params),
+    }),
+    defineTool({
+      name: 'prepare_delete_task_attachment',
+      description: 'Prepare to delete a task attachment. Returns an approval token. Call confirm_delete_task_attachment to execute. (Graph API)',
+      input: PrepareDeleteTaskAttachmentInput,
+      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+      destructive: true,
+      presets: ['tasks'],
+      backends: ['graph'],
+      handler: (ctx, params) => tools(ctx).prepareDeleteTaskAttachment(params),
+    }),
+    defineTool({
+      name: 'confirm_delete_task_attachment',
+      description: 'Confirm deletion of a task attachment with approval token (Graph API)',
+      input: ConfirmDeleteTaskAttachmentInput,
+      annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+      destructive: true,
+      presets: ['tasks'],
+      backends: ['graph'],
+      handler: (ctx, params) => tools(ctx).confirmDeleteTaskAttachment(params),
+    }),
+  ];
 }

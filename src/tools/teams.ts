@@ -12,10 +12,21 @@
 
 import { z } from 'zod';
 import type { ApprovalTokenManager } from '../approval/index.js';
+import { defineTool } from '../registry/define-tool.js';
+import { requireGraphToolset } from '../registry/context.js';
+import type { ToolContext, ToolDefinition } from '../registry/types.js';
+
+declare module '../registry/types.js' {
+  interface GraphToolsets {
+    teams: TeamsTools;
+  }
+}
 
 // =============================================================================
 // Input Schemas
 // =============================================================================
+
+export const NoInput = z.strictObject({});
 
 export const ListChannelsInput = z.strictObject({
   team_id: z.number().int().positive().describe('Team ID'),
@@ -709,4 +720,258 @@ export class TeamsTools {
       }],
     };
   }
+}
+
+// =============================================================================
+// Registry Definitions (v3 registry-driven architecture, U2)
+// =============================================================================
+
+/**
+ * Registry tool definitions for the teams domain.
+ */
+export function teamsToolDefinitions(): ToolDefinition[] {
+  const tools = (ctx: ToolContext): TeamsTools => requireGraphToolset(ctx, 'teams');
+
+  return [
+    defineTool({
+      name: 'list_teams',
+      description: 'List all Microsoft Teams the user has joined (Graph API)',
+      input: NoInput,
+      annotations: { readOnlyHint: true, openWorldHint: true },
+      destructive: false,
+      presets: ['teams'],
+      backends: ['graph'],
+      handler: (ctx) => tools(ctx).listTeams(),
+    }),
+    defineTool({
+      name: 'list_channels',
+      description: 'List all channels in a team (Graph API)',
+      input: ListChannelsInput,
+      annotations: { readOnlyHint: true, openWorldHint: true },
+      destructive: false,
+      presets: ['teams'],
+      backends: ['graph'],
+      handler: (ctx, params) => tools(ctx).listChannels(params),
+    }),
+    defineTool({
+      name: 'get_channel',
+      description: 'Get details for a specific channel (Graph API)',
+      input: GetChannelInput,
+      annotations: { readOnlyHint: true, openWorldHint: true },
+      destructive: false,
+      presets: ['teams'],
+      backends: ['graph'],
+      handler: (ctx, params) => tools(ctx).getChannel(params),
+    }),
+    defineTool({
+      name: 'create_channel',
+      description: 'Create a new channel in a team (Graph API)',
+      input: CreateChannelInput,
+      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+      destructive: false,
+      presets: ['teams'],
+      backends: ['graph'],
+      handler: (ctx, params) => tools(ctx).createChannel(params),
+    }),
+    defineTool({
+      name: 'update_channel',
+      description: 'Update a channel name or description (Graph API)',
+      input: UpdateChannelInput,
+      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+      destructive: false,
+      presets: ['teams'],
+      backends: ['graph'],
+      handler: (ctx, params) => tools(ctx).updateChannel(params),
+    }),
+    defineTool({
+      name: 'prepare_delete_channel',
+      description: 'Prepare to delete a channel. Returns an approval token. Call confirm_delete_channel to execute. (Graph API)',
+      input: PrepareDeleteChannelInput,
+      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+      destructive: true,
+      presets: ['teams'],
+      backends: ['graph'],
+      handler: (ctx, params) => tools(ctx).prepareDeleteChannel(params),
+    }),
+    defineTool({
+      name: 'confirm_delete_channel',
+      description: 'Confirm channel deletion with approval token (Graph API)',
+      input: ConfirmDeleteChannelInput,
+      annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+      destructive: true,
+      presets: ['teams'],
+      backends: ['graph'],
+      handler: (ctx, params) => tools(ctx).confirmDeleteChannel(params),
+    }),
+    defineTool({
+      name: 'list_team_members',
+      description: 'List all members of a team (Graph API)',
+      input: ListTeamMembersInput,
+      annotations: { readOnlyHint: true, openWorldHint: true },
+      destructive: false,
+      presets: ['teams'],
+      backends: ['graph'],
+      handler: (ctx, params) => tools(ctx).listTeamMembers(params),
+    }),
+    defineTool({
+      name: 'list_channel_messages',
+      description: 'List recent messages in a channel (Graph API)',
+      input: ListChannelMessagesInput,
+      annotations: { readOnlyHint: true, openWorldHint: true },
+      destructive: false,
+      presets: ['teams'],
+      backends: ['graph'],
+      handler: (ctx, params) => tools(ctx).listChannelMessages(params),
+    }),
+    defineTool({
+      name: 'get_channel_message',
+      description: 'Get a specific channel message with its replies (Graph API)',
+      input: GetChannelMessageInput,
+      annotations: { readOnlyHint: true, openWorldHint: true },
+      destructive: false,
+      presets: ['teams'],
+      backends: ['graph'],
+      handler: (ctx, params) => tools(ctx).getChannelMessage(params),
+    }),
+    defineTool({
+      name: 'prepare_send_channel_message',
+      description: 'Prepare to send a message to a channel. Returns an approval token. Call confirm_send_channel_message to execute. (Graph API)',
+      input: PrepareSendChannelMessageInput,
+      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+      destructive: true,
+      presets: ['teams'],
+      backends: ['graph'],
+      handler: (ctx, params) => tools(ctx).prepareSendChannelMessage(params),
+    }),
+    defineTool({
+      name: 'confirm_send_channel_message',
+      description: 'Confirm sending a channel message with approval token (Graph API)',
+      input: ConfirmSendChannelMessageInput,
+      annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+      destructive: true,
+      presets: ['teams'],
+      backends: ['graph'],
+      handler: (ctx, params) => tools(ctx).confirmSendChannelMessage(params),
+    }),
+    defineTool({
+      name: 'prepare_reply_channel_message',
+      description: 'Prepare to reply to a channel message. Returns an approval token. Call confirm_reply_channel_message to execute. (Graph API)',
+      input: PrepareReplyChannelMessageInput,
+      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+      destructive: true,
+      presets: ['teams'],
+      backends: ['graph'],
+      handler: (ctx, params) => tools(ctx).prepareReplyChannelMessage(params),
+    }),
+    defineTool({
+      name: 'confirm_reply_channel_message',
+      description: 'Confirm replying to a channel message with approval token (Graph API)',
+      input: ConfirmReplyChannelMessageInput,
+      annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+      destructive: true,
+      presets: ['teams'],
+      backends: ['graph'],
+      handler: (ctx, params) => tools(ctx).confirmReplyChannelMessage(params),
+    }),
+    defineTool({
+      name: 'list_chats',
+      description: 'List recent 1:1 and group chats (Graph API)',
+      input: ListChatsInput,
+      annotations: { readOnlyHint: true, openWorldHint: true },
+      destructive: false,
+      presets: ['teams'],
+      backends: ['graph'],
+      handler: (ctx, params) => tools(ctx).listChats(params),
+    }),
+    defineTool({
+      name: 'get_chat',
+      description: 'Get details of a specific chat (Graph API)',
+      input: GetChatInput,
+      annotations: { readOnlyHint: true, openWorldHint: true },
+      destructive: false,
+      presets: ['teams'],
+      backends: ['graph'],
+      handler: (ctx, params) => tools(ctx).getChat(params),
+    }),
+    defineTool({
+      name: 'list_chat_messages',
+      description: 'List recent messages in a chat (Graph API)',
+      input: ListChatMessagesInput,
+      annotations: { readOnlyHint: true, openWorldHint: true },
+      destructive: false,
+      presets: ['teams'],
+      backends: ['graph'],
+      handler: (ctx, params) => tools(ctx).listChatMessages(params),
+    }),
+    defineTool({
+      name: 'prepare_send_chat_message',
+      description: 'Prepare to send a message in a chat. Returns an approval token. Call confirm_send_chat_message to execute. (Graph API)',
+      input: PrepareSendChatMessageInput,
+      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+      destructive: true,
+      presets: ['teams'],
+      backends: ['graph'],
+      handler: (ctx, params) => tools(ctx).prepareSendChatMessage(params),
+    }),
+    defineTool({
+      name: 'confirm_send_chat_message',
+      description: 'Confirm sending a chat message with approval token (Graph API)',
+      input: ConfirmSendChatMessageInput,
+      annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+      destructive: true,
+      presets: ['teams'],
+      backends: ['graph'],
+      handler: (ctx, params) => tools(ctx).confirmSendChatMessage(params),
+    }),
+    defineTool({
+      name: 'list_chat_members',
+      description: 'List members of a chat (Graph API)',
+      input: ListChatMembersInput,
+      annotations: { readOnlyHint: true, openWorldHint: true },
+      destructive: false,
+      presets: ['teams'],
+      backends: ['graph'],
+      handler: (ctx, params) => tools(ctx).listChatMembers(params),
+    }),
+    defineTool({
+      name: 'list_message_reactions',
+      description: 'List reactions on a channel or chat message (Graph API)',
+      input: ListMessageReactionsInput,
+      annotations: { readOnlyHint: true, openWorldHint: true },
+      destructive: false,
+      presets: ['teams'],
+      backends: ['graph'],
+      handler: (ctx, params) => tools(ctx).listMessageReactions(params),
+    }),
+    defineTool({
+      name: 'prepare_add_message_reaction',
+      description: 'Prepare to add a reaction to a message. Returns an approval token. Call confirm_add_message_reaction to execute. (Graph API)',
+      input: PrepareAddMessageReactionInput,
+      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+      destructive: true,
+      presets: ['teams'],
+      backends: ['graph'],
+      handler: (ctx, params) => tools(ctx).prepareAddMessageReaction(params),
+    }),
+    defineTool({
+      name: 'confirm_add_message_reaction',
+      description: 'Confirm adding a reaction to a message with approval token (Graph API)',
+      input: ConfirmAddMessageReactionInput,
+      annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+      destructive: true,
+      presets: ['teams'],
+      backends: ['graph'],
+      handler: (ctx, params) => tools(ctx).confirmAddMessageReaction(params),
+    }),
+    defineTool({
+      name: 'remove_message_reaction',
+      description: 'Remove your own reaction from a channel or chat message (Graph API)',
+      input: RemoveMessageReactionInput,
+      annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+      destructive: true,
+      presets: ['teams'],
+      backends: ['graph'],
+      handler: (ctx, params) => tools(ctx).removeMessageReaction(params),
+    }),
+  ];
 }

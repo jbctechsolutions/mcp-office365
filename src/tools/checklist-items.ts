@@ -12,6 +12,15 @@
 
 import { z } from 'zod';
 import type { ApprovalTokenManager } from '../approval/index.js';
+import { defineTool } from '../registry/define-tool.js';
+import { requireGraphToolset } from '../registry/context.js';
+import type { ToolContext, ToolDefinition } from '../registry/types.js';
+
+declare module '../registry/types.js' {
+  interface GraphToolsets {
+    checklistItems: ChecklistItemsTools;
+  }
+}
 
 // =============================================================================
 // Input Schemas
@@ -182,4 +191,68 @@ export class ChecklistItemsTools {
       }],
     };
   }
+}
+
+// =============================================================================
+// Registry Definitions (v3 registry-driven architecture, U2)
+// =============================================================================
+
+/**
+ * Registry tool definitions for the checklist-items domain.
+ */
+export function checklistItemsToolDefinitions(): ToolDefinition[] {
+  const tools = (ctx: ToolContext): ChecklistItemsTools => requireGraphToolset(ctx, 'checklistItems');
+
+  return [
+    defineTool({
+      name: 'list_checklist_items',
+      description: 'List checklist items (subtasks) on a To Do task (Graph API)',
+      input: ListChecklistItemsInput,
+      annotations: { readOnlyHint: true, openWorldHint: true },
+      destructive: false,
+      presets: ['tasks'],
+      backends: ['graph'],
+      handler: (ctx, params) => tools(ctx).listChecklistItems(params),
+    }),
+    defineTool({
+      name: 'create_checklist_item',
+      description: 'Create a checklist item (subtask) on a To Do task (Graph API)',
+      input: CreateChecklistItemInput,
+      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+      destructive: false,
+      presets: ['tasks'],
+      backends: ['graph'],
+      handler: (ctx, params) => tools(ctx).createChecklistItem(params),
+    }),
+    defineTool({
+      name: 'update_checklist_item',
+      description: 'Update a checklist item (toggle check, rename) on a To Do task (Graph API)',
+      input: UpdateChecklistItemInput,
+      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+      destructive: false,
+      presets: ['tasks'],
+      backends: ['graph'],
+      handler: (ctx, params) => tools(ctx).updateChecklistItem(params),
+    }),
+    defineTool({
+      name: 'prepare_delete_checklist_item',
+      description: 'Prepare to delete a checklist item. Returns an approval token. Call confirm_delete_checklist_item to execute. (Graph API)',
+      input: PrepareDeleteChecklistItemInput,
+      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+      destructive: true,
+      presets: ['tasks'],
+      backends: ['graph'],
+      handler: (ctx, params) => tools(ctx).prepareDeleteChecklistItem(params),
+    }),
+    defineTool({
+      name: 'confirm_delete_checklist_item',
+      description: 'Confirm deletion of a checklist item with approval token (Graph API)',
+      input: ConfirmDeleteChecklistItemInput,
+      annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+      destructive: true,
+      presets: ['tasks'],
+      backends: ['graph'],
+      handler: (ctx, params) => tools(ctx).confirmDeleteChecklistItem(params),
+    }),
+  ];
 }

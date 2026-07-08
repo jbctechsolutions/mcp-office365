@@ -12,6 +12,15 @@
 
 import { z } from 'zod';
 import type { ApprovalTokenManager } from '../approval/index.js';
+import { defineTool } from '../registry/define-tool.js';
+import { requireGraphToolset } from '../registry/context.js';
+import type { ToolContext, ToolDefinition } from '../registry/types.js';
+
+declare module '../registry/types.js' {
+  interface GraphToolsets {
+    focusedOverrides: FocusedOverridesTools;
+  }
+}
 
 // =============================================================================
 // Input Schemas
@@ -153,4 +162,60 @@ export class FocusedOverridesTools {
       }],
     };
   }
+}
+
+// =============================================================================
+// Registry Definitions (v3 registry-driven architecture, U2)
+// =============================================================================
+
+const NoInput = z.strictObject({});
+
+/**
+ * Registry tool definitions for the focused-inbox-overrides domain.
+ */
+export function focusedOverridesToolDefinitions(): ToolDefinition[] {
+  const tools = (ctx: ToolContext): FocusedOverridesTools => requireGraphToolset(ctx, 'focusedOverrides');
+
+  return [
+    defineTool({
+      name: 'list_focused_overrides',
+      description: 'List all focused inbox overrides (Graph API)',
+      input: NoInput,
+      annotations: { readOnlyHint: true, openWorldHint: true },
+      destructive: false,
+      presets: ['calendar'],
+      backends: ['graph'],
+      handler: (ctx) => tools(ctx).listFocusedOverrides(),
+    }),
+    defineTool({
+      name: 'create_focused_override',
+      description: 'Create a focused inbox override for a sender (Graph API)',
+      input: CreateFocusedOverrideInput,
+      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+      destructive: false,
+      presets: ['calendar'],
+      backends: ['graph'],
+      handler: (ctx, params) => tools(ctx).createFocusedOverride(params),
+    }),
+    defineTool({
+      name: 'prepare_delete_focused_override',
+      description: 'Prepare to delete a focused inbox override. Returns a preview and approval token. Call confirm_delete_focused_override to execute. (Graph API)',
+      input: PrepareDeleteFocusedOverrideInput,
+      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+      destructive: true,
+      presets: ['calendar'],
+      backends: ['graph'],
+      handler: (ctx, params) => tools(ctx).prepareDeleteFocusedOverride(params),
+    }),
+    defineTool({
+      name: 'confirm_delete_focused_override',
+      description: 'Confirm focused inbox override deletion with approval token (Graph API)',
+      input: ConfirmDeleteFocusedOverrideInput,
+      annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+      destructive: true,
+      presets: ['calendar'],
+      backends: ['graph'],
+      handler: (ctx, params) => tools(ctx).confirmDeleteFocusedOverride(params),
+    }),
+  ];
 }

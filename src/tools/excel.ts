@@ -13,6 +13,15 @@
 
 import { z } from 'zod';
 import type { ApprovalTokenManager } from '../approval/index.js';
+import { defineTool } from '../registry/define-tool.js';
+import { requireGraphToolset } from '../registry/context.js';
+import type { ToolContext, ToolDefinition } from '../registry/types.js';
+
+declare module '../registry/types.js' {
+  interface GraphToolsets {
+    excel: ExcelTools;
+  }
+}
 
 // =============================================================================
 // Input Schemas
@@ -216,4 +225,78 @@ export class ExcelTools {
       }],
     };
   }
+}
+
+// =============================================================================
+// Registry Definitions (v3 registry-driven architecture, U2)
+// =============================================================================
+
+/**
+ * Registry tool definitions for the excel domain.
+ */
+export function excelToolDefinitions(): ToolDefinition[] {
+  const tools = (ctx: ToolContext): ExcelTools => requireGraphToolset(ctx, 'excel');
+
+  return [
+    defineTool({
+      name: 'list_worksheets',
+      description: 'List all worksheets in an Excel workbook stored in OneDrive or SharePoint. (Graph API)',
+      input: ListWorksheetsInput,
+      annotations: { readOnlyHint: true, openWorldHint: true },
+      destructive: false,
+      presets: ['excel'],
+      backends: ['graph'],
+      handler: (ctx, params) => tools(ctx).listWorksheets(params),
+    }),
+    defineTool({
+      name: 'get_worksheet_range',
+      description: 'Get cell values for a specific range in an Excel worksheet. (Graph API)',
+      input: GetWorksheetRangeInput,
+      annotations: { readOnlyHint: true, openWorldHint: true },
+      destructive: false,
+      presets: ['excel'],
+      backends: ['graph'],
+      handler: (ctx, params) => tools(ctx).getWorksheetRange(params),
+    }),
+    defineTool({
+      name: 'get_used_range',
+      description: 'Get all used data in an Excel worksheet (automatically detects the data region). (Graph API)',
+      input: GetUsedRangeInput,
+      annotations: { readOnlyHint: true, openWorldHint: true },
+      destructive: false,
+      presets: ['excel'],
+      backends: ['graph'],
+      handler: (ctx, params) => tools(ctx).getUsedRange(params),
+    }),
+    defineTool({
+      name: 'prepare_update_range',
+      description: 'Prepare to update cell values in an Excel worksheet range. Returns an approval token. (Graph API)',
+      input: PrepareUpdateRangeInput,
+      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+      destructive: true,
+      presets: ['excel'],
+      backends: ['graph'],
+      handler: (ctx, params) => tools(ctx).prepareUpdateRange(params),
+    }),
+    defineTool({
+      name: 'confirm_update_range',
+      description: 'Confirm updating cell values in an Excel worksheet range using the approval token from prepare_update_range. (Graph API)',
+      input: ConfirmUpdateRangeInput,
+      annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+      destructive: true,
+      presets: ['excel'],
+      backends: ['graph'],
+      handler: (ctx, params) => tools(ctx).confirmUpdateRange(params),
+    }),
+    defineTool({
+      name: 'get_table_data',
+      description: 'Get rows from a named table in an Excel workbook. (Graph API)',
+      input: GetTableDataInput,
+      annotations: { readOnlyHint: true, openWorldHint: true },
+      destructive: false,
+      presets: ['excel'],
+      backends: ['graph'],
+      handler: (ctx, params) => tools(ctx).getTableData(params),
+    }),
+  ];
 }

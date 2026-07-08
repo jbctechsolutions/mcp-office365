@@ -13,6 +13,15 @@
 
 import { z } from 'zod';
 import type { ApprovalTokenManager } from '../approval/index.js';
+import { defineTool } from '../registry/define-tool.js';
+import { requireGraphToolset } from '../registry/context.js';
+import type { ToolContext, ToolDefinition } from '../registry/types.js';
+
+declare module '../registry/types.js' {
+  interface GraphToolsets {
+    planner: PlannerTools;
+  }
+}
 
 // =============================================================================
 // Input Schemas
@@ -515,4 +524,188 @@ export class PlannerTools {
       }],
     };
   }
+}
+
+// =============================================================================
+// Registry Definitions (v3 registry-driven architecture, U2)
+// =============================================================================
+
+/**
+ * Registry tool definitions for the planner domain.
+ */
+export function plannerToolDefinitions(): ToolDefinition[] {
+  const tools = (ctx: ToolContext): PlannerTools => requireGraphToolset(ctx, 'planner');
+
+  return [
+    defineTool({
+      name: 'list_plans',
+      description: 'List all Planner plans the user has access to (Graph API)',
+      input: ListPlansInput,
+      annotations: { readOnlyHint: true, openWorldHint: true },
+      destructive: false,
+      presets: ['planner'],
+      backends: ['graph'],
+      handler: (ctx) => tools(ctx).listPlans(),
+    }),
+    defineTool({
+      name: 'get_plan',
+      description: 'Get details for a specific Planner plan (Graph API)',
+      input: GetPlanInput,
+      annotations: { readOnlyHint: true, openWorldHint: true },
+      destructive: false,
+      presets: ['planner'],
+      backends: ['graph'],
+      handler: (ctx, params) => tools(ctx).getPlan(params),
+    }),
+    defineTool({
+      name: 'create_plan',
+      description: 'Create a new Planner plan in a Microsoft 365 group (Graph API)',
+      input: CreatePlanInput,
+      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+      destructive: false,
+      presets: ['planner'],
+      backends: ['graph'],
+      handler: (ctx, params) => tools(ctx).createPlan(params),
+    }),
+    defineTool({
+      name: 'update_plan',
+      description: 'Update a Planner plan title (Graph API)',
+      input: UpdatePlanInput,
+      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+      destructive: false,
+      presets: ['planner'],
+      backends: ['graph'],
+      handler: (ctx, params) => tools(ctx).updatePlan(params),
+    }),
+    defineTool({
+      name: 'list_buckets',
+      description: 'List all buckets in a Planner plan (Graph API)',
+      input: ListBucketsInput,
+      annotations: { readOnlyHint: true, openWorldHint: true },
+      destructive: false,
+      presets: ['planner'],
+      backends: ['graph'],
+      handler: (ctx, params) => tools(ctx).listBuckets(params),
+    }),
+    defineTool({
+      name: 'create_bucket',
+      description: 'Create a new bucket in a Planner plan (Graph API)',
+      input: CreateBucketInput,
+      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+      destructive: false,
+      presets: ['planner'],
+      backends: ['graph'],
+      handler: (ctx, params) => tools(ctx).createBucket(params),
+    }),
+    defineTool({
+      name: 'update_bucket',
+      description: 'Update a Planner bucket name (Graph API)',
+      input: UpdateBucketInput,
+      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+      destructive: false,
+      presets: ['planner'],
+      backends: ['graph'],
+      handler: (ctx, params) => tools(ctx).updateBucket(params),
+    }),
+    defineTool({
+      name: 'prepare_delete_bucket',
+      description: 'Prepare to delete a Planner bucket. Returns an approval token. (Graph API)',
+      input: PrepareDeleteBucketInput,
+      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+      destructive: true,
+      presets: ['planner'],
+      backends: ['graph'],
+      handler: (ctx, params) => tools(ctx).prepareDeleteBucket(params),
+    }),
+    defineTool({
+      name: 'confirm_delete_bucket',
+      description: 'Confirm deletion of a Planner bucket using the approval token from prepare_delete_bucket. (Graph API)',
+      input: ConfirmDeleteBucketInput,
+      annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+      destructive: true,
+      presets: ['planner'],
+      backends: ['graph'],
+      handler: (ctx, params) => tools(ctx).confirmDeleteBucket(params),
+    }),
+    defineTool({
+      name: 'list_planner_tasks',
+      description: 'List all tasks in a Planner plan (Graph API)',
+      input: ListPlannerTasksInput,
+      annotations: { readOnlyHint: true, openWorldHint: true },
+      destructive: false,
+      presets: ['planner'],
+      backends: ['graph'],
+      handler: (ctx, params) => tools(ctx).listPlannerTasks(params),
+    }),
+    defineTool({
+      name: 'get_planner_task',
+      description: 'Get details for a specific Planner task (Graph API)',
+      input: GetPlannerTaskInput,
+      annotations: { readOnlyHint: true, openWorldHint: true },
+      destructive: false,
+      presets: ['planner'],
+      backends: ['graph'],
+      handler: (ctx, params) => tools(ctx).getPlannerTask(params),
+    }),
+    defineTool({
+      name: 'create_planner_task',
+      description: 'Create a new task in a Planner plan (Graph API)',
+      input: CreatePlannerTaskInput,
+      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+      destructive: false,
+      presets: ['planner'],
+      backends: ['graph'],
+      handler: (ctx, params) => tools(ctx).createPlannerTask(params),
+    }),
+    defineTool({
+      name: 'update_planner_task',
+      description: 'Update a Planner task (Graph API)',
+      input: UpdatePlannerTaskInput,
+      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+      destructive: false,
+      presets: ['planner'],
+      backends: ['graph'],
+      handler: (ctx, params) => tools(ctx).updatePlannerTask(params),
+    }),
+    defineTool({
+      name: 'prepare_delete_planner_task',
+      description: 'Prepare to delete a Planner task. Returns an approval token. (Graph API)',
+      input: PrepareDeletePlannerTaskInput,
+      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+      destructive: true,
+      presets: ['planner'],
+      backends: ['graph'],
+      handler: (ctx, params) => tools(ctx).prepareDeletePlannerTask(params),
+    }),
+    defineTool({
+      name: 'confirm_delete_planner_task',
+      description: 'Confirm deletion of a Planner task using the approval token from prepare_delete_planner_task. (Graph API)',
+      input: ConfirmDeletePlannerTaskInput,
+      annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+      destructive: true,
+      presets: ['planner'],
+      backends: ['graph'],
+      handler: (ctx, params) => tools(ctx).confirmDeletePlannerTask(params),
+    }),
+    defineTool({
+      name: 'get_planner_task_details',
+      description: 'Get details for a Planner task (description, checklist, references). (Graph API)',
+      input: GetPlannerTaskDetailsInput,
+      annotations: { readOnlyHint: true, openWorldHint: true },
+      destructive: false,
+      presets: ['planner'],
+      backends: ['graph'],
+      handler: (ctx, params) => tools(ctx).getPlannerTaskDetails(params),
+    }),
+    defineTool({
+      name: 'update_planner_task_details',
+      description: 'Update details for a Planner task (description, checklist, references). Requires get_planner_task_details first for ETag. (Graph API)',
+      input: UpdatePlannerTaskDetailsInput,
+      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+      destructive: false,
+      presets: ['planner'],
+      backends: ['graph'],
+      handler: (ctx, params) => tools(ctx).updatePlannerTaskDetails(params),
+    }),
+  ];
 }

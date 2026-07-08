@@ -7,6 +7,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { z } from 'zod';
 import { ToolRegistry, toInputSchema } from '../../../src/registry/registry.js';
 import { defineTool } from '../../../src/registry/define-tool.js';
+import { requireGraphToolset, requireAppleScriptToolset } from '../../../src/registry/context.js';
 import type { ToolContext, ToolDefinition } from '../../../src/registry/types.js';
 import { mailRulesToolDefinitions } from '../../../src/tools/mail-rules.js';
 import { ApprovalTokenManager } from '../../../src/approval/index.js';
@@ -21,6 +22,47 @@ function readContext(rules: unknown): ToolContext {
 }
 
 const graphSurface = { backend: 'graph' as const };
+
+describe('requireGraphToolset', () => {
+  it('returns the toolset when the graph bag is present', () => {
+    const marker = { listMailRules: () => undefined };
+    const ctx = readContext(marker);
+    expect(requireGraphToolset(ctx, 'rules')).toBe(marker);
+  });
+
+  it('throws a clear error when the graph backend is unavailable', () => {
+    const ctx: ToolContext = {
+      backend: 'applescript',
+      tokenManager: new ApprovalTokenManager(),
+      graph: null,
+      applescript: {} as never,
+    };
+    expect(() => requireGraphToolset(ctx, 'rules')).toThrow(/Microsoft Graph API backend/);
+  });
+});
+
+describe('requireAppleScriptToolset', () => {
+  it('returns the toolset when the applescript bag is present', () => {
+    const marker = { listNotes: () => [] };
+    const ctx: ToolContext = {
+      backend: 'applescript',
+      tokenManager: new ApprovalTokenManager(),
+      graph: null,
+      applescript: { notes: marker } as never,
+    };
+    expect(requireAppleScriptToolset(ctx, 'notes')).toBe(marker);
+  });
+
+  it('throws a clear error when the applescript backend is unavailable', () => {
+    const ctx: ToolContext = {
+      backend: 'graph',
+      tokenManager: new ApprovalTokenManager(),
+      graph: {} as never,
+      applescript: null,
+    };
+    expect(() => requireAppleScriptToolset(ctx, 'notes')).toThrow(/AppleScript \(classic Outlook\) backend/);
+  });
+});
 
 describe('toInputSchema', () => {
   it('produces an MCP-compatible object schema with no $schema key', () => {
@@ -40,6 +82,17 @@ describe('toInputSchema', () => {
   it('defaults type to object when the Zod schema produces no type', () => {
     const json = toInputSchema(z.any()) as Record<string, unknown>;
     expect(json['type']).toBe('object');
+  });
+
+  it('treats a field with a default as optional in the advertised schema (io:input)', () => {
+    // A .default() field is optional for the client — the server fills it.
+    const schema = z.strictObject({
+      plan_id: z.number(),
+      format: z.enum(['png', 'svg']).default('png'),
+    });
+    const json = toInputSchema(schema) as Record<string, unknown>;
+    expect(json['required']).toEqual(['plan_id']);
+    expect(json['required']).not.toContain('format');
   });
 
   it('round-trips enum and required/optional fields from the Zod schema', () => {

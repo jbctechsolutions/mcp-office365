@@ -11,6 +11,15 @@
  */
 
 import { z } from 'zod';
+import { defineTool } from '../registry/define-tool.js';
+import { requireGraphToolset } from '../registry/context.js';
+import type { ToolContext, ToolDefinition } from '../registry/types.js';
+
+declare module '../registry/types.js' {
+  interface GraphToolsets {
+    sharePoint: SharePointTools;
+  }
+}
 
 // =============================================================================
 // Input Schemas
@@ -150,4 +159,79 @@ export class SharePointTools {
       }],
     };
   }
+}
+
+// =============================================================================
+// Registry Definitions (v3 registry-driven architecture, U2)
+// =============================================================================
+
+/**
+ * Registry tool definitions for the sharepoint domain.
+ */
+export function sharePointToolDefinitions(): ToolDefinition[] {
+  const tools = (ctx: ToolContext): SharePointTools => requireGraphToolset(ctx, 'sharePoint');
+
+  return [
+    defineTool({
+      name: 'list_sites',
+      description: 'List SharePoint sites the user follows (Graph API)',
+      input: ListSitesInput,
+      annotations: { readOnlyHint: true, openWorldHint: true },
+      destructive: false,
+      presets: ['sharepoint'],
+      backends: ['graph'],
+      handler: (ctx) => tools(ctx).listSites(),
+    }),
+    defineTool({
+      name: 'search_sites',
+      description: 'Search for SharePoint sites by keyword (Graph API)',
+      input: SearchSitesInput,
+      annotations: { readOnlyHint: true, openWorldHint: true },
+      destructive: false,
+      presets: ['sharepoint'],
+      backends: ['graph'],
+      handler: (ctx, params) => tools(ctx).searchSites(params),
+    }),
+    defineTool({
+      name: 'get_site',
+      description: 'Get details for a specific SharePoint site (Graph API)',
+      input: GetSiteInput,
+      annotations: { readOnlyHint: true, openWorldHint: true },
+      destructive: false,
+      presets: ['sharepoint'],
+      backends: ['graph'],
+      handler: (ctx, params) => tools(ctx).getSite(params),
+    }),
+    defineTool({
+      name: 'list_document_libraries',
+      description: 'List document libraries (drives) for a SharePoint site (Graph API)',
+      input: ListDocumentLibrariesInput,
+      annotations: { readOnlyHint: true, openWorldHint: true },
+      destructive: false,
+      presets: ['sharepoint'],
+      backends: ['graph'],
+      handler: (ctx, params) => tools(ctx).listDocumentLibraries(params),
+    }),
+    defineTool({
+      name: 'list_library_items',
+      description: 'List files and folders in a document library or subfolder (Graph API)',
+      input: ListLibraryItemsInput,
+      annotations: { readOnlyHint: true, openWorldHint: true },
+      destructive: false,
+      presets: ['sharepoint'],
+      backends: ['graph'],
+      handler: (ctx, params) => tools(ctx).listLibraryItems(params),
+    }),
+    defineTool({
+      name: 'download_library_file',
+      description: 'Download a file from a SharePoint document library to a local path (Graph API)',
+      input: DownloadLibraryFileInput,
+      // Writes the file to output_path on local disk — not read-only.
+      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+      destructive: false,
+      presets: ['sharepoint'],
+      backends: ['graph'],
+      handler: (ctx, params) => tools(ctx).downloadLibraryFile(params),
+    }),
+  ];
 }

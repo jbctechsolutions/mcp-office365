@@ -12,6 +12,15 @@
 
 import { z } from 'zod';
 import type { ApprovalTokenManager } from '../approval/index.js';
+import { defineTool } from '../registry/define-tool.js';
+import { requireGraphToolset } from '../registry/context.js';
+import type { ToolContext, ToolDefinition } from '../registry/types.js';
+
+declare module '../registry/types.js' {
+  interface GraphToolsets {
+    categories: CategoriesTools;
+  }
+}
 
 // =============================================================================
 // Input Schemas
@@ -153,4 +162,60 @@ export class CategoriesTools {
       }],
     };
   }
+}
+
+// =============================================================================
+// Registry Definitions (v3 registry-driven architecture, U2)
+// =============================================================================
+
+const NoInput = z.strictObject({});
+
+/**
+ * Registry tool definitions for the master-categories domain.
+ */
+export function categoriesToolDefinitions(): ToolDefinition[] {
+  const tools = (ctx: ToolContext): CategoriesTools => requireGraphToolset(ctx, 'categories');
+
+  return [
+    defineTool({
+      name: 'list_categories',
+      description: 'List all master categories (Graph API)',
+      input: NoInput,
+      annotations: { readOnlyHint: true, openWorldHint: true },
+      destructive: false,
+      presets: ['mail'],
+      backends: ['graph'],
+      handler: (ctx) => tools(ctx).listCategories(),
+    }),
+    defineTool({
+      name: 'create_category',
+      description: 'Create a new master category (Graph API)',
+      input: CreateCategoryInput,
+      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+      destructive: false,
+      presets: ['mail'],
+      backends: ['graph'],
+      handler: (ctx, params) => tools(ctx).createCategory(params),
+    }),
+    defineTool({
+      name: 'prepare_delete_category',
+      description: 'Prepare to delete a master category. Returns a preview and approval token. Call confirm_delete_category to execute. (Graph API)',
+      input: PrepareDeleteCategoryInput,
+      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+      destructive: true,
+      presets: ['mail'],
+      backends: ['graph'],
+      handler: (ctx, params) => tools(ctx).prepareDeleteCategory(params),
+    }),
+    defineTool({
+      name: 'confirm_delete_category',
+      description: 'Confirm category deletion with approval token (Graph API)',
+      input: ConfirmDeleteCategoryInput,
+      annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+      destructive: true,
+      presets: ['mail'],
+      backends: ['graph'],
+      handler: (ctx, params) => tools(ctx).confirmDeleteCategory(params),
+    }),
+  ];
 }

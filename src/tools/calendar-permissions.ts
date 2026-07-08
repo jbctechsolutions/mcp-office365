@@ -12,6 +12,15 @@
 
 import { z } from 'zod';
 import type { ApprovalTokenManager } from '../approval/index.js';
+import { defineTool } from '../registry/define-tool.js';
+import { requireGraphToolset } from '../registry/context.js';
+import type { ToolContext, ToolDefinition } from '../registry/types.js';
+
+declare module '../registry/types.js' {
+  interface GraphToolsets {
+    calendarPermissions: CalendarPermissionsTools;
+  }
+}
 
 // =============================================================================
 // Input Schemas
@@ -159,4 +168,58 @@ export class CalendarPermissionsTools {
       }],
     };
   }
+}
+
+// =============================================================================
+// Registry Definitions (v3 registry-driven architecture, U2)
+// =============================================================================
+
+/**
+ * Registry tool definitions for the calendar-permissions domain.
+ */
+export function calendarPermissionsToolDefinitions(): ToolDefinition[] {
+  const tools = (ctx: ToolContext): CalendarPermissionsTools => requireGraphToolset(ctx, 'calendarPermissions');
+
+  return [
+    defineTool({
+      name: 'list_calendar_permissions',
+      description: 'List all sharing permissions for a calendar (Graph API)',
+      input: ListCalendarPermissionsInput,
+      annotations: { readOnlyHint: true, openWorldHint: true },
+      destructive: false,
+      presets: ['calendar'],
+      backends: ['graph'],
+      handler: (ctx, params) => tools(ctx).listCalendarPermissions(params),
+    }),
+    defineTool({
+      name: 'create_calendar_permission',
+      description: 'Share a calendar with someone by creating a permission (Graph API)',
+      input: CreateCalendarPermissionInput,
+      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+      destructive: false,
+      presets: ['calendar'],
+      backends: ['graph'],
+      handler: (ctx, params) => tools(ctx).createCalendarPermission(params),
+    }),
+    defineTool({
+      name: 'prepare_delete_calendar_permission',
+      description: 'Prepare to delete a calendar sharing permission. Returns a preview and approval token. Call confirm_delete_calendar_permission to execute. (Graph API)',
+      input: PrepareDeleteCalendarPermissionInput,
+      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+      destructive: true,
+      presets: ['calendar'],
+      backends: ['graph'],
+      handler: (ctx, params) => tools(ctx).prepareDeleteCalendarPermission(params),
+    }),
+    defineTool({
+      name: 'confirm_delete_calendar_permission',
+      description: 'Confirm calendar permission deletion with approval token (Graph API)',
+      input: ConfirmDeleteCalendarPermissionInput,
+      annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+      destructive: true,
+      presets: ['calendar'],
+      backends: ['graph'],
+      handler: (ctx, params) => tools(ctx).confirmDeleteCalendarPermission(params),
+    }),
+  ];
 }

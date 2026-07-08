@@ -104,6 +104,9 @@ describe('MCP Client E2E', () => {
 
       // No duplicate tool names across the registry + legacy union.
       expect(new Set(names).size).toBe(names.length);
+      // Graph-mode surface count is invariant across U2 migrations — tools move
+      // from the legacy TOOLS array into the registry, never disappear.
+      expect(names.length).toBe(218);
 
       // The 4 migrated mail-rules tools each appear exactly once.
       for (const name of ['list_mail_rules', 'create_mail_rule', 'prepare_delete_mail_rule', 'confirm_delete_mail_rule']) {

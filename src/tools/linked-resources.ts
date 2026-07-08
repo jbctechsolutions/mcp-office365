@@ -12,6 +12,15 @@
 
 import { z } from 'zod';
 import type { ApprovalTokenManager } from '../approval/index.js';
+import { defineTool } from '../registry/define-tool.js';
+import { requireGraphToolset } from '../registry/context.js';
+import type { ToolContext, ToolDefinition } from '../registry/types.js';
+
+declare module '../registry/types.js' {
+  interface GraphToolsets {
+    linkedResources: LinkedResourcesTools;
+  }
+}
 
 // =============================================================================
 // Input Schemas
@@ -160,4 +169,58 @@ export class LinkedResourcesTools {
       }],
     };
   }
+}
+
+// =============================================================================
+// Registry Definitions (v3 registry-driven architecture, U2)
+// =============================================================================
+
+/**
+ * Registry tool definitions for the linked-resources domain.
+ */
+export function linkedResourcesToolDefinitions(): ToolDefinition[] {
+  const tools = (ctx: ToolContext): LinkedResourcesTools => requireGraphToolset(ctx, 'linkedResources');
+
+  return [
+    defineTool({
+      name: 'list_linked_resources',
+      description: 'List linked resources on a To Do task (Graph API)',
+      input: ListLinkedResourcesInput,
+      annotations: { readOnlyHint: true, openWorldHint: true },
+      destructive: false,
+      presets: ['tasks'],
+      backends: ['graph'],
+      handler: (ctx, params) => tools(ctx).listLinkedResources(params),
+    }),
+    defineTool({
+      name: 'create_linked_resource',
+      description: 'Create a linked resource on a To Do task (Graph API)',
+      input: CreateLinkedResourceInput,
+      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+      destructive: false,
+      presets: ['tasks'],
+      backends: ['graph'],
+      handler: (ctx, params) => tools(ctx).createLinkedResource(params),
+    }),
+    defineTool({
+      name: 'prepare_delete_linked_resource',
+      description: 'Prepare to delete a linked resource. Returns an approval token. Call confirm_delete_linked_resource to execute. (Graph API)',
+      input: PrepareDeleteLinkedResourceInput,
+      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+      destructive: true,
+      presets: ['tasks'],
+      backends: ['graph'],
+      handler: (ctx, params) => tools(ctx).prepareDeleteLinkedResource(params),
+    }),
+    defineTool({
+      name: 'confirm_delete_linked_resource',
+      description: 'Confirm deletion of a linked resource with approval token (Graph API)',
+      input: ConfirmDeleteLinkedResourceInput,
+      annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+      destructive: true,
+      presets: ['tasks'],
+      backends: ['graph'],
+      handler: (ctx, params) => tools(ctx).confirmDeleteLinkedResource(params),
+    }),
+  ];
 }

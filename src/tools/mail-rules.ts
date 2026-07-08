@@ -13,7 +13,16 @@
 import { z } from 'zod';
 import type { ApprovalTokenManager } from '../approval/index.js';
 import { defineTool } from '../registry/define-tool.js';
+import { requireGraphToolset } from '../registry/context.js';
 import type { ToolContext, ToolDefinition } from '../registry/types.js';
+
+// Register this domain's toolset on the shared context bag (module
+// augmentation keeps the declaration in this file, not registry/types.ts).
+declare module '../registry/types.js' {
+  interface GraphToolsets {
+    rules: MailRulesTools;
+  }
+}
 
 // =============================================================================
 // Input Schemas
@@ -214,12 +223,7 @@ const NoInput = z.strictObject({});
  * Graph backend is initialized.
  */
 export function mailRulesToolDefinitions(): ToolDefinition[] {
-  const rules = (ctx: ToolContext): MailRulesTools => {
-    if (ctx.graph == null) {
-      throw new Error('Mail rules require the Graph API backend.');
-    }
-    return ctx.graph.rules;
-  };
+  const tools = (ctx: ToolContext): MailRulesTools => requireGraphToolset(ctx, 'rules');
 
   return [
     defineTool({
@@ -230,7 +234,7 @@ export function mailRulesToolDefinitions(): ToolDefinition[] {
       destructive: false,
       presets: ['mail'],
       backends: ['graph'],
-      handler: (ctx) => rules(ctx).listMailRules(),
+      handler: (ctx) => tools(ctx).listMailRules(),
     }),
     defineTool({
       name: 'create_mail_rule',
@@ -240,7 +244,7 @@ export function mailRulesToolDefinitions(): ToolDefinition[] {
       destructive: false,
       presets: ['mail'],
       backends: ['graph'],
-      handler: (ctx, params) => rules(ctx).createMailRule(params),
+      handler: (ctx, params) => tools(ctx).createMailRule(params),
     }),
     defineTool({
       name: 'prepare_delete_mail_rule',
@@ -250,7 +254,7 @@ export function mailRulesToolDefinitions(): ToolDefinition[] {
       destructive: true,
       presets: ['mail'],
       backends: ['graph'],
-      handler: (ctx, params) => rules(ctx).prepareDeleteMailRule(params),
+      handler: (ctx, params) => tools(ctx).prepareDeleteMailRule(params),
     }),
     defineTool({
       name: 'confirm_delete_mail_rule',
@@ -260,7 +264,7 @@ export function mailRulesToolDefinitions(): ToolDefinition[] {
       destructive: true,
       presets: ['mail'],
       backends: ['graph'],
-      handler: (ctx, params) => rules(ctx).confirmDeleteMailRule(params),
+      handler: (ctx, params) => tools(ctx).confirmDeleteMailRule(params),
     }),
   ];
 }
