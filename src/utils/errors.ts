@@ -466,6 +466,8 @@ function graphStatusToEnvelope(status: number, message: string): ErrorEnvelope {
     case 502:
     case 503:
     case 504:
+      // The transport auto-retries these (see shouldRetryGraphRequest), so
+      // retriable:true reflects real coverage, not just caller advice.
       return {
         code: ErrorCode.GRAPH_UNAVAILABLE,
         message,
@@ -474,15 +476,52 @@ function graphStatusToEnvelope(status: number, message: string): ErrorEnvelope {
       };
     default:
       if (status >= 500) {
+        // Other 5xx (500/501/505…) are NOT auto-retried by the transport, so
+        // retriable stays false to keep the envelope honest with D5.
         return {
           code: ErrorCode.GRAPH_UNAVAILABLE,
           message,
-          retriable: true,
-          suggestion: 'Microsoft Graph returned a server error. Retry shortly.',
+          retriable: false,
+          suggestion: 'Microsoft Graph returned a server error.',
         };
       }
       return { code: ErrorCode.GRAPH_ERROR, message, retriable: false };
   }
+}
+
+/** True when `value` already has the {@link ErrorEnvelope} shape. */
+export function isErrorEnvelope(value: unknown): value is ErrorEnvelope {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    typeof (value as ErrorEnvelope).code === 'string' &&
+    typeof (value as ErrorEnvelope).message === 'string' &&
+    typeof (value as ErrorEnvelope).retriable === 'boolean'
+  );
+}
+
+/**
+ * Normalizes the text of a tool's error result into a D10 envelope JSON string.
+ * Thrown failures already funnel through {@link toErrorEnvelope} at the dispatch
+ * chokepoint, but many handlers return `{ isError: true, text: '…' }` directly
+ * (not-found, approval-token mismatches, etc.). Passing those through here keeps
+ * a single stable error shape across *every* failure path. Text that is already
+ * a valid envelope is returned unchanged (idempotent — never double-wraps).
+ */
+export function ensureErrorEnvelopeText(text: string): string {
+  try {
+    if (isErrorEnvelope(JSON.parse(text))) {
+      return text;
+    }
+  } catch {
+    // not JSON — fall through and wrap
+  }
+  const envelope: ErrorEnvelope = {
+    code: ErrorCode.GRAPH_ERROR,
+    message: text,
+    retriable: false,
+  };
+  return JSON.stringify(envelope, null, 2);
 }
 
 /**

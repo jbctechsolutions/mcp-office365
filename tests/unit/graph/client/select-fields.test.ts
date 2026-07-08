@@ -146,6 +146,7 @@ vi.mock('@microsoft/microsoft-graph-client', () => ({
   AuthenticationHandler: class { setNext(): void {} },
   RetryHandler: class { setNext(): void {} },
   RetryHandlerOptions: class {},
+  RedirectHandler: class { setNext(): void {} },
   HTTPMessageHandler: class { setNext(): void {} },
   ResponseType: { ARRAYBUFFER: 'arraybuffer', BLOB: 'blob', STREAM: 'stream', TEXT: 'text', JSON: 'json' },
 }));

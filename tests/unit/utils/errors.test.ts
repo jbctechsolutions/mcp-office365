@@ -30,6 +30,8 @@ import {
   isOutlookMcpError,
   wrapError,
   toErrorEnvelope,
+  isErrorEnvelope,
+  ensureErrorEnvelopeText,
 } from '../../../src/utils/errors.js';
 
 describe('errors', () => {
@@ -477,6 +479,15 @@ describe('errors', () => {
       );
     });
 
+    it('marks non-auto-retried 5xx (500/501) as NOT retriable, matching the D5 policy', () => {
+      // Only 429/502/503/504 are auto-retried by the transport; the envelope's
+      // retriable flag must not overstate coverage for bare 500/501.
+      expect(toErrorEnvelope({ statusCode: 500, message: 'x' }).retriable).toBe(false);
+      expect(toErrorEnvelope({ statusCode: 501, message: 'x' }).retriable).toBe(false);
+      // ...but the auto-retried statuses stay retriable:true.
+      expect(toErrorEnvelope({ statusCode: 503, message: 'x' }).retriable).toBe(true);
+    });
+
     it('synthesizes a message when the SDK error has none', () => {
       const env = toErrorEnvelope({ statusCode: 503 });
       expect(env.message).toContain('503');
@@ -491,6 +502,46 @@ describe('errors', () => {
       const env = toErrorEnvelope('just a string');
       expect(env.code).toBe(ErrorCode.GRAPH_ERROR);
       expect(env.retriable).toBe(false);
+    });
+  });
+
+  describe('isErrorEnvelope', () => {
+    it('recognizes a well-formed envelope', () => {
+      expect(isErrorEnvelope({ code: 'GRAPH_ERROR', message: 'x', retriable: false })).toBe(true);
+    });
+
+    it('rejects shapes missing a required field or with wrong types', () => {
+      expect(isErrorEnvelope({ code: 'X', message: 'x' })).toBe(false); // no retriable
+      expect(isErrorEnvelope({ code: 1, message: 'x', retriable: false })).toBe(false); // code not string
+      expect(isErrorEnvelope(null)).toBe(false);
+      expect(isErrorEnvelope('str')).toBe(false);
+    });
+  });
+
+  describe('ensureErrorEnvelopeText (D10 handler-return normalization)', () => {
+    it('wraps a plain error message into an envelope JSON string', () => {
+      const out = ensureErrorEnvelopeText('Email not found');
+      const parsed = JSON.parse(out) as unknown;
+      expect(isErrorEnvelope(parsed)).toBe(true);
+      expect((parsed as { code: string }).code).toBe(ErrorCode.GRAPH_ERROR);
+      expect((parsed as { message: string }).message).toBe('Email not found');
+      expect((parsed as { retriable: boolean }).retriable).toBe(false);
+    });
+
+    it('is idempotent — text that is already an envelope is returned unchanged', () => {
+      const envelope = JSON.stringify(
+        { code: 'NOT_FOUND', message: 'gone', retriable: false },
+        null,
+        2
+      );
+      expect(ensureErrorEnvelopeText(envelope)).toBe(envelope);
+    });
+
+    it('wraps JSON that is not an envelope (e.g. a tool payload) rather than passing it through', () => {
+      const out = ensureErrorEnvelopeText('{"foo":1}');
+      const parsed = JSON.parse(out) as { code: string; message: string };
+      expect(parsed.code).toBe(ErrorCode.GRAPH_ERROR);
+      expect(parsed.message).toBe('{"foo":1}');
     });
   });
 });

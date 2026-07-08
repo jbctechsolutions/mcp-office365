@@ -20,6 +20,7 @@ import {
   AuthenticationHandler,
   RetryHandler,
   RetryHandlerOptions,
+  RedirectHandler,
   HTTPMessageHandler,
   type AuthenticationProvider,
   type ShouldRetry,
@@ -34,13 +35,26 @@ import { ResponseCache, CacheTTL, createCacheKey } from './cache.js';
 /** Generic shape for a Graph API response containing a `.value` array. */
 interface GraphCollectionResponse<T> { value: T[] }
 
+// The SDK's RetryHandler only considers 429/503/504 retriable (its private
+// static RETRY_STATUS_CODES), gating `this.isRetry(response)` BEFORE our
+// shouldRetry callback runs — so a callback can only *narrow* that set, never
+// widen it. D5 also wants 502 Bad Gateway retried, so we widen the SDK's set
+// once at load. Our shouldRetry still narrows to idempotent GET/HEAD/OPTIONS,
+// and this server builds only its own client, so the shared-static mutation
+// has no cross-tenant effect.
+const RETRY_STATUS_CODES = (RetryHandler as unknown as { RETRY_STATUS_CODES: number[] })
+  .RETRY_STATUS_CODES;
+if (Array.isArray(RETRY_STATUS_CODES) && !RETRY_STATUS_CODES.includes(502)) {
+  RETRY_STATUS_CODES.push(502);
+}
+
 /**
  * D5 retry policy (exported for testing). Retries only idempotent reads on
  * transient failures — 429 plus 502/503/504 — honoring Retry-After via the
  * SDK-computed delay. NEVER retries a send/write once the body is on the wire:
- * an ambiguous 429/5xx on a POST could double-send. This replaces the SDK
- * default, which retries 429/503/504 on ALL requests (including sendMail) and
- * never retries 502.
+ * an ambiguous 429/5xx on a POST could double-send. Paired with the module-load
+ * widening above (the SDK gates 502 out by default), this makes 502 genuinely
+ * retriable for idempotent reads while leaving writes/sendMail untouched.
  */
 export function shouldRetryGraphRequest(
   method: string,
@@ -52,8 +66,10 @@ export function shouldRetryGraphRequest(
     return false;
   }
   // Never retry an OData action (POST-shaped operation like /sendMail, /reply,
-  // /$batch of writes) even if the transport surfaces it as a GET.
-  if (/\/(sendMail|send|reply|forward|createReply|createForward)\b/i.test(url)) {
+  // /createReply of writes) even if the transport surfaces it as a GET. Anchor
+  // the action to the end of the path (or a query string) so a drive item
+  // literally named e.g. "reply.docx" read via GET is still retriable.
+  if (/\/(sendMail|reply|forward|createReply|createForward)(?:\?|$)/i.test(url)) {
     return false;
   }
   return status === 429 || status === 502 || status === 503 || status === 504;
@@ -86,15 +102,24 @@ export class GraphClient {
 
       const shouldRetry: ShouldRetry = (_delay, _attempt, request, options, response) => {
         const method = (options?.method ?? 'GET').toString();
+        // The SDK types `request` as RequestInfo, which resolves to `any` under
+        // this repo's lib config; cast to the shape we read to stay lint-clean.
         const url = typeof request === 'string' ? request : String((request as { url?: unknown }).url ?? '');
         return shouldRetryGraphRequest(method, url, response?.status ?? 0);
       };
 
+      // Chain mirrors the SDK default order (auth → retry → redirect → http),
+      // minus the cosmetic TelemetryHandler. RedirectHandler matters: the
+      // binary download endpoints (/content, /photo/$value, meeting recordings)
+      // 302 to a pre-authenticated CDN URL, so the redirect must be followed
+      // explicitly rather than relying on the underlying fetch default.
       const auth = new AuthenticationHandler(authProvider);
       const retry = new RetryHandler(new RetryHandlerOptions(undefined, undefined, shouldRetry));
+      const redirect = new RedirectHandler();
       const http = new HTTPMessageHandler();
       auth.setNext(retry);
-      retry.setNext(http);
+      retry.setNext(redirect);
+      redirect.setNext(http);
 
       this.client = Client.initWithMiddleware({ middleware: auth });
     }
@@ -1981,11 +2006,13 @@ export class GraphClient {
 
   async listOnlineMeetings(limit: number = 20): Promise<GraphEntity[]> {
     const client = await this.getClient();
-    // Graph rejects $top on /me/onlineMeetings, so limit client-side.
+    // Graph rejects $top on /me/onlineMeetings, so limit client-side. Guard a
+    // negative limit (slice(0, -n) would count from the end).
+    const cap = Math.max(0, limit);
     const response = await client.api('/me/onlineMeetings')
       .orderby('startDateTime desc')
       .get() as GraphCollectionResponse<GraphEntity>;
-    return response.value.slice(0, limit);
+    return response.value.slice(0, cap);
   }
 
   async getOnlineMeeting(meetingId: string): Promise<GraphEntity> {

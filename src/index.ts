@@ -87,6 +87,9 @@ import { SharePointTools } from './tools/sharepoint.js';
 import { ApprovalTokenManager } from './approval/index.js';
 import {
   toErrorEnvelope,
+  ensureErrorEnvelopeText,
+  ErrorCode,
+  type ErrorEnvelope,
   OutlookNotRunningError,
 } from './utils/errors.js';
 
@@ -111,6 +114,26 @@ function shouldUseGraphApi(): boolean {
 // =============================================================================
 // Server Creation
 // =============================================================================
+
+/**
+ * D10: normalize a tool result whose handler returned an error directly (rather
+ * than throwing) so its text carries the stable envelope shape. Success results
+ * and results already carrying an envelope pass through unchanged.
+ */
+function normalizeToolResult(result: CallToolResult): CallToolResult {
+  if (result.isError !== true) {
+    return result;
+  }
+  const text = (result.content ?? [])
+    .filter((block): block is { type: 'text'; text: string } => block.type === 'text')
+    .map((block) => block.text)
+    .join('\n');
+  const normalized = ensureErrorEnvelopeText(text);
+  if (normalized === text) {
+    return result;
+  }
+  return { ...result, content: [{ type: 'text', text: normalized }] };
+}
 
 /**
  * Creates and configures the MCP server.
@@ -383,17 +406,26 @@ export function createServer(options: ServerOptions = {}): Server {
 
       const registryResult = await registry.dispatch(name, args, buildToolContext(), surface);
       if (registryResult !== undefined) {
-        return registryResult as CallToolResult;
+        // D10: handlers that return an error result directly (not-found,
+        // approval-token mismatches, …) are normalized to the envelope shape
+        // here so every failure path — thrown or returned — has one contract.
+        return normalizeToolResult(registryResult as CallToolResult);
       }
 
       return {
-        content: [{ type: 'text', text: `Unknown tool: ${name}` }],
+        content: [{ type: 'text', text: JSON.stringify(toErrorEnvelope(new Error(`Unknown tool: ${name}`)), null, 2) }],
         isError: true,
       } satisfies CallToolResult;
     } catch (error) {
-      // D10: every failure surfaces as a stable typed envelope
-      // ({ code, message, retriable, suggestion }) mapped at this single point.
-      const envelope = toErrorEnvelope(error);
+      // D10: every thrown failure surfaces as a stable typed envelope mapped at
+      // this single point. Guard against a pathological error whose own
+      // getters throw so the chokepoint itself can never reject.
+      let envelope: ErrorEnvelope;
+      try {
+        envelope = toErrorEnvelope(error);
+      } catch {
+        envelope = { code: ErrorCode.GRAPH_ERROR, message: 'An unknown error occurred.', retriable: false };
+      }
 
       return {
         content: [{ type: 'text', text: JSON.stringify(envelope, null, 2) }],

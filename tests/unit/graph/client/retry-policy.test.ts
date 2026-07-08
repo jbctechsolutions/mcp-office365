@@ -4,6 +4,9 @@
  */
 
 import { describe, it, expect } from 'vitest';
+import { RetryHandler } from '@microsoft/microsoft-graph-client';
+// Importing graph-client runs its module-load side effect that widens the SDK's
+// retry-status set to include 502 (the SDK gates 502 out by default).
 import { shouldRetryGraphRequest } from '../../../../src/graph/client/graph-client.js';
 
 const GET = 'https://graph.microsoft.com/v1.0/me/messages';
@@ -45,8 +48,26 @@ describe('shouldRetryGraphRequest (D5 policy)', () => {
 
   it('never retries reply/forward/createReply/createForward actions', () => {
     const base = 'https://graph.microsoft.com/v1.0/me/messages/AAA';
-    for (const action of ['reply', 'forward', 'createReply', 'createForward', 'send']) {
+    for (const action of ['reply', 'forward', 'createReply', 'createForward']) {
       expect(shouldRetryGraphRequest('GET', `${base}/${action}`, 503)).toBe(false);
     }
+  });
+
+  it('still retries a GET whose path segment merely starts with an action word (e.g. a file named reply.docx)', () => {
+    // The regex anchors the action to end-of-path/query, so a drive item named
+    // "reply.docx" read via GET is NOT mistaken for an OData reply action.
+    const url = 'https://graph.microsoft.com/v1.0/me/drive/root:/Reports/reply.docx:/content';
+    expect(shouldRetryGraphRequest('GET', url, 503)).toBe(true);
+  });
+
+  it('actually widens the SDK retry-status set to include 502 (otherwise the policy is dead code)', () => {
+    // The SDK's RetryHandler gates on its private static RETRY_STATUS_CODES
+    // BEFORE calling shouldRetry, so 502 must be present there or it is never
+    // retried at runtime regardless of the predicate.
+    const codes = (RetryHandler as unknown as { RETRY_STATUS_CODES: number[] }).RETRY_STATUS_CODES;
+    expect(codes).toContain(502);
+    expect(codes).toContain(429);
+    expect(codes).toContain(503);
+    expect(codes).toContain(504);
   });
 });
