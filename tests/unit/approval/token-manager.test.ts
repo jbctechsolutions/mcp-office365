@@ -749,6 +749,22 @@ describe('ApprovalTokenManager', () => {
       expect(m.consumeToken(token.tokenId, 'delete_email', 42).valid).toBe(false);
     });
 
+    it('fails closed (NOT_FOUND, no throw) on a corrupt persisted target_json', () => {
+      // Simulate a corrupt/tampered row: valid token record but unparseable target.
+      store.putApprovalToken({
+        token: 'ap-corrupt',
+        action: 'delete_email',
+        targetJson: '{not valid json',
+        contentHash: null,
+        accountId: 'default',
+        expiresAt: 4_000_000_000_000,
+      });
+      const m = new ApprovalTokenManager({ store });
+      expect(m.lookupToken('ap-corrupt')).toBeUndefined();
+      expect(() => m.validateToken('ap-corrupt', 'delete_email', 1)).not.toThrow();
+      expect(m.validateToken('ap-corrupt', 'delete_email', 1).error).toBe('NOT_FOUND');
+    });
+
     it('does not resolve a token minted under a different account (D7)', () => {
       const owner = new ApprovalTokenManager({ store, accountId: 'acct-A' });
       const token = owner.generateToken(genParams);

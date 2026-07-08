@@ -112,7 +112,7 @@ export class ApprovalTokenManager {
   lookupToken(tokenId: string): ApprovalToken | undefined {
     if (this.store != null) {
       const row = this.store.getApprovalToken(tokenId, this.accountId);
-      return row != null ? rowToToken(row) : undefined;
+      return row != null ? (rowToToken(row) ?? undefined) : undefined;
     }
     return this.tokens.get(tokenId);
   }
@@ -130,7 +130,13 @@ export class ApprovalTokenManager {
       if (row.redeemedAt != null) {
         return { valid: false, error: 'ALREADY_CONSUMED' };
       }
-      return this.check(rowToToken(row), operation, targetId);
+      const token = rowToToken(row);
+      // A corrupt/tampered target_json fails closed as NOT_FOUND rather than
+      // throwing out of validate — the token simply can't be redeemed.
+      if (token == null) {
+        return { valid: false, error: 'NOT_FOUND' };
+      }
+      return this.check(token, operation, targetId);
     }
 
     const token = this.tokens.get(tokenId);
@@ -211,9 +217,15 @@ export class ApprovalTokenManager {
   }
 }
 
-/** Reconstructs an {@link ApprovalToken} from a stored row. */
-function rowToToken(row: ApprovalTokenRow): ApprovalToken {
-  const target = JSON.parse(row.targetJson) as StoredTarget;
+/** Reconstructs an {@link ApprovalToken} from a stored row, or null if the
+ * persisted target JSON is corrupt/unparseable (fail closed). */
+function rowToToken(row: ApprovalTokenRow): ApprovalToken | null {
+  let target: StoredTarget;
+  try {
+    target = JSON.parse(row.targetJson) as StoredTarget;
+  } catch {
+    return null;
+  }
   return {
     tokenId: row.token,
     operation: row.action as OperationType,
