@@ -59,6 +59,56 @@ export const GetContactInput = z.strictObject({
   contact_id: z.number().int().positive().describe('The contact ID to retrieve'),
 });
 
+// Contact write schemas (Graph API)
+export const CreateContactInput = z.strictObject({
+  given_name: z.string().optional(),
+  surname: z.string().optional(),
+  email: z.string().email().optional(),
+  phone: z.string().optional(),
+  mobile_phone: z.string().optional(),
+  company: z.string().optional(),
+  job_title: z.string().optional(),
+  street_address: z.string().optional(),
+  city: z.string().optional(),
+  state: z.string().optional(),
+  postal_code: z.string().optional(),
+  country: z.string().optional(),
+});
+
+export const UpdateContactInput = z.strictObject({
+  contact_id: z.number().int().positive(),
+  given_name: z.string().optional(),
+  surname: z.string().optional(),
+  email: z.string().email().optional(),
+  phone: z.string().optional(),
+  mobile_phone: z.string().optional(),
+  company: z.string().optional(),
+  job_title: z.string().optional(),
+  street_address: z.string().optional(),
+  city: z.string().optional(),
+  state: z.string().optional(),
+  postal_code: z.string().optional(),
+  country: z.string().optional(),
+});
+
+export const PrepareDeleteContactInput = z.strictObject({
+  contact_id: z.number().int().positive(),
+});
+
+export const ConfirmDeleteContactInput = z.strictObject({
+  token_id: z.uuid(),
+  contact_id: z.number().int().positive(),
+});
+
+export const GetContactPhotoInput = z.strictObject({
+  contact_id: z.number().int().positive().describe('Contact ID'),
+});
+
+export const SetContactPhotoInput = z.strictObject({
+  contact_id: z.number().int().positive().describe('Contact ID'),
+  file_path: z.string().describe('Path to the photo file (JPEG or PNG)'),
+});
+
 // =============================================================================
 // Type Definitions
 // =============================================================================
@@ -66,6 +116,12 @@ export const GetContactInput = z.strictObject({
 export type ListContactsParams = z.infer<typeof ListContactsInput>;
 export type SearchContactsParams = z.infer<typeof SearchContactsInput>;
 export type GetContactParams = z.infer<typeof GetContactInput>;
+export type CreateContactParams = z.infer<typeof CreateContactInput>;
+export type UpdateContactParams = z.infer<typeof UpdateContactInput>;
+export type PrepareDeleteContactParams = z.infer<typeof PrepareDeleteContactInput>;
+export type ConfirmDeleteContactParams = z.infer<typeof ConfirmDeleteContactInput>;
+export type GetContactPhotoParams = z.infer<typeof GetContactPhotoInput>;
+export type SetContactPhotoParams = z.infer<typeof SetContactPhotoInput>;
 
 // =============================================================================
 // Content Reader Interface
@@ -275,6 +331,66 @@ export function contactsToolDefinitions(): ToolDefinition[] {
         }
         return jsonResult(result);
       },
+    }),
+    defineTool({
+      name: 'create_contact',
+      description: 'Create a new contact in Outlook. All fields are optional but at least one should be provided.',
+      input: CreateContactInput,
+      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+      destructive: false,
+      presets: ['contacts'],
+      backends: ['graph'],
+      handler: (ctx, params) => requireGraphToolset(ctx, 'contactsGraph').createContact(params),
+    }),
+    defineTool({
+      name: 'update_contact',
+      description: 'Update an existing contact. Only specified fields will be updated.',
+      input: UpdateContactInput,
+      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+      destructive: false,
+      presets: ['contacts'],
+      backends: ['graph'],
+      handler: (ctx, params) => requireGraphToolset(ctx, 'contactsGraph').updateContact(params),
+    }),
+    defineTool({
+      name: 'prepare_delete_contact',
+      description: 'Prepare to delete a contact. Returns a preview and approval token. Call confirm_delete_contact to execute.',
+      input: PrepareDeleteContactInput,
+      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+      destructive: true,
+      presets: ['contacts'],
+      backends: ['graph'],
+      handler: (ctx, params) => requireGraphToolset(ctx, 'contactsGraph').prepareDeleteContact(params),
+    }),
+    defineTool({
+      name: 'confirm_delete_contact',
+      description: 'Confirm deletion of a contact using a token from prepare_delete_contact',
+      input: ConfirmDeleteContactInput,
+      annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+      destructive: true,
+      presets: ['contacts'],
+      backends: ['graph'],
+      handler: (ctx, params) => requireGraphToolset(ctx, 'contactsGraph').confirmDeleteContact(params),
+    }),
+    defineTool({
+      name: 'get_contact_photo',
+      description: 'Download a contact\'s photo to a local file (Graph API)',
+      input: GetContactPhotoInput,
+      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+      destructive: false,
+      presets: ['contacts'],
+      backends: ['graph'],
+      handler: (ctx, params) => requireGraphToolset(ctx, 'contactsGraph').getContactPhoto(params),
+    }),
+    defineTool({
+      name: 'set_contact_photo',
+      description: 'Set or update a contact\'s photo from a local file (JPEG or PNG) (Graph API)',
+      input: SetContactPhotoInput,
+      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+      destructive: false,
+      presets: ['contacts'],
+      backends: ['graph'],
+      handler: (ctx, params) => requireGraphToolset(ctx, 'contactsGraph').setContactPhoto(params),
     }),
   ];
 }

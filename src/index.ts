@@ -59,9 +59,11 @@ import { createCalendarTools } from './tools/calendar.js';
 import { GraphCalendarTools } from './tools/calendar-graph.js';
 import { AppleCalendarTools } from './tools/calendar-apple.js';
 import { createContactsTools } from './tools/contacts.js';
-import { GraphContactsTools, transformContactRow } from './tools/contacts-graph.js';
+import { GraphContactsTools } from './tools/contacts-graph.js';
+import { GraphContactFoldersTools } from './tools/contact-folders.js';
 import { createTasksTools } from './tools/tasks.js';
-import { GraphTasksTools, transformTaskRow } from './tools/tasks-graph.js';
+import { GraphTasksTools } from './tools/tasks-graph.js';
+import { GraphTaskListsTools } from './tools/task-lists.js';
 import { createNotesTools } from './tools/notes.js';
 import { createMailboxOrganizationTools } from './tools/mailbox-organization.js';
 import { createMailSendTools } from './tools/mail-send.js';
@@ -89,7 +91,7 @@ import {
   PrepareBatchMoveEmailsInput,
   ConfirmBatchOperationInput,
 } from './tools/index.js';
-import { ApprovalTokenManager, hashEventForApproval, hashContactForApproval, hashTaskForApproval } from './approval/index.js';
+import { ApprovalTokenManager, hashEventForApproval } from './approval/index.js';
 import {
   wrapError,
   OutlookNotRunningError,
@@ -189,159 +191,7 @@ const TOOLS: Tool[] = [
       required: ['token_id', 'event_id'],
     },
   },
-  // Contact tools
-  {
-    name: 'create_contact',
-    description: 'Create a new contact in Outlook. All fields are optional but at least one should be provided.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        given_name: { type: 'string', description: 'First name' },
-        surname: { type: 'string', description: 'Last name' },
-        email: { type: 'string', description: 'Email address' },
-        phone: { type: 'string', description: 'Business phone number' },
-        mobile_phone: { type: 'string', description: 'Mobile phone number' },
-        company: { type: 'string', description: 'Company name' },
-        job_title: { type: 'string', description: 'Job title' },
-        street_address: { type: 'string', description: 'Street address' },
-        city: { type: 'string', description: 'City' },
-        state: { type: 'string', description: 'State or province' },
-        postal_code: { type: 'string', description: 'Postal/ZIP code' },
-        country: { type: 'string', description: 'Country or region' },
-      },
-      required: [],
-    },
-  },
-  {
-    name: 'update_contact',
-    description: 'Update an existing contact. Only specified fields will be updated.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        contact_id: { type: 'number', description: 'The contact ID to update' },
-        given_name: { type: 'string', description: 'First name' },
-        surname: { type: 'string', description: 'Last name' },
-        email: { type: 'string', description: 'Email address' },
-        phone: { type: 'string', description: 'Business phone number' },
-        mobile_phone: { type: 'string', description: 'Mobile phone number' },
-        company: { type: 'string', description: 'Company name' },
-        job_title: { type: 'string', description: 'Job title' },
-        street_address: { type: 'string', description: 'Street address' },
-        city: { type: 'string', description: 'City' },
-        state: { type: 'string', description: 'State or province' },
-        postal_code: { type: 'string', description: 'Postal/ZIP code' },
-        country: { type: 'string', description: 'Country or region' },
-      },
-      required: ['contact_id'],
-    },
-  },
-  {
-    name: 'prepare_delete_contact',
-    description: 'Prepare to delete a contact. Returns a preview and approval token. Call confirm_delete_contact to execute.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        contact_id: { type: 'number', description: 'The contact ID to delete' },
-      },
-      required: ['contact_id'],
-    },
-  },
-  {
-    name: 'confirm_delete_contact',
-    description: 'Confirm deletion of a contact using a token from prepare_delete_contact',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        token_id: { type: 'string', description: 'The approval token from prepare_delete_contact' },
-        contact_id: { type: 'number', description: 'The contact ID to delete' },
-      },
-      required: ['token_id', 'contact_id'],
-    },
-  },
   // Task tools
-  {
-    name: 'list_task_lists',
-    description: 'List all task lists (Microsoft To Do) (Graph API)',
-    inputSchema: { type: 'object', properties: {}, required: [] },
-  },
-  {
-    name: 'create_task',
-    description: 'Create a new task in a task list. Supports optional recurrence settings for repeating tasks.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        title: { type: 'string', description: 'Task title' },
-        task_list_id: { type: 'number', description: 'The task list ID to create the task in' },
-        body: { type: 'string', description: 'Task body/notes' },
-        body_type: { type: 'string', enum: ['text', 'html'], default: 'text', description: 'Body content type' },
-        due_date: { type: 'string', description: 'Due date (ISO 8601 format)' },
-        importance: { type: 'string', enum: ['low', 'normal', 'high'], description: 'Task importance' },
-        reminder_date: { type: 'string', description: 'Reminder date (ISO 8601 format)' },
-        recurrence: {
-          type: 'object',
-          description: 'Task recurrence settings',
-          properties: {
-            pattern: { type: 'string', enum: ['daily', 'weekly', 'monthly', 'yearly'], description: 'Recurrence pattern type' },
-            interval: { type: 'number', default: 1, description: 'Interval between occurrences' },
-            days_of_week: { type: 'array', items: { type: 'string', enum: ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'] }, description: 'Days of week (for weekly pattern)' },
-            day_of_month: { type: 'number', description: 'Day of month (for monthly pattern)' },
-            range_type: { type: 'string', enum: ['endDate', 'noEnd', 'numbered'], description: 'How the recurrence ends' },
-            start_date: { type: 'string', description: 'Start date (YYYY-MM-DD)' },
-            end_date: { type: 'string', description: 'End date (YYYY-MM-DD, for endDate range)' },
-            occurrences: { type: 'number', description: 'Number of occurrences (for numbered range)' },
-          },
-          required: ['pattern', 'range_type', 'start_date'],
-        },
-        categories: { type: 'array', items: { type: 'string' }, description: 'Category names to assign to the task' },
-      },
-      required: ['title', 'task_list_id'],
-    },
-  },
-  {
-    name: 'update_task',
-    description: 'Update an existing task. Only specified fields will be updated. Supports optional recurrence settings for repeating tasks.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        task_id: { type: 'number', description: 'The task ID to update' },
-        title: { type: 'string', description: 'New task title' },
-        body: { type: 'string', description: 'New task body/notes' },
-        body_type: { type: 'string', enum: ['text', 'html'], description: 'Body content type' },
-        due_date: { type: 'string', description: 'New due date (ISO 8601 format)' },
-        importance: { type: 'string', enum: ['low', 'normal', 'high'], description: 'Task importance' },
-        reminder_date: { type: 'string', description: 'Reminder date (ISO 8601 format)' },
-        status: { type: 'string', enum: ['notStarted', 'inProgress', 'completed', 'waitingOnOthers', 'deferred'], description: 'Task status' },
-        recurrence: {
-          type: 'object',
-          description: 'Task recurrence settings',
-          properties: {
-            pattern: { type: 'string', enum: ['daily', 'weekly', 'monthly', 'yearly'], description: 'Recurrence pattern type' },
-            interval: { type: 'number', default: 1, description: 'Interval between occurrences' },
-            days_of_week: { type: 'array', items: { type: 'string', enum: ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'] }, description: 'Days of week (for weekly pattern)' },
-            day_of_month: { type: 'number', description: 'Day of month (for monthly pattern)' },
-            range_type: { type: 'string', enum: ['endDate', 'noEnd', 'numbered'], description: 'How the recurrence ends' },
-            start_date: { type: 'string', description: 'Start date (YYYY-MM-DD)' },
-            end_date: { type: 'string', description: 'End date (YYYY-MM-DD, for endDate range)' },
-            occurrences: { type: 'number', description: 'Number of occurrences (for numbered range)' },
-          },
-          required: ['pattern', 'range_type', 'start_date'],
-        },
-        categories: { type: 'array', items: { type: 'string' }, description: 'Category names to assign to the task' },
-      },
-      required: ['task_id'],
-    },
-  },
-  {
-    name: 'complete_task',
-    description: 'Mark a task as completed',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        task_id: { type: 'number', description: 'The task ID to complete' },
-      },
-      required: ['task_id'],
-    },
-  },
   {
     name: 'create_task_list',
     description: 'Create a new task list',
@@ -351,64 +201,6 @@ const TOOLS: Tool[] = [
         display_name: { type: 'string', description: 'Name for the new task list' },
       },
       required: ['display_name'],
-    },
-  },
-  {
-    name: 'prepare_delete_task',
-    description: 'Prepare to delete a task. Returns a preview and approval token. Call confirm_delete_task to execute.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        task_id: { type: 'number', description: 'The task ID to delete' },
-      },
-      required: ['task_id'],
-    },
-  },
-  {
-    name: 'confirm_delete_task',
-    description: 'Confirm deletion of a task using a token from prepare_delete_task',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        token_id: { type: 'string', description: 'The approval token from prepare_delete_task' },
-        task_id: { type: 'number', description: 'The task ID to delete' },
-      },
-      required: ['token_id', 'task_id'],
-    },
-  },
-  {
-    name: 'rename_task_list',
-    description: 'Rename a task list (Graph API)',
-    inputSchema: {
-      type: 'object' as const,
-      properties: {
-        task_list_id: { type: 'number', description: 'Task list ID' },
-        name: { type: 'string', description: 'New name for the task list' },
-      },
-      required: ['task_list_id', 'name'],
-    },
-  },
-  {
-    name: 'prepare_delete_task_list',
-    description: 'Prepare to delete a task list. Returns an approval token. Call confirm_delete_task_list to execute. (Graph API)',
-    inputSchema: {
-      type: 'object' as const,
-      properties: {
-        task_list_id: { type: 'number', description: 'Task list ID to delete' },
-      },
-      required: ['task_list_id'],
-    },
-  },
-  {
-    name: 'confirm_delete_task_list',
-    description: 'Confirm task list deletion with approval token (Graph API)',
-    inputSchema: {
-      type: 'object' as const,
-      properties: {
-        token_id: { type: 'string', description: 'The approval token from prepare_delete_task_list' },
-        task_list_id: { type: 'number', description: 'The task list ID to delete' },
-      },
-      required: ['token_id', 'task_list_id'],
     },
   },
   // =========================================================================
@@ -635,74 +427,6 @@ const TOOLS: Tool[] = [
       required: [],
     },
   },
-  // Contact folder tools
-  {
-    name: 'list_contact_folders',
-    description: 'List all contact folders (Graph API)',
-    inputSchema: {
-      type: 'object' as const,
-      properties: {},
-      required: [],
-    },
-  },
-  {
-    name: 'create_contact_folder',
-    description: 'Create a contact folder (Graph API)',
-    inputSchema: {
-      type: 'object' as const,
-      properties: {
-        name: { type: 'string', description: 'Contact folder name' },
-      },
-      required: ['name'],
-    },
-  },
-  {
-    name: 'prepare_delete_contact_folder',
-    description: 'Prepare to delete a contact folder. Returns an approval token. Call confirm_delete_contact_folder to execute. (Graph API)',
-    inputSchema: {
-      type: 'object' as const,
-      properties: {
-        folder_id: { type: 'number', description: 'Contact folder ID to delete' },
-      },
-      required: ['folder_id'],
-    },
-  },
-  {
-    name: 'confirm_delete_contact_folder',
-    description: 'Confirm contact folder deletion with approval token (Graph API)',
-    inputSchema: {
-      type: 'object' as const,
-      properties: {
-        token_id: { type: 'string', description: 'The approval token from prepare_delete_contact_folder' },
-        folder_id: { type: 'number', description: 'The contact folder ID to delete' },
-      },
-      required: ['token_id', 'folder_id'],
-    },
-  },
-  // Contact photo tools
-  {
-    name: 'get_contact_photo',
-    description: 'Download a contact\'s photo to a local file (Graph API)',
-    inputSchema: {
-      type: 'object' as const,
-      properties: {
-        contact_id: { type: 'number', description: 'Contact ID' },
-      },
-      required: ['contact_id'],
-    },
-  },
-  {
-    name: 'set_contact_photo',
-    description: 'Set or update a contact\'s photo from a local file (JPEG or PNG) (Graph API)',
-    inputSchema: {
-      type: 'object' as const,
-      properties: {
-        contact_id: { type: 'number', description: 'Contact ID' },
-        file_path: { type: 'string', description: 'Path to the photo file (JPEG or PNG)' },
-      },
-      required: ['contact_id', 'file_path'],
-    },
-  },
   // Mail tips tool
   {
     name: 'get_mail_tips',
@@ -879,7 +603,9 @@ export function createServer(options: ServerOptions = {}): Server {
   let graphRepository: GraphRepository | null = null;
   let graphContentReaders: GraphContentReaders | null = null;
   let graphContactsTools: GraphContactsTools | null = null;
+  let graphContactFoldersTools: GraphContactFoldersTools | null = null;
   let graphTasksTools: GraphTasksTools | null = null;
+  let graphTaskListsTools: GraphTaskListsTools | null = null;
   let graphCalendarTools: GraphCalendarTools | null = null;
   let appleCalendarTools: AppleCalendarTools | null = null;
   let graphMailTools: GraphMailTools | null = null;
@@ -925,8 +651,10 @@ export function createServer(options: ServerOptions = {}): Server {
 
     graphRepository = createGraphRepository();
     graphContentReaders = createGraphContentReadersWithClient(graphRepository.getClient());
-    graphContactsTools = new GraphContactsTools(graphRepository, graphContentReaders);
-    graphTasksTools = new GraphTasksTools(graphRepository, graphContentReaders);
+    graphContactsTools = new GraphContactsTools(graphRepository, graphContentReaders, tokenManager);
+    graphContactFoldersTools = new GraphContactFoldersTools(graphRepository, tokenManager);
+    graphTasksTools = new GraphTasksTools(graphRepository, graphContentReaders, tokenManager);
+    graphTaskListsTools = new GraphTaskListsTools(graphRepository, tokenManager);
     graphCalendarTools = new GraphCalendarTools(graphRepository, graphContentReaders);
     graphMailTools = new GraphMailTools(graphRepository, graphContentReaders);
 
@@ -971,20 +699,10 @@ export function createServer(options: ServerOptions = {}): Server {
     'list_conversation',
     'search_emails_advanced',
     'check_new_emails',
-    'list_task_lists',
-    'rename_task_list',
-    'prepare_delete_task_list',
-    'confirm_delete_task_list',
     'get_automatic_replies',
     'set_automatic_replies',
     'get_mailbox_settings',
     'update_mailbox_settings',
-    'list_contact_folders',
-    'create_contact_folder',
-    'prepare_delete_contact_folder',
-    'confirm_delete_contact_folder',
-    'get_contact_photo',
-    'set_contact_photo',
     'get_mail_tips',
     'get_message_headers',
     'get_message_mime',
@@ -1017,7 +735,9 @@ export function createServer(options: ServerOptions = {}): Server {
         && oneDriveTools != null
         && excelTools != null
         && graphContactsTools != null
+        && graphContactFoldersTools != null
         && graphTasksTools != null
+        && graphTaskListsTools != null
         && graphCalendarTools != null
         && graphMailTools != null
         && sendTools != null
@@ -1040,7 +760,9 @@ export function createServer(options: ServerOptions = {}): Server {
               oneDrive: oneDriveTools,
               excel: excelTools,
               contactsGraph: graphContactsTools,
+              contactFolders: graphContactFoldersTools,
               tasksGraph: graphTasksTools,
+              taskLists: graphTaskListsTools,
               calendarGraph: graphCalendarTools,
               mailGraph: graphMailTools,
               mailSend: sendTools,
@@ -1274,118 +996,11 @@ const ConfirmDeleteEventInput = z.strictObject({
 });
 
 // =============================================================================
-// Contact Write — Zod Schemas (Graph API)
-// =============================================================================
-
-const CreateContactGraphInput = z.strictObject({
-  given_name: z.string().optional(),
-  surname: z.string().optional(),
-  email: z.string().email().optional(),
-  phone: z.string().optional(),
-  mobile_phone: z.string().optional(),
-  company: z.string().optional(),
-  job_title: z.string().optional(),
-  street_address: z.string().optional(),
-  city: z.string().optional(),
-  state: z.string().optional(),
-  postal_code: z.string().optional(),
-  country: z.string().optional(),
-});
-
-const UpdateContactGraphInput = z.strictObject({
-  contact_id: z.number().int().positive(),
-  given_name: z.string().optional(),
-  surname: z.string().optional(),
-  email: z.string().email().optional(),
-  phone: z.string().optional(),
-  mobile_phone: z.string().optional(),
-  company: z.string().optional(),
-  job_title: z.string().optional(),
-  street_address: z.string().optional(),
-  city: z.string().optional(),
-  state: z.string().optional(),
-  postal_code: z.string().optional(),
-  country: z.string().optional(),
-});
-
-const PrepareDeleteContactInput = z.strictObject({
-  contact_id: z.number().int().positive(),
-});
-
-const ConfirmDeleteContactInput = z.strictObject({
-  token_id: z.uuid(),
-  contact_id: z.number().int().positive(),
-});
-
-// =============================================================================
 // Task Write — Zod Schemas (Graph API)
 // =============================================================================
 
-const RecurrenceSchema = z.strictObject({
-  pattern: z.enum(['daily', 'weekly', 'monthly', 'yearly']).describe('Recurrence pattern type'),
-  interval: z.number().int().min(1).default(1).describe('Interval between occurrences'),
-  days_of_week: z.array(z.enum(['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'])).optional().describe('Days of week (for weekly pattern)'),
-  day_of_month: z.number().int().min(1).max(31).optional().describe('Day of month (for monthly pattern)'),
-  range_type: z.enum(['endDate', 'noEnd', 'numbered']).describe('How the recurrence ends'),
-  start_date: z.string().describe('Start date (YYYY-MM-DD)'),
-  end_date: z.string().optional().describe('End date (YYYY-MM-DD, for endDate range)'),
-  occurrences: z.number().int().min(1).optional().describe('Number of occurrences (for numbered range)'),
-}).optional().describe('Task recurrence settings');
-
-const CreateTaskGraphInput = z.strictObject({
-  title: z.string().min(1),
-  task_list_id: z.number().int().positive(),
-  body: z.string().optional(),
-  body_type: z.enum(['text', 'html']).optional(),
-  due_date: z.string().optional(),
-  importance: z.enum(['low', 'normal', 'high']).optional(),
-  reminder_date: z.string().optional(),
-  recurrence: RecurrenceSchema,
-  categories: z.array(z.string()).optional(),
-});
-
-const UpdateTaskGraphInput = z.strictObject({
-  task_id: z.number().int().positive(),
-  title: z.string().optional(),
-  body: z.string().optional(),
-  body_type: z.enum(['text', 'html']).optional(),
-  due_date: z.string().optional(),
-  importance: z.enum(['low', 'normal', 'high']).optional(),
-  reminder_date: z.string().optional(),
-  status: z.enum(['notStarted', 'inProgress', 'completed', 'waitingOnOthers', 'deferred']).optional(),
-  recurrence: RecurrenceSchema,
-  categories: z.array(z.string()).optional(),
-});
-
-const CompleteTaskGraphInput = z.strictObject({
-  task_id: z.number().int().positive(),
-});
-
 const CreateTaskListGraphInput = z.strictObject({
   display_name: z.string().min(1),
-});
-
-const PrepareDeleteTaskInput = z.strictObject({
-  task_id: z.number().int().positive(),
-});
-
-const ConfirmDeleteTaskInput = z.strictObject({
-  token_id: z.uuid(),
-  task_id: z.number().int().positive(),
-});
-
-const RenameTaskListInput = z.strictObject({
-  task_list_id: z.number().int().positive().describe('Task list ID'),
-  name: z.string().min(1).describe('New name for the task list'),
-});
-
-const PrepareDeleteTaskListInput = z.strictObject({
-  task_list_id: z.number().int().positive().describe('Task list ID to delete'),
-});
-
-const ConfirmDeleteTaskListInput = z.strictObject({
-  token_id: z.string().uuid().describe('Approval token from prepare_delete_task_list'),
-  task_list_id: z.number().int().positive().describe('The task list ID to delete'),
 });
 
 const GetAutomaticRepliesInput = z.strictObject({});
@@ -1422,28 +1037,6 @@ const GetMessageMimeInput = z.strictObject({
 
 const CreateCalendarGroupInput = z.strictObject({
   name: z.string().min(1).describe('Calendar group name'),
-});
-
-const CreateContactFolderInput = z.strictObject({
-  name: z.string().min(1).describe('Contact folder name'),
-});
-
-const PrepareDeleteContactFolderInput = z.strictObject({
-  folder_id: z.number().int().positive().describe('Contact folder ID to delete'),
-});
-
-const ConfirmDeleteContactFolderInput = z.strictObject({
-  token_id: z.string().uuid().describe('Approval token from prepare_delete_contact_folder'),
-  folder_id: z.number().int().positive().describe('The contact folder ID to delete'),
-});
-
-const GetContactPhotoInput = z.strictObject({
-  contact_id: z.number().int().positive().describe('Contact ID'),
-});
-
-const SetContactPhotoInput = z.strictObject({
-  contact_id: z.number().int().positive().describe('Contact ID'),
-  file_path: z.string().describe('Path to the photo file (JPEG or PNG)'),
 });
 
 const ListRoomsInput = z.strictObject({
@@ -1587,212 +1180,7 @@ async function handleGraphToolCall(
         };
       }
 
-      // Contact tools
-      case 'create_contact': {
-        const params = CreateContactGraphInput.parse(args);
-        const numericId = await repository.createContactAsync({
-          ...(params.given_name != null ? { given_name: params.given_name } : {}),
-          ...(params.surname != null ? { surname: params.surname } : {}),
-          ...(params.email != null ? { email: params.email } : {}),
-          ...(params.phone != null ? { phone: params.phone } : {}),
-          ...(params.mobile_phone != null ? { mobile_phone: params.mobile_phone } : {}),
-          ...(params.company != null ? { company: params.company } : {}),
-          ...(params.job_title != null ? { job_title: params.job_title } : {}),
-          ...(params.street_address != null ? { street_address: params.street_address } : {}),
-          ...(params.city != null ? { city: params.city } : {}),
-          ...(params.state != null ? { state: params.state } : {}),
-          ...(params.postal_code != null ? { postal_code: params.postal_code } : {}),
-          ...(params.country != null ? { country: params.country } : {}),
-        });
-        const result = {
-          id: numericId,
-          given_name: params.given_name ?? null,
-          surname: params.surname ?? null,
-          email: params.email ?? null,
-          status: 'created',
-        };
-        return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
-      }
-
-      case 'update_contact': {
-        const params = UpdateContactGraphInput.parse(args);
-        const updates: Record<string, unknown> = {};
-        if (params.given_name != null) updates.givenName = params.given_name;
-        if (params.surname != null) updates.surname = params.surname;
-        if (params.email != null) updates.emailAddresses = [{ address: params.email }];
-        if (params.phone != null) updates.businessPhones = [params.phone];
-        if (params.mobile_phone != null) updates.mobilePhone = params.mobile_phone;
-        if (params.company != null) updates.companyName = params.company;
-        if (params.job_title != null) updates.jobTitle = params.job_title;
-        if (params.street_address != null || params.city != null || params.state != null || params.postal_code != null || params.country != null) {
-          const address: Record<string, string> = {};
-          if (params.street_address != null) address.street = params.street_address;
-          if (params.city != null) address.city = params.city;
-          if (params.state != null) address.state = params.state;
-          if (params.postal_code != null) address.postalCode = params.postal_code;
-          if (params.country != null) address.countryOrRegion = params.country;
-          updates.businessAddress = address;
-        }
-        await repository.updateContactAsync(params.contact_id, updates);
-        return {
-          content: [{ type: 'text', text: `Successfully updated contact ${params.contact_id}` }],
-        };
-      }
-
-      case 'prepare_delete_contact': {
-        const params = PrepareDeleteContactInput.parse(args);
-        const contact = await repository.getContactAsync(params.contact_id);
-        if (contact == null) {
-          return { content: [{ type: 'text', text: 'Contact not found' }], isError: true };
-        }
-
-        const graphId = repository.getGraphId('contact', params.contact_id);
-        const graphContact = graphId != null ? await repository.getClient().getContact(graphId) : null;
-        const hash = hashContactForApproval({
-          id: params.contact_id,
-          displayName: graphContact?.displayName ?? null,
-          emailAddress: graphContact?.emailAddresses?.[0]?.address ?? null,
-        });
-
-        const token = tokenManager.generateToken({
-          operation: 'delete_contact',
-          targetType: 'contact',
-          targetId: params.contact_id,
-          targetHash: hash,
-        });
-
-        const result = {
-          token_id: token.tokenId,
-          expires_at: new Date(token.expiresAt).toISOString(),
-          contact: transformContactRow(contact),
-          action: 'This contact will be permanently deleted.',
-        };
-        return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
-      }
-
-      case 'confirm_delete_contact': {
-        const params = ConfirmDeleteContactInput.parse(args);
-
-        const graphId = repository.getGraphId('contact', params.contact_id);
-        const graphContact = graphId != null ? await repository.getClient().getContact(graphId) : null;
-        const currentHash = hashContactForApproval({
-          id: params.contact_id,
-          displayName: graphContact?.displayName ?? null,
-          emailAddress: graphContact?.emailAddresses?.[0]?.address ?? null,
-        });
-
-        const validation = tokenManager.consumeToken(params.token_id, 'delete_contact', params.contact_id);
-        if (!validation.valid) {
-          const errorMessages: Record<string, string> = {
-            NOT_FOUND: 'Token not found or already used',
-            EXPIRED: 'Token has expired. Please call prepare_delete_contact again.',
-            OPERATION_MISMATCH: 'Token was not generated for delete_contact',
-            TARGET_MISMATCH: 'Token was generated for a different contact',
-            ALREADY_CONSUMED: 'Token has already been used',
-          };
-          return {
-            content: [{ type: 'text', text: errorMessages[validation.error ?? ''] ?? 'Invalid token' }],
-            isError: true,
-          };
-        }
-
-        if (validation.token!.targetHash !== currentHash) {
-          return {
-            content: [{ type: 'text', text: 'Contact has changed since prepare was called. Please call prepare_delete_contact again.' }],
-            isError: true,
-          };
-        }
-
-        await repository.deleteContactAsync(params.contact_id);
-        return {
-          content: [{ type: 'text', text: `Successfully deleted contact ${params.contact_id}` }],
-        };
-      }
-
       // Task tools
-      case 'list_task_lists': {
-        const lists = await repository.listTaskListsAsync();
-        return { content: [{ type: 'text', text: JSON.stringify({ task_lists: lists }, null, 2) }] };
-      }
-
-      case 'create_task': {
-        const params = CreateTaskGraphInput.parse(args);
-        const numericId = await repository.createTaskAsync({
-          title: params.title,
-          task_list_id: params.task_list_id,
-          ...(params.body != null ? { body: params.body } : {}),
-          ...(params.body_type != null ? { body_type: params.body_type } : {}),
-          ...(params.due_date != null ? { due_date: params.due_date } : {}),
-          ...(params.importance != null ? { importance: params.importance } : {}),
-          ...(params.reminder_date != null ? { reminder_date: params.reminder_date } : {}),
-          ...(params.recurrence != null ? { recurrence: params.recurrence } : {}),
-          ...(params.categories != null ? { categories: params.categories } : {}),
-        });
-        const result = {
-          id: numericId,
-          title: params.title,
-          task_list_id: params.task_list_id,
-          status: 'created',
-        };
-        return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
-      }
-
-      case 'update_task': {
-        const params = UpdateTaskGraphInput.parse(args);
-        const updates: Record<string, unknown> = {};
-        if (params.title != null) updates.title = params.title;
-        if (params.body != null) {
-          updates.body = {
-            contentType: params.body_type ?? 'text',
-            content: params.body,
-          };
-        }
-        if (params.due_date != null) {
-          updates.dueDateTime = {
-            dateTime: params.due_date,
-            timeZone: 'UTC',
-          };
-        }
-        if (params.importance != null) updates.importance = params.importance;
-        if (params.reminder_date != null) {
-          updates.isReminderOn = true;
-          updates.reminderDateTime = {
-            dateTime: params.reminder_date,
-            timeZone: 'UTC',
-          };
-        }
-        if (params.status != null) updates.status = params.status;
-        if (params.recurrence != null) {
-          updates.recurrence = {
-            pattern: {
-              type: params.recurrence.pattern,
-              interval: params.recurrence.interval ?? 1,
-              ...(params.recurrence.days_of_week != null ? { daysOfWeek: params.recurrence.days_of_week } : {}),
-              ...(params.recurrence.day_of_month != null ? { dayOfMonth: params.recurrence.day_of_month } : {}),
-            },
-            range: {
-              type: params.recurrence.range_type,
-              startDate: params.recurrence.start_date,
-              ...(params.recurrence.end_date != null ? { endDate: params.recurrence.end_date } : {}),
-              ...(params.recurrence.occurrences != null ? { numberOfOccurrences: params.recurrence.occurrences } : {}),
-            },
-          };
-        }
-        if (params.categories != null) updates.categories = params.categories;
-        await repository.updateTaskAsync(params.task_id, updates);
-        return {
-          content: [{ type: 'text', text: `Successfully updated task ${params.task_id}` }],
-        };
-      }
-
-      case 'complete_task': {
-        const params = CompleteTaskGraphInput.parse(args);
-        await repository.completeTaskAsync(params.task_id);
-        return {
-          content: [{ type: 'text', text: `Successfully completed task ${params.task_id}` }],
-        };
-      }
-
       case 'create_task_list': {
         const params = CreateTaskListGraphInput.parse(args);
         const numericId = await repository.createTaskListAsync(params.display_name);
@@ -1802,141 +1190,6 @@ async function handleGraphToolCall(
           status: 'created',
         };
         return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
-      }
-
-      case 'rename_task_list': {
-        const params = RenameTaskListInput.parse(args);
-        await repository.renameTaskListAsync(params.task_list_id, params.name);
-        return { content: [{ type: 'text', text: JSON.stringify({ success: true, message: 'Task list renamed' }, null, 2) }] };
-      }
-
-      case 'prepare_delete_task_list': {
-        const params = PrepareDeleteTaskListInput.parse(args);
-        const token = tokenManager.generateToken({
-          operation: 'delete_task_list',
-          targetType: 'task_list',
-          targetId: params.task_list_id,
-          targetHash: String(params.task_list_id),
-        });
-
-        return {
-          content: [{
-            type: 'text' as const,
-            text: JSON.stringify({
-              token_id: token.tokenId,
-              expires_at: new Date(token.expiresAt).toISOString(),
-              task_list_id: params.task_list_id,
-              action: `To confirm deleting task list ${params.task_list_id}, call confirm_delete_task_list with the token_id and task_list_id.`,
-            }, null, 2),
-          }],
-        };
-      }
-
-      case 'confirm_delete_task_list': {
-        const params = ConfirmDeleteTaskListInput.parse(args);
-        const validation = tokenManager.consumeToken(params.token_id, 'delete_task_list', params.task_list_id);
-        if (!validation.valid) {
-          const errorMessages: Record<string, string> = {
-            NOT_FOUND: 'Token not found or already used',
-            EXPIRED: 'Token has expired. Please call prepare_delete_task_list again.',
-            OPERATION_MISMATCH: 'Token was not generated for delete_task_list',
-            TARGET_MISMATCH: 'Token was generated for a different task list',
-            ALREADY_CONSUMED: 'Token has already been used',
-          };
-          return {
-            content: [{
-              type: 'text' as const,
-              text: JSON.stringify({
-                success: false,
-                error: errorMessages[validation.error ?? ''] ?? 'Invalid token',
-              }, null, 2),
-            }],
-          };
-        }
-
-        await repository.deleteTaskListAsync(params.task_list_id);
-        return {
-          content: [{
-            type: 'text' as const,
-            text: JSON.stringify({ success: true, message: 'Task list deleted' }, null, 2),
-          }],
-        };
-      }
-
-      case 'prepare_delete_task': {
-        const params = PrepareDeleteTaskInput.parse(args);
-        const task = await repository.getTaskAsync(params.task_id);
-        if (task == null) {
-          return { content: [{ type: 'text', text: 'Task not found' }], isError: true };
-        }
-
-        const taskInfo = repository.getTaskInfo(params.task_id);
-        const graphTask = taskInfo != null
-          ? await repository.getClient().getTask(taskInfo.taskListId, taskInfo.taskId)
-          : null;
-        const hash = hashTaskForApproval({
-          taskId: taskInfo?.taskId ?? '',
-          title: graphTask?.title ?? null,
-          listId: taskInfo?.taskListId ?? '',
-        });
-
-        const token = tokenManager.generateToken({
-          operation: 'delete_task',
-          targetType: 'task',
-          targetId: params.task_id,
-          targetHash: hash,
-        });
-
-        const result = {
-          token_id: token.tokenId,
-          expires_at: new Date(token.expiresAt).toISOString(),
-          task: transformTaskRow(task),
-          action: 'This task will be permanently deleted.',
-        };
-        return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
-      }
-
-      case 'confirm_delete_task': {
-        const params = ConfirmDeleteTaskInput.parse(args);
-
-        // Re-fetch the task and compute fresh hash for comparison
-        const taskInfo = repository.getTaskInfo(params.task_id);
-        const graphTask = taskInfo != null
-          ? await repository.getClient().getTask(taskInfo.taskListId, taskInfo.taskId)
-          : null;
-        const currentHash = hashTaskForApproval({
-          taskId: taskInfo?.taskId ?? '',
-          title: graphTask?.title ?? null,
-          listId: taskInfo?.taskListId ?? '',
-        });
-
-        const validation = tokenManager.consumeToken(params.token_id, 'delete_task', params.task_id);
-        if (!validation.valid) {
-          const errorMessages: Record<string, string> = {
-            NOT_FOUND: 'Token not found or already used',
-            EXPIRED: 'Token has expired. Please call prepare_delete_task again.',
-            OPERATION_MISMATCH: 'Token was not generated for delete_task',
-            TARGET_MISMATCH: 'Token was generated for a different task',
-            ALREADY_CONSUMED: 'Token has already been used',
-          };
-          return {
-            content: [{ type: 'text', text: errorMessages[validation.error ?? ''] ?? 'Invalid token' }],
-            isError: true,
-          };
-        }
-
-        // Check that the task hasn't changed since prepare
-        if (validation.token!.targetHash !== currentHash) {
-          return {
-            content: [{ type: 'text', text: 'Task has changed since prepare was called. Please call prepare_delete_task again.' }],
-            isError: true,
-          };
-        }
-
-        await repository.deleteTaskAsync(params.task_id);
-        return {
-          content: [{ type: 'text', text: `Successfully deleted task ${params.task_id}` }],
-        };
       }
 
       // Note tools - NOT SUPPORTED in Graph API
@@ -1980,88 +1233,6 @@ async function handleGraphToolCall(
         if (params.time_format != null) settingsParams.timeFormat = params.time_format;
         await repository.updateMailboxSettingsAsync(settingsParams);
         return { content: [{ type: 'text', text: JSON.stringify({ success: true }, null, 2) }] };
-      }
-
-      // Contact folder tools
-      case 'list_contact_folders': {
-        const folders = await repository.listContactFoldersAsync();
-        return { content: [{ type: 'text', text: JSON.stringify({ contact_folders: folders }, null, 2) }] };
-      }
-
-      case 'create_contact_folder': {
-        const params = CreateContactFolderInput.parse(args);
-        const folderId = await repository.createContactFolderAsync(params.name);
-        const result = {
-          id: folderId,
-          name: params.name,
-          status: 'created',
-        };
-        return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
-      }
-
-      case 'prepare_delete_contact_folder': {
-        const params = PrepareDeleteContactFolderInput.parse(args);
-        const token = tokenManager.generateToken({
-          operation: 'delete_contact_folder',
-          targetType: 'contact_folder',
-          targetId: params.folder_id,
-          targetHash: String(params.folder_id),
-        });
-
-        return {
-          content: [{
-            type: 'text' as const,
-            text: JSON.stringify({
-              token_id: token.tokenId,
-              expires_at: new Date(token.expiresAt).toISOString(),
-              folder_id: params.folder_id,
-              action: `To confirm deleting contact folder ${params.folder_id}, call confirm_delete_contact_folder with the token_id and folder_id.`,
-            }, null, 2),
-          }],
-        };
-      }
-
-      case 'confirm_delete_contact_folder': {
-        const params = ConfirmDeleteContactFolderInput.parse(args);
-        const validation = tokenManager.consumeToken(params.token_id, 'delete_contact_folder', params.folder_id);
-        if (!validation.valid) {
-          const errorMessages: Record<string, string> = {
-            NOT_FOUND: 'Token not found or already used',
-            EXPIRED: 'Token has expired. Please call prepare_delete_contact_folder again.',
-            OPERATION_MISMATCH: 'Token was not generated for delete_contact_folder',
-            TARGET_MISMATCH: 'Token was generated for a different contact folder',
-            ALREADY_CONSUMED: 'Token has already been used',
-          };
-          return {
-            content: [{
-              type: 'text' as const,
-              text: JSON.stringify({
-                success: false,
-                error: errorMessages[validation.error ?? ''] ?? 'Invalid token',
-              }, null, 2),
-            }],
-          };
-        }
-
-        await repository.deleteContactFolderAsync(params.folder_id);
-        return {
-          content: [{
-            type: 'text' as const,
-            text: JSON.stringify({ success: true, message: 'Contact folder deleted' }, null, 2),
-          }],
-        };
-      }
-
-      case 'get_contact_photo': {
-        const params = GetContactPhotoInput.parse(args);
-        const result = await repository.getContactPhotoAsync(params.contact_id);
-        return { content: [{ type: 'text', text: JSON.stringify({ success: true, file_path: result.filePath, content_type: result.contentType }, null, 2) }] };
-      }
-
-      case 'set_contact_photo': {
-        const params = SetContactPhotoInput.parse(args);
-        await repository.setContactPhotoAsync(params.contact_id, params.file_path);
-        return { content: [{ type: 'text', text: JSON.stringify({ success: true, message: 'Contact photo updated' }, null, 2) }] };
       }
 
       case 'get_mail_tips': {

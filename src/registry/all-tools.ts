@@ -29,8 +29,10 @@ import { oneDriveToolDefinitions } from '../tools/onedrive.js';
 import { excelToolDefinitions } from '../tools/excel.js';
 import { notesToolDefinitions } from '../tools/notes.js';
 import { contactsToolDefinitions } from '../tools/contacts.js';
+import { contactFoldersToolDefinitions } from '../tools/contact-folders.js';
 import { calendarToolDefinitions } from '../tools/calendar.js';
 import { tasksToolDefinitions } from '../tools/tasks.js';
+import { taskListsToolDefinitions } from '../tools/task-lists.js';
 import { mailboxOrganizationToolDefinitions } from '../tools/mailbox-organization.js';
 import { mailToolDefinitions } from '../tools/mail.js';
 import { mailSendToolDefinitions } from '../tools/mail-send.js';
@@ -55,8 +57,10 @@ export function allToolDefinitions(): ToolDefinition[] {
     ...excelToolDefinitions(),
     ...notesToolDefinitions(),
     ...contactsToolDefinitions(),
+    ...contactFoldersToolDefinitions(),
     ...calendarToolDefinitions(),
     ...tasksToolDefinitions(),
+    ...taskListsToolDefinitions(),
     ...mailboxOrganizationToolDefinitions(),
     ...mailToolDefinitions(),
     ...mailSendToolDefinitions(),
