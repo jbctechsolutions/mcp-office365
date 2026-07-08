@@ -867,7 +867,7 @@ describe('MailSendTools', () => {
         const prepared = await tools.prepareSendDraft({ draft_id: 5 });
 
         // Advance past the 5-minute TTL
-        vi.advanceTimersByTime(6 * 60 * 1000);
+        vi.advanceTimersByTime(24 * 60 * 60 * 1000 + 1);
 
         await expect(
           tools.confirmSendDraft({ token_id: prepared.token_id, draft_id: 5 })
@@ -889,7 +889,7 @@ describe('MailSendTools', () => {
           body_type: 'text',
         });
 
-        vi.advanceTimersByTime(6 * 60 * 1000);
+        vi.advanceTimersByTime(24 * 60 * 60 * 1000 + 1);
 
         await expect(
           tools.confirmSendEmail({ token_id: prepared.token_id })

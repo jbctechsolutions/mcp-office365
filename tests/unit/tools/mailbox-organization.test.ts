@@ -160,7 +160,7 @@ describe('MailboxOrganizationTools', () => {
         const prepared = await tools.prepareDeleteEmail({ email_id: 1 });
 
         // Advance past the 5-minute TTL
-        vi.advanceTimersByTime(6 * 60 * 1000);
+        vi.advanceTimersByTime(24 * 60 * 60 * 1000 + 1);
 
         await expect(
           tools.confirmDeleteEmail({

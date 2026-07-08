@@ -17,6 +17,10 @@ import {
   hashTaskForApproval,
 } from '../../../src/approval/hash.js';
 import { ApprovalTokenManager } from '../../../src/approval/token-manager.js';
+import { StateStore } from '../../../src/state/store.js';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 // =============================================================================
 // hashEmailForApproval
@@ -348,8 +352,8 @@ describe('ApprovalTokenManager', () => {
       try {
         const token = manager.generateToken(defaultParams);
 
-        // Advance time past the default 5-minute TTL
-        vi.advanceTimersByTime(5 * 60 * 1000 + 1);
+        // Advance time past the default 24h TTL
+        vi.advanceTimersByTime(24 * 60 * 60 * 1000 + 1);
 
         const result = manager.validateToken(token.tokenId, 'delete_email', 1);
         expect(result.valid).toBe(false);
@@ -365,7 +369,7 @@ describe('ApprovalTokenManager', () => {
         const token = manager.generateToken(defaultParams);
         expect(manager.size).toBe(1);
 
-        vi.advanceTimersByTime(5 * 60 * 1000 + 1);
+        vi.advanceTimersByTime(24 * 60 * 60 * 1000 + 1);
 
         const result = manager.validateToken(token.tokenId, 'delete_email', 1);
         expect(result.valid).toBe(false);
@@ -439,7 +443,7 @@ describe('ApprovalTokenManager', () => {
         expect(manager.size).toBe(2);
 
         // Advance past expiry
-        vi.advanceTimersByTime(5 * 60 * 1000 + 1);
+        vi.advanceTimersByTime(24 * 60 * 60 * 1000 + 1);
 
         manager.cleanupExpiredTokens();
         expect(manager.size).toBe(0);
@@ -451,19 +455,21 @@ describe('ApprovalTokenManager', () => {
     it('keeps non-expired tokens during cleanup', () => {
       vi.useFakeTimers();
       try {
-        manager.generateToken(defaultParams);
+        // Explicit 5-minute TTL so the relative timings below are meaningful.
+        const m = new ApprovalTokenManager(5 * 60 * 1000);
+        m.generateToken(defaultParams);
 
         // Advance time but stay within TTL
         vi.advanceTimersByTime(2 * 60 * 1000);
 
         // Add another token at the later time
-        manager.generateToken({ ...defaultParams, targetId: 2 });
+        m.generateToken({ ...defaultParams, targetId: 2 });
 
         // Advance so first token expires but second does not
         vi.advanceTimersByTime(3 * 60 * 1000 + 1);
 
-        manager.cleanupExpiredTokens();
-        expect(manager.size).toBe(1);
+        m.cleanupExpiredTokens();
+        expect(m.size).toBe(1);
       } finally {
         vi.useRealTimers();
       }
@@ -659,6 +665,112 @@ describe('ApprovalTokenManager', () => {
 
       const result = manager.validateToken(token.tokenId, 'delete_task', 30);
       expect(result.valid).toBe(true);
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // Durable (store-backed) mode — U9b
+  // ---------------------------------------------------------------------------
+
+  describe('durable (store-backed) mode', () => {
+    let dir: string;
+    let store: StateStore;
+    const genParams = {
+      operation: 'delete_email' as const,
+      targetType: 'email' as const,
+      targetId: 42,
+      targetHash: 'seal-abc',
+      metadata: { subject: 'Q3' },
+    };
+
+    beforeEach(() => {
+      dir = mkdtempSync(join(tmpdir(), 'mcp-approval-'));
+      store = StateStore.open({ dir, legacyDir: join(dir, 'legacy'), warn: () => {} });
+    });
+
+    afterEach(() => {
+      store.close();
+      rmSync(dir, { recursive: true, force: true });
+    });
+
+    it('persists a token that survives a fresh manager on the same store (restart)', () => {
+      const a = new ApprovalTokenManager({ store });
+      const token = a.generateToken(genParams);
+
+      // A new manager instance (simulating a server restart) resolves it.
+      const b = new ApprovalTokenManager({ store });
+      expect(b.lookupToken(token.tokenId)?.targetId).toBe(42);
+      expect(b.validateToken(token.tokenId, 'delete_email', 42).valid).toBe(true);
+    });
+
+    it('round-trips targetType/targetHash/metadata through the store', () => {
+      const m = new ApprovalTokenManager({ store });
+      const token = m.generateToken(genParams);
+      const looked = new ApprovalTokenManager({ store }).lookupToken(token.tokenId);
+      expect(looked?.targetType).toBe('email');
+      expect(looked?.targetHash).toBe('seal-abc');
+      expect(looked?.metadata).toEqual({ subject: 'Q3' });
+    });
+
+    it('consume is atomic + idempotent across manager instances (D8)', () => {
+      const a = new ApprovalTokenManager({ store });
+      const token = a.generateToken(genParams);
+
+      const b = new ApprovalTokenManager({ store }); // e.g. a second window
+      expect(a.consumeToken(token.tokenId, 'delete_email', 42).valid).toBe(true);
+      // The second consume — same or different instance — is refused.
+      const second = b.consumeToken(token.tokenId, 'delete_email', 42);
+      expect(second.valid).toBe(false);
+      expect(second.error).toBe('ALREADY_CONSUMED');
+    });
+
+    it('validate reports ALREADY_CONSUMED after redemption', () => {
+      const m = new ApprovalTokenManager({ store });
+      const token = m.generateToken(genParams);
+      m.consumeToken(token.tokenId, 'delete_email', 42);
+      const v = m.validateToken(token.tokenId, 'delete_email', 42);
+      expect(v.error).toBe('ALREADY_CONSUMED');
+    });
+
+    it('enforces operation and target match against the persisted token', () => {
+      const m = new ApprovalTokenManager({ store });
+      const token = m.generateToken(genParams);
+      expect(m.validateToken(token.tokenId, 'delete_folder', 42).error).toBe('OPERATION_MISMATCH');
+      expect(m.validateToken(token.tokenId, 'delete_email', 999).error).toBe('TARGET_MISMATCH');
+    });
+
+    it('expires a durable token past its 24h TTL', () => {
+      let clock = 1_000_000_000_000;
+      const m = new ApprovalTokenManager({ store, now: () => clock });
+      const token = m.generateToken(genParams);
+      clock += 24 * 60 * 60 * 1000 + 1;
+      expect(m.validateToken(token.tokenId, 'delete_email', 42).error).toBe('EXPIRED');
+      // And a consume of an expired token is refused.
+      expect(m.consumeToken(token.tokenId, 'delete_email', 42).valid).toBe(false);
+    });
+
+    it('fails closed (NOT_FOUND, no throw) on a corrupt persisted target_json', () => {
+      // Simulate a corrupt/tampered row: valid token record but unparseable target.
+      store.putApprovalToken({
+        token: 'ap-corrupt',
+        action: 'delete_email',
+        targetJson: '{not valid json',
+        contentHash: null,
+        accountId: 'default',
+        expiresAt: 4_000_000_000_000,
+      });
+      const m = new ApprovalTokenManager({ store });
+      expect(m.lookupToken('ap-corrupt')).toBeUndefined();
+      expect(() => m.validateToken('ap-corrupt', 'delete_email', 1)).not.toThrow();
+      expect(m.validateToken('ap-corrupt', 'delete_email', 1).error).toBe('NOT_FOUND');
+    });
+
+    it('does not resolve a token minted under a different account (D7)', () => {
+      const owner = new ApprovalTokenManager({ store, accountId: 'acct-A' });
+      const token = owner.generateToken(genParams);
+      const other = new ApprovalTokenManager({ store, accountId: 'acct-B' });
+      expect(other.lookupToken(token.tokenId)).toBeUndefined();
+      expect(other.validateToken(token.tokenId, 'delete_email', 42).error).toBe('NOT_FOUND');
     });
   });
 });
