@@ -64,16 +64,8 @@ import { createTasksTools } from './tools/tasks.js';
 import { GraphTasksTools, transformTaskRow } from './tools/tasks-graph.js';
 import { createNotesTools } from './tools/notes.js';
 import { createMailboxOrganizationTools } from './tools/mailbox-organization.js';
-import {
-  createMailSendTools,
-  SetSignatureInput,
-  GetSignatureInput,
-} from './tools/mail-send.js';
-import {
-  createSchedulingTools,
-  CheckAvailabilityInput,
-  FindMeetingTimesInput,
-} from './tools/scheduling.js';
+import { createMailSendTools } from './tools/mail-send.js';
+import { createSchedulingTools } from './tools/scheduling.js';
 import { MailRulesTools } from './tools/mail-rules.js';
 import { CategoriesTools } from './tools/categories.js';
 import { CalendarPermissionsTools } from './tools/calendar-permissions.js';
@@ -96,21 +88,6 @@ import {
   PrepareBatchDeleteEmailsInput,
   PrepareBatchMoveEmailsInput,
   ConfirmBatchOperationInput,
-  CreateDraftInput,
-  UpdateDraftInput,
-  ListDraftsInput,
-  PrepareSendDraftInput,
-  ConfirmSendDraftInput,
-  PrepareSendEmailInput,
-  ConfirmSendEmailInput,
-  PrepareReplyEmailInput,
-  ConfirmReplyEmailInput,
-  PrepareForwardEmailInput,
-  ConfirmForwardEmailInput,
-  ReplyAsDraftInput,
-  ForwardAsDraftInput,
-  AddDraftAttachmentInput,
-  AddDraftInlineImageInput,
 } from './tools/index.js';
 import { ApprovalTokenManager, hashEventForApproval, hashContactForApproval, hashTaskForApproval } from './approval/index.js';
 import {
@@ -576,444 +553,6 @@ const TOOLS: Tool[] = [
       required: ['to', 'subject', 'body'],
     },
   },
-  // =========================================================================
-  // Mail Send — Draft Management (Non-Destructive, Graph API only)
-  // =========================================================================
-  {
-    name: 'create_draft',
-    description: 'Create a draft email that can be edited and sent later',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        to: {
-          type: 'array',
-          items: { type: 'string' },
-          description: 'To recipients (email addresses)',
-        },
-        cc: {
-          type: 'array',
-          items: { type: 'string' },
-          description: 'CC recipients (email addresses)',
-        },
-        bcc: {
-          type: 'array',
-          items: { type: 'string' },
-          description: 'BCC recipients (email addresses)',
-        },
-        subject: {
-          type: 'string',
-          description: 'Email subject',
-        },
-        body: {
-          type: 'string',
-          description: 'Email body',
-        },
-        body_type: {
-          type: 'string',
-          enum: ['text', 'html'],
-          default: 'text',
-          description: 'Body content type (default: text)',
-        },
-        include_signature: {
-          type: 'boolean',
-          default: true,
-          description: 'Include email signature (default: true)',
-        },
-        attachments: {
-          type: 'array',
-          description: 'File attachments',
-          items: {
-            type: 'object',
-            properties: {
-              file_path: { type: 'string', description: 'Absolute path to the file' },
-              name: { type: 'string', description: 'Override filename' },
-              content_type: { type: 'string', description: 'Override MIME type' },
-            },
-            required: ['file_path'],
-          },
-        },
-        body_file: {
-          type: 'string',
-          description: 'Path to a file containing the email body (alternative to body; use to avoid large MCP payloads)',
-        },
-        inline_images: {
-          type: 'array',
-          description: 'Inline images for HTML body: reference in body via <img src="cid:content_id"> to avoid embedding base64 in the payload',
-          items: {
-            type: 'object',
-            properties: {
-              file_path: { type: 'string', description: 'Absolute path to the image file' },
-              content_id: { type: 'string', description: 'Content-ID for HTML (e.g. "logo" for cid:logo)' },
-            },
-            required: ['file_path', 'content_id'],
-          },
-        },
-      },
-      required: ['subject'],
-    },
-  },
-  {
-    name: 'update_draft',
-    description: 'Update an existing draft email',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        draft_id: {
-          type: 'number',
-          description: 'The draft ID to update',
-        },
-        to: {
-          type: 'array',
-          items: { type: 'string' },
-          description: 'To recipients (email addresses)',
-        },
-        cc: {
-          type: 'array',
-          items: { type: 'string' },
-          description: 'CC recipients (email addresses)',
-        },
-        bcc: {
-          type: 'array',
-          items: { type: 'string' },
-          description: 'BCC recipients (email addresses)',
-        },
-        subject: {
-          type: 'string',
-          description: 'Email subject',
-        },
-        body: {
-          type: 'string',
-          description: 'Email body',
-        },
-        body_type: {
-          type: 'string',
-          enum: ['text', 'html'],
-          description: 'Body content type',
-        },
-      },
-      required: ['draft_id'],
-    },
-  },
-  {
-    name: 'add_draft_attachment',
-    description: 'Add a file attachment to an existing draft (Graph API)',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        draft_id: { type: 'number', description: 'The draft ID' },
-        file_path: { type: 'string', description: 'Absolute path to the file' },
-        name: { type: 'string', description: 'Override filename (optional)' },
-        content_type: { type: 'string', description: 'Override MIME type (optional)' },
-      },
-      required: ['draft_id', 'file_path'],
-    },
-  },
-  {
-    name: 'add_draft_inline_image',
-    description: 'Add an inline image to an existing draft for use in HTML body (Graph API)',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        draft_id: { type: 'number', description: 'The draft ID' },
-        file_path: { type: 'string', description: 'Absolute path to the image file' },
-        content_id: { type: 'string', description: 'Content-ID (reference in HTML as <img src="cid:content_id">)' },
-      },
-      required: ['draft_id', 'file_path', 'content_id'],
-    },
-  },
-  {
-    name: 'list_drafts',
-    description: 'List all draft emails',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        limit: {
-          type: 'number',
-          description: 'Maximum number of drafts to return (1-100, default 50)',
-          default: 50,
-        },
-        offset: {
-          type: 'number',
-          description: 'Number of drafts to skip (default 0)',
-          default: 0,
-        },
-      },
-      required: [],
-    },
-  },
-  // =========================================================================
-  // Mail Send — Two-Phase Approval (Graph API only)
-  // =========================================================================
-  {
-    name: 'prepare_send_draft',
-    description: 'Prepare to send a draft email. Returns a preview and approval token.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        draft_id: { type: 'number', description: 'The draft ID to send' },
-      },
-      required: ['draft_id'],
-    },
-  },
-  {
-    name: 'confirm_send_draft',
-    description: 'Confirm and send a draft email using the approval token.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        token_id: { type: 'string', description: 'Approval token from prepare_send_draft' },
-        draft_id: { type: 'number', description: 'The draft ID to send' },
-      },
-      required: ['token_id', 'draft_id'],
-    },
-  },
-  {
-    name: 'prepare_send_email',
-    description: 'Prepare to send an email immediately. Returns a preview and approval token.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        to: {
-          type: 'array',
-          items: { type: 'string' },
-          minItems: 1,
-          description: 'To recipients (email addresses)',
-        },
-        cc: {
-          type: 'array',
-          items: { type: 'string' },
-          description: 'CC recipients (email addresses)',
-        },
-        bcc: {
-          type: 'array',
-          items: { type: 'string' },
-          description: 'BCC recipients (email addresses)',
-        },
-        subject: {
-          type: 'string',
-          description: 'Email subject',
-        },
-        body: {
-          type: 'string',
-          description: 'Email body (omit when using body_file)',
-        },
-        body_file: {
-          type: 'string',
-          description: 'Path to a file containing the email body (alternative to body; use to avoid large MCP payloads)',
-        },
-        body_type: {
-          type: 'string',
-          enum: ['text', 'html'],
-          default: 'text',
-          description: 'Body content type (default: text)',
-        },
-        include_signature: {
-          type: 'boolean',
-          default: true,
-          description: 'Include email signature (default: true)',
-        },
-        attachments: {
-          type: 'array',
-          description: 'File attachments',
-          items: {
-            type: 'object',
-            properties: {
-              file_path: { type: 'string', description: 'Absolute path to the file' },
-              name: { type: 'string', description: 'Override filename' },
-              content_type: { type: 'string', description: 'Override MIME type' },
-            },
-            required: ['file_path'],
-          },
-        },
-      },
-      required: ['to', 'subject'],
-    },
-  },
-  {
-    name: 'confirm_send_email',
-    description: 'Confirm and send an email using the approval token.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        token_id: { type: 'string', description: 'Approval token from prepare_send_email' },
-      },
-      required: ['token_id'],
-    },
-  },
-  {
-    name: 'prepare_reply_email',
-    description: 'Prepare to reply to an email. Returns a preview and approval token.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        message_id: { type: 'number', description: 'The message ID to reply to' },
-        comment: { type: 'string', description: 'Reply body' },
-        reply_all: {
-          type: 'boolean',
-          default: true,
-          description: 'Reply to all recipients (default true)',
-        },
-      },
-      required: ['message_id', 'comment'],
-    },
-  },
-  {
-    name: 'confirm_reply_email',
-    description: 'Confirm and reply to an email using the approval token.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        token_id: { type: 'string', description: 'Approval token from prepare_reply_email' },
-        message_id: { type: 'number', description: 'The message ID being replied to' },
-      },
-      required: ['token_id', 'message_id'],
-    },
-  },
-  {
-    name: 'prepare_forward_email',
-    description: 'Prepare to forward an email. Returns a preview and approval token.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        message_id: { type: 'number', description: 'The message ID to forward' },
-        to_recipients: {
-          type: 'array',
-          items: { type: 'string' },
-          minItems: 1,
-          description: 'Forward to recipients (email addresses)',
-        },
-        comment: { type: 'string', description: 'Optional comment to include' },
-      },
-      required: ['message_id', 'to_recipients'],
-    },
-  },
-  {
-    name: 'confirm_forward_email',
-    description: 'Confirm and forward an email using the approval token.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        token_id: { type: 'string', description: 'Approval token from prepare_forward_email' },
-        message_id: { type: 'number', description: 'The message ID being forwarded' },
-      },
-      required: ['token_id', 'message_id'],
-    },
-  },
-  {
-    name: 'reply_as_draft',
-    description: 'Create a reply (or reply-all) as an editable draft. Returns a draft_id for use with update_draft and prepare_send_draft.',
-    inputSchema: {
-      type: 'object' as const,
-      properties: {
-        message_id: { type: 'number', description: 'The message ID to reply to' },
-        comment: { type: 'string', description: 'Initial reply body text' },
-        reply_all: { type: 'boolean', default: false, description: 'Reply to all recipients (default: false)' },
-        include_signature: {
-          type: 'boolean',
-          default: true,
-          description: 'Include email signature (default: true)',
-        },
-      },
-      required: ['message_id'],
-    },
-  },
-  {
-    name: 'forward_as_draft',
-    description: 'Create a forward as an editable draft. Returns a draft_id for use with update_draft and prepare_send_draft.',
-    inputSchema: {
-      type: 'object' as const,
-      properties: {
-        message_id: { type: 'number', description: 'The message ID to forward' },
-        to_recipients: {
-          type: 'array',
-          items: { type: 'string' },
-          description: 'Forward recipients (can also add later via update_draft)',
-        },
-        comment: { type: 'string', description: 'Initial forward body text' },
-        include_signature: {
-          type: 'boolean',
-          default: true,
-          description: 'Include email signature (default: true)',
-        },
-      },
-      required: ['message_id'],
-    },
-  },
-  // Signature management tools
-  {
-    name: 'set_signature',
-    description: 'Save an email signature that will be auto-appended to outgoing emails',
-    inputSchema: {
-      type: 'object' as const,
-      properties: {
-        content: { type: 'string', description: 'Signature content (HTML or plain text)' },
-        content_type: {
-          type: 'string',
-          enum: ['html', 'text'],
-          default: 'html',
-          description: 'Content type of the signature (default: html)',
-        },
-      },
-      required: ['content'],
-    },
-  },
-  {
-    name: 'get_signature',
-    description: 'Get the currently stored email signature',
-    inputSchema: {
-      type: 'object' as const,
-      properties: {},
-      required: [],
-    },
-  },
-  // Calendar scheduling tools
-  {
-    name: 'check_availability',
-    description: 'Check free/busy availability for one or more people in a time window',
-    inputSchema: {
-      type: 'object' as const,
-      properties: {
-        email_addresses: {
-          type: 'array',
-          items: { type: 'string' },
-          minItems: 1,
-          description: 'Email addresses to check availability for',
-        },
-        start_time: { type: 'string', description: 'Start of time window (ISO 8601)' },
-        end_time: { type: 'string', description: 'End of time window (ISO 8601)' },
-        availability_view_interval: {
-          type: 'number',
-          default: 30,
-          description: 'Time slot interval in minutes (default: 30)',
-        },
-      },
-      required: ['email_addresses', 'start_time', 'end_time'],
-    },
-  },
-  {
-    name: 'find_meeting_times',
-    description: 'Find available meeting time slots for a group of attendees',
-    inputSchema: {
-      type: 'object' as const,
-      properties: {
-        attendees: {
-          type: 'array',
-          items: { type: 'string' },
-          minItems: 1,
-          description: 'Attendee email addresses',
-        },
-        duration_minutes: { type: 'number', description: 'Meeting duration in minutes' },
-        start_time: { type: 'string', description: 'Start of search window (ISO 8601, optional)' },
-        end_time: { type: 'string', description: 'End of search window (ISO 8601, optional)' },
-        max_candidates: {
-          type: 'number',
-          default: 5,
-          description: 'Maximum number of time suggestions (default: 5)',
-        },
-      },
-      required: ['attendees', 'duration_minutes'],
-    },
-  },
   // Automatic replies (OOF) tools
   {
     name: 'get_automatic_replies',
@@ -1429,10 +968,6 @@ export function createServer(options: ServerOptions = {}): Server {
 
   // Tools that only exist when using Graph API (signature + scheduling)
   const GRAPH_ONLY_TOOL_NAMES = new Set([
-    'set_signature',
-    'get_signature',
-    'check_availability',
-    'find_meeting_times',
     'list_conversation',
     'search_emails_advanced',
     'check_new_emails',
@@ -1485,6 +1020,8 @@ export function createServer(options: ServerOptions = {}): Server {
         && graphTasksTools != null
         && graphCalendarTools != null
         && graphMailTools != null
+        && sendTools != null
+        && schedulingTools != null
         && orgTools != null
           ? {
               rules: rulesTools,
@@ -1506,6 +1043,8 @@ export function createServer(options: ServerOptions = {}): Server {
               tasksGraph: graphTasksTools,
               calendarGraph: graphCalendarTools,
               mailGraph: graphMailTools,
+              mailSend: sendTools,
+              scheduling: schedulingTools,
               mailboxOrg: orgTools,
             }
           : null,
@@ -1548,7 +1087,7 @@ export function createServer(options: ServerOptions = {}): Server {
 
       // Graph API mode - handle async operations directly
       if (useGraphApi && graphRepository != null) {
-        return await handleGraphToolCall(name, args, graphRepository, graphContentReaders!, orgTools!, sendTools!, schedulingTools!, rulesTools!, categoriesTools!, calendarPermissionsTools!, focusedOverridesTools!, teamsTools!, checklistItemsTools!, linkedResourcesTools!, taskAttachmentsTools!, peopleTools!, plannerTools!, plannerVisualizationTools!, meetingsTools!, oneDriveTools!, sharePointTools!, excelTools!, tokenManager);
+        return await handleGraphToolCall(name, args, graphRepository, graphContentReaders!, orgTools!, rulesTools!, categoriesTools!, calendarPermissionsTools!, focusedOverridesTools!, teamsTools!, checklistItemsTools!, linkedResourcesTools!, taskAttachmentsTools!, peopleTools!, plannerTools!, plannerVisualizationTools!, meetingsTools!, oneDriveTools!, sharePointTools!, excelTools!, tokenManager);
       }
 
       // AppleScript mode - use sync tool interfaces
@@ -1612,144 +1151,6 @@ async function handleOrgToolCall(
       return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
     }
 
-    default:
-      return null;
-  }
-}
-
-// =============================================================================
-// Mail Send Tool Handler (Graph API only)
-// =============================================================================
-
-async function handleSendToolCall(
-  name: string,
-  args: unknown,
-  sendTools: ReturnType<typeof createMailSendTools>
-): Promise<ToolResult | null> {
-  switch (name) {
-    // Non-Destructive — Draft Management
-    case 'create_draft': {
-      const params = CreateDraftInput.parse(args);
-      const result = await sendTools.createDraft(params);
-      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
-    }
-    case 'update_draft': {
-      const params = UpdateDraftInput.parse(args);
-      const result = await sendTools.updateDraft(params);
-      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
-    }
-    case 'add_draft_attachment': {
-      const params = AddDraftAttachmentInput.parse(args);
-      const result = await sendTools.addDraftAttachment(params);
-      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
-    }
-    case 'add_draft_inline_image': {
-      const params = AddDraftInlineImageInput.parse(args);
-      const result = await sendTools.addDraftInlineImage(params);
-      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
-    }
-    case 'list_drafts': {
-      const params = ListDraftsInput.parse(args ?? {});
-      const result = await sendTools.listDrafts(params);
-      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
-    }
-
-    // Two-Phase — Send Draft
-    case 'prepare_send_draft': {
-      const params = PrepareSendDraftInput.parse(args);
-      const result = await sendTools.prepareSendDraft(params);
-      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
-    }
-    case 'confirm_send_draft': {
-      const params = ConfirmSendDraftInput.parse(args);
-      const result = await sendTools.confirmSendDraft(params);
-      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
-    }
-
-    // Two-Phase — Send Email (Direct)
-    case 'prepare_send_email': {
-      const params = PrepareSendEmailInput.parse(args);
-      const result = sendTools.prepareSendEmail(params);
-      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
-    }
-    case 'confirm_send_email': {
-      const params = ConfirmSendEmailInput.parse(args);
-      const result = await sendTools.confirmSendEmail(params);
-      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
-    }
-
-    // Two-Phase — Reply Email
-    case 'prepare_reply_email': {
-      const params = PrepareReplyEmailInput.parse(args);
-      const result = await sendTools.prepareReplyEmail(params);
-      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
-    }
-    case 'confirm_reply_email': {
-      const params = ConfirmReplyEmailInput.parse(args);
-      const result = await sendTools.confirmReplyEmail(params);
-      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
-    }
-
-    // Two-Phase — Forward Email
-    case 'prepare_forward_email': {
-      const params = PrepareForwardEmailInput.parse(args);
-      const result = await sendTools.prepareForwardEmail(params);
-      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
-    }
-    case 'confirm_forward_email': {
-      const params = ConfirmForwardEmailInput.parse(args);
-      const result = await sendTools.confirmForwardEmail(params);
-      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
-    }
-
-    // Draft Reply/Forward
-    case 'reply_as_draft': {
-      const params = ReplyAsDraftInput.parse(args);
-      const result = await sendTools.replyAsDraft(params);
-      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
-    }
-    case 'forward_as_draft': {
-      const params = ForwardAsDraftInput.parse(args);
-      const result = await sendTools.forwardAsDraft(params);
-      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
-    }
-
-    case 'set_signature': {
-      const params = SetSignatureInput.parse(args);
-      const result = sendTools.setSignature(params);
-      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
-    }
-    case 'get_signature': {
-      GetSignatureInput.parse(args ?? {});
-      const result = sendTools.getSignature();
-      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
-    }
-
-    default:
-      return null;
-  }
-}
-
-// =============================================================================
-// Scheduling Tool Handler (Graph API only)
-// =============================================================================
-
-async function handleSchedulingToolCall(
-  name: string,
-  args: unknown,
-  schedulingTools: ReturnType<typeof createSchedulingTools>
-): Promise<ToolResult | null> {
-  switch (name) {
-    case 'check_availability': {
-      const params = CheckAvailabilityInput.parse(args);
-      const result = await schedulingTools.checkAvailability(params);
-      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
-    }
-    case 'find_meeting_times': {
-      const params = FindMeetingTimesInput.parse(args);
-      const result = await schedulingTools.findMeetingTimes(params);
-      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
-    }
     default:
       return null;
   }
@@ -2059,8 +1460,6 @@ async function handleGraphToolCall(
   repository: GraphRepository,
   contentReaders: GraphContentReaders,
   orgTools: ReturnType<typeof createMailboxOrganizationTools>,
-  sendTools: ReturnType<typeof createMailSendTools>,
-  schedulingTools: ReturnType<typeof createSchedulingTools>,
   rulesTools: MailRulesTools,
   categoriesTools: CategoriesTools,
   calendarPermissionsTools: CalendarPermissionsTools,
@@ -2081,14 +1480,6 @@ async function handleGraphToolCall(
   // Handle mailbox organization tools (shared between backends)
   const orgResult = await handleOrgToolCall(name, args, orgTools);
   if (orgResult != null) return orgResult;
-
-  // Handle mail send tools (Graph API only)
-  const sendResult = await handleSendToolCall(name, args, sendTools);
-  if (sendResult != null) return sendResult;
-
-  // Handle scheduling tools (Graph API only)
-  const schedulingResult = await handleSchedulingToolCall(name, args, schedulingTools);
-  if (schedulingResult != null) return schedulingResult;
 
   try {
     switch (name) {

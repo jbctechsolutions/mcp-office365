@@ -33,6 +33,8 @@ import { calendarToolDefinitions } from '../tools/calendar.js';
 import { tasksToolDefinitions } from '../tools/tasks.js';
 import { mailboxOrganizationToolDefinitions } from '../tools/mailbox-organization.js';
 import { mailToolDefinitions } from '../tools/mail.js';
+import { mailSendToolDefinitions } from '../tools/mail-send.js';
+import { schedulingToolDefinitions } from '../tools/scheduling.js';
 
 export function allToolDefinitions(): ToolDefinition[] {
   return [
@@ -57,6 +59,8 @@ export function allToolDefinitions(): ToolDefinition[] {
     ...tasksToolDefinitions(),
     ...mailboxOrganizationToolDefinitions(),
     ...mailToolDefinitions(),
+    ...mailSendToolDefinitions(),
+    ...schedulingToolDefinitions(),
     // U2: append each migrated domain's definitions here.
   ];
 }

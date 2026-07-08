@@ -11,6 +11,15 @@
  */
 
 import { z } from 'zod';
+import { defineTool } from '../registry/define-tool.js';
+import { requireGraphToolset } from '../registry/context.js';
+import type { ToolContext, ToolDefinition, ToolResult } from '../registry/types.js';
+
+declare module '../registry/types.js' {
+  interface GraphToolsets {
+    scheduling: SchedulingTools;
+  }
+}
 
 // =============================================================================
 // Repository Interface
@@ -141,4 +150,44 @@ export class SchedulingTools {
 
 export function createSchedulingTools(repository: ISchedulingRepository): SchedulingTools {
   return new SchedulingTools(repository);
+}
+
+// =============================================================================
+// Registry Definitions (v3 registry-driven architecture, U2)
+// =============================================================================
+
+function jsonResult(data: unknown): ToolResult {
+  return { content: [{ type: 'text', text: JSON.stringify(data, null, 2) }] };
+}
+
+/**
+ * Registry tool definitions for the scheduling domain (Graph API only). The
+ * SchedulingTools methods return raw objects, wrapped here to match the
+ * pre-registry dispatch behavior exactly.
+ */
+export function schedulingToolDefinitions(): ToolDefinition[] {
+  const tools = (ctx: ToolContext): SchedulingTools => requireGraphToolset(ctx, 'scheduling');
+
+  return [
+    defineTool({
+      name: 'check_availability',
+      description: 'Check free/busy availability for one or more people in a time window',
+      input: CheckAvailabilityInput,
+      annotations: { readOnlyHint: true },
+      destructive: false,
+      presets: ['calendar'],
+      backends: ['graph'],
+      handler: async (ctx, params) => jsonResult(await tools(ctx).checkAvailability(params)),
+    }),
+    defineTool({
+      name: 'find_meeting_times',
+      description: 'Find available meeting time slots for a group of attendees',
+      input: FindMeetingTimesInput,
+      annotations: { readOnlyHint: true },
+      destructive: false,
+      presets: ['calendar'],
+      backends: ['graph'],
+      handler: async (ctx, params) => jsonResult(await tools(ctx).findMeetingTimes(params)),
+    }),
+  ];
 }
