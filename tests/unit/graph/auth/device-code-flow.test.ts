@@ -290,6 +290,23 @@ describe('graph/auth/device-code-flow', () => {
       expect(token).toBe('interactive-token');
       expect(mockAcquireTokenByDeviceCode).toHaveBeenCalled();
     });
+
+    it('throws AUTH_EXPIRED (no device code) when a cached session fails to refresh (U9)', async () => {
+      const mockAccount: AccountInfo = {
+        homeAccountId: 'home-account-id',
+        environment: 'login.microsoftonline.com',
+        tenantId: 'tenant-id',
+        username: 'user@example.com',
+        localAccountId: 'local-account-id',
+      };
+      // Cached account exists, but the silent refresh fails (invalid_grant).
+      mockGetAllAccounts.mockResolvedValue([mockAccount]);
+      mockAcquireTokenSilent.mockRejectedValue(new Error('invalid_grant'));
+
+      await expect(getAccessToken(vi.fn())).rejects.toMatchObject({ code: 'AUTH_EXPIRED' });
+      // Critically, it does NOT fall into an unwatchable interactive device code.
+      expect(mockAcquireTokenByDeviceCode).not.toHaveBeenCalled();
+    });
   });
 
   describe('isAuthenticated', () => {

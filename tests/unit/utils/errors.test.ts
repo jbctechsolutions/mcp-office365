@@ -251,12 +251,18 @@ describe('errors', () => {
   // =========================================================================
 
   describe('GraphAuthRequiredError', () => {
-    it('creates error with correct message', () => {
+    it('creates error with correct message and the AUTH_EXPIRED code (U9 consolidation)', () => {
       const error = new GraphAuthRequiredError();
       expect(error.message).toContain('authentication required');
       expect(error.message).toContain('npx @jbctechsolutions/mcp-office365 auth');
-      expect(error.code).toBe(ErrorCode.GRAPH_AUTH_REQUIRED);
+      expect(error.code).toBe(ErrorCode.AUTH_EXPIRED);
       expect(error.name).toBe('GraphAuthRequiredError');
+    });
+
+    it('reports a session-expired reason distinctly', () => {
+      const error = new GraphAuthRequiredError('session_expired');
+      expect(error.code).toBe(ErrorCode.AUTH_EXPIRED);
+      expect(error.message).toContain('session expired');
     });
 
     it('extends OutlookMcpError', () => {
@@ -453,7 +459,7 @@ describe('errors', () => {
 
     it('carries the auth suggestion from GraphAuthRequiredError', () => {
       const env = toErrorEnvelope(new GraphAuthRequiredError());
-      expect(env.code).toBe(ErrorCode.GRAPH_AUTH_REQUIRED);
+      expect(env.code).toBe(ErrorCode.AUTH_EXPIRED);
       expect(env.retriable).toBe(false);
       expect(env.suggestion).toContain('auth');
     });

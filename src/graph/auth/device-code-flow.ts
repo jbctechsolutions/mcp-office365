@@ -22,6 +22,7 @@ import {
 
 import { loadGraphConfig, getAuthorityUrl, type GraphAuthConfig } from './config.js';
 import { createTokenCachePlugin, hasTokenCache } from './token-cache.js';
+import { GraphAuthRequiredError } from '../../utils/errors.js';
 
 /**
  * Singleton MSAL application instance.
@@ -115,26 +116,41 @@ export async function acquireTokenInteractive(
  * Returns null if no cached token is available or if refresh fails.
  */
 export async function acquireTokenSilent(): Promise<AuthenticationResult | null> {
+  const outcome = await acquireTokenSilentDetailed();
+  return outcome.status === 'ok' ? outcome.result : null;
+}
+
+/**
+ * Silent acquisition that distinguishes *why* it failed: no cached account
+ * (never authenticated) vs. a cached account whose refresh token is expired or
+ * revoked (session expired mid-run — the `invalid_grant` case). The caller uses
+ * this to avoid falling into an unwatchable re-interactive device-code flow for
+ * an expired session, surfacing a typed AUTH_EXPIRED instead (U9).
+ */
+type SilentOutcome =
+  | { status: 'ok'; result: AuthenticationResult }
+  | { status: 'no_account' }
+  | { status: 'refresh_failed'; cause: unknown };
+
+async function acquireTokenSilentDetailed(): Promise<SilentOutcome> {
   const msal = getMsalInstance();
   const config = getConfig();
 
-  // Get accounts from cache
   const accounts = await msal.getTokenCache().getAllAccounts();
-
-  // Use the first account (most common case)
   const account = accounts[0];
   if (account == null) {
-    return null;
+    return { status: 'no_account' };
   }
 
   try {
-    return await msal.acquireTokenSilent({
+    const result = await msal.acquireTokenSilent({
       account,
       scopes: [...config.scopes],
     });
-  } catch {
-    // Token refresh failed, will need interactive auth
-    return null;
+    return { status: 'ok', result };
+  } catch (cause) {
+    // e.g. expired/revoked refresh token (invalid_grant) — a re-auth is needed.
+    return { status: 'refresh_failed', cause };
   }
 }
 
@@ -148,14 +164,22 @@ export async function acquireTokenSilent(): Promise<AuthenticationResult | null>
 export async function getAccessToken(
   deviceCodeCallback: DeviceCodeCallback = defaultDeviceCodeCallback
 ): Promise<string> {
-  // Try silent first
-  let result = await acquireTokenSilent();
-
-  // If silent fails, do interactive
-  if (result == null) {
-    result = await acquireTokenInteractive(deviceCodeCallback);
+  const silent = await acquireTokenSilentDetailed();
+  if (silent.status === 'ok') {
+    return silent.result.accessToken;
   }
 
+  // A cached session that failed to refresh (expired/revoked, `invalid_grant`)
+  // must NOT fall into a fresh interactive device-code flow: in the MCP server
+  // that device code prints to an unwatched stderr and the call hangs until the
+  // code expires. Surface a typed AUTH_EXPIRED with the re-auth hint instead (U9).
+  if (silent.status === 'refresh_failed') {
+    throw new GraphAuthRequiredError('session_expired');
+  }
+
+  // No cached account at all — genuine first-time auth; the interactive device
+  // code is appropriate (this is the path the CLI `auth` command drives).
+  const result = await acquireTokenInteractive(deviceCodeCallback);
   return result.accessToken;
 }
 
