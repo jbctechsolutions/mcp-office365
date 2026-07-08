@@ -22,7 +22,6 @@ export const ErrorCode = {
   APPLESCRIPT_PERMISSION_DENIED: 'APPLESCRIPT_PERMISSION_DENIED',
   APPLESCRIPT_TIMEOUT: 'APPLESCRIPT_TIMEOUT',
   APPLESCRIPT_ERROR: 'APPLESCRIPT_ERROR',
-  GRAPH_AUTH_REQUIRED: 'GRAPH_AUTH_REQUIRED',
   GRAPH_RATE_LIMITED: 'GRAPH_RATE_LIMITED',
   GRAPH_PERMISSION_DENIED: 'GRAPH_PERMISSION_DENIED',
   GRAPH_ERROR: 'GRAPH_ERROR',
@@ -242,17 +241,23 @@ export class AppleScriptError extends OutlookMcpError {
 // =============================================================================
 
 /**
- * Thrown when Microsoft Graph authentication is required.
+ * Thrown when Microsoft Graph authentication is required or a cached session has
+ * expired mid-run. Uses the D10 `AUTH_EXPIRED` code (the older
+ * `GRAPH_AUTH_REQUIRED` was never thrown and has been removed) so raw-401
+ * mapping and this typed path agree on one code for "you need to (re-)authenticate".
  */
 export class GraphAuthRequiredError extends OutlookMcpError {
-  readonly code = ErrorCode.GRAPH_AUTH_REQUIRED;
+  readonly code = ErrorCode.AUTH_EXPIRED;
 
-  constructor() {
-    super(
-      'Microsoft Graph authentication required. ' +
-        'Run: npx @jbctechsolutions/mcp-office365 auth',
-      { retriable: false, suggestion: 'Run `npx @jbctechsolutions/mcp-office365 auth` to sign in.' }
-    );
+  constructor(reason: 'not_authenticated' | 'session_expired' = 'not_authenticated') {
+    const lead =
+      reason === 'session_expired'
+        ? 'Microsoft Graph session expired.'
+        : 'Microsoft Graph authentication required.';
+    super(`${lead} Run: npx @jbctechsolutions/mcp-office365 auth`, {
+      retriable: false,
+      suggestion: 'Run `npx @jbctechsolutions/mcp-office365 auth` to (re)authenticate.',
+    });
   }
 }
 

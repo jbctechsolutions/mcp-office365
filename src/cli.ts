@@ -175,7 +175,9 @@ async function handleAuth(print: PrintFn): Promise<number> {
   print('');
 
   try {
-    await getAccessToken();
+    // CLI runs at a real terminal, so re-authenticate interactively even when a
+    // cached session is expired (the server path throws AUTH_EXPIRED instead).
+    await getAccessToken(undefined, { interactiveOnExpired: true });
     const account = await getAccount();
     const username = account?.username ?? 'unknown';
 
@@ -202,7 +204,9 @@ async function handleForceAuth(print: PrintFn): Promise<number> {
     await signOut();
     print('Cleared existing tokens.');
     print('');
-    await getAccessToken();
+    // CLI runs at a real terminal, so re-authenticate interactively even when a
+    // cached session is expired (the server path throws AUTH_EXPIRED instead).
+    await getAccessToken(undefined, { interactiveOnExpired: true });
     const account = await getAccount();
     const username = account?.username ?? 'unknown';
 

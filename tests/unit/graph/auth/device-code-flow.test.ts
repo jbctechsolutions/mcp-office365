@@ -8,6 +8,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { InteractionRequiredAuthError } from '@azure/msal-node';
 import type { PublicClientApplication, AccountInfo, AuthenticationResult } from '@azure/msal-node';
 
 // Mock MSAL module
@@ -28,6 +29,8 @@ const mockMsalInstance = {
 
 vi.mock('@azure/msal-node', () => ({
   PublicClientApplication: vi.fn(function() { return mockMsalInstance; }),
+  // Real-ish so `cause instanceof InteractionRequiredAuthError` works in source.
+  InteractionRequiredAuthError: class InteractionRequiredAuthError extends Error {},
 }));
 
 // Mock config module
@@ -289,6 +292,72 @@ describe('graph/auth/device-code-flow', () => {
 
       expect(token).toBe('interactive-token');
       expect(mockAcquireTokenByDeviceCode).toHaveBeenCalled();
+    });
+
+    it('throws AUTH_EXPIRED (no device code) when a cached session fails to refresh (U9)', async () => {
+      const mockAccount: AccountInfo = {
+        homeAccountId: 'home-account-id',
+        environment: 'login.microsoftonline.com',
+        tenantId: 'tenant-id',
+        username: 'user@example.com',
+        localAccountId: 'local-account-id',
+      };
+      // Cached account exists, but the silent refresh fails (invalid_grant).
+      mockGetAllAccounts.mockResolvedValue([mockAccount]);
+      mockAcquireTokenSilent.mockRejectedValue(new InteractionRequiredAuthError('invalid_grant'));
+
+      await expect(getAccessToken(vi.fn())).rejects.toMatchObject({ code: 'AUTH_EXPIRED' });
+      // Critically, it does NOT fall into an unwatchable interactive device code.
+      expect(mockAcquireTokenByDeviceCode).not.toHaveBeenCalled();
+    });
+
+    it('re-authenticates interactively on an expired session when interactiveOnExpired is set (CLI path)', async () => {
+      const mockAccount: AccountInfo = {
+        homeAccountId: 'home-account-id',
+        environment: 'login.microsoftonline.com',
+        tenantId: 'tenant-id',
+        username: 'user@example.com',
+        localAccountId: 'local-account-id',
+      };
+      // Cached account whose refresh fails — but a terminal user CAN see the code.
+      mockGetAllAccounts.mockResolvedValue([mockAccount]);
+      mockAcquireTokenSilent.mockRejectedValue(new InteractionRequiredAuthError('invalid_grant'));
+      mockAcquireTokenByDeviceCode.mockResolvedValue({
+        accessToken: 'reauth-token',
+        account: mockAccount,
+        authority: '',
+        uniqueId: '',
+        tenantId: '',
+        scopes: [],
+        expiresOn: new Date(),
+        idToken: '',
+        idTokenClaims: {},
+        fromCache: false,
+        tokenType: 'Bearer',
+        correlationId: '',
+      });
+
+      const token = await getAccessToken(vi.fn(), { interactiveOnExpired: true });
+      expect(token).toBe('reauth-token');
+      expect(mockAcquireTokenByDeviceCode).toHaveBeenCalled();
+    });
+
+    it('propagates a transient silent-auth error (not AUTH_EXPIRED, no device code)', async () => {
+      const mockAccount: AccountInfo = {
+        homeAccountId: 'home-account-id',
+        environment: 'login.microsoftonline.com',
+        tenantId: 'tenant-id',
+        username: 'user@example.com',
+        localAccountId: 'local-account-id',
+      };
+      mockGetAllAccounts.mockResolvedValue([mockAccount]);
+      // A plain (non-interaction-required) error = network/throttle/server — NOT
+      // an expired session, so it must not be relabeled AUTH_EXPIRED or trigger
+      // a device-code prompt; it propagates as-is (retriable at the chokepoint).
+      mockAcquireTokenSilent.mockRejectedValue(new Error('ECONNRESET'));
+
+      await expect(getAccessToken(vi.fn())).rejects.toThrow('ECONNRESET');
+      expect(mockAcquireTokenByDeviceCode).not.toHaveBeenCalled();
     });
   });
 
