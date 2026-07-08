@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **`list_my_planner_tasks`** — lists every Planner task assigned to the
+  signed-in user across all plans (`GET /me/planner/tasks`). Each task carries
+  its own `planId`, so no plan-by-plan enumeration is needed to find "my tasks".
+
 ## [3.0.0] - 2026-07-08
 
 Version 3.0.0 is a major release centered on **reliability, a typed error

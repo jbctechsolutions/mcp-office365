@@ -2810,6 +2810,49 @@ export class GraphRepository implements IRepository {
   }
 
   /**
+   * Lists all Planner tasks assigned to the signed-in user, across every plan
+   * (`GET /me/planner/tasks`). Unlike the plan-scoped list, each task carries its
+   * own `planId`; the plan and task ids are cached so follow-up get/update calls
+   * resolve without a re-list.
+   */
+  async listMyPlannerTasksAsync(): Promise<Array<{
+    id: number; title: string; planId: number; bucketId: number | null;
+    assignees: string[]; percentComplete: number; priority: number;
+    startDateTime: string; dueDateTime: string; createdDateTime: string;
+  }>> {
+    const tasks = await this.client.listMyPlannerTasks();
+    return tasks.map((task) => {
+      const graphId = task.id!;
+      const numericId = hashStringToNumber(graphId);
+      const etag = ((task as unknown as Record<string, unknown>)['@odata.etag'] as string | undefined) ?? '';
+      this.idCache.plannerTasks.set(numericId, { taskId: graphId, etag });
+      let planNumericId = 0;
+      if (task.planId != null) {
+        planNumericId = hashStringToNumber(task.planId);
+        if (!this.idCache.plans.has(planNumericId)) {
+          this.idCache.plans.set(planNumericId, { planId: task.planId, etag: '' });
+        }
+      }
+      let bucketNumericId: number | null = null;
+      if (task.bucketId != null) {
+        bucketNumericId = hashStringToNumber(task.bucketId);
+      }
+      return {
+        id: numericId,
+        title: task.title ?? '',
+        planId: planNumericId,
+        bucketId: bucketNumericId,
+        assignees: task.assignments != null ? Object.keys(task.assignments) : [],
+        percentComplete: task.percentComplete ?? 0,
+        priority: task.priority ?? 5,
+        startDateTime: task.startDateTime ?? '',
+        dueDateTime: task.dueDateTime ?? '',
+        createdDateTime: task.createdDateTime ?? '',
+      };
+    });
+  }
+
+  /**
    * Gets a specific planner task by cached numeric ID.
    */
   async getPlannerTaskAsync(taskId: number): Promise<{

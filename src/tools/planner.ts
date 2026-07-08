@@ -69,6 +69,8 @@ export const ListPlannerTasksInput = z.strictObject({
   plan_id: z.number().int().positive().describe('Plan ID from list_plans'),
 });
 
+export const ListMyPlannerTasksInput = z.strictObject({});
+
 export const GetPlannerTaskInput = z.strictObject({
   task_id: z.number().int().positive().describe('Task ID from list_planner_tasks'),
 });
@@ -127,6 +129,7 @@ export type UpdateBucketParams = z.infer<typeof UpdateBucketInput>;
 export type PrepareDeleteBucketParams = z.infer<typeof PrepareDeleteBucketInput>;
 export type ConfirmDeleteBucketParams = z.infer<typeof ConfirmDeleteBucketInput>;
 export type ListPlannerTasksParams = z.infer<typeof ListPlannerTasksInput>;
+export type ListMyPlannerTasksParams = z.infer<typeof ListMyPlannerTasksInput>;
 export type GetPlannerTaskParams = z.infer<typeof GetPlannerTaskInput>;
 export type CreatePlannerTaskParams = z.infer<typeof CreatePlannerTaskInput>;
 export type UpdatePlannerTaskParams = z.infer<typeof UpdatePlannerTaskInput>;
@@ -152,6 +155,11 @@ export interface IPlannerRepository {
     id: number; title: string; bucketId: number | null; assignees: string[];
     percentComplete: number; priority: number; startDateTime: string;
     dueDateTime: string; createdDateTime: string;
+  }>>;
+  listMyPlannerTasksAsync(): Promise<Array<{
+    id: number; title: string; planId: number; bucketId: number | null;
+    assignees: string[]; percentComplete: number; priority: number;
+    startDateTime: string; dueDateTime: string; createdDateTime: string;
   }>>;
   getPlannerTaskAsync(taskId: number): Promise<{
     id: number; title: string; bucketId: number | null; assignees: string[];
@@ -357,6 +365,18 @@ export class PlannerTools {
     content: Array<{ type: 'text'; text: string }>;
   }> {
     const tasks = await this.repo.listPlannerTasksAsync(params.plan_id);
+    return {
+      content: [{
+        type: 'text' as const,
+        text: JSON.stringify({ tasks }, null, 2),
+      }],
+    };
+  }
+
+  async listMyPlannerTasks(_params: ListMyPlannerTasksParams): Promise<{
+    content: Array<{ type: 'text'; text: string }>;
+  }> {
+    const tasks = await this.repo.listMyPlannerTasksAsync();
     return {
       content: [{
         type: 'text' as const,
@@ -636,6 +656,16 @@ export function plannerToolDefinitions(): ToolDefinition[] {
       presets: ['planner'],
       backends: ['graph'],
       handler: (ctx, params) => tools(ctx).listPlannerTasks(params),
+    }),
+    defineTool({
+      name: 'list_my_planner_tasks',
+      description: 'List all Planner tasks assigned to the signed-in user across every plan (Graph API)',
+      input: ListMyPlannerTasksInput,
+      annotations: { readOnlyHint: true, openWorldHint: true },
+      destructive: false,
+      presets: ['planner'],
+      backends: ['graph'],
+      handler: (ctx, params) => tools(ctx).listMyPlannerTasks(params),
     }),
     defineTool({
       name: 'get_planner_task',

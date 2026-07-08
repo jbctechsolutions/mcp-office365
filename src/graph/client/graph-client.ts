@@ -1943,6 +1943,13 @@ export class GraphClient {
     return response.value as MicrosoftGraph.PlannerTask[];
   }
 
+  /** All Planner tasks assigned to the signed-in user, across every plan. */
+  async listMyPlannerTasks(): Promise<MicrosoftGraph.PlannerTask[]> {
+    const client = await this.getClient();
+    const response = await client.api('/me/planner/tasks').get() as PageCollection;
+    return response.value as MicrosoftGraph.PlannerTask[];
+  }
+
   async getPlannerTask(taskId: string): Promise<MicrosoftGraph.PlannerTask> {
     const client = await this.getClient();
     return await client.api(`/planner/tasks/${taskId}`).get() as MicrosoftGraph.PlannerTask;
