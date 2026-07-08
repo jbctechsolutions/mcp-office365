@@ -226,7 +226,8 @@ export function sharePointToolDefinitions(): ToolDefinition[] {
       name: 'download_library_file',
       description: 'Download a file from a SharePoint document library to a local path (Graph API)',
       input: DownloadLibraryFileInput,
-      annotations: { readOnlyHint: true, openWorldHint: true },
+      // Writes the file to output_path on local disk — not read-only.
+      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
       destructive: false,
       presets: ['sharepoint'],
       backends: ['graph'],

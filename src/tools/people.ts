@@ -389,7 +389,8 @@ export function peopleToolDefinitions(): ToolDefinition[] {
       name: 'get_user_photo',
       description: 'Get a user\'s photo and save to disk (Graph API)',
       input: GetUserPhotoInput,
-      annotations: { readOnlyHint: true, openWorldHint: true },
+      // Writes the photo to save_path (defaults to ~/Downloads) on local disk.
+      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
       destructive: false,
       presets: ['people'],
       backends: ['graph'],

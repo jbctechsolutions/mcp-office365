@@ -223,7 +223,8 @@ export function meetingsToolDefinitions(): ToolDefinition[] {
       name: 'download_meeting_recording',
       description: 'Download a meeting recording to a local file (Graph API)',
       input: DownloadMeetingRecordingInput,
-      annotations: { readOnlyHint: true, openWorldHint: true },
+      // Writes the recording to output_path on local disk — not read-only.
+      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
       destructive: false,
       presets: ['meetings'],
       backends: ['graph'],

@@ -412,7 +412,8 @@ export function oneDriveToolDefinitions(): ToolDefinition[] {
       name: 'download_file',
       description: 'Download a file from OneDrive to a local path (Graph API)',
       input: DownloadFileInput,
-      annotations: { readOnlyHint: true, openWorldHint: true },
+      // Writes the file to output_path on local disk — not read-only.
+      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
       destructive: false,
       presets: ['files'],
       backends: ['graph'],
