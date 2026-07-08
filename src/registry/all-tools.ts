@@ -29,8 +29,10 @@ import { oneDriveToolDefinitions } from '../tools/onedrive.js';
 import { excelToolDefinitions } from '../tools/excel.js';
 import { notesToolDefinitions } from '../tools/notes.js';
 import { contactsToolDefinitions } from '../tools/contacts.js';
+import { calendarToolDefinitions } from '../tools/calendar.js';
 import { tasksToolDefinitions } from '../tools/tasks.js';
 import { mailboxOrganizationToolDefinitions } from '../tools/mailbox-organization.js';
+import { mailToolDefinitions } from '../tools/mail.js';
 
 export function allToolDefinitions(): ToolDefinition[] {
   return [
@@ -51,8 +53,10 @@ export function allToolDefinitions(): ToolDefinition[] {
     ...excelToolDefinitions(),
     ...notesToolDefinitions(),
     ...contactsToolDefinitions(),
+    ...calendarToolDefinitions(),
     ...tasksToolDefinitions(),
     ...mailboxOrganizationToolDefinitions(),
+    ...mailToolDefinitions(),
     // U2: append each migrated domain's definitions here.
   ];
 }
