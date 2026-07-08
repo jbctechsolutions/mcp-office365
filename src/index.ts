@@ -85,6 +85,7 @@ import { PlannerTools } from './tools/planner.js';
 import { PlannerVisualizationTools } from './tools/planner-visualization.js';
 import { SharePointTools } from './tools/sharepoint.js';
 import { ApprovalTokenManager } from './approval/index.js';
+import { StateStore } from './state/store.js';
 import {
   toErrorEnvelope,
   ensureErrorEnvelopeText,
@@ -174,8 +175,11 @@ export function createServer(options: ServerOptions = {}): Server {
   const registry = new ToolRegistry();
   registry.register(allToolDefinitions());
 
-  // Shared state (used by both backends)
-  const tokenManager = new ApprovalTokenManager();
+  // Shared state (used by both backends). The durable state store backs approval
+  // tokens (U9b) so a two-phase approval survives a restart / a second window; a
+  // corrupt/locked db degrades to in-memory (StateStore.open handles it).
+  const stateStore = StateStore.open();
+  const tokenManager = new ApprovalTokenManager({ store: stateStore });
 
   // Tools and backend state
   let initialized = false;

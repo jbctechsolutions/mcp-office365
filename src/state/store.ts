@@ -59,6 +59,18 @@ export interface ApprovalTokenInput {
   createdAt?: number;
 }
 
+/** A stored approval-token row (read view). */
+export interface ApprovalTokenRow {
+  token: string;
+  action: string;
+  targetJson: string;
+  contentHash: string | null;
+  expiresAt: number;
+  redeemedAt: number | null;
+  receiptJson: string | null;
+  createdAt: number;
+}
+
 /** Outcome of an atomic approval-token consume. */
 export type ConsumeResult =
   | { status: 'consumed'; receiptJson: string | null }
@@ -282,6 +294,43 @@ export class StateStore {
   }
 
   // ---- Approval tokens (D7/D8) --------------------------------------------
+
+  /**
+   * Reads an approval token scoped to `accountId` (or null). A read view for
+   * validation/preview; redemption still goes through {@link consumeApprovalToken}
+   * so the atomic guard is never bypassed.
+   */
+  getApprovalToken(token: string, accountId: string): ApprovalTokenRow | null {
+    const raw = this.db
+      .prepare(
+        'SELECT token, action, target_json, content_hash, expires_at, redeemed_at, receipt_json, created_at FROM approval_tokens WHERE token = ? AND account_id = ?',
+      )
+      .get(token, accountId) as
+      | {
+          token: string;
+          action: string;
+          target_json: string;
+          content_hash: string | null;
+          expires_at: number;
+          redeemed_at: number | null;
+          receipt_json: string | null;
+          created_at: number;
+        }
+      | undefined;
+    if (raw === undefined) {
+      return null;
+    }
+    return {
+      token: raw.token,
+      action: raw.action,
+      targetJson: raw.target_json,
+      contentHash: raw.content_hash,
+      expiresAt: raw.expires_at,
+      redeemedAt: raw.redeemed_at,
+      receiptJson: raw.receipt_json,
+      createdAt: raw.created_at,
+    };
+  }
 
   /** Stages a two-phase approval token. */
   putApprovalToken(input: ApprovalTokenInput): void {
