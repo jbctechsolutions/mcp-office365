@@ -12,6 +12,21 @@
 import { z } from 'zod';
 import type { IRepository, ContactRow } from '../database/repository.js';
 import type { ContactSummary, Contact, ContactTypeValue } from '../types/index.js';
+import { defineTool } from '../registry/define-tool.js';
+import { requireGraphToolset, requireAppleScriptToolset } from '../registry/context.js';
+import type { ToolContext, ToolDefinition, ToolResult } from '../registry/types.js';
+import type { GraphContactsTools } from './contacts-graph.js';
+
+// Contacts are a dual-backend domain: the AppleScript backend serves them via
+// ContactsTools; the Graph backend serves them via GraphContactsTools.
+declare module '../registry/types.js' {
+  interface GraphToolsets {
+    contactsGraph: GraphContactsTools;
+  }
+  interface AppleScriptToolsets {
+    contacts: ContactsTools;
+  }
+}
 
 // =============================================================================
 // Input Schemas
@@ -198,4 +213,68 @@ export function createContactsTools(
   contentReader: IContactContentReader = nullContactContentReader
 ): ContactsTools {
   return new ContactsTools(repository, contentReader);
+}
+
+// =============================================================================
+// Registry Definitions (v3 registry-driven architecture, U2 — dual backend)
+// =============================================================================
+
+function jsonResult(data: unknown): ToolResult {
+  return { content: [{ type: 'text', text: JSON.stringify(data, null, 2) }] };
+}
+
+/**
+ * Registry tool definitions for the contacts domain. Each handler branches on
+ * the active backend: Graph delegates to GraphContactsTools (which returns MCP
+ * content directly); AppleScript delegates to ContactsTools (which returns raw
+ * objects, wrapped here to match the pre-registry dispatch behavior exactly).
+ */
+export function contactsToolDefinitions(): ToolDefinition[] {
+  return [
+    defineTool({
+      name: 'list_contacts',
+      description: 'List contacts with pagination',
+      input: ListContactsInput,
+      annotations: { readOnlyHint: true },
+      destructive: false,
+      presets: ['contacts'],
+      backends: ['graph', 'applescript'],
+      handler: (ctx, params) =>
+        ctx.backend === 'graph'
+          ? requireGraphToolset(ctx, 'contactsGraph').listContacts(params)
+          : jsonResult(requireAppleScriptToolset(ctx, 'contacts').listContacts(params)),
+    }),
+    defineTool({
+      name: 'search_contacts',
+      description: 'Search contacts by name',
+      input: SearchContactsInput,
+      annotations: { readOnlyHint: true },
+      destructive: false,
+      presets: ['contacts'],
+      backends: ['graph', 'applescript'],
+      handler: (ctx, params) =>
+        ctx.backend === 'graph'
+          ? requireGraphToolset(ctx, 'contactsGraph').searchContacts(params)
+          : jsonResult(requireAppleScriptToolset(ctx, 'contacts').searchContacts(params)),
+    }),
+    defineTool({
+      name: 'get_contact',
+      description: 'Get contact details',
+      input: GetContactInput,
+      annotations: { readOnlyHint: true },
+      destructive: false,
+      presets: ['contacts'],
+      backends: ['graph', 'applescript'],
+      handler: (ctx: ToolContext, params): Promise<ToolResult> | ToolResult => {
+        if (ctx.backend === 'graph') {
+          return requireGraphToolset(ctx, 'contactsGraph').getContact(params);
+        }
+        const result = requireAppleScriptToolset(ctx, 'contacts').getContact(params);
+        if (result == null) {
+          return { content: [{ type: 'text', text: 'Contact not found' }], isError: true };
+        }
+        return jsonResult(result);
+      },
+    }),
+  ];
 }

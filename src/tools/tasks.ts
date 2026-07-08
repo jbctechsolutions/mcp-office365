@@ -13,6 +13,21 @@ import { z } from 'zod';
 import type { IRepository, TaskRow } from '../database/repository.js';
 import type { TaskSummary, Task, PriorityValue } from '../types/index.js';
 import { appleTimestampToIso } from '../utils/dates.js';
+import { defineTool } from '../registry/define-tool.js';
+import { requireGraphToolset, requireAppleScriptToolset } from '../registry/context.js';
+import type { ToolContext, ToolDefinition, ToolResult } from '../registry/types.js';
+import type { GraphTasksTools } from './tasks-graph.js';
+
+// Tasks are a dual-backend domain: the AppleScript backend serves them via
+// TasksTools; the Graph backend serves them via GraphTasksTools.
+declare module '../registry/types.js' {
+  interface GraphToolsets {
+    tasksGraph: GraphTasksTools;
+  }
+  interface AppleScriptToolsets {
+    tasks: TasksTools;
+  }
+}
 
 // =============================================================================
 // Input Schemas
@@ -178,4 +193,68 @@ export function createTasksTools(
   contentReader: ITaskContentReader = nullTaskContentReader
 ): TasksTools {
   return new TasksTools(repository, contentReader);
+}
+
+// =============================================================================
+// Registry Definitions (v3 registry-driven architecture, U2 — dual backend)
+// =============================================================================
+
+function jsonResult(data: unknown): ToolResult {
+  return { content: [{ type: 'text', text: JSON.stringify(data, null, 2) }] };
+}
+
+/**
+ * Registry tool definitions for the tasks domain. Each handler branches on the
+ * active backend: Graph delegates to GraphTasksTools (which returns MCP content
+ * directly); AppleScript delegates to TasksTools (which returns raw objects,
+ * wrapped here to match the pre-registry dispatch behavior exactly).
+ */
+export function tasksToolDefinitions(): ToolDefinition[] {
+  return [
+    defineTool({
+      name: 'list_tasks',
+      description: 'List tasks with pagination and filtering',
+      input: ListTasksInput,
+      annotations: { readOnlyHint: true },
+      destructive: false,
+      presets: ['tasks'],
+      backends: ['graph', 'applescript'],
+      handler: (ctx, params) =>
+        ctx.backend === 'graph'
+          ? requireGraphToolset(ctx, 'tasksGraph').listTasks(params)
+          : jsonResult(requireAppleScriptToolset(ctx, 'tasks').listTasks(params)),
+    }),
+    defineTool({
+      name: 'search_tasks',
+      description: 'Search tasks by name',
+      input: SearchTasksInput,
+      annotations: { readOnlyHint: true },
+      destructive: false,
+      presets: ['tasks'],
+      backends: ['graph', 'applescript'],
+      handler: (ctx, params) =>
+        ctx.backend === 'graph'
+          ? requireGraphToolset(ctx, 'tasksGraph').searchTasks(params)
+          : jsonResult(requireAppleScriptToolset(ctx, 'tasks').searchTasks(params)),
+    }),
+    defineTool({
+      name: 'get_task',
+      description: 'Get task details',
+      input: GetTaskInput,
+      annotations: { readOnlyHint: true },
+      destructive: false,
+      presets: ['tasks'],
+      backends: ['graph', 'applescript'],
+      handler: (ctx: ToolContext, params): Promise<ToolResult> | ToolResult => {
+        if (ctx.backend === 'graph') {
+          return requireGraphToolset(ctx, 'tasksGraph').getTask(params);
+        }
+        const result = requireAppleScriptToolset(ctx, 'tasks').getTask(params);
+        if (result == null) {
+          return { content: [{ type: 'text', text: 'Task not found' }], isError: true };
+        }
+        return jsonResult(result);
+      },
+    }),
+  ];
 }
