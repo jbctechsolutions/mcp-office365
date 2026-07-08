@@ -22,28 +22,33 @@
 
 import { ValidationError } from '../utils/errors.js';
 
-/** Structured, typed email-search criteria (replaces the raw `query` KQL). */
+/**
+ * Structured, typed email-search criteria (replaces the raw `query` KQL). Fields
+ * are `| undefined`-tolerant so a zod-parsed input object (which carries explicit
+ * `undefined` for absent optionals under exactOptionalPropertyTypes) passes
+ * directly; every field is guarded with `!= null` before use.
+ */
 export interface EmailSearchParams {
   /** Sender address (exact). Property → `$filter`. */
-  from?: string;
+  from?: string | undefined;
   /** Recipient address (exact). Property → `$filter`. */
-  to?: string;
+  to?: string | undefined;
   /** Received on/after this ISO date/datetime. Property → `$filter`. */
-  received_after?: string;
+  received_after?: string | undefined;
   /** Received on/before this ISO date/datetime. Property → `$filter`. */
-  received_before?: string;
+  received_before?: string | undefined;
   /** Only messages with attachments. Property → `$filter`. */
-  has_attachments?: boolean;
+  has_attachments?: boolean | undefined;
   /** Only unread messages. Property → `$filter`. */
-  is_unread?: boolean;
+  is_unread?: boolean | undefined;
   /** Importance level. Property → `$filter`. */
-  importance?: 'low' | 'normal' | 'high';
+  importance?: 'low' | 'normal' | 'high' | undefined;
   /** Subject contains (free-text — Graph `$filter` has no `contains` here). */
-  subject_contains?: string;
+  subject_contains?: string | undefined;
   /** Body contains (free-text). */
-  body_contains?: string;
+  body_contains?: string | undefined;
   /** Free-text across the message. */
-  text?: string;
+  text?: string | undefined;
 }
 
 /** The compiled query and which Graph mechanism executes it. */
@@ -77,15 +82,16 @@ export function compileEmailSearch(params: EmailSearchParams): CompiledSearch {
   return { mechanism: 'searchQuery', kql: buildKql(params) };
 }
 
-/** Property criteria → OData `$filter` clauses (order is stable for snapshots). */
+/**
+ * Property criteria → OData `$filter` clauses (order is stable for snapshots).
+ * Addressing fields (`from`/`to`) are deliberately NOT here: the D9 live spike
+ * showed Graph rejects a recipient `any()` lambda (`ErrorInvalidUrlQueryFilter`)
+ * and returns `InefficientFilter` when a sender/flag `$filter` is combined with
+ * `$orderby`. So `from`/`to` are handled as `from:`/`to:` in the $search/KQL
+ * layer instead, where both work reliably.
+ */
 function buildFilters(p: EmailSearchParams): string[] {
   const out: string[] = [];
-  if (p.from != null && p.from.length > 0) {
-    out.push(`from/emailAddress/address eq '${escapeODataString(p.from)}'`);
-  }
-  if (p.to != null && p.to.length > 0) {
-    out.push(`toRecipients/any(r:r/emailAddress/address eq '${escapeODataString(p.to)}')`);
-  }
   if (p.received_after != null) {
     out.push(`receivedDateTime ge ${requireIsoDate(p.received_after, 'received_after')}`);
   }
@@ -104,17 +110,28 @@ function buildFilters(p: EmailSearchParams): string[] {
   return out;
 }
 
-/** Free-text criteria → search terms (subject/body `contains` isn't a filter). */
+/**
+ * `$search`/KQL terms. Includes the addressing fields (`from`/`to`) — Graph's
+ * `$filter` can't reliably express them (see buildFilters) but the `from:`/`to:`
+ * KQL operators work in `$search` and `/search/query` (D9 spike). Order is stable
+ * for snapshots.
+ */
 function buildSearchTerms(p: EmailSearchParams): string[] {
   const out: string[] = [];
-  if (p.text != null && p.text.trim().length > 0) {
-    out.push(p.text.trim());
+  if (p.from != null && p.from.trim().length > 0) {
+    out.push(`from:${p.from.trim()}`);
+  }
+  if (p.to != null && p.to.trim().length > 0) {
+    out.push(`to:${p.to.trim()}`);
   }
   if (p.subject_contains != null && p.subject_contains.trim().length > 0) {
     out.push(`subject:${p.subject_contains.trim()}`);
   }
   if (p.body_contains != null && p.body_contains.trim().length > 0) {
     out.push(`body:${p.body_contains.trim()}`);
+  }
+  if (p.text != null && p.text.trim().length > 0) {
+    out.push(p.text.trim());
   }
   return out;
 }
@@ -184,11 +201,6 @@ function invalidDate(field: string, value: string): ValidationError {
 function toKqlDate(value: string, field: string): string {
   requireIsoDate(value, field);
   return value.slice(0, 10);
-}
-
-/** Escapes single quotes for an OData string literal (doubled per OData rules). */
-function escapeODataString(value: string): string {
-  return value.replace(/'/g, "''");
 }
 
 /** Wraps a value as a quoted KQL phrase, stripping embedded double quotes. */

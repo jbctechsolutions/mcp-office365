@@ -9,11 +9,20 @@ import { ErrorCode } from '../../../src/utils/errors.js';
 
 describe('compileEmailSearch — mechanism selection (D9)', () => {
   it('property-only criteria compile to $filter', () => {
-    const c = compileEmailSearch({ from: 'alice@example.com' });
+    const c = compileEmailSearch({ received_after: '2026-01-01' });
     expect(c.mechanism).toBe('filter');
     if (c.mechanism === 'filter') {
-      expect(c.filter).toBe("from/emailAddress/address eq 'alice@example.com'");
+      expect(c.filter).toBe('receivedDateTime ge 2026-01-01T00:00:00Z');
     }
+  });
+
+  it('from/to are $search terms, not $filter (Graph $filter cannot express them reliably)', () => {
+    const cf = compileEmailSearch({ from: 'alice@example.com' });
+    expect(cf.mechanism).toBe('search');
+    if (cf.mechanism === 'search') expect(cf.search).toBe('"from:alice@example.com"');
+    const ct = compileEmailSearch({ to: 'bob@example.com' });
+    expect(ct.mechanism).toBe('search');
+    if (ct.mechanism === 'search') expect(ct.search).toBe('"to:bob@example.com"');
   });
 
   it('free-text-only criteria compile to a quoted $search', () => {
@@ -25,20 +34,28 @@ describe('compileEmailSearch — mechanism selection (D9)', () => {
   });
 
   it('mixed property + free-text compile to /search/query KQL', () => {
-    const c = compileEmailSearch({ from: 'alice@example.com', body_contains: 'invoice' });
+    const c = compileEmailSearch({ received_after: '2026-01-01', body_contains: 'invoice' });
     expect(c.mechanism).toBe('searchQuery');
     if (c.mechanism === 'searchQuery') {
-      expect(c.kql).toBe('from:"alice@example.com" AND body:"invoice"');
+      expect(c.kql).toBe('received>=2026-01-01 AND body:"invoice"');
+    }
+  });
+
+  it('from + a property filter is mixed → /search/query KQL', () => {
+    const c = compileEmailSearch({ from: 'alice@example.com', received_after: '2026-01-01' });
+    expect(c.mechanism).toBe('searchQuery');
+    if (c.mechanism === 'searchQuery') {
+      expect(c.kql).toBe('from:"alice@example.com" AND received>=2026-01-01');
     }
   });
 });
 
 describe('compileEmailSearch — $filter compilation', () => {
   it('combines two properties with a single "and"-joined $filter (stable order)', () => {
-    const c = compileEmailSearch({ from: 'alice@example.com', received_after: '2026-01-01' });
+    const c = compileEmailSearch({ received_after: '2026-01-01', has_attachments: true });
     expect(c).toEqual({
       mechanism: 'filter',
-      filter: "from/emailAddress/address eq 'alice@example.com' and receivedDateTime ge 2026-01-01T00:00:00Z",
+      filter: 'receivedDateTime ge 2026-01-01T00:00:00Z and hasAttachments eq true',
     });
   });
 
@@ -65,15 +82,6 @@ describe('compileEmailSearch — $filter compilation', () => {
     );
   });
 
-  it('escapes single quotes in an OData string literal', () => {
-    const c = compileEmailSearch({ from: "o'brien@example.com" }) as { filter: string };
-    expect(c.filter).toBe("from/emailAddress/address eq 'o''brien@example.com'");
-  });
-
-  it('compiles a recipient filter with an any() lambda', () => {
-    const c = compileEmailSearch({ to: 'bob@example.com' }) as { filter: string };
-    expect(c.filter).toBe("toRecipients/any(r:r/emailAddress/address eq 'bob@example.com')");
-  });
 });
 
 describe('compileEmailSearch — $search compilation', () => {
@@ -116,13 +124,14 @@ describe('compileEmailSearch — mixed KQL compilation', () => {
     );
   });
 
-  it('a from/to value with KQL operators or spaces cannot inject clauses (quoted phrase)', () => {
+  it('a from value with KQL operators is mixed only via a real filter; injection stays quoted', () => {
+    // from + a property filter → /search/query KQL; the from value stays inside
+    // one quoted phrase, so it cannot inject an extra clause.
     const c = compileEmailSearch({
       from: 'alice@x.com AND body:secret',
-      text: 'invoice',
+      received_after: '2026-01-01',
     }) as { kql: string };
-    // The whole from value stays inside one quoted phrase — no injected body: clause.
-    expect(c.kql).toBe('from:"alice@x.com AND body:secret" AND "invoice"');
+    expect(c.kql).toBe('from:"alice@x.com AND body:secret" AND received>=2026-01-01');
   });
 });
 

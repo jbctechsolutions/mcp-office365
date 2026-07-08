@@ -142,6 +142,8 @@ function setupMock(response: any = { value: [] }) {
 // ---------------------------------------------------------------------------
 
 const VALID_ENDPOINT_PATTERNS = [
+  // Search (U7 structured search — mixed path)
+  /^\/search\/query$/,
   // Mail folders
   /^\/me\/mailFolders$/,
   /^\/me\/mailFolders\/[^/]+$/,
@@ -322,24 +324,40 @@ describe('Graph API endpoint and method validation', () => {
       expect(apiCalls[0].topValue).toBe(30);
     });
 
-    it('searchMessagesKql passes raw KQL query to search without quotes', async () => {
-      await client.searchMessagesKql('from:alice AND hasAttachments:true', 20);
+    it('searchMessagesFilter uses $filter on /me/messages, no $orderby (U7)', async () => {
+      await client.searchMessagesFilter('hasAttachments eq true', 20);
 
       expect(apiCalls).toHaveLength(1);
       expect(apiCalls[0].url).toBe('/me/messages');
       expect(apiCalls[0].method).toBe('get');
-      expect(apiCalls[0].searchExpr).toBe('from:alice AND hasAttachments:true');
+      expect(apiCalls[0].filterExpr).toBe('hasAttachments eq true');
+      // No $orderby: Graph returns InefficientFilter if a filter is combined with
+      // it; /me/messages already defaults to receivedDateTime desc.
+      expect(apiCalls[0].orderbyExpr).toBeUndefined();
       expect(apiCalls[0].topValue).toBe(20);
     });
 
-    it('searchMessagesKqlInFolder passes raw KQL with folder scope', async () => {
-      await client.searchMessagesKqlInFolder('folder-123', 'subject:"report"', 10);
+    it('searchMessagesSearchValue passes the already-quoted value to $search (U7)', async () => {
+      await client.searchMessagesSearchValue('"subject:report"', 10);
 
       expect(apiCalls).toHaveLength(1);
-      expect(apiCalls[0].url).toBe('/me/mailFolders/folder-123/messages');
+      expect(apiCalls[0].url).toBe('/me/messages');
       expect(apiCalls[0].method).toBe('get');
-      expect(apiCalls[0].searchExpr).toBe('subject:"report"');
+      // The compiler already quotes; the client must not double-wrap.
+      expect(apiCalls[0].searchExpr).toBe('"subject:report"');
       expect(apiCalls[0].topValue).toBe(10);
+    });
+
+    it('searchMessagesQuery POSTs KQL to /search/query (U7 mixed path)', async () => {
+      await client.searchMessagesQuery('from:"a@b.com" AND body:"x"', 15);
+
+      expect(apiCalls).toHaveLength(1);
+      expect(apiCalls[0].url).toBe('/search/query');
+      expect(apiCalls[0].method).toBe('post');
+      const req = (apiCalls[0].body as { requests: Array<{ entityTypes: string[]; query: { queryString: string }; size: number }> }).requests[0];
+      expect(req.entityTypes).toEqual(['message']);
+      expect(req.query.queryString).toBe('from:"a@b.com" AND body:"x"');
+      expect(req.size).toBe(15);
     });
 
     it('listConversationMessages filters by conversationId with asc ordering', async () => {
@@ -1420,8 +1438,9 @@ describe('Graph API endpoint and method validation', () => {
       await client.listUnreadMessages('f1');
       await client.searchMessages('q');
       await client.searchMessagesInFolder('f1', 'q');
-      await client.searchMessagesKql('from:alice');
-      await client.searchMessagesKqlInFolder('f1', 'subject:"test"');
+      await client.searchMessagesFilter("from/emailAddress/address eq 'a@b.com'");
+      await client.searchMessagesSearchValue('"subject:test"');
+      await client.searchMessagesQuery('from:"a@b.com" AND body:"x"');
       await client.listConversationMessages('conv-1', 10);
 
       setupMock({ value: [{ id: 'msg-d' }], '@odata.deltaLink': 'https://graph.microsoft.com/v1.0/delta' });
