@@ -48,7 +48,6 @@ interface IdCache {
   folders: Map<number, string>;
   messages: Map<number, string>;
   conversations: Map<number, string>;
-  events: Map<number, string>;
   tasks: Map<number, { taskListId: string; taskId: string }>;
   taskLists: Map<number, string>;
   attachments: Map<number, { messageId: string; attachmentId: string }>;
@@ -94,7 +93,6 @@ export class GraphRepository implements IRepository {
     folders: new Map(),
     messages: new Map(),
     conversations: new Map(),
-    events: new Map(),
     tasks: new Map(),
     taskLists: new Map(),
     attachments: new Map(),
@@ -559,15 +557,8 @@ export class GraphRepository implements IRepository {
   }
 
   async listEventsAsync(limit: number): Promise<EventRow[]> {
+    // Rows carry self-encoding ev_ tokens (the mapper mints them) — no cache.
     const events = await this.client.listEvents(limit);
-
-    for (const event of events) {
-      if (event.id != null) {
-        const numericId = hashStringToNumber(event.id);
-        this.idCache.events.set(numericId, event.id);
-      }
-    }
-
     return events.map((e) => mapEventToEventRow(e));
   }
 
@@ -582,14 +573,6 @@ export class GraphRepository implements IRepository {
     }
 
     const events = await this.client.listEvents(limit, graphCalendarId);
-
-    for (const event of events) {
-      if (event.id != null) {
-        const numericId = hashStringToNumber(event.id);
-        this.idCache.events.set(numericId, event.id);
-      }
-    }
-
     return events.map((e) => mapEventToEventRow(e, graphCalendarId));
   }
 
@@ -598,33 +581,18 @@ export class GraphRepository implements IRepository {
   }
 
   async searchEventsAsync(query: string | null, startDate: string | null, endDate: string | null, limit: number): Promise<EventRow[]> {
-    // Graph doesn't have direct event search, so we filter client-side
+    // Graph doesn't have direct event search, so we filter client-side on the
+    // Graph events (by subject) before mapping to rows.
     const start = startDate != null ? new Date(startDate) : undefined;
     const end = endDate != null ? new Date(endDate) : undefined;
 
     const events = await this.client.listEvents(1000, undefined, start, end);
 
-    for (const event of events) {
-      if (event.id != null) {
-        const numericId = hashStringToNumber(event.id);
-        this.idCache.events.set(numericId, event.id);
-      }
-    }
+    const matched = query != null
+      ? events.filter((e) => (e.subject?.toLowerCase() ?? '').includes(query.toLowerCase()))
+      : events;
 
-    let rows = events.map((e) => mapEventToEventRow(e));
-
-    // Filter by title client-side if query provided
-    if (query != null) {
-      const queryLower = query.toLowerCase();
-      rows = rows.filter((row) => {
-        // EventRow doesn't have title, so we need to check the original event
-        const originalEvent = events.find((e) => e.id != null && hashStringToNumber(e.id) === row.id);
-        const subject = originalEvent?.subject?.toLowerCase() ?? '';
-        return subject.includes(queryLower);
-      });
-    }
-
-    return rows.slice(0, limit);
+    return matched.slice(0, limit).map((e) => mapEventToEventRow(e));
   }
 
   listEventsByDateRange(_startDate: number, _endDate: number, _limit: number): EventRow[] {
@@ -636,47 +604,31 @@ export class GraphRepository implements IRepository {
     const end = new Date(endDate * 1000);
 
     const events = await this.client.listEvents(limit, undefined, start, end);
-
-    for (const event of events) {
-      if (event.id != null) {
-        const numericId = hashStringToNumber(event.id);
-        this.idCache.events.set(numericId, event.id);
-      }
-    }
-
     return events.map((e) => mapEventToEventRow(e));
   }
 
-  getEvent(_id: number): EventRow | undefined {
+  getEvent(_id: string | number): EventRow | undefined {
     throw new Error('Use getEventAsync() for Graph repository');
   }
 
-  async getEventAsync(id: number): Promise<EventRow | undefined> {
-    const graphId = this.idCache.events.get(id);
-    if (graphId == null) {
-      return undefined;
-    }
-
+  async getEventAsync(id: string | number): Promise<EventRow | undefined> {
+    const graphId = this.toGraphId(id, 'event');
     const event = await this.client.getEvent(graphId);
     return event != null ? mapEventToEventRow(event) : undefined;
   }
 
+  /** Resolves an event id (durable `ev_` token or raw Graph id) to its Graph id. */
+  getEventGraphId(id: string | number): string {
+    return this.toGraphId(id, 'event');
+  }
+
   async listEventInstancesAsync(
-    eventId: number,
+    eventId: string | number,
     startDate: string,
     endDate: string
   ): Promise<EventRow[]> {
-    const graphId = this.idCache.events.get(eventId);
-    if (graphId == null) {
-      throw new Error(`Event ID ${eventId} not found in cache. Try searching for or listing the item first to refresh the cache.`);
-    }
-
+    const graphId = this.toGraphId(eventId, 'event');
     const instances = await this.client.listEventInstances(graphId, startDate, endDate);
-    for (const inst of instances) {
-      if (inst.id != null) {
-        this.idCache.events.set(hashStringToNumber(inst.id), inst.id);
-      }
-    }
     return instances.map((e) => mapEventToEventRow(e));
   }
 
@@ -925,14 +877,12 @@ export class GraphRepository implements IRepository {
   /**
    * Gets the Graph string ID from a numeric ID.
    */
-  getGraphId(type: 'folder' | 'message' | 'event', numericId: number): string | undefined {
+  getGraphId(type: 'folder' | 'message', numericId: number): string | undefined {
     switch (type) {
       case 'folder':
         return this.idCache.folders.get(numericId);
       case 'message':
         return this.idCache.messages.get(numericId);
-      case 'event':
-        return this.idCache.events.get(numericId);
     }
   }
 
@@ -1461,7 +1411,7 @@ export class GraphRepository implements IRepository {
     calendarId?: number;
     is_online_meeting?: boolean;
     online_meeting_provider?: string;
-  }): Promise<number> {
+  }): Promise<string> {
     const tz = params.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
 
     const graphEvent: Record<string, unknown> = {
@@ -1507,9 +1457,7 @@ export class GraphRepository implements IRepository {
 
     const created = await this.client.createEvent(graphEvent, graphCalendarId);
     const graphId = created.id!;
-    const numericId = hashStringToNumber(graphId);
-    this.idCache.events.set(numericId, graphId);
-    return numericId;
+    return mintSelfEncoded('event', graphId);
   }
 
   /**
@@ -1518,9 +1466,8 @@ export class GraphRepository implements IRepository {
    * Looks up the Graph string ID from idCache.events, then calls
    * client.updateEvent(). Throws if the event is not cached.
    */
-  async updateEventAsync(eventId: number, updates: Record<string, unknown>): Promise<void> {
-    const graphId = this.idCache.events.get(eventId);
-    if (graphId == null) throw new Error(`Event ID ${eventId} not found in cache. Try searching for or listing the item first to refresh the cache.`);
+  async updateEventAsync(eventId: string | number, updates: Record<string, unknown>): Promise<void> {
+    const graphId = this.toGraphId(eventId, 'event');
     await this.client.updateEvent(graphId, updates);
   }
 
@@ -1531,11 +1478,9 @@ export class GraphRepository implements IRepository {
    * client.deleteEvent(), and removes the entry from idCache.
    * Throws if the event is not cached.
    */
-  async deleteEventAsync(eventId: number): Promise<void> {
-    const graphId = this.idCache.events.get(eventId);
-    if (graphId == null) throw new Error(`Event ID ${eventId} not found in cache. Try searching for or listing the item first to refresh the cache.`);
+  async deleteEventAsync(eventId: string | number): Promise<void> {
+    const graphId = this.toGraphId(eventId, 'event');
     await this.client.deleteEvent(graphId);
-    this.idCache.events.delete(eventId);
   }
 
   /**
@@ -1545,13 +1490,12 @@ export class GraphRepository implements IRepository {
    * client.respondToEvent(). Throws if the event is not cached.
    */
   async respondToEventAsync(
-    eventId: number,
+    eventId: string | number,
     response: 'accept' | 'decline' | 'tentative',
     sendResponse: boolean,
     comment?: string
   ): Promise<void> {
-    const graphId = this.idCache.events.get(eventId);
-    if (graphId == null) throw new Error(`Event ID ${eventId} not found in cache. Try searching for or listing the item first to refresh the cache.`);
+    const graphId = this.toGraphId(eventId, 'event');
     await this.client.respondToEvent(graphId, response, sendResponse, comment);
   }
 

@@ -108,7 +108,7 @@ export function hashForwardForApproval(params: {
  * Used to detect if the event changed between prepare and confirm.
  */
 export function hashEventForApproval(event: {
-  id: number;
+  id: string | number;
   subject: string | null;
   startDateTime: string | null;
 }): string {

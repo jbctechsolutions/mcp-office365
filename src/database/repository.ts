@@ -53,7 +53,9 @@ export interface EmailRow {
 }
 
 export interface EventRow {
-  readonly id: number;
+  // Durable string token (`ev_…`) on the Graph backend (U5); numeric on the
+  // AppleScript/SQLite backend (D4).
+  readonly id: string | number;
   readonly folderId: number;
   readonly subject: string | null;
   readonly startDate: number | null;
@@ -129,7 +131,7 @@ export interface IRepository {
   listEventsByFolder(folderId: number, limit: number): EventRow[];
   listEventsByDateRange(startDate: number, endDate: number, limit: number): EventRow[];
   searchEvents(query: string | null, startDate: string | null, endDate: string | null, limit: number): EventRow[];
-  getEvent(id: number): EventRow | undefined;
+  getEvent(id: string | number): EventRow | undefined;
 
   // Contacts
   listContacts(limit: number, offset: number): ContactRow[];
@@ -343,7 +345,7 @@ export class OutlookRepository implements IRepository {
     return this.listEvents(limit);
   }
 
-  getEvent(id: number): EventRow | undefined {
+  getEvent(id: string | number): EventRow | undefined {
     return this.connection.execute((db) => {
       const stmt = db.prepare(queries.GET_EVENT);
       return stmt.get(id) as EventRow | undefined;

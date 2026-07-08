@@ -126,7 +126,7 @@ export class AppleCalendarTools {
     }
 
     const result = this.calendarManager.respondToEvent(
-      params.event_id,
+      params.event_id as number,
       params.response,
       params.send_response,
       params.comment
@@ -155,7 +155,7 @@ export class AppleCalendarTools {
     }
     const applyTo = params.apply_to ?? 'this_instance';
 
-    this.calendarManager.deleteEvent(params.event_id, applyTo);
+    this.calendarManager.deleteEvent(params.event_id as number, applyTo);
 
     const deleteText = applyTo === 'all_in_series' ? ' (entire series)' : '';
     return {
@@ -194,7 +194,7 @@ export class AppleCalendarTools {
     };
 
     const applyTo = params.apply_to ?? 'this_instance';
-    const result = this.calendarManager.updateEvent(params.event_id, updates, applyTo);
+    const result = this.calendarManager.updateEvent(params.event_id as number, updates, applyTo);
     const seriesSuffix = applyTo === 'all_in_series' ? ' (entire series)' : '';
 
     return {
