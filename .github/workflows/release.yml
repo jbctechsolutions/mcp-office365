@@ -95,4 +95,11 @@ jobs:
       # No NPM_TOKEN needed; --provenance publishes a signed provenance
       # attestation (needs the id-token: write permission above).
       - name: Publish to npm (OIDC trusted publishing)
-        run: npm publish --access public --provenance
+        run: |
+          # setup-node's registry-url writes a `//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}`
+          # stanza to ~/.npmrc. With no NODE_AUTH_TOKEN it expands to an empty token, and npm then
+          # uses (broken) classic auth instead of the OIDC handshake — E404/ENEEDAUTH. Strip it so
+          # trusted publishing kicks in.
+          npmrc="${NPM_CONFIG_USERCONFIG:-$HOME/.npmrc}"
+          [ -f "$npmrc" ] && sed -i.bak '/_authToken/d' "$npmrc" && rm -f "$npmrc.bak"
+          npm publish --access public --provenance
