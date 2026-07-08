@@ -32,6 +32,7 @@ import {
   toErrorEnvelope,
   isErrorEnvelope,
   ensureErrorEnvelopeText,
+  ReadOnlyModeError,
 } from '../../../src/utils/errors.js';
 
 describe('errors', () => {
@@ -415,6 +416,21 @@ describe('errors', () => {
       const error = new AttachmentSaveError('file.txt', 'Permission denied');
       expect(error).toBeInstanceOf(OutlookMcpError);
       expect(error).toBeInstanceOf(Error);
+    });
+  });
+
+  describe('ReadOnlyModeError', () => {
+    it('has code READ_ONLY_MODE, is non-retriable, names the tool, and maps to an envelope', () => {
+      const error = new ReadOnlyModeError('confirm_delete_email');
+      expect(error.code).toBe(ErrorCode.READ_ONLY_MODE);
+      expect(error.retriable).toBe(false);
+      expect(error.message).toContain('confirm_delete_email');
+      expect(error).toBeInstanceOf(OutlookMcpError);
+
+      const env = toErrorEnvelope(error);
+      expect(env.code).toBe(ErrorCode.READ_ONLY_MODE);
+      expect(env.retriable).toBe(false);
+      expect(env.suggestion).toContain('--read-only');
     });
   });
 

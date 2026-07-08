@@ -13,6 +13,7 @@
 
 import { z } from 'zod';
 import type { Tool } from '@modelcontextprotocol/sdk/types.js';
+import { ReadOnlyModeError } from '../utils/errors.js';
 import type {
   Backend,
   Preset,
@@ -123,6 +124,11 @@ export class ToolRegistry {
       return undefined;
     }
     if (!this.matches(def, options)) {
+      // Distinguish the read-only rejection so it surfaces a stable
+      // READ_ONLY_MODE envelope (D13) rather than a generic error.
+      if (options.readOnly === true && !isReadOnly(def)) {
+        throw new ReadOnlyModeError(name);
+      }
       throw new Error(`Tool "${name}" is not available in the current mode.`);
     }
     // MCP marks `arguments` optional; default to {} so no-input tools
@@ -140,7 +146,7 @@ export class ToolRegistry {
     if (!def.backends.includes(options.backend)) {
       return false;
     }
-    if (options.readOnly === true && def.destructive) {
+    if (options.readOnly === true && !isReadOnly(def)) {
       return false;
     }
     const presets = options.presets;
@@ -149,4 +155,13 @@ export class ToolRegistry {
     }
     return true;
   }
+}
+
+/**
+ * A tool is read-only iff it explicitly advertises `readOnlyHint: true`. This is
+ * stricter than `!destructive` — a non-destructive write (e.g. create_draft,
+ * mark_email_read) still mutates state and must be excluded from `--read-only`.
+ */
+function isReadOnly(def: ToolDefinition): boolean {
+  return def.annotations.readOnlyHint === true;
 }

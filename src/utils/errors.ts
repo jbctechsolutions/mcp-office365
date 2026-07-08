@@ -38,6 +38,7 @@ export const ErrorCode = {
   APPROVAL_EXPIRED: 'APPROVAL_EXPIRED',
   APPROVAL_INVALID: 'APPROVAL_INVALID',
   TARGET_CHANGED: 'TARGET_CHANGED',
+  READ_ONLY_MODE: 'READ_ONLY_MODE',
 } as const;
 
 export type ErrorCode = (typeof ErrorCode)[keyof typeof ErrorCode];
@@ -399,6 +400,22 @@ export class TargetChangedError extends OutlookMcpError {
     super(
       'The target has been modified since the approval was generated. ' +
         'Please prepare the operation again.'
+    );
+  }
+}
+
+/**
+ * Thrown when a destructive/write tool is invoked while the server runs in
+ * `--read-only` mode (D13). Read-only filters these tools out of the surface,
+ * but a client can still call one by name — this is the runtime guard.
+ */
+export class ReadOnlyModeError extends OutlookMcpError {
+  readonly code = ErrorCode.READ_ONLY_MODE;
+
+  constructor(toolName: string) {
+    super(
+      `Tool "${toolName}" is not available in read-only mode.`,
+      { retriable: false, suggestion: 'Restart the server without --read-only to use write tools.' },
     );
   }
 }

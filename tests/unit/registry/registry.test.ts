@@ -165,11 +165,12 @@ describe('ToolRegistry', () => {
     expect(result).toBeDefined();
   });
 
-  it('throws (does not fall through) when a tool is filtered out of the current mode', async () => {
+  it('throws a READ_ONLY_MODE error when a destructive tool is called in read-only mode', async () => {
     const registry = new ToolRegistry();
     registry.register(mailRulesToolDefinitions());
     // confirm_delete_mail_rule is destructive; read-only mode filters it out,
-    // so dispatch must reject rather than return undefined into legacy fallback.
+    // so dispatch must reject with the typed READ_ONLY_MODE guard (D13) rather
+    // than return undefined into legacy fallback.
     await expect(
       registry.dispatch(
         'confirm_delete_mail_rule',
@@ -177,6 +178,16 @@ describe('ToolRegistry', () => {
         readContext({}),
         { backend: 'graph', readOnly: true },
       ),
+    ).rejects.toMatchObject({ code: 'READ_ONLY_MODE' });
+  });
+
+  it('throws a generic not-available error when a tool is filtered out by backend (not read-only)', async () => {
+    const registry = new ToolRegistry();
+    registry.register(mailRulesToolDefinitions());
+    // Force a matches() failure that is not read-only: a graph-only tool under
+    // the applescript backend. The read-only guard must not fire here.
+    await expect(
+      registry.dispatch('list_mail_rules', {}, readContext({}), { backend: 'applescript' }),
     ).rejects.toThrow(/not available in the current mode/);
   });
 
@@ -202,12 +213,13 @@ describe('ToolRegistry', () => {
     expect(tools).toHaveLength(0); // all mail-rules tools are graph-only
   });
 
-  it('read-only mode excludes destructive tools (prepare/confirm delete)', () => {
+  it('read-only mode exposes only readOnlyHint:true tools (excludes writes, not just destructive)', () => {
     const registry = new ToolRegistry();
     registry.register(mailRulesToolDefinitions());
     const names = registry.listTools({ backend: 'graph', readOnly: true }).map((t) => t.name);
     expect(names).toContain('list_mail_rules');
-    expect(names).toContain('create_mail_rule');
+    // create_mail_rule is a non-destructive WRITE — excluded in read-only (D13).
+    expect(names).not.toContain('create_mail_rule');
     expect(names).not.toContain('prepare_delete_mail_rule');
     expect(names).not.toContain('confirm_delete_mail_rule');
   });

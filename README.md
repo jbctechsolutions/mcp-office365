@@ -65,6 +65,38 @@ npx @jbctechsolutions/mcp-office365 auth --status
 npx @jbctechsolutions/mcp-office365 auth --logout
 ```
 
+### Server flags
+
+Pass these when launching the server (after any subcommand) to scope the exposed
+tool surface:
+
+| Flag | Effect |
+| --- | --- |
+| `--preset <names>` | Expose only the listed domains (comma-separated). Repeatable. Default (or `all`) exposes the full surface. |
+| `--read-only` | Expose only read tools (`readOnlyHint: true`). All writes, `prepare_*`/`confirm_*`, and destructive tools are hidden; calling one returns a `READ_ONLY_MODE` error. |
+
+Valid presets: `mail`, `calendar`, `contacts`, `tasks`, `notes`, `teams`,
+`planner`, `files`, `sharepoint`, `excel`, `people`, `meetings` (plus `all`).
+An unknown preset name fails startup with the valid list.
+
+```bash
+# Mail + calendar only, read-only
+npx @jbctechsolutions/mcp-office365 --preset mail,calendar --read-only
+```
+
+In a client config, add them to `args`:
+
+```json
+{
+  "mcpServers": {
+    "office365": {
+      "command": "npx",
+      "args": ["-y", "@jbctechsolutions/mcp-office365", "--preset", "mail,calendar", "--read-only"]
+    }
+  }
+}
+```
+
 ### Claude Desktop configuration
 
 Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
