@@ -69,23 +69,26 @@ export function parseServerOptions(args: string[]): ServerCliOptions {
     } else if (arg === '--preset') {
       const value = args[i + 1];
       if (value == null || value.startsWith('--')) {
-        throw new Error('--preset requires a comma-separated list of preset names.');
+        throw missingPresetValue();
       }
-      presetNames.push(...splitPresetList(value));
+      presetNames.push(...requirePresetNames(value));
       i++;
     } else if (arg.startsWith('--preset=')) {
-      presetNames.push(...splitPresetList(arg.slice('--preset='.length)));
+      presetNames.push(...requirePresetNames(arg.slice('--preset='.length)));
     }
     // Unknown args are ignored — argv may carry runner-injected entries.
   }
 
-  // `all` (or no --preset) exposes the full surface.
-  if (presetNames.length === 0 || presetNames.includes('all')) {
+  // No --preset flag at all → full surface.
+  if (presetNames.length === 0) {
     return { readOnly };
   }
 
+  // Validate every name (the `all` keyword excepted) BEFORE honoring `all`, so a
+  // typo mixed with `all` (e.g. `--preset all,mial`) fails loudly rather than
+  // silently exposing the full surface.
   const invalid = presetNames.filter(
-    (name) => !(VALID_PRESETS as readonly string[]).includes(name),
+    (name) => name !== 'all' && !(VALID_PRESETS as readonly string[]).includes(name),
   );
   if (invalid.length > 0) {
     throw new Error(
@@ -94,7 +97,25 @@ export function parseServerOptions(args: string[]): ServerCliOptions {
     );
   }
 
+  // `all` (alone or mixed with valid names) exposes the full surface.
+  if (presetNames.includes('all')) {
+    return { readOnly };
+  }
+
   return { readOnly, presets: presetNames as Preset[] };
+}
+
+function missingPresetValue(): Error {
+  return new Error('--preset requires a comma-separated list of preset names.');
+}
+
+/** Splits a preset value and rejects an empty/whitespace-only list. */
+function requirePresetNames(value: string): string[] {
+  const names = splitPresetList(value);
+  if (names.length === 0) {
+    throw missingPresetValue();
+  }
+  return names;
 }
 
 function splitPresetList(value: string): string[] {

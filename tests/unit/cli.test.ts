@@ -210,9 +210,23 @@ describe('parseServerOptions (U10)', () => {
     expect(() => parseServerOptions(['--preset', 'nope'])).toThrow(/Valid presets:/);
   });
 
+  it('validates co-listed names even when "all" is present (no silent swallow)', () => {
+    // `all` must not short-circuit past validation of a typo'd sibling.
+    expect(() => parseServerOptions(['--preset', 'all,bogus'])).toThrow(/Unknown preset\(s\): bogus/);
+    expect(() => parseServerOptions(['--preset', 'mial,all'])).toThrow(/Unknown preset\(s\): mial/);
+  });
+
   it('throws when --preset has no value', () => {
     expect(() => parseServerOptions(['--preset'])).toThrow(/requires a comma-separated list/);
     expect(() => parseServerOptions(['--preset', '--read-only'])).toThrow(/requires/);
+  });
+
+  it('throws (does not fail open to full surface) on an empty/whitespace preset value', () => {
+    // Regression: these previously collapsed to the FULL surface silently.
+    expect(() => parseServerOptions(['--preset', ''])).toThrow(/requires/);
+    expect(() => parseServerOptions(['--preset', '   '])).toThrow(/requires/);
+    expect(() => parseServerOptions(['--preset', ',,,'])).toThrow(/requires/);
+    expect(() => parseServerOptions(['--preset='])).toThrow(/requires/);
   });
 
   it('ignores unknown args (runner-injected argv)', () => {

@@ -125,8 +125,10 @@ export class ToolRegistry {
     }
     if (!this.matches(def, options)) {
       // Distinguish the read-only rejection so it surfaces a stable
-      // READ_ONLY_MODE envelope (D13) rather than a generic error.
-      if (options.readOnly === true && !isReadOnly(def)) {
+      // READ_ONLY_MODE envelope (D13) — but only when read-only is the *sole*
+      // reason (the tool would otherwise be exposed). A tool also filtered by
+      // backend/preset gets the generic error, avoiding misattribution.
+      if (options.readOnly === true && this.matches(def, { ...options, readOnly: false })) {
         throw new ReadOnlyModeError(name);
       }
       throw new Error(`Tool "${name}" is not available in the current mode.`);
