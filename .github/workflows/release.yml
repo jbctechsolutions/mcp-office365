@@ -88,7 +88,11 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Publish to npm
-        run: npm publish --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      # Tokenless publish via npm OIDC trusted publishing (npm >= 11.5.1, which
+      # ships with the pinned Node). Requires a Trusted Publisher registered on
+      # npm for this repo + workflow (Package settings → Trusted Publisher →
+      # GitHub Actions: jbctechsolutions/mcp-office365, workflow release.yml).
+      # No NPM_TOKEN needed; --provenance publishes a signed provenance
+      # attestation (needs the id-token: write permission above).
+      - name: Publish to npm (OIDC trusted publishing)
+        run: npm publish --access public --provenance
