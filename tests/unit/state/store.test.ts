@@ -88,6 +88,31 @@ describe('StateStore.open', () => {
     openStore();
     expect(statSync(dbPath).mode & 0o777).toBe(0o600);
   });
+
+  it.runIf(isPosix)('restricts the -wal/-shm sidecars to 0600 (they hold token data too)', () => {
+    openStore();
+    // WAL sidecars are created during the migration writes at open.
+    for (const suffix of ['-wal', '-shm']) {
+      const p = join(dir, `state.db${suffix}`);
+      if (existsSync(p)) {
+        expect(statSync(p).mode & 0o777, `${suffix} perms`).toBe(0o600);
+      }
+    }
+  });
+
+  it('degrades to in-memory when the db was migrated by a newer build (downgrade guard)', () => {
+    // Simulate a future build: stamp a schema_version beyond this build's count.
+    const raw = new Database(join(dir, 'state.db'));
+    raw.exec('CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);');
+    raw.prepare("INSERT INTO meta (key, value) VALUES ('schema_version', ?)").run(String(SCHEMA_VERSION + 5));
+    raw.close();
+
+    const warn = vi.fn();
+    const store = StateStore.open({ dir, legacyDir, warn });
+    open.add(store);
+    expect(store.degraded).toBe(true);
+    expect(warn).toHaveBeenCalledOnce();
+  });
 });
 
 describe('StateStore aliases (account stamping)', () => {
@@ -95,9 +120,8 @@ describe('StateStore aliases (account stamping)', () => {
     const store = openStore();
     store.putAlias({ token: 'em_abc', graphId: 'AAA', entityType: 'message', accountId: 'acct-X', mutable: false });
 
-    expect(store.getAlias('em_abc')?.graphId).toBe('AAA');
     expect(store.getAlias('em_abc', 'acct-X')?.graphId).toBe('AAA');
-    // Scoped to a different account → invisible.
+    // Scoped to a different account → invisible (account is mandatory / fail-closed).
     expect(store.getAlias('em_abc', 'acct-Y')).toBeNull();
   });
 });
@@ -130,6 +154,22 @@ describe('StateStore approval tokens (atomic consume)', () => {
   it('returns not_found for an unknown token', () => {
     expect(openStore().consumeApprovalToken({ token: 'nope', accountId: 'acct-X', now: 1 }).status).toBe('not_found');
   });
+
+  it('refuses to consume an expired-but-unpurged token (expiry enforced at the store)', () => {
+    const store = openStore();
+    store.putApprovalToken(approval({ token: 'ap_exp', expiresAt: 5000 }));
+    // now is past expiry but the row still exists (not yet purged).
+    expect(store.consumeApprovalToken({ token: 'ap_exp', accountId: 'acct-X', now: 6000 }).status).toBe('expired');
+    // A still-valid consume of a fresh token works.
+    store.putApprovalToken(approval({ token: 'ap_ok', operationKey: 'op-ok', expiresAt: 9000 }));
+    expect(store.consumeApprovalToken({ token: 'ap_ok', accountId: 'acct-X', now: 6000 }).status).toBe('consumed');
+  });
+
+  it('throws on a duplicate token (PK) — the U9 mint contract must not silently overwrite', () => {
+    const store = openStore();
+    store.putApprovalToken(approval({ token: 'dup' }));
+    expect(() => store.putApprovalToken(approval({ token: 'dup' }))).toThrow();
+  });
 });
 
 describe('StateStore degraded mode', () => {
@@ -146,7 +186,7 @@ describe('StateStore degraded mode', () => {
 
     // Operations still succeed against the in-memory schema.
     store.putAlias({ token: 'em_1', graphId: 'G', entityType: 'message', accountId: 'acct-X' });
-    expect(store.getAlias('em_1')?.graphId).toBe('G');
+    expect(store.getAlias('em_1', 'acct-X')?.graphId).toBe('G');
   });
 });
 
@@ -190,7 +230,8 @@ describe('StateStore purge (90-day retention)', () => {
     const purged = store.purgeExpired(now);
     expect(purged).toBe(1);
     expect(store.consumeApprovalToken({ token: 'old', accountId: 'acct-X', now }).status).toBe('not_found');
-    expect(store.consumeApprovalToken({ token: 'recent', accountId: 'acct-X', now }).status).toBe('consumed');
+    // 'recent' is retained (within 90d) but expired → consume refuses it.
+    expect(store.consumeApprovalToken({ token: 'recent', accountId: 'acct-X', now }).status).toBe('expired');
     expect(store.consumeApprovalToken({ token: 'future', accountId: 'acct-X', now }).status).toBe('consumed');
   });
 

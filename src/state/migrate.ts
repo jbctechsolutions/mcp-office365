@@ -10,7 +10,7 @@
  *   existing token cache, gated by a `meta` marker so it runs at most once.
  */
 
-import { copyFileSync, existsSync } from 'node:fs';
+import { chmodSync, copyFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import type Database from 'better-sqlite3';
 import {
@@ -54,6 +54,14 @@ export function getSchemaVersion(db: DB): number {
 export function runMigrations(db: DB): void {
   ensureMetaTable(db);
   let current = getSchemaVersion(db);
+  // Downgrade guard: a db migrated by a newer build (version beyond this build's
+  // migration count) must not be operated on blindly against an unknown schema.
+  // Throwing here routes the caller to its degraded in-memory fallback.
+  if (current > MIGRATIONS.length) {
+    throw new Error(
+      `state.db schema version ${current} is newer than this build supports (${MIGRATIONS.length}).`,
+    );
+  }
   while (current < MIGRATIONS.length) {
     const sql = MIGRATIONS[current];
     if (sql == null) break;
@@ -84,6 +92,12 @@ export function migrateLegacyTokens(
   const legacyTokens = join(legacyDir, 'tokens.json');
   if (!existsSync(newTokens) && existsSync(legacyTokens)) {
     copyFileSync(legacyTokens, newTokens);
+    // The copied cache holds OAuth material — restrict it like state.db (D18).
+    try {
+      chmodSync(newTokens, 0o600);
+    } catch {
+      // Best-effort; non-POSIX filesystems ignore modes.
+    }
   }
   setMeta(db, META_LEGACY_TOKENS_MIGRATED, '1');
 }

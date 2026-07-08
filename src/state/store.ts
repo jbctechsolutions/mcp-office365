@@ -63,6 +63,7 @@ export interface ApprovalTokenInput {
 export type ConsumeResult =
   | { status: 'consumed'; receiptJson: string | null }
   | { status: 'already_redeemed'; receiptJson: string | null }
+  | { status: 'expired' }
   | { status: 'foreign_account' }
   | { status: 'not_found' };
 
@@ -121,26 +122,51 @@ export class StateStore {
     const now = options.now ?? ((): number => Date.now());
     const warn = options.warn ?? ((msg: string): void => void process.stderr.write(`${msg}\n`));
 
+    let fileDb: DB | undefined;
     try {
       // Directory: create 0700, or repair perms if it already exists (D18).
       if (!existsSync(dir)) {
         mkdirSync(dir, { recursive: true, mode: 0o700 });
       } else {
-        safeChmod(dir, 0o700);
+        safeChmod(dir, 0o700, warn);
       }
 
       const dbPath = join(dir, DB_FILENAME);
-      const db = new Database(dbPath);
-      configurePragmas(db);
-      runMigrations(db); // executes DDL — surfaces a corrupt file here
-      migrateLegacyTokens(db, dir, legacyDir);
-      // File may have just been created; enforce 0600 (and repair a loose one).
-      safeChmod(dbPath, 0o600);
+      fileDb = new Database(dbPath);
+      configurePragmas(fileDb);
+      runMigrations(fileDb); // executes DDL — surfaces a corrupt/newer file here
+      // The file (and its -wal/-shm sidecars) may have just been created;
+      // enforce 0600 across all three (and repair a loose one).
+      safeChmod(dbPath, 0o600, warn);
+      safeChmod(`${dbPath}-wal`, 0o600, warn);
+      safeChmod(`${dbPath}-shm`, 0o600, warn);
 
-      const store = new StateStore(db, dbPath, false, now);
-      store.purgeExpired(now());
+      const store = new StateStore(fileDb, dbPath, false, now);
+
+      // The legacy token copy and boot purge are conveniences — a failure in
+      // either must NOT discard an otherwise-healthy on-disk store, so they run
+      // outside the degrade-governing path (warn-and-continue).
+      try {
+        migrateLegacyTokens(fileDb, dir, legacyDir);
+      } catch (e) {
+        warn(`[mcp-office365] legacy token migration skipped (${e instanceof Error ? e.message : String(e)}).`);
+      }
+      try {
+        store.purgeExpired(now());
+      } catch (e) {
+        warn(`[mcp-office365] boot purge skipped (${e instanceof Error ? e.message : String(e)}).`);
+      }
       return store;
     } catch (error) {
+      // Release the on-disk handle (and its WAL lock) before degrading, so a
+      // failed open does not leak a file descriptor / lock for the process.
+      if (fileDb !== undefined) {
+        try {
+          fileDb.close();
+        } catch {
+          /* best-effort */
+        }
+      }
       const reason = error instanceof Error ? error.message : String(error);
       warn(`[mcp-office365] state store unavailable (${reason}); running in-memory (durability degraded).`);
       const mem = new Database(':memory:');
@@ -175,13 +201,15 @@ export class StateStore {
   }
 
   /**
-   * Resolves an alias token. When `accountId` is provided, rows stamped with a
-   * different account are invisible (D7 account stamping).
+   * Resolves an alias token, scoped to `accountId` (D7 account stamping). The
+   * account is a mandatory, fail-closed argument: a row minted under a different
+   * account is invisible, so no caller can accidentally resolve a foreign
+   * account's durable ID into a live Graph ID by omitting the scope.
    */
-  getAlias(token: string, accountId?: string): AliasRow | null {
-    const raw = (accountId != null
-      ? this.db.prepare('SELECT * FROM aliases WHERE token = ? AND account_id = ?').get(token, accountId)
-      : this.db.prepare('SELECT * FROM aliases WHERE token = ?').get(token)) as RawAliasRow | undefined;
+  getAlias(token: string, accountId: string): AliasRow | null {
+    const raw = this.db
+      .prepare('SELECT * FROM aliases WHERE token = ? AND account_id = ?')
+      .get(token, accountId) as RawAliasRow | undefined;
     if (raw === undefined) {
       return null;
     }
@@ -219,9 +247,12 @@ export class StateStore {
 
   /**
    * Atomically consumes an approval token (D8). The guarded `UPDATE … WHERE
-   * redeemed_at IS NULL RETURNING` means only one caller — across processes
-   * sharing the db — can win the redemption; the loser sees `already_redeemed`
-   * and can return the stored receipt. A foreign-account token is refused.
+   * redeemed_at IS NULL AND expires_at > now RETURNING` means only one caller —
+   * across processes sharing the db — can win the redemption; the loser sees
+   * `already_redeemed` and can return the stored receipt. Expiry is enforced
+   * here at the trust boundary (not left to callers): an expired token that
+   * still authorizes a send/delete would defeat the whole point of a time-boxed
+   * two-phase approval. Foreign-account tokens are refused.
    */
   consumeApprovalToken(args: {
     token: string;
@@ -229,15 +260,15 @@ export class StateStore {
     receiptJson?: string | null;
     now?: number;
   }): ConsumeResult {
-    const redeemedAt = args.now ?? this.now();
+    const now = args.now ?? this.now();
     const updated = this.db
       .prepare(
         `UPDATE approval_tokens
            SET redeemed_at = ?, receipt_json = ?
-         WHERE token = ? AND account_id = ? AND redeemed_at IS NULL
+         WHERE token = ? AND account_id = ? AND redeemed_at IS NULL AND expires_at > ?
          RETURNING receipt_json`,
       )
-      .get(redeemedAt, args.receiptJson ?? null, args.token, args.accountId) as
+      .get(now, args.receiptJson ?? null, args.token, args.accountId, now) as
       | { receipt_json: string | null }
       | undefined;
 
@@ -245,10 +276,13 @@ export class StateStore {
       return { status: 'consumed', receiptJson: updated.receipt_json };
     }
 
+    // Classify why the guarded update matched nothing.
     const row = this.db
-      .prepare('SELECT account_id, redeemed_at, receipt_json FROM approval_tokens WHERE token = ?')
+      .prepare(
+        'SELECT account_id, redeemed_at, receipt_json, expires_at FROM approval_tokens WHERE token = ?',
+      )
       .get(args.token) as
-      | { account_id: string; redeemed_at: number | null; receipt_json: string | null }
+      | { account_id: string; redeemed_at: number | null; receipt_json: string | null; expires_at: number }
       | undefined;
     if (row === undefined) {
       return { status: 'not_found' };
@@ -256,7 +290,12 @@ export class StateStore {
     if (row.account_id !== args.accountId) {
       return { status: 'foreign_account' };
     }
-    return { status: 'already_redeemed', receiptJson: row.receipt_json };
+    // Redemption takes precedence over expiry so an idempotent re-consume of an
+    // already-redeemed token still returns its receipt.
+    if (row.redeemed_at !== null) {
+      return { status: 'already_redeemed', receiptJson: row.receipt_json };
+    }
+    return { status: 'expired' };
   }
 
   // ---- Maintenance ---------------------------------------------------------
@@ -282,11 +321,20 @@ function configurePragmas(db: DB): void {
   db.pragma('busy_timeout = 5000');
 }
 
-/** chmod that never throws (a no-op on platforms without POSIX perms). */
-function safeChmod(target: string, mode: number): void {
+/**
+ * chmod that never throws. Windows/filesystems without POSIX modes fail benignly
+ * and are ignored; a genuine failure on a POSIX host (e.g. EPERM) means the file
+ * may sit with looser-than-intended permissions, so we surface it via `warn`
+ * rather than swallow silently — the at-rest exposure should be observable.
+ * A missing sidecar (-wal/-shm not yet created) is not a failure worth noting.
+ */
+function safeChmod(target: string, mode: number, warn?: (message: string) => void): void {
   try {
     chmodSync(target, mode);
-  } catch {
-    // Best-effort — Windows and some filesystems don't honor POSIX modes.
+  } catch (error) {
+    const code = (error as { code?: string }).code;
+    if (process.platform !== 'win32' && code !== 'ENOENT' && warn != null) {
+      warn(`[mcp-office365] could not set permissions on ${target} (${code ?? 'error'}); it may be readable by other local users.`);
+    }
   }
 }
