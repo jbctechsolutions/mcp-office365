@@ -14,7 +14,17 @@
  */
 
 import 'isomorphic-fetch';
-import { Client, ResponseType, type PageCollection } from '@microsoft/microsoft-graph-client';
+import {
+  Client,
+  ResponseType,
+  AuthenticationHandler,
+  RetryHandler,
+  RetryHandlerOptions,
+  HTTPMessageHandler,
+  type AuthenticationProvider,
+  type ShouldRetry,
+  type PageCollection,
+} from '@microsoft/microsoft-graph-client';
 import type * as MicrosoftGraph from '@microsoft/microsoft-graph-types';
 
 import { getAccessToken, type DeviceCodeCallback } from '../auth/index.js';
@@ -23,6 +33,31 @@ import { ResponseCache, CacheTTL, createCacheKey } from './cache.js';
 
 /** Generic shape for a Graph API response containing a `.value` array. */
 interface GraphCollectionResponse<T> { value: T[] }
+
+/**
+ * D5 retry policy (exported for testing). Retries only idempotent reads on
+ * transient failures — 429 plus 502/503/504 — honoring Retry-After via the
+ * SDK-computed delay. NEVER retries a send/write once the body is on the wire:
+ * an ambiguous 429/5xx on a POST could double-send. This replaces the SDK
+ * default, which retries 429/503/504 on ALL requests (including sendMail) and
+ * never retries 502.
+ */
+export function shouldRetryGraphRequest(
+  method: string,
+  url: string,
+  status: number
+): boolean {
+  const m = method.toUpperCase();
+  if (m !== 'GET' && m !== 'HEAD' && m !== 'OPTIONS') {
+    return false;
+  }
+  // Never retry an OData action (POST-shaped operation like /sendMail, /reply,
+  // /$batch of writes) even if the transport surfaces it as a GET.
+  if (/\/(sendMail|send|reply|forward|createReply|createForward)\b/i.test(url)) {
+    return false;
+  }
+  return status === 429 || status === 502 || status === 503 || status === 504;
+}
 
 /** Generic Graph API entity (untyped). */
 type GraphEntity = Record<string, unknown>;
@@ -45,17 +80,23 @@ export class GraphClient {
   // eslint-disable-next-line @typescript-eslint/require-await
   private async getClient(): Promise<Client> {
     if (this.client == null) {
-      this.client = Client.init({
-        // eslint-disable-next-line @typescript-eslint/no-misused-promises
-        authProvider: async (done) => {
-          try {
-            const token = await getAccessToken(this.deviceCodeCallback);
-            done(null, token);
-          } catch (error) {
-            done(error as Error, null);
-          }
-        },
-      });
+      const authProvider: AuthenticationProvider = {
+        getAccessToken: () => getAccessToken(this.deviceCodeCallback),
+      };
+
+      const shouldRetry: ShouldRetry = (_delay, _attempt, request, options, response) => {
+        const method = (options?.method ?? 'GET').toString();
+        const url = typeof request === 'string' ? request : String((request as { url?: unknown }).url ?? '');
+        return shouldRetryGraphRequest(method, url, response?.status ?? 0);
+      };
+
+      const auth = new AuthenticationHandler(authProvider);
+      const retry = new RetryHandler(new RetryHandlerOptions(undefined, undefined, shouldRetry));
+      const http = new HTTPMessageHandler();
+      auth.setNext(retry);
+      retry.setNext(http);
+
+      this.client = Client.initWithMiddleware({ middleware: auth });
     }
     return this.client;
   }

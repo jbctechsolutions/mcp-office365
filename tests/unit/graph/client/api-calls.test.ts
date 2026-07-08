@@ -111,7 +111,12 @@ const mockGraphClient = { api: mockApi };
 vi.mock('@microsoft/microsoft-graph-client', () => ({
   Client: {
     init: vi.fn(function () { return mockGraphClient; }),
+    initWithMiddleware: vi.fn(function () { return mockGraphClient; }),
   },
+  AuthenticationHandler: class { setNext(): void {} },
+  RetryHandler: class { setNext(): void {} },
+  RetryHandlerOptions: class {},
+  HTTPMessageHandler: class { setNext(): void {} },
   ResponseType: { ARRAYBUFFER: 'arraybuffer', BLOB: 'blob', STREAM: 'stream', TEXT: 'text', JSON: 'json' },
 }));
 
