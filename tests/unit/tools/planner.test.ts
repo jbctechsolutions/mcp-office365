@@ -27,6 +27,7 @@ describe('PlannerTools', () => {
       updateBucketAsync: vi.fn(),
       deleteBucketAsync: vi.fn(),
       listPlannerTasksAsync: vi.fn(),
+      listMyPlannerTasksAsync: vi.fn(),
       getPlannerTaskAsync: vi.fn(),
       createPlannerTaskAsync: vi.fn(),
       updatePlannerTaskAsync: vi.fn(),
@@ -233,6 +234,22 @@ describe('PlannerTools', () => {
       const result = await tools.listPlannerTasks({ plan_id: 1 });
 
       expect(repo.listPlannerTasksAsync).toHaveBeenCalledWith(1);
+      const parsed = JSON.parse(result.content[0].text);
+      expect(parsed.tasks).toEqual(mockTasks);
+    });
+  });
+
+  describe('listMyPlannerTasks', () => {
+    it('returns the signed-in user tasks across plans (with planId per task)', async () => {
+      const mockTasks = [
+        { id: 100, title: 'Task A', planId: 900, bucketId: 10, assignees: ['user1'], percentComplete: 0, priority: 5, startDateTime: '', dueDateTime: '2026-04-01T00:00:00Z', createdDateTime: '2026-03-01T00:00:00Z' },
+        { id: 101, title: 'Task B', planId: 901, bucketId: null, assignees: ['user1'], percentComplete: 50, priority: 3, startDateTime: '', dueDateTime: '', createdDateTime: '2026-03-02T00:00:00Z' },
+      ];
+      vi.mocked(repo.listMyPlannerTasksAsync).mockResolvedValue(mockTasks);
+
+      const result = await tools.listMyPlannerTasks({});
+
+      expect(repo.listMyPlannerTasksAsync).toHaveBeenCalledWith();
       const parsed = JSON.parse(result.content[0].text);
       expect(parsed.tasks).toEqual(mockTasks);
     });

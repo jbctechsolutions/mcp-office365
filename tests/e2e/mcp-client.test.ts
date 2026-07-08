@@ -43,11 +43,11 @@ describe('MCP Client E2E', () => {
       // List tools
       const result = await client.listTools();
 
-      // Verify tools were returned (218 in Graph API mode (default), 78 in AppleScript mode)
+      // Verify tools were returned (219 in Graph API mode (default), 78 in AppleScript mode)
       expect(result.tools).toBeDefined();
       expect(Array.isArray(result.tools)).toBe(true);
       const count = result.tools.length;
-      expect([78, 218]).toContain(count);
+      expect([78, 219]).toContain(count);
 
       // Verify core tools exist
       const toolNames = result.tools.map((t) => t.name);
@@ -106,7 +106,8 @@ describe('MCP Client E2E', () => {
       expect(new Set(names).size).toBe(names.length);
       // Graph-mode surface count is invariant across U2 migrations — tools move
       // from the legacy TOOLS array into the registry, never disappear.
-      expect(names.length).toBe(218);
+      // 219 = 218 + list_my_planner_tasks (v3.1).
+      expect(names.length).toBe(219);
 
       // The 4 migrated mail-rules tools each appear exactly once.
       for (const name of ['list_mail_rules', 'create_mail_rule', 'prepare_delete_mail_rule', 'confirm_delete_mail_rule']) {

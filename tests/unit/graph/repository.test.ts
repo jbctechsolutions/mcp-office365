@@ -129,6 +129,8 @@ vi.mock('../../../src/graph/client/index.js', () => ({
       updateChannel: vi.fn(),
       deleteChannel: vi.fn(),
       listTeamMembers: vi.fn(),
+      // Planner operations
+      listMyPlannerTasks: vi.fn(),
     };
   }),
 }));
@@ -4183,6 +4185,58 @@ describe('graph/repository', () => {
           email: '',
           roles: [],
         });
+      });
+    });
+  });
+
+  describe('Planner', () => {
+    describe('listMyPlannerTasksAsync', () => {
+      it('maps cross-plan tasks, carrying a deterministic planId per task', async () => {
+        mockClient.listMyPlannerTasks.mockResolvedValue([
+          {
+            id: 'graph-task-1', title: 'Ship v3.1', planId: 'graph-plan-A', bucketId: 'graph-bucket-1',
+            assignments: { 'user-1': {} }, percentComplete: 40, priority: 3,
+            startDateTime: '2026-07-01T00:00:00Z', dueDateTime: '2026-07-15T00:00:00Z',
+            createdDateTime: '2026-06-01T00:00:00Z', '@odata.etag': 'W/"etag1"',
+          },
+          {
+            id: 'graph-task-2', title: 'Review', planId: 'graph-plan-B', bucketId: null,
+            assignments: null, percentComplete: 0, priority: 5,
+            startDateTime: '', dueDateTime: '', createdDateTime: '2026-06-02T00:00:00Z',
+          },
+        ]);
+
+        const tasks = await repository.listMyPlannerTasksAsync();
+
+        expect(tasks).toEqual([
+          {
+            id: hashStringToNumber('graph-task-1'), title: 'Ship v3.1',
+            planId: hashStringToNumber('graph-plan-A'), bucketId: hashStringToNumber('graph-bucket-1'),
+            assignees: ['user-1'], percentComplete: 40, priority: 3,
+            startDateTime: '2026-07-01T00:00:00Z', dueDateTime: '2026-07-15T00:00:00Z',
+            createdDateTime: '2026-06-01T00:00:00Z',
+          },
+          {
+            id: hashStringToNumber('graph-task-2'), title: 'Review',
+            planId: hashStringToNumber('graph-plan-B'), bucketId: null,
+            assignees: [], percentComplete: 0, priority: 5,
+            startDateTime: '', dueDateTime: '', createdDateTime: '2026-06-02T00:00:00Z',
+          },
+        ]);
+      });
+
+      it('caches the plan mapping so the numeric planId resolves for follow-up calls', async () => {
+        mockClient.listMyPlannerTasks.mockResolvedValue([
+          { id: 'graph-task-1', title: 'T', planId: 'graph-plan-A', bucketId: null, assignments: null,
+            percentComplete: 0, priority: 5, startDateTime: '', dueDateTime: '', createdDateTime: '' },
+        ]);
+
+        await repository.listMyPlannerTasksAsync();
+
+        // The plan mapping lands in the same idCache the plan-scoped resolvers
+        // (resolvePlanId) read, so a follow-up list/update on that plan resolves.
+        const cached = (repository as any).idCache.plans.get(hashStringToNumber('graph-plan-A'));
+        expect(cached).toEqual({ planId: 'graph-plan-A', etag: '' });
       });
     });
   });
