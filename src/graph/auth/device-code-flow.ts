@@ -15,6 +15,7 @@
 
 import {
   PublicClientApplication,
+  InteractionRequiredAuthError,
   type AuthenticationResult,
   type DeviceCodeRequest,
   type AccountInfo,
@@ -116,8 +117,14 @@ export async function acquireTokenInteractive(
  * Returns null if no cached token is available or if refresh fails.
  */
 export async function acquireTokenSilent(): Promise<AuthenticationResult | null> {
-  const outcome = await acquireTokenSilentDetailed();
-  return outcome.status === 'ok' ? outcome.result : null;
+  try {
+    const outcome = await acquireTokenSilentDetailed();
+    return outcome.status === 'ok' ? outcome.result : null;
+  } catch {
+    // Preserve this wrapper's "null on any failure" contract even for the
+    // transient errors acquireTokenSilentDetailed now rethrows.
+    return null;
+  }
 }
 
 /**
@@ -149,8 +156,15 @@ async function acquireTokenSilentDetailed(): Promise<SilentOutcome> {
     });
     return { status: 'ok', result };
   } catch (cause) {
-    // e.g. expired/revoked refresh token (invalid_grant) — a re-auth is needed.
-    return { status: 'refresh_failed', cause };
+    // Only an interaction-required failure (expired/revoked refresh token,
+    // invalid_grant) means a re-auth is needed. Transient failures (network,
+    // throttling, server errors) are NOT auth problems — rethrow so the caller
+    // surfaces them as retriable errors rather than a misleading AUTH_EXPIRED or
+    // an unnecessary device-code prompt.
+    if (cause instanceof InteractionRequiredAuthError) {
+      return { status: 'refresh_failed', cause };
+    }
+    throw cause;
   }
 }
 
