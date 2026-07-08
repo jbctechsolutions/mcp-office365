@@ -474,8 +474,43 @@ export function createMailTools(
  * the active backend: Graph delegates to GraphMailTools; AppleScript delegates
  * to AppleMailTools. Both toolsets return MCP content directly.
  */
+export const SendEmailInput = z.strictObject({
+  to: z.array(z.string()).min(1).describe('Recipient email addresses'),
+  subject: z.string().min(1).describe('Email subject'),
+  body: z.string().describe('Email body content'),
+  body_type: z.enum(['plain', 'html']).default('plain').describe('Body content type (default: plain)'),
+  cc: z.array(z.string()).optional().describe('CC recipients'),
+  bcc: z.array(z.string()).optional().describe('BCC recipients'),
+  reply_to: z.string().optional().describe('Reply-to address'),
+  attachments: z.array(z.strictObject({
+    path: z.string().describe('Absolute file path to attachment'),
+    name: z.string().optional().describe('Optional display name for the attachment'),
+  })).optional().describe('File attachments'),
+  inline_images: z.array(z.strictObject({
+    path: z.string().describe('Absolute file path to the inline image'),
+    content_id: z.string().describe('Content-ID referenced in the HTML body'),
+  })).optional().describe('Inline images referenced by the HTML body'),
+  account_id: z.number().int().positive().optional().describe('Optional account ID to send from'),
+});
+export type SendEmailParams = z.infer<typeof SendEmailInput>;
+
 export function mailToolDefinitions(): ToolDefinition[] {
   return [
+    defineTool({
+      name: 'send_email',
+      description: 'Send an email with optional CC, BCC, attachments, and HTML formatting. Returns the sent message ID and timestamp.',
+      input: SendEmailInput,
+      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+      destructive: true,
+      presets: ['mail'],
+      backends: ['graph', 'applescript'],
+      // AppleScript single-shot send. On the Graph backend, direct send is not
+      // available — clients use the two-phase prepare_send_email/confirm_send_email.
+      handler: (ctx, params) =>
+        ctx.backend === 'graph'
+          ? { content: [{ type: 'text' as const, text: 'Direct send_email is not available on the Graph backend; use prepare_send_email then confirm_send_email.' }], isError: true }
+          : requireAppleScriptToolset(ctx, 'mail').sendEmail(params),
+    }),
     defineTool({
       name: 'list_folders',
       description: 'List all mail folders with message and unread counts. Can filter by account.',
