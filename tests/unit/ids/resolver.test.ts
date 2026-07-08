@@ -128,10 +128,39 @@ describe('registerComposite — collision policy (D1a)', () => {
     expect(t1).toBe(t2);
   });
 
-  it('throws ID_COLLISION when a different Graph ID already occupies the token', () => {
-    const token = mintComposite('attachment', canonicalKey('attachment', { messageId: 'M', attachmentId: 'A' }));
-    // Pre-seed the alias row for this token with a DIFFERENT graph id, simulating
-    // a digest collision from a different canonical key.
+  it('does NOT throw on graphId drift of a mutable entity — it updates (D2)', () => {
+    const args = {
+      entityType: 'plannerTask' as const,
+      parts: { id: 'PT1' },
+      graphId: 'PT-OLD',
+      accountId: ACCOUNT,
+      mutable: true,
+    };
+    const token = registerComposite(store, args);
+    // The same mutable entity re-listed after its Graph ID drifted → update.
+    const token2 = registerComposite(store, { ...args, graphId: 'PT-NEW' });
+    expect(token2).toBe(token);
+    expect(resolveId(token, ACCOUNT, store).graphId).toBe('PT-NEW');
+  });
+
+  it('gives each account a distinct token for a shared resource — no ownership churn', () => {
+    const parts = { id: 'SHARED-CHAT' };
+    const tokenA = registerComposite(store, { entityType: 'chat', parts, graphId: 'CHAT-G', accountId: 'acct-A' });
+    const tokenB = registerComposite(store, { entityType: 'chat', parts, graphId: 'CHAT-G', accountId: 'acct-B' });
+    // Distinct tokens → account B listing the shared chat does not lock A out.
+    expect(tokenA).not.toBe(tokenB);
+    expect(resolveId(tokenA, 'acct-A', store).graphId).toBe('CHAT-G');
+    expect(resolveId(tokenB, 'acct-B', store).graphId).toBe('CHAT-G');
+  });
+
+  it('throws ID_COLLISION when a different Graph ID already occupies an immutable token', () => {
+    // Compute the token exactly as registerComposite does (account folded in),
+    // then pre-seed it with a DIFFERENT graph id — simulating a digest collision
+    // from a different canonical key.
+    const token = mintComposite(
+      'attachment',
+      canonicalKey('attachment', { messageId: 'M', attachmentId: 'A', '@account': ACCOUNT }),
+    );
     store.putAlias({ token, graphId: 'DIFFERENT', entityType: 'attachment', accountId: ACCOUNT });
     try {
       registerComposite(store, {

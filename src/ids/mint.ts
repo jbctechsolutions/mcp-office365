@@ -33,12 +33,21 @@ export interface RegisterCompositeArgs {
  * mis-resolves.
  */
 export function registerComposite(store: StateStore, args: RegisterCompositeArgs): string {
-  const key = canonicalKey(args.entityType, args.parts);
+  // Fold the account into the key so a tenant-global resource (chat/team/channel)
+  // mints a DISTINCT token per account. Otherwise two accounts listing the same
+  // shared object would mint one token and putAlias would flip its account_id,
+  // locking the first account out of its own token with ID_FOREIGN_ACCOUNT (D7).
+  const key = canonicalKey(args.entityType, { ...args.parts, '@account': args.accountId });
   const token = mintComposite(args.entityType, key);
 
   const existing = store.getAliasUnscoped(token);
   if (existing !== null && existing.graphId !== args.graphId) {
-    throw new IdCollisionError(token);
+    // A differing Graph ID for an immutable entity is a genuine digest collision
+    // (D1a) — refuse. For a mutable ($search-minted) entity it's expected ID
+    // drift (D2), so fall through and let putAlias update the row.
+    if (!existing.mutable && args.mutable !== true) {
+      throw new IdCollisionError(token);
+    }
   }
 
   store.putAlias({

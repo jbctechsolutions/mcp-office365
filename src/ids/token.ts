@@ -104,6 +104,11 @@ export function mintSelfEncoded(entityType: EntityType, graphId: string): string
   if (prefix == null || !(prefix in SELF_ENCODING_PREFIXES)) {
     throw new Error(`Entity type "${entityType}" is not self-encoding.`);
   }
+  if (graphId.length === 0) {
+    // An empty ID would encode to `<prefix>_` (empty payload), which parseToken
+    // rejects — the token would then be mis-handled as a raw Graph ID. Fail fast.
+    throw new Error('Cannot mint a self-encoding token for an empty Graph ID.');
+  }
   return `${prefix}_${Buffer.from(graphId, 'utf8').toString('base64url')}`;
 }
 
@@ -121,12 +126,16 @@ export function mintComposite(entityType: EntityType, canonicalKey: string): str
 
 /**
  * Builds a canonical key for a composite entity from its identifying tuple.
- * Keys are sorted so field order never changes the digest.
+ * Keys are sorted so field order never changes the digest. Keys and values are
+ * percent-encoded so a value containing the `&`/`=` delimiters (Graph IDs are
+ * base64-ish and can) cannot forge a boundary and make two distinct tuples
+ * produce the same key — which would collide their tokens without a hash
+ * collision.
  */
 export function canonicalKey(entityType: EntityType, parts: Readonly<Record<string, string>>): string {
   const sorted = Object.keys(parts)
     .sort()
-    .map((k) => `${k}=${parts[k] ?? ''}`)
+    .map((k) => `${encodeURIComponent(k)}=${encodeURIComponent(parts[k] ?? '')}`)
     .join('&');
   return `${entityType}:${sorted}`;
 }
@@ -194,10 +203,22 @@ function decodeBase64Url(payload: string): string | null {
   if (!/^[A-Za-z0-9_-]+$/.test(payload)) {
     return null;
   }
+  let decoded: string;
   try {
-    const decoded = Buffer.from(payload, 'base64url').toString('utf8');
-    return decoded.length > 0 ? decoded : null;
+    decoded = Buffer.from(payload, 'base64url').toString('utf8');
   } catch {
     return null;
   }
+  if (decoded.length === 0) {
+    return null;
+  }
+  // Reject NON-CANONICAL encodings: Buffer's base64url decode is lenient (em_QQ,
+  // em_QR, em_QS all decode to "A"), which would give one Graph ID many valid
+  // token strings. Requiring the payload to be the exact canonical encoding of
+  // the decoded bytes means one Graph ID ↔ exactly one token string, so a later
+  // unit keying a control on the token string can't be evaded by a variant.
+  if (Buffer.from(decoded, 'utf8').toString('base64url') !== payload) {
+    return null;
+  }
+  return decoded;
 }

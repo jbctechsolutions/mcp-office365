@@ -48,6 +48,22 @@ describe('ids/token — self-encoding', () => {
   it('rejects minting a self-encoding token for an alias-backed entity', () => {
     expect(() => mintSelfEncoded('attachment', 'X')).toThrow(/not self-encoding/);
   });
+
+  it('rejects an empty Graph ID rather than emitting a payload-less token', () => {
+    expect(() => mintSelfEncoded('message', '')).toThrow(/empty Graph ID/);
+  });
+
+  it('rejects non-canonical base64url payloads — one Graph ID has exactly one token', () => {
+    // 'QQ' is the canonical encoding of "A"; 'QR'/'QS' also leniently decode to
+    // "A" but are non-canonical and must be rejected so a control keyed on the
+    // token string cannot be evaded by a variant.
+    expect(parseToken('em_QQ')?.graphId).toBe('A');
+    expect(parseToken('em_QR')).toBeNull();
+    expect(parseToken('em_QS')).toBeNull();
+    // The canonical mint of any id parses back and equals a re-mint.
+    const t = mintSelfEncoded('message', 'A');
+    expect(t).toBe('em_QQ');
+  });
 });
 
 describe('ids/token — composite / alias-backed', () => {
@@ -84,6 +100,15 @@ describe('ids/token — composite / alias-backed', () => {
     const t1 = mintComposite('attachment', canonicalKey('attachment', { messageId: 'M1', attachmentId: 'A' }));
     const t2 = mintComposite('attachment', canonicalKey('attachment', { messageId: 'M2', attachmentId: 'A' }));
     expect(t1).not.toBe(t2);
+  });
+
+  it('is delimiter-injection safe — a value containing &/= cannot forge a boundary', () => {
+    // Without percent-encoding, {messageId:'A', attachmentId:'B'} and
+    // {messageId:'A&attachmentId=B'} (single field) could collide.
+    const two = canonicalKey('attachment', { messageId: 'A', attachmentId: 'B' });
+    const one = canonicalKey('attachment', { messageId: 'A&attachmentId=B' });
+    expect(one).not.toBe(two);
+    expect(mintComposite('attachment', one)).not.toBe(mintComposite('attachment', two));
   });
 
   it('rejects minting a composite token for a self-encoding entity', () => {
