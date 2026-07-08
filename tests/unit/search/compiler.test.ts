@@ -28,7 +28,7 @@ describe('compileEmailSearch — mechanism selection (D9)', () => {
     const c = compileEmailSearch({ from: 'alice@example.com', body_contains: 'invoice' });
     expect(c.mechanism).toBe('searchQuery');
     if (c.mechanism === 'searchQuery') {
-      expect(c.kql).toBe('from:alice@example.com AND body:invoice');
+      expect(c.kql).toBe('from:"alice@example.com" AND body:"invoice"');
     }
   });
 });
@@ -82,14 +82,21 @@ describe('compileEmailSearch — $search compilation', () => {
     expect(c.search).toBe('"subject:budget" AND "body:Q3"');
   });
 
-  it('escapes embedded double quotes in a free-text term', () => {
+  it('strips embedded double quotes from a free-text term (no in-phrase escape)', () => {
     const c = compileEmailSearch({ text: 'say "hi"' }) as { search: string };
-    expect(c.search).toBe('"say \\"hi\\""');
+    expect(c.search).toBe('"say hi"');
+  });
+
+  it('a quote-injection attempt cannot break out of the $search phrase', () => {
+    // Without stripping, `a" AND "b` would inject an AND. Stripped → literal.
+    const c = compileEmailSearch({ text: 'a" AND "b' }) as { search: string };
+    expect(c.search).toBe('"a AND b"');
+    expect(c.search).not.toContain('" AND "');
   });
 });
 
 describe('compileEmailSearch — mixed KQL compilation', () => {
-  it('emits KQL dates as YYYY-MM-DD and quotes multi-word terms', () => {
+  it('emits KQL dates as YYYY-MM-DD and quotes terms', () => {
     const c = compileEmailSearch({
       received_after: '2026-01-01',
       subject_contains: 'quarterly report',
@@ -97,14 +104,25 @@ describe('compileEmailSearch — mixed KQL compilation', () => {
     expect(c.kql).toBe('received>=2026-01-01 AND subject:"quarterly report"');
   });
 
-  it('combines many mixed criteria deterministically', () => {
+  it('combines many mixed criteria deterministically (all free values quoted)', () => {
     const c = compileEmailSearch({
       from: 'alice@example.com',
       received_after: '2026-01-01',
       has_attachments: true,
       text: 'invoice',
     }) as { kql: string };
-    expect(c.kql).toBe('from:alice@example.com AND received>=2026-01-01 AND hasattachment:true AND invoice');
+    expect(c.kql).toBe(
+      'from:"alice@example.com" AND received>=2026-01-01 AND hasattachment:true AND "invoice"',
+    );
+  });
+
+  it('a from/to value with KQL operators or spaces cannot inject clauses (quoted phrase)', () => {
+    const c = compileEmailSearch({
+      from: 'alice@x.com AND body:secret',
+      text: 'invoice',
+    }) as { kql: string };
+    // The whole from value stays inside one quoted phrase — no injected body: clause.
+    expect(c.kql).toBe('from:"alice@x.com AND body:secret" AND "invoice"');
   });
 });
 
@@ -131,6 +149,16 @@ describe('compileEmailSearch — validation', () => {
 
   it('rejects an impossible date that matches the shape but is invalid', () => {
     expect(() => compileEmailSearch({ received_after: '2026-13-45' })).toThrow(/received_after/);
+  });
+
+  it('rejects rollover-invalid calendar dates (Feb 30, non-leap Feb 29, Apr 31)', () => {
+    // Date.parse rolls these to a valid instant, so the strict re-serialize
+    // check must reject them rather than silently shifting the window.
+    for (const bad of ['2026-02-30', '2026-02-29', '2026-04-31', '2026-06-31']) {
+      expect(() => compileEmailSearch({ received_after: bad }), bad).toThrow(/valid ISO date/);
+    }
+    // A real leap day is accepted.
+    expect(() => compileEmailSearch({ received_after: '2024-02-29' })).not.toThrow();
   });
 
   it('treats whitespace-only free-text as absent (empty → validation error)', () => {

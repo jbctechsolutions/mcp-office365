@@ -119,20 +119,29 @@ function buildSearchTerms(p: EmailSearchParams): string[] {
   return out;
 }
 
-/** Builds the `$search` value: quoted, AND-joined terms. */
+/**
+ * Builds the `$search` value: each term wrapped in a quoted phrase, AND-joined.
+ * Embedded double quotes are STRIPPED (not backslash-escaped): Graph's $search
+ * has no documented in-phrase escape, so a `"` in a value could otherwise close
+ * the phrase early and inject a boolean/property clause.
+ */
 function quoteSearch(terms: string[]): string {
-  return terms.map((t) => `"${t.replace(/"/g, '\\"')}"`).join(' AND ');
+  return terms.map((t) => kqlPhrase(t)).join(' AND ');
 }
 
 /**
  * Builds a KQL string for `POST /search/query` combining property and free-text
- * criteria (the only single-request path when both are present). Dates are
- * emitted as `YYYY-MM-DD` per KQL range syntax.
+ * criteria (the only single-request path when both are present). EVERY free
+ * value — including from/to — is wrapped as a quoted phrase so a value with
+ * whitespace or KQL operators (e.g. `alice@x.com AND body:secret`) cannot inject
+ * extra clauses. Dates are day-granular here (KQL range syntax); the $filter
+ * path preserves time-of-day, so mixed-mode queries are intentionally
+ * day-granular on dates (documented on the tool in U7b).
  */
 function buildKql(p: EmailSearchParams): string {
   const clauses: string[] = [];
-  if (p.from != null && p.from.length > 0) clauses.push(`from:${p.from}`);
-  if (p.to != null && p.to.length > 0) clauses.push(`to:${p.to}`);
+  if (p.from != null && p.from.length > 0) clauses.push(`from:${kqlPhrase(p.from)}`);
+  if (p.to != null && p.to.length > 0) clauses.push(`to:${kqlPhrase(p.to)}`);
   if (p.received_after != null) clauses.push(`received>=${toKqlDate(p.received_after, 'received_after')}`);
   if (p.received_before != null) clauses.push(`received<=${toKqlDate(p.received_before, 'received_before')}`);
   if (p.has_attachments != null) clauses.push(`hasattachment:${p.has_attachments ? 'true' : 'false'}`);
@@ -140,25 +149,36 @@ function buildKql(p: EmailSearchParams): string {
   else if (p.is_unread === false) clauses.push('isread:true');
   if (p.importance != null) clauses.push(`importance:${p.importance}`);
   if (p.subject_contains != null && p.subject_contains.trim().length > 0) {
-    clauses.push(`subject:${quoteKqlTerm(p.subject_contains.trim())}`);
+    clauses.push(`subject:${kqlPhrase(p.subject_contains.trim())}`);
   }
   if (p.body_contains != null && p.body_contains.trim().length > 0) {
-    clauses.push(`body:${quoteKqlTerm(p.body_contains.trim())}`);
+    clauses.push(`body:${kqlPhrase(p.body_contains.trim())}`);
   }
   if (p.text != null && p.text.trim().length > 0) {
-    clauses.push(quoteKqlTerm(p.text.trim()));
+    clauses.push(kqlPhrase(p.text.trim()));
   }
   return clauses.join(' AND ');
 }
 
 function requireIsoDate(value: string, field: string): string {
   if (!ISO_DATE.test(value) || Number.isNaN(Date.parse(value))) {
-    throw new ValidationError(
-      `${field} must be an ISO date (YYYY-MM-DD) or datetime; got "${value}".`,
-    );
+    throw invalidDate(field, value);
+  }
+  // Reject rollover-invalid calendar dates: Date.parse('2026-02-30') is NOT NaN
+  // (it rolls to Mar 2), so re-serialize the date part and require an exact
+  // match to catch day/month overflow.
+  const datePart = value.slice(0, 10);
+  if (new Date(`${datePart}T00:00:00Z`).toISOString().slice(0, 10) !== datePart) {
+    throw invalidDate(field, value);
   }
   // A bare date becomes midnight UTC so `ge`/`le` compare against a full instant.
   return value.includes('T') ? value : `${value}T00:00:00Z`;
+}
+
+function invalidDate(field: string, value: string): ValidationError {
+  return new ValidationError(
+    `${field} must be a valid ISO date (YYYY-MM-DD) or datetime; got "${value}".`,
+  );
 }
 
 function toKqlDate(value: string, field: string): string {
@@ -171,8 +191,11 @@ function escapeODataString(value: string): string {
   return value.replace(/'/g, "''");
 }
 
-/** Quotes a KQL term when it contains whitespace so the phrase stays intact. */
-function quoteKqlTerm(term: string): string {
-  const escaped = term.replace(/"/g, '\\"');
-  return /\s/.test(term) ? `"${escaped}"` : escaped;
+/** Wraps a value as a quoted KQL phrase, stripping embedded double quotes. */
+function kqlPhrase(value: string): string {
+  return `"${stripQuotes(value)}"`;
+}
+
+function stripQuotes(value: string): string {
+  return value.replace(/"/g, '');
 }
