@@ -12,6 +12,9 @@
 
 import * as fs from 'fs';
 import { z } from 'zod';
+import { defineTool } from '../registry/define-tool.js';
+import { requireGraphToolset } from '../registry/context.js';
+import type { ToolContext, ToolDefinition, ToolResult } from '../registry/types.js';
 import type { EmailRow } from '../database/repository.js';
 import {
   ApprovalTokenManager,
@@ -32,6 +35,12 @@ import {
 import type { GraphClient } from '../graph/client/index.js';
 import { uploadAttachment, uploadInlineAttachment } from '../graph/attachments.js';
 import { readSignature, writeSignature, appendSignature } from '../signature.js';
+
+declare module '../registry/types.js' {
+  interface GraphToolsets {
+    mailSend: MailSendTools;
+  }
+}
 
 // =============================================================================
 // Repository Interface
@@ -821,4 +830,194 @@ export function createMailSendTools(
   tokenManager: ApprovalTokenManager
 ): MailSendTools {
   return new MailSendTools(repository, tokenManager);
+}
+
+// =============================================================================
+// Registry Definitions (v3 registry-driven architecture, U2)
+// =============================================================================
+
+function jsonResult(data: unknown): ToolResult {
+  return { content: [{ type: 'text', text: JSON.stringify(data, null, 2) }] };
+}
+
+/**
+ * Registry tool definitions for the mail-send domain (Graph API only). The
+ * MailSendTools methods return raw objects, wrapped here to match the
+ * pre-registry dispatch behavior exactly.
+ */
+export function mailSendToolDefinitions(): ToolDefinition[] {
+  const tools = (ctx: ToolContext): MailSendTools => requireGraphToolset(ctx, 'mailSend');
+
+  return [
+    defineTool({
+      name: 'create_draft',
+      description: 'Create a draft email that can be edited and sent later',
+      input: CreateDraftInput,
+      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+      destructive: false,
+      presets: ['mail'],
+      backends: ['graph'],
+      handler: async (ctx, params) => jsonResult(await tools(ctx).createDraft(params)),
+    }),
+    defineTool({
+      name: 'update_draft',
+      description: 'Update an existing draft email',
+      input: UpdateDraftInput,
+      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+      destructive: false,
+      presets: ['mail'],
+      backends: ['graph'],
+      handler: async (ctx, params) => jsonResult(await tools(ctx).updateDraft(params)),
+    }),
+    defineTool({
+      name: 'add_draft_attachment',
+      description: 'Add a file attachment to an existing draft (Graph API)',
+      input: AddDraftAttachmentInput,
+      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+      destructive: false,
+      presets: ['mail'],
+      backends: ['graph'],
+      handler: async (ctx, params) => jsonResult(await tools(ctx).addDraftAttachment(params)),
+    }),
+    defineTool({
+      name: 'add_draft_inline_image',
+      description: 'Add an inline image to an existing draft for use in HTML body (Graph API)',
+      input: AddDraftInlineImageInput,
+      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+      destructive: false,
+      presets: ['mail'],
+      backends: ['graph'],
+      handler: async (ctx, params) => jsonResult(await tools(ctx).addDraftInlineImage(params)),
+    }),
+    defineTool({
+      name: 'list_drafts',
+      description: 'List all draft emails',
+      input: ListDraftsInput,
+      annotations: { readOnlyHint: true },
+      destructive: false,
+      presets: ['mail'],
+      backends: ['graph'],
+      handler: async (ctx, params) => jsonResult(await tools(ctx).listDrafts(params)),
+    }),
+    defineTool({
+      name: 'prepare_send_draft',
+      description: 'Prepare to send a draft email. Returns a preview and approval token.',
+      input: PrepareSendDraftInput,
+      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+      destructive: true,
+      presets: ['mail'],
+      backends: ['graph'],
+      handler: async (ctx, params) => jsonResult(await tools(ctx).prepareSendDraft(params)),
+    }),
+    defineTool({
+      name: 'confirm_send_draft',
+      description: 'Confirm and send a draft email using the approval token.',
+      input: ConfirmSendDraftInput,
+      annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+      destructive: true,
+      presets: ['mail'],
+      backends: ['graph'],
+      handler: async (ctx, params) => jsonResult(await tools(ctx).confirmSendDraft(params)),
+    }),
+    defineTool({
+      name: 'prepare_send_email',
+      description: 'Prepare to send an email immediately. Returns a preview and approval token.',
+      input: PrepareSendEmailInput,
+      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+      destructive: true,
+      presets: ['mail'],
+      backends: ['graph'],
+      handler: (ctx, params) => jsonResult(tools(ctx).prepareSendEmail(params)),
+    }),
+    defineTool({
+      name: 'confirm_send_email',
+      description: 'Confirm and send an email using the approval token.',
+      input: ConfirmSendEmailInput,
+      annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+      destructive: true,
+      presets: ['mail'],
+      backends: ['graph'],
+      handler: async (ctx, params) => jsonResult(await tools(ctx).confirmSendEmail(params)),
+    }),
+    defineTool({
+      name: 'prepare_reply_email',
+      description: 'Prepare to reply to an email. Returns a preview and approval token.',
+      input: PrepareReplyEmailInput,
+      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+      destructive: true,
+      presets: ['mail'],
+      backends: ['graph'],
+      handler: async (ctx, params) => jsonResult(await tools(ctx).prepareReplyEmail(params)),
+    }),
+    defineTool({
+      name: 'confirm_reply_email',
+      description: 'Confirm and reply to an email using the approval token.',
+      input: ConfirmReplyEmailInput,
+      annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+      destructive: true,
+      presets: ['mail'],
+      backends: ['graph'],
+      handler: async (ctx, params) => jsonResult(await tools(ctx).confirmReplyEmail(params)),
+    }),
+    defineTool({
+      name: 'prepare_forward_email',
+      description: 'Prepare to forward an email. Returns a preview and approval token.',
+      input: PrepareForwardEmailInput,
+      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+      destructive: true,
+      presets: ['mail'],
+      backends: ['graph'],
+      handler: async (ctx, params) => jsonResult(await tools(ctx).prepareForwardEmail(params)),
+    }),
+    defineTool({
+      name: 'confirm_forward_email',
+      description: 'Confirm and forward an email using the approval token.',
+      input: ConfirmForwardEmailInput,
+      annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+      destructive: true,
+      presets: ['mail'],
+      backends: ['graph'],
+      handler: async (ctx, params) => jsonResult(await tools(ctx).confirmForwardEmail(params)),
+    }),
+    defineTool({
+      name: 'reply_as_draft',
+      description: 'Create a reply (or reply-all) as an editable draft. Returns a draft_id for use with update_draft and prepare_send_draft.',
+      input: ReplyAsDraftInput,
+      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+      destructive: false,
+      presets: ['mail'],
+      backends: ['graph'],
+      handler: async (ctx, params) => jsonResult(await tools(ctx).replyAsDraft(params)),
+    }),
+    defineTool({
+      name: 'forward_as_draft',
+      description: 'Create a forward as an editable draft. Returns a draft_id for use with update_draft and prepare_send_draft.',
+      input: ForwardAsDraftInput,
+      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+      destructive: false,
+      presets: ['mail'],
+      backends: ['graph'],
+      handler: async (ctx, params) => jsonResult(await tools(ctx).forwardAsDraft(params)),
+    }),
+    defineTool({
+      name: 'set_signature',
+      description: 'Save an email signature that will be auto-appended to outgoing emails',
+      input: SetSignatureInput,
+      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+      destructive: false,
+      presets: ['mail'],
+      backends: ['graph'],
+      handler: (ctx, params) => jsonResult(tools(ctx).setSignature(params)),
+    }),
+    defineTool({
+      name: 'get_signature',
+      description: 'Get the currently stored email signature',
+      input: GetSignatureInput,
+      annotations: { readOnlyHint: true },
+      destructive: false,
+      presets: ['mail'],
+      backends: ['graph'],
+      handler: (ctx) => jsonResult(tools(ctx).getSignature()),
+    }),
+  ];
 }

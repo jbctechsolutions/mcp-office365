@@ -24,6 +24,12 @@ import type {
   GetUnreadCountParams,
   ListAttachmentsParams,
   DownloadAttachmentParams,
+  SearchEmailsAdvancedParams,
+  CheckNewEmailsParams,
+  ListConversationParams,
+  GetMessageHeadersParams,
+  GetMessageMimeParams,
+  GetMailTipsParams,
 } from './mail.js';
 
 function jsonResult(data: unknown): ToolResult {
@@ -197,5 +203,41 @@ export class GraphMailTools {
   async downloadAttachment(params: DownloadAttachmentParams): Promise<ToolResult> {
     const result = await this.repository.downloadAttachmentAsync(params.attachment_index);
     return jsonResult(result);
+  }
+
+  async searchEmailsAdvanced(params: SearchEmailsAdvancedParams): Promise<ToolResult> {
+    const emails = params.folder_id != null
+      ? await this.repository.searchEmailsAdvancedInFolderAsync(params.folder_id, params.query, params.limit)
+      : await this.repository.searchEmailsAdvancedAsync(params.query, params.limit);
+    return jsonResult({ emails: emails.map(transformEmailRow) });
+  }
+
+  async checkNewEmails(params: CheckNewEmailsParams): Promise<ToolResult> {
+    const deltaResult = await this.repository.checkNewEmailsAsync(params.folder_id);
+    return jsonResult({
+      emails: deltaResult.emails.map(transformEmailRow),
+      is_initial_sync: deltaResult.isInitialSync,
+      count: deltaResult.emails.length,
+    });
+  }
+
+  async listConversation(params: ListConversationParams): Promise<ToolResult> {
+    const emails = await this.repository.listConversationAsync(params.message_id, params.limit);
+    return jsonResult({ emails: emails.map(transformEmailRow) });
+  }
+
+  async getMessageHeaders(params: GetMessageHeadersParams): Promise<ToolResult> {
+    const headers = await this.repository.getMessageHeadersAsync(params.email_id);
+    return jsonResult({ headers });
+  }
+
+  async getMessageMime(params: GetMessageMimeParams): Promise<ToolResult> {
+    const result = await this.repository.getMessageMimeAsync(params.email_id);
+    return jsonResult({ success: true, file_path: result.filePath });
+  }
+
+  async getMailTips(params: GetMailTipsParams): Promise<ToolResult> {
+    const tips = await this.repository.getMailTipsAsync(params.email_addresses);
+    return jsonResult({ mail_tips: tips });
   }
 }

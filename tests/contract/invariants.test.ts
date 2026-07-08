@@ -78,7 +78,12 @@ describe('registry contract invariants', () => {
     // be excluded by --read-only, so a read-only client cannot mint OR redeem.
     for (const def of defs) {
       if (def.name.startsWith('prepare_')) {
-        const confirmName = def.name.replace(/^prepare_/, 'confirm_');
+        // Batch prepares (prepare_batch_delete_emails, prepare_batch_move_emails)
+        // deliberately pair many-to-one with a single confirm_batch_operation
+        // rather than a 1:1 confirm_<suffix>.
+        const confirmName = def.name.startsWith('prepare_batch_')
+          ? 'confirm_batch_operation'
+          : def.name.replace(/^prepare_/, 'confirm_');
         const confirm = byName.get(confirmName);
         expect(confirm, `${def.name} missing ${confirmName}`).toBeDefined();
         expect(def.destructive, `${def.name} not destructive`).toBe(true);

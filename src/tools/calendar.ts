@@ -258,6 +258,27 @@ export const ListEventInstancesInput = z.strictObject({
   end_date: z.string().describe('End of date range (ISO 8601, e.g. 2024-12-31T23:59:59Z)'),
 });
 
+export const PrepareDeleteEventInput = z.strictObject({
+  event_id: z.number().int().positive().describe('The event ID to delete'),
+});
+
+export const ConfirmDeleteEventInput = z.strictObject({
+  token_id: z.uuid().describe('The approval token from prepare_delete_event'),
+  event_id: z.number().int().positive().describe('The event ID to delete'),
+});
+
+export const ListCalendarGroupsInput = z.strictObject({});
+
+export const CreateCalendarGroupInput = z.strictObject({
+  name: z.string().min(1).describe('Calendar group name'),
+});
+
+export const ListRoomListsInput = z.strictObject({});
+
+export const ListRoomsInput = z.strictObject({
+  room_list_email: z.string().email().optional().describe('Room list email to filter by (from list_room_lists)'),
+});
+
 // =============================================================================
 // Type Definitions
 // =============================================================================
@@ -273,6 +294,10 @@ export type CreateEventGraphParams = z.infer<typeof CreateEventGraphInput>;
 export type UpdateEventParams = z.infer<typeof UpdateEventInput>;
 export type DeleteEventParams = z.infer<typeof DeleteEventInput>;
 export type ListEventInstancesParams = z.infer<typeof ListEventInstancesInput>;
+export type PrepareDeleteEventParams = z.infer<typeof PrepareDeleteEventInput>;
+export type ConfirmDeleteEventParams = z.infer<typeof ConfirmDeleteEventInput>;
+export type CreateCalendarGroupParams = z.infer<typeof CreateCalendarGroupInput>;
+export type ListRoomsParams = z.infer<typeof ListRoomsInput>;
 
 /**
  * Result of creating a calendar event.
@@ -588,6 +613,69 @@ export function calendarToolDefinitions(): ToolDefinition[] {
       presets: ['calendar'],
       backends: ['graph'],
       handler: (ctx, params) => requireGraphToolset(ctx, 'calendarGraph').listEventInstances(params),
+    }),
+    // ---- Graph-only destructive two-phase (delete event) ----
+    defineTool({
+      name: 'prepare_delete_event',
+      description: 'Prepare to delete a calendar event. Returns a preview and approval token. Call confirm_delete_event to execute.',
+      input: PrepareDeleteEventInput,
+      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+      destructive: true,
+      presets: ['calendar'],
+      backends: ['graph'],
+      handler: (ctx, params) => requireGraphToolset(ctx, 'calendarGraph').prepareDeleteEvent(params),
+    }),
+    defineTool({
+      name: 'confirm_delete_event',
+      description: 'Confirm deletion of a calendar event using a token from prepare_delete_event',
+      input: ConfirmDeleteEventInput,
+      annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+      destructive: true,
+      presets: ['calendar'],
+      backends: ['graph'],
+      handler: (ctx, params) => requireGraphToolset(ctx, 'calendarGraph').confirmDeleteEvent(params),
+    }),
+    // ---- Graph-only calendar groups ----
+    defineTool({
+      name: 'list_calendar_groups',
+      description: 'List all calendar groups (Graph API)',
+      input: ListCalendarGroupsInput,
+      annotations: { readOnlyHint: true },
+      destructive: false,
+      presets: ['calendar'],
+      backends: ['graph'],
+      handler: (ctx) => requireGraphToolset(ctx, 'calendarGraph').listCalendarGroups(),
+    }),
+    defineTool({
+      name: 'create_calendar_group',
+      description: 'Create a new calendar group (Graph API)',
+      input: CreateCalendarGroupInput,
+      annotations: { readOnlyHint: false, destructiveHint: false },
+      destructive: false,
+      presets: ['calendar'],
+      backends: ['graph'],
+      handler: (ctx, params) => requireGraphToolset(ctx, 'calendarGraph').createCalendarGroup(params),
+    }),
+    // ---- Graph-only room lists & rooms ----
+    defineTool({
+      name: 'list_room_lists',
+      description: 'List all room lists (building/floor groupings) in the organization (Graph API)',
+      input: ListRoomListsInput,
+      annotations: { readOnlyHint: true },
+      destructive: false,
+      presets: ['calendar'],
+      backends: ['graph'],
+      handler: (ctx) => requireGraphToolset(ctx, 'calendarGraph').listRoomLists(),
+    }),
+    defineTool({
+      name: 'list_rooms',
+      description: 'List meeting rooms, optionally filtered by a room list email from list_room_lists (Graph API)',
+      input: ListRoomsInput,
+      annotations: { readOnlyHint: true },
+      destructive: false,
+      presets: ['calendar'],
+      backends: ['graph'],
+      handler: (ctx, params) => requireGraphToolset(ctx, 'calendarGraph').listRooms(params),
     }),
   ];
 }

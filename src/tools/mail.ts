@@ -136,6 +136,18 @@ export const CheckNewEmailsInput = z.strictObject({
   folder_id: z.number().int().positive().describe('Folder ID to check for new emails'),
 });
 
+export const GetMessageHeadersInput = z.strictObject({
+  email_id: z.number().int().positive().describe('Email ID'),
+});
+
+export const GetMessageMimeInput = z.strictObject({
+  email_id: z.number().int().positive().describe('Email ID'),
+});
+
+export const GetMailTipsInput = z.strictObject({
+  email_addresses: z.array(z.string().email()).min(1).max(20).describe('Email addresses to check'),
+});
+
 // =============================================================================
 // Type Definitions
 // =============================================================================
@@ -150,6 +162,11 @@ export type GetUnreadCountParams = z.infer<typeof GetUnreadCountInput>;
 export type ListAttachmentsParams = z.infer<typeof ListAttachmentsInput>;
 export type DownloadAttachmentParams = z.infer<typeof DownloadAttachmentInput>;
 export type CheckNewEmailsParams = z.infer<typeof CheckNewEmailsInput>;
+export type SearchEmailsAdvancedParams = z.infer<typeof SearchEmailsAdvancedInput>;
+export type ListConversationParams = z.infer<typeof ListConversationInput>;
+export type GetMessageHeadersParams = z.infer<typeof GetMessageHeadersInput>;
+export type GetMessageMimeParams = z.infer<typeof GetMessageMimeInput>;
+export type GetMailTipsParams = z.infer<typeof GetMailTipsInput>;
 
 // =============================================================================
 // Transformers
@@ -457,8 +474,43 @@ export function createMailTools(
  * the active backend: Graph delegates to GraphMailTools; AppleScript delegates
  * to AppleMailTools. Both toolsets return MCP content directly.
  */
+export const SendEmailInput = z.strictObject({
+  to: z.array(z.string()).min(1).describe('Recipient email addresses'),
+  subject: z.string().min(1).describe('Email subject'),
+  body: z.string().describe('Email body content'),
+  body_type: z.enum(['plain', 'html']).default('plain').describe('Body content type (default: plain)'),
+  cc: z.array(z.string()).optional().describe('CC recipients'),
+  bcc: z.array(z.string()).optional().describe('BCC recipients'),
+  reply_to: z.string().optional().describe('Reply-to address'),
+  attachments: z.array(z.strictObject({
+    path: z.string().describe('Absolute file path to attachment'),
+    name: z.string().optional().describe('Optional display name for the attachment'),
+  })).optional().describe('File attachments'),
+  inline_images: z.array(z.strictObject({
+    path: z.string().describe('Absolute file path to the inline image'),
+    content_id: z.string().describe('Content-ID referenced in the HTML body'),
+  })).optional().describe('Inline images referenced by the HTML body'),
+  account_id: z.number().int().positive().optional().describe('Optional account ID to send from'),
+});
+export type SendEmailParams = z.infer<typeof SendEmailInput>;
+
 export function mailToolDefinitions(): ToolDefinition[] {
   return [
+    defineTool({
+      name: 'send_email',
+      description: 'Send an email with optional CC, BCC, attachments, and HTML formatting. Returns the sent message ID and timestamp.',
+      input: SendEmailInput,
+      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+      destructive: true,
+      presets: ['mail'],
+      backends: ['graph', 'applescript'],
+      // AppleScript single-shot send. On the Graph backend, direct send is not
+      // available — clients use the two-phase prepare_send_email/confirm_send_email.
+      handler: (ctx, params) =>
+        ctx.backend === 'graph'
+          ? { content: [{ type: 'text' as const, text: 'Direct send_email is not available on the Graph backend; use prepare_send_email then confirm_send_email.' }], isError: true }
+          : requireAppleScriptToolset(ctx, 'mail').sendEmail(params),
+    }),
     defineTool({
       name: 'list_folders',
       description: 'List all mail folders with message and unread counts. Can filter by account.',
@@ -562,6 +614,67 @@ export function mailToolDefinitions(): ToolDefinition[] {
         ctx.backend === 'graph'
           ? requireGraphToolset(ctx, 'mailGraph').downloadAttachment(params)
           : requireAppleScriptToolset(ctx, 'mail').downloadAttachment(params),
+    }),
+    // ---- Graph-only reads ----
+    defineTool({
+      name: 'search_emails_advanced',
+      description: 'Search emails using KQL (Keyword Query Language) for advanced queries. Supports operators: from:, to:, subject:, hasAttachments:true, received>=2024-01-01, AND, OR. (Graph API)',
+      input: SearchEmailsAdvancedInput,
+      annotations: { readOnlyHint: true },
+      destructive: false,
+      presets: ['mail'],
+      backends: ['graph'],
+      handler: (ctx, params) => requireGraphToolset(ctx, 'mailGraph').searchEmailsAdvanced(params),
+    }),
+    defineTool({
+      name: 'check_new_emails',
+      description: 'Check for new or changed emails since last check using delta sync. First call returns recent messages (initial sync). Subsequent calls return only new/changed messages.',
+      input: CheckNewEmailsInput,
+      annotations: { readOnlyHint: true },
+      destructive: false,
+      presets: ['mail'],
+      backends: ['graph'],
+      handler: (ctx, params) => requireGraphToolset(ctx, 'mailGraph').checkNewEmails(params),
+    }),
+    defineTool({
+      name: 'list_conversation',
+      description: 'List all messages in an email conversation/thread, ordered chronologically. Provide any message ID from the thread.',
+      input: ListConversationInput,
+      annotations: { readOnlyHint: true },
+      destructive: false,
+      presets: ['mail'],
+      backends: ['graph'],
+      handler: (ctx, params) => requireGraphToolset(ctx, 'mailGraph').listConversation(params),
+    }),
+    defineTool({
+      name: 'get_message_headers',
+      description: 'Get internet message headers (SPF, DKIM, routing, etc.) for an email (Graph API)',
+      input: GetMessageHeadersInput,
+      annotations: { readOnlyHint: true },
+      destructive: false,
+      presets: ['mail'],
+      backends: ['graph'],
+      handler: (ctx, params) => requireGraphToolset(ctx, 'mailGraph').getMessageHeaders(params),
+    }),
+    defineTool({
+      name: 'get_message_mime',
+      description: 'Download the full MIME content (.eml) of an email to a local file (Graph API)',
+      input: GetMessageMimeInput,
+      annotations: { readOnlyHint: true },
+      destructive: false,
+      presets: ['mail'],
+      backends: ['graph'],
+      handler: (ctx, params) => requireGraphToolset(ctx, 'mailGraph').getMessageMime(params),
+    }),
+    defineTool({
+      name: 'get_mail_tips',
+      description: 'Get mail tips (automatic replies, mailbox full, delivery restrictions, max message size) for email addresses (Graph API)',
+      input: GetMailTipsInput,
+      annotations: { readOnlyHint: true },
+      destructive: false,
+      presets: ['mail'],
+      backends: ['graph'],
+      handler: (ctx, params) => requireGraphToolset(ctx, 'mailGraph').getMailTips(params),
     }),
   ];
 }

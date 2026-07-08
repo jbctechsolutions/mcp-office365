@@ -25,8 +25,9 @@ import type {
   ListAttachmentsParams,
   DownloadAttachmentParams,
 } from './mail.js';
-import type { IAccountRepository } from '../applescript/index.js';
+import type { IAccountRepository, IMailSender, MailSenderSendEmailParams } from '../applescript/index.js';
 import type { ToolResult } from '../registry/types.js';
+import type { SendEmailParams } from './mail.js';
 
 function jsonResult(data: unknown): ToolResult {
   return { content: [{ type: 'text', text: JSON.stringify(data, null, 2) }] };
@@ -75,8 +76,43 @@ function resolveAccountIds(
 export class AppleMailTools {
   constructor(
     private readonly mailTools: MailTools,
-    private readonly accountRepository: IAccountRepository
+    private readonly accountRepository: IAccountRepository,
+    private readonly mailSender: IMailSender | null,
   ) {}
+
+  /** Single-shot send via the AppleScript mail sender (Graph uses two-phase). */
+  sendEmail(params: SendEmailParams): ToolResult {
+    if (this.mailSender == null) {
+      return { content: [{ type: 'text', text: 'Email sending is not available' }], isError: true };
+    }
+    let sendParams: MailSenderSendEmailParams = {
+      to: params.to,
+      subject: params.subject,
+      body: params.body,
+      bodyType: params.body_type ?? 'plain',
+    };
+    if (params.cc != null) sendParams = { ...sendParams, cc: params.cc };
+    if (params.bcc != null) sendParams = { ...sendParams, bcc: params.bcc };
+    if (params.reply_to != null) sendParams = { ...sendParams, replyTo: params.reply_to };
+    if (params.attachments != null) {
+      sendParams = {
+        ...sendParams,
+        attachments: params.attachments.map((a) => (a.name != null ? { path: a.path, name: a.name } : { path: a.path })),
+      };
+    }
+    if (params.inline_images != null) {
+      sendParams = {
+        ...sendParams,
+        inlineImages: params.inline_images.map((img) => ({ path: img.path, contentId: img.content_id })),
+      };
+    }
+    if (params.account_id != null) sendParams = { ...sendParams, accountId: params.account_id };
+
+    const sent = this.mailSender.sendEmail(sendParams);
+    return {
+      content: [{ type: 'text', text: JSON.stringify({ message_id: sent.messageId, sent_at: sent.sentAt, status: 'sent' }, null, 2) }],
+    };
+  }
 
   listFolders(params: ListFoldersToolParams): ToolResult {
     const accountIds = resolveAccountIds(params.account_id, this.accountRepository);
