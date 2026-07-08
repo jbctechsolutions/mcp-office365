@@ -64,6 +64,10 @@ function createTrackingBuilder(mockResponse: any) {
       call.queryParams = params;
       return builder;
     }),
+    responseType: vi.fn().mockImplementation((rt: string) => {
+      call.responseType = rt;
+      return builder;
+    }),
     get: vi.fn().mockImplementation(async () => {
       call.method = 'get';
       apiCalls.push({ ...call });
@@ -107,7 +111,14 @@ const mockGraphClient = { api: mockApi };
 vi.mock('@microsoft/microsoft-graph-client', () => ({
   Client: {
     init: vi.fn(function () { return mockGraphClient; }),
+    initWithMiddleware: vi.fn(function () { return mockGraphClient; }),
   },
+  AuthenticationHandler: class { setNext(): void {} },
+  RetryHandler: class { setNext(): void {} },
+  RetryHandlerOptions: class {},
+  RedirectHandler: class { setNext(): void {} },
+  HTTPMessageHandler: class { setNext(): void {} },
+  ResponseType: { ARRAYBUFFER: 'arraybuffer', BLOB: 'blob', STREAM: 'stream', TEXT: 'text', JSON: 'json' },
 }));
 
 vi.mock('../../../../src/graph/auth/index.js', () => ({
@@ -1332,6 +1343,9 @@ describe('Graph API endpoint and method validation', () => {
       expect(apiCalls).toHaveLength(1);
       expect(apiCalls[0].url).toBe('/me/contacts/contact-1/photo/$value');
       expect(apiCalls[0].method).toBe('get');
+      // Binary downloads must request ARRAYBUFFER so the response is bytes, not
+      // a Node stream (the pre-U8 bug that made downloads 100% broken).
+      expect(apiCalls[0].responseType).toBe('arraybuffer');
       expect(result).toBe(mockPhotoData);
     });
 

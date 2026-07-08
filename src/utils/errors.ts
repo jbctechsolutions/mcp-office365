@@ -26,6 +26,10 @@ export const ErrorCode = {
   GRAPH_RATE_LIMITED: 'GRAPH_RATE_LIMITED',
   GRAPH_PERMISSION_DENIED: 'GRAPH_PERMISSION_DENIED',
   GRAPH_ERROR: 'GRAPH_ERROR',
+  // D10 transport error envelope codes (mapped at the single dispatch chokepoint).
+  AUTH_EXPIRED: 'AUTH_EXPIRED',
+  THROTTLED: 'THROTTLED',
+  GRAPH_UNAVAILABLE: 'GRAPH_UNAVAILABLE',
   ATTACHMENT_NOT_FOUND: 'ATTACHMENT_NOT_FOUND',
   ATTACHMENT_TOO_LARGE: 'ATTACHMENT_TOO_LARGE',
   ATTACHMENT_SAVE_ERROR: 'ATTACHMENT_SAVE_ERROR',
@@ -38,15 +42,27 @@ export const ErrorCode = {
 
 export type ErrorCode = (typeof ErrorCode)[keyof typeof ErrorCode];
 
+/** Per-error hints carried into the D10 envelope. */
+export interface ErrorMeta {
+  /** True when the caller can reasonably retry the same operation. */
+  retriable?: boolean;
+  /** Actionable next step for the caller (agent or human). */
+  suggestion?: string;
+}
+
 /**
  * Base class for all Outlook MCP errors.
  */
 export abstract class OutlookMcpError extends Error {
   abstract readonly code: ErrorCode;
+  readonly retriable: boolean;
+  readonly suggestion: string | undefined;
 
-  constructor(message: string) {
+  constructor(message: string, meta?: ErrorMeta) {
     super(message);
     this.name = this.constructor.name;
+    this.retriable = meta?.retriable ?? false;
+    this.suggestion = meta?.suggestion;
     // Maintains proper stack trace for where error was thrown
     Error.captureStackTrace(this, this.constructor);
   }
@@ -227,7 +243,8 @@ export class GraphAuthRequiredError extends OutlookMcpError {
   constructor() {
     super(
       'Microsoft Graph authentication required. ' +
-        'Run: npx @jbctechsolutions/mcp-office365 auth'
+        'Run: npx @jbctechsolutions/mcp-office365 auth',
+      { retriable: false, suggestion: 'Run `npx @jbctechsolutions/mcp-office365 auth` to sign in.' }
     );
   }
 }
@@ -242,7 +259,14 @@ export class GraphRateLimitedError extends OutlookMcpError {
   constructor(retryAfter?: number) {
     super(
       'Microsoft Graph API rate limit exceeded. ' +
-        (retryAfter != null ? `Retry after ${retryAfter} seconds.` : 'Please try again later.')
+        (retryAfter != null ? `Retry after ${retryAfter} seconds.` : 'Please try again later.'),
+      {
+        retriable: true,
+        suggestion:
+          retryAfter != null
+            ? `Wait ${retryAfter}s and retry.`
+            : 'Wait a few seconds and retry.',
+      }
     );
     this.retryAfter = retryAfter;
   }
@@ -377,4 +401,172 @@ export class TargetChangedError extends OutlookMcpError {
         'Please prepare the operation again.'
     );
   }
+}
+
+// =============================================================================
+// D10 — Typed error envelope
+// =============================================================================
+
+/**
+ * The stable, machine-readable shape returned for every tool failure. Ends the
+ * ad-hoc `GRAPH_ERROR:`/`DATABASE_ERROR:` string-prefix inconsistency: callers
+ * get a stable `code`, a human `message`, whether a retry could help
+ * (`retriable`), and an actionable `suggestion` when one exists.
+ */
+export interface ErrorEnvelope {
+  code: ErrorCode;
+  message: string;
+  retriable: boolean;
+  suggestion?: string;
+}
+
+/** Shape of a Microsoft Graph SDK error (has a numeric HTTP `statusCode`). */
+interface GraphSdkErrorLike {
+  statusCode: number;
+  code?: string;
+  message?: string;
+}
+
+function isGraphSdkError(error: unknown): error is GraphSdkErrorLike {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    typeof (error as { statusCode?: unknown }).statusCode === 'number'
+  );
+}
+
+/** Maps a raw Graph SDK / HTTP status to a stable envelope. */
+function graphStatusToEnvelope(status: number, message: string): ErrorEnvelope {
+  switch (status) {
+    case 401:
+      return {
+        code: ErrorCode.AUTH_EXPIRED,
+        message,
+        retriable: false,
+        suggestion: 'Session expired. Run `npx @jbctechsolutions/mcp-office365 auth` to re-authenticate.',
+      };
+    case 403:
+      return {
+        code: ErrorCode.GRAPH_PERMISSION_DENIED,
+        message,
+        retriable: false,
+        suggestion: 'Check the app permissions/scopes granted in Azure AD.',
+      };
+    case 404:
+      return { code: ErrorCode.NOT_FOUND, message, retriable: false };
+    case 400:
+      return { code: ErrorCode.VALIDATION_ERROR, message, retriable: false };
+    case 429:
+      return {
+        code: ErrorCode.THROTTLED,
+        message,
+        retriable: true,
+        suggestion: 'Rate limited. Retry after the Retry-After interval.',
+      };
+    case 502:
+    case 503:
+    case 504:
+      // The transport auto-retries these (see shouldRetryGraphRequest), so
+      // retriable:true reflects real coverage, not just caller advice.
+      return {
+        code: ErrorCode.GRAPH_UNAVAILABLE,
+        message,
+        retriable: true,
+        suggestion: 'Microsoft Graph is temporarily unavailable. Retry shortly.',
+      };
+    default:
+      if (status >= 500) {
+        // Other 5xx (500/501/505…) are NOT auto-retried by the transport, so
+        // retriable stays false to keep the envelope honest with D5.
+        return {
+          code: ErrorCode.GRAPH_UNAVAILABLE,
+          message,
+          retriable: false,
+          suggestion: 'Microsoft Graph returned a server error.',
+        };
+      }
+      return { code: ErrorCode.GRAPH_ERROR, message, retriable: false };
+  }
+}
+
+/** True when `code` is a member of the stable {@link ErrorCode} vocabulary. */
+export function isKnownErrorCode(code: string): code is ErrorCode {
+  return (Object.values(ErrorCode) as string[]).includes(code);
+}
+
+/**
+ * True when `value` already has the {@link ErrorEnvelope} shape *with a known
+ * code*. Requiring a real {@link ErrorCode} (not just any string) means an
+ * unrelated JSON payload that happens to carry `code`/`message`/`retriable`
+ * fields is not mistaken for an envelope by {@link ensureErrorEnvelopeText}.
+ */
+export function isErrorEnvelope(value: unknown): value is ErrorEnvelope {
+  const candidate = value as Partial<Record<keyof ErrorEnvelope, unknown>>;
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    typeof candidate.code === 'string' &&
+    isKnownErrorCode(candidate.code) &&
+    typeof candidate.message === 'string' &&
+    typeof candidate.retriable === 'boolean' &&
+    (candidate.suggestion === undefined || typeof candidate.suggestion === 'string')
+  );
+}
+
+/**
+ * Normalizes the text of a tool's error result into a D10 envelope JSON string.
+ * Thrown failures already funnel through {@link toErrorEnvelope} at the dispatch
+ * chokepoint, but many handlers return `{ isError: true, text: '…' }` directly
+ * (not-found, approval-token mismatches, etc.). Passing those through here keeps
+ * a single stable error shape across *every* failure path. Text that is already
+ * a valid envelope is returned unchanged (idempotent — never double-wraps).
+ */
+export function ensureErrorEnvelopeText(text: string): string {
+  try {
+    if (isErrorEnvelope(JSON.parse(text))) {
+      return text;
+    }
+  } catch {
+    // not JSON — fall through and wrap
+  }
+  const envelope: ErrorEnvelope = {
+    code: ErrorCode.GRAPH_ERROR,
+    message: text,
+    retriable: false,
+  };
+  return JSON.stringify(envelope, null, 2);
+}
+
+/**
+ * Single mapping point (D10): converts any thrown value into a stable
+ * {@link ErrorEnvelope}. Typed {@link OutlookMcpError}s carry their own
+ * code/retriable/suggestion; raw Graph SDK errors are mapped by HTTP status;
+ * everything else becomes a non-retriable `GRAPH_ERROR`.
+ */
+export function toErrorEnvelope(error: unknown): ErrorEnvelope {
+  if (isOutlookMcpError(error)) {
+    const envelope: ErrorEnvelope = {
+      code: error.code,
+      message: error.message,
+      retriable: error.retriable,
+    };
+    if (error.suggestion !== undefined) {
+      envelope.suggestion = error.suggestion;
+    }
+    return envelope;
+  }
+
+  if (isGraphSdkError(error)) {
+    const message =
+      typeof error.message === 'string' && error.message.length > 0
+        ? error.message
+        : `Microsoft Graph request failed (HTTP ${error.statusCode}).`;
+    return graphStatusToEnvelope(error.statusCode, message);
+  }
+
+  if (error instanceof Error) {
+    return { code: ErrorCode.GRAPH_ERROR, message: error.message, retriable: false };
+  }
+
+  return { code: ErrorCode.GRAPH_ERROR, message: 'An unknown error occurred.', retriable: false };
 }

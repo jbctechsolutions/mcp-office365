@@ -14,7 +14,18 @@
  */
 
 import 'isomorphic-fetch';
-import { Client, type PageCollection } from '@microsoft/microsoft-graph-client';
+import {
+  Client,
+  ResponseType,
+  AuthenticationHandler,
+  RetryHandler,
+  RetryHandlerOptions,
+  RedirectHandler,
+  HTTPMessageHandler,
+  type AuthenticationProvider,
+  type ShouldRetry,
+  type PageCollection,
+} from '@microsoft/microsoft-graph-client';
 import type * as MicrosoftGraph from '@microsoft/microsoft-graph-types';
 
 import { getAccessToken, type DeviceCodeCallback } from '../auth/index.js';
@@ -23,6 +34,46 @@ import { ResponseCache, CacheTTL, createCacheKey } from './cache.js';
 
 /** Generic shape for a Graph API response containing a `.value` array. */
 interface GraphCollectionResponse<T> { value: T[] }
+
+// The SDK's RetryHandler only considers 429/503/504 retriable (its private
+// static RETRY_STATUS_CODES), gating `this.isRetry(response)` BEFORE our
+// shouldRetry callback runs — so a callback can only *narrow* that set, never
+// widen it. D5 also wants 502 Bad Gateway retried, so we widen the SDK's set
+// once at load. Our shouldRetry still narrows to idempotent GET/HEAD/OPTIONS,
+// and this server builds only its own client, so the shared-static mutation
+// has no cross-tenant effect.
+const RETRY_STATUS_CODES = (RetryHandler as unknown as { RETRY_STATUS_CODES: number[] })
+  .RETRY_STATUS_CODES;
+if (Array.isArray(RETRY_STATUS_CODES) && !RETRY_STATUS_CODES.includes(502)) {
+  RETRY_STATUS_CODES.push(502);
+}
+
+/**
+ * D5 retry policy (exported for testing). Retries only idempotent reads on
+ * transient failures — 429 plus 502/503/504 — honoring Retry-After via the
+ * SDK-computed delay. NEVER retries a send/write once the body is on the wire:
+ * an ambiguous 429/5xx on a POST could double-send. Paired with the module-load
+ * widening above (the SDK gates 502 out by default), this makes 502 genuinely
+ * retriable for idempotent reads while leaving writes/sendMail untouched.
+ */
+export function shouldRetryGraphRequest(
+  method: string,
+  url: string,
+  status: number
+): boolean {
+  const m = method.toUpperCase();
+  if (m !== 'GET' && m !== 'HEAD' && m !== 'OPTIONS') {
+    return false;
+  }
+  // Never retry an OData action (POST-shaped operation like /sendMail, /reply,
+  // /createReply of writes) even if the transport surfaces it as a GET. Anchor
+  // the action to the end of the path (or a query string) so a drive item
+  // literally named e.g. "reply.docx" read via GET is still retriable.
+  if (/\/(sendMail|reply|forward|createReply|createForward)(?:\?|$)/i.test(url)) {
+    return false;
+  }
+  return status === 429 || status === 502 || status === 503 || status === 504;
+}
 
 /** Generic Graph API entity (untyped). */
 type GraphEntity = Record<string, unknown>;
@@ -45,17 +96,32 @@ export class GraphClient {
   // eslint-disable-next-line @typescript-eslint/require-await
   private async getClient(): Promise<Client> {
     if (this.client == null) {
-      this.client = Client.init({
-        // eslint-disable-next-line @typescript-eslint/no-misused-promises
-        authProvider: async (done) => {
-          try {
-            const token = await getAccessToken(this.deviceCodeCallback);
-            done(null, token);
-          } catch (error) {
-            done(error as Error, null);
-          }
-        },
-      });
+      const authProvider: AuthenticationProvider = {
+        getAccessToken: () => getAccessToken(this.deviceCodeCallback),
+      };
+
+      const shouldRetry: ShouldRetry = (_delay, _attempt, request, options, response) => {
+        const method = (options?.method ?? 'GET').toString();
+        // The SDK types `request` as RequestInfo, which resolves to `any` under
+        // this repo's lib config; cast to the shape we read to stay lint-clean.
+        const url = typeof request === 'string' ? request : String((request as { url?: unknown }).url ?? '');
+        return shouldRetryGraphRequest(method, url, response?.status ?? 0);
+      };
+
+      // Chain mirrors the SDK default order (auth → retry → redirect → http),
+      // minus the cosmetic TelemetryHandler. RedirectHandler matters: the
+      // binary download endpoints (/content, /photo/$value, meeting recordings)
+      // 302 to a pre-authenticated CDN URL, so the redirect must be followed
+      // explicitly rather than relying on the underlying fetch default.
+      const auth = new AuthenticationHandler(authProvider);
+      const retry = new RetryHandler(new RetryHandlerOptions(undefined, undefined, shouldRetry));
+      const redirect = new RedirectHandler();
+      const http = new HTTPMessageHandler();
+      auth.setNext(retry);
+      retry.setNext(redirect);
+      redirect.setNext(http);
+
+      this.client = Client.initWithMiddleware({ middleware: auth });
     }
     return this.client;
   }
@@ -690,7 +756,7 @@ export class GraphClient {
     const client = await this.getClient();
     return await client
       .api(`/me/contacts/${contactId}/photo/$value`)
-      .get() as ArrayBuffer;
+      .responseType(ResponseType.ARRAYBUFFER).get() as ArrayBuffer;
   }
 
   /**
@@ -1898,7 +1964,7 @@ export class GraphClient {
 
   async getUserPhoto(identifier: string): Promise<ArrayBuffer> {
     const client = await this.getClient();
-    return await client.api(`/users/${identifier}/photo/$value`).get() as ArrayBuffer;
+    return await client.api(`/users/${identifier}/photo/$value`).responseType(ResponseType.ARRAYBUFFER).get() as ArrayBuffer;
   }
 
   async getUserPresence(identifier: string): Promise<MicrosoftGraph.Presence> {
@@ -1940,11 +2006,13 @@ export class GraphClient {
 
   async listOnlineMeetings(limit: number = 20): Promise<GraphEntity[]> {
     const client = await this.getClient();
+    // Graph rejects $top on /me/onlineMeetings, so limit client-side. Guard a
+    // negative limit (slice(0, -n) would count from the end).
+    const cap = Math.max(0, limit);
     const response = await client.api('/me/onlineMeetings')
-      .top(limit)
       .orderby('startDateTime desc')
       .get() as GraphCollectionResponse<GraphEntity>;
-    return response.value;
+    return response.value.slice(0, cap);
   }
 
   async getOnlineMeeting(meetingId: string): Promise<GraphEntity> {
@@ -1960,7 +2028,7 @@ export class GraphClient {
 
   async getMeetingRecordingContent(meetingId: string, recordingId: string): Promise<ArrayBuffer> {
     const client = await this.getClient();
-    return await client.api(`/me/onlineMeetings/${meetingId}/recordings/${recordingId}/content`).get() as ArrayBuffer;
+    return await client.api(`/me/onlineMeetings/${meetingId}/recordings/${recordingId}/content`).responseType(ResponseType.ARRAYBUFFER).get() as ArrayBuffer;
   }
 
   async listMeetingTranscripts(meetingId: string): Promise<GraphEntity[]> {
@@ -2046,7 +2114,7 @@ export class GraphClient {
 
   async downloadDriveItem(itemId: string): Promise<ArrayBuffer> {
     const client = await this.getClient();
-    return await client.api(`/me/drive/items/${itemId}/content`).get() as ArrayBuffer;
+    return await client.api(`/me/drive/items/${itemId}/content`).responseType(ResponseType.ARRAYBUFFER).get() as ArrayBuffer;
   }
 
   async uploadDriveItem(parentPath: string, fileName: string, content: Buffer): Promise<GraphEntity> {
@@ -2132,7 +2200,7 @@ export class GraphClient {
    */
   async downloadLibraryFile(driveId: string, itemId: string): Promise<ArrayBuffer> {
     const client = await this.getClient();
-    return await client.api(`/drives/${driveId}/items/${itemId}/content`).get() as ArrayBuffer;
+    return await client.api(`/drives/${driveId}/items/${itemId}/content`).responseType(ResponseType.ARRAYBUFFER).get() as ArrayBuffer;
   }
 }
 
