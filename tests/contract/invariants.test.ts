@@ -18,6 +18,14 @@ import { ToolRegistry, toInputSchema } from '../../src/registry/registry.js';
 import { allToolDefinitions } from '../../src/registry/all-tools.js';
 import type { Backend, Preset, ToolContext } from '../../src/registry/types.js';
 import { ApprovalTokenManager } from '../../src/approval/index.js';
+import {
+  SELF_ENCODING_PREFIXES,
+  ALIAS_PREFIXES,
+  mintSelfEncoded,
+  mintComposite,
+  canonicalKey,
+  parseToken,
+} from '../../src/ids/token.js';
 
 const defs = allToolDefinitions();
 const byName = new Map(defs.map((d) => [d.name, d]));
@@ -152,6 +160,30 @@ describe('registry contract invariants', () => {
       if (def.destructive && def.backends.includes('graph')) {
         expect(readOnlyNames.has(def.name), `${def.name} leaked into read-only`).toBe(false);
       }
+    }
+  });
+});
+
+describe('durable-ID round-trip invariant (U5, invariant f)', () => {
+  it('every self-encoding prefix mints a token that parses back to the same entity + Graph ID', () => {
+    const graphId = 'AAMkAG_round+trip/id=';
+    for (const [prefix, entity] of Object.entries(SELF_ENCODING_PREFIXES)) {
+      const token = mintSelfEncoded(entity, graphId);
+      expect(token.startsWith(`${prefix}_`), `${entity} prefix`).toBe(true);
+      const parsed = parseToken(token);
+      expect(parsed?.entityType, `${entity} entity`).toBe(entity);
+      expect(parsed?.kind).toBe('self');
+      expect(parsed?.graphId, `${entity} graphId`).toBe(graphId);
+    }
+  });
+
+  it('every alias-backed prefix mints a token that parses back to the same entity (kind alias)', () => {
+    for (const [prefix, entity] of Object.entries(ALIAS_PREFIXES)) {
+      const token = mintComposite(entity, canonicalKey(entity, { id: 'X' }));
+      expect(token.startsWith(`${prefix}_`), `${entity} prefix`).toBe(true);
+      const parsed = parseToken(token);
+      expect(parsed?.entityType, `${entity} entity`).toBe(entity);
+      expect(parsed?.kind).toBe('alias');
     }
   });
 });

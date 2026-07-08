@@ -223,6 +223,64 @@ export class StateStore {
     };
   }
 
+  /**
+   * Atomically registers an alias with D1a collision enforcement, in a single
+   * IMMEDIATE transaction so the check-and-write is not a read-then-write race:
+   * two concurrent immutable registrations of the same token cannot both pass
+   * the check and then clobber each other. Returns `'collision'` when a
+   * *different* Graph ID already occupies the token for an immutable entity
+   * (neither the stored nor the new row is mutable); otherwise upserts and
+   * returns `'ok'`.
+   */
+  registerAlias(input: AliasInput): 'ok' | 'collision' {
+    const run = this.db.transaction((): 'ok' | 'collision' => {
+      const existing = this.getAliasUnscoped(input.token);
+      if (
+        existing !== null &&
+        existing.graphId !== input.graphId &&
+        !existing.mutable &&
+        input.mutable !== true
+      ) {
+        return 'collision';
+      }
+      this.putAlias(input);
+      return 'ok';
+    });
+    return run.immediate();
+  }
+
+  /**
+   * Returns an alias row regardless of account, or null. Reserved for two
+   * internal uses that must see across accounts: foreign-account disambiguation
+   * during resolution, and collision detection at mint time (D1a). It is NOT a
+   * resolution path — {@link getAlias} (account-scoped) is the only one of those.
+   */
+  getAliasUnscoped(token: string): AliasRow | null {
+    const raw = this.db.prepare('SELECT * FROM aliases WHERE token = ?').get(token) as
+      | RawAliasRow
+      | undefined;
+    if (raw === undefined) {
+      return null;
+    }
+    return {
+      token: raw.token,
+      graphId: raw.graph_id,
+      entityType: raw.entity_type,
+      accountId: raw.account_id,
+      mutable: raw.mutable !== 0,
+      createdAt: raw.created_at,
+    };
+  }
+
+  /**
+   * Returns the account a token was minted under (any account), or null when the
+   * token is unknown. Distinguishes "foreign account" from "unknown" during
+   * resolution so a foreign token yields a typed ID_FOREIGN_ACCOUNT.
+   */
+  getAliasAccount(token: string): string | null {
+    return this.getAliasUnscoped(token)?.accountId ?? null;
+  }
+
   // ---- Approval tokens (D7/D8) --------------------------------------------
 
   /** Stages a two-phase approval token. */
