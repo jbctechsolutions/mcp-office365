@@ -53,6 +53,8 @@ import { parseCliCommand, handleAuthCommand, createAuthMutex } from './cli.js';
 
 const pkg = createRequire(import.meta.url)('../package.json') as { version: string };
 import { createMailTools } from './tools/mail.js';
+import { GraphMailTools } from './tools/mail-graph.js';
+import { AppleMailTools } from './tools/mail-apple.js';
 import { createCalendarTools } from './tools/calendar.js';
 import { GraphCalendarTools } from './tools/calendar-graph.js';
 import { AppleCalendarTools } from './tools/calendar-apple.js';
@@ -88,15 +90,8 @@ import { PlannerTools } from './tools/planner.js';
 import { PlannerVisualizationTools } from './tools/planner-visualization.js';
 import { SharePointTools } from './tools/sharepoint.js';
 import {
-  ListEmailsInput,
-  SearchEmailsInput,
   SearchEmailsAdvancedInput,
-  GetEmailInput,
-  GetEmailsInput,
   ListConversationInput,
-  GetUnreadCountInput,
-  ListAttachmentsInput,
-  DownloadAttachmentInput,
   CheckNewEmailsInput,
   PrepareBatchDeleteEmailsInput,
   PrepareBatchMoveEmailsInput,
@@ -158,76 +153,6 @@ const TOOLS: Tool[] = [
   },
   // Mail tools
   {
-    name: 'list_folders',
-    description: 'List all mail folders with message and unread counts. Can filter by account.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        account_id: {
-          oneOf: [
-            { type: 'number', description: 'Specific account ID' },
-            { type: 'array', items: { type: 'number' }, description: 'Multiple account IDs' },
-            { type: 'string', enum: ['all'], description: 'All accounts' },
-          ],
-          description: 'Account filter: number (specific account), array (multiple accounts), "all" (all accounts), or omit for default account',
-        },
-      },
-      required: [],
-    },
-  },
-  {
-    name: 'list_emails',
-    description: 'List emails in a folder with pagination',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        folder_id: {
-          type: 'number',
-          description: 'The folder ID to list emails from',
-        },
-        limit: {
-          type: 'number',
-          description: 'Maximum number of emails to return (1-100, default 50)',
-          default: 50,
-        },
-        offset: {
-          type: 'number',
-          description: 'Number of emails to skip (default 0)',
-          default: 0,
-        },
-        unread_only: {
-          type: 'boolean',
-          description: 'Only return unread emails (default false)',
-          default: false,
-        },
-      },
-      required: ['folder_id'],
-    },
-  },
-  {
-    name: 'search_emails',
-    description: 'Search emails by subject, sender, or content',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        query: {
-          type: 'string',
-          description: 'Search query',
-        },
-        folder_id: {
-          type: 'number',
-          description: 'Optional folder ID to limit search to',
-        },
-        limit: {
-          type: 'number',
-          description: 'Maximum number of emails to return (1-100, default 50)',
-          default: 50,
-        },
-      },
-      required: ['query'],
-    },
-  },
-  {
     name: 'search_emails_advanced',
     description: 'Search emails using KQL (Keyword Query Language) for advanced queries. Supports operators: from:, to:, subject:, hasAttachments:true, received>=2024-01-01, AND, OR. (Graph API)',
     inputSchema: {
@@ -252,55 +177,6 @@ const TOOLS: Tool[] = [
     },
   },
   {
-    name: 'get_email',
-    description: 'Get full email details including body',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        email_id: {
-          type: 'number',
-          description: 'The email ID to retrieve',
-        },
-        include_body: {
-          type: 'boolean',
-          description: 'Include the email body (default true)',
-          default: true,
-        },
-        strip_html: {
-          type: 'boolean',
-          description: 'Strip HTML from the body (default true)',
-          default: true,
-        },
-      },
-      required: ['email_id'],
-    },
-  },
-  {
-    name: 'get_emails',
-    description: 'Get multiple emails by ID in a single call (max 25). Useful for batch operations or summarizing threads.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        email_ids: {
-          type: 'array',
-          items: { type: 'number' },
-          description: 'Array of email IDs to fetch (max 25)',
-        },
-        include_body: {
-          type: 'boolean',
-          description: 'Include full email body (default: false)',
-          default: false,
-        },
-        strip_html: {
-          type: 'boolean',
-          description: 'Strip HTML tags from body (default: false)',
-          default: false,
-        },
-      },
-      required: ['email_ids'],
-    },
-  },
-  {
     name: 'list_conversation',
     description: 'List all messages in an email conversation/thread, ordered chronologically. Provide any message ID from the thread.',
     inputSchema: {
@@ -310,57 +186,6 @@ const TOOLS: Tool[] = [
         limit: { type: 'number', description: 'Maximum messages to return (default: 25)', default: 25 },
       },
       required: ['message_id'],
-    },
-  },
-  {
-    name: 'get_unread_count',
-    description: 'Get unread email count',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        folder_id: {
-          type: 'number',
-          description: 'Optional folder ID to get unread count for',
-        },
-      },
-      required: [],
-    },
-  },
-  // Attachment tools
-  {
-    name: 'list_attachments',
-    description: 'List attachment metadata (name, size, type) for an email',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        email_id: {
-          type: 'number',
-          description: 'The email ID to list attachments for',
-        },
-      },
-      required: ['email_id'],
-    },
-  },
-  {
-    name: 'download_attachment',
-    description: 'Download/save an email attachment to a file on disk. Returns the saved file path and size.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        email_id: {
-          type: 'number',
-          description: 'The email ID containing the attachment',
-        },
-        attachment_index: {
-          type: 'number',
-          description: 'The 1-based index of the attachment (from list_attachments)',
-        },
-        save_path: {
-          type: 'string',
-          description: 'Absolute file path where the attachment should be saved',
-        },
-      },
-      required: ['email_id', 'attachment_index', 'save_path'],
     },
   },
   // Calendar tools
@@ -1518,6 +1343,8 @@ export function createServer(options: ServerOptions = {}): Server {
   let graphTasksTools: GraphTasksTools | null = null;
   let graphCalendarTools: GraphCalendarTools | null = null;
   let appleCalendarTools: AppleCalendarTools | null = null;
+  let graphMailTools: GraphMailTools | null = null;
+  let appleMailTools: AppleMailTools | null = null;
 
   /**
    * Initializes AppleScript backend.
@@ -1541,6 +1368,7 @@ export function createServer(options: ServerOptions = {}): Server {
     calendarManager = createCalendarManager();
     mailSender = createMailSender();
     appleCalendarTools = new AppleCalendarTools(calendarTools, calendarWriter, calendarManager);
+    appleMailTools = new AppleMailTools(mailTools, accountRepository);
 
     initialized = true;
   }
@@ -1561,6 +1389,7 @@ export function createServer(options: ServerOptions = {}): Server {
     graphContactsTools = new GraphContactsTools(graphRepository, graphContentReaders);
     graphTasksTools = new GraphTasksTools(graphRepository, graphContentReaders);
     graphCalendarTools = new GraphCalendarTools(graphRepository, graphContentReaders);
+    graphMailTools = new GraphMailTools(graphRepository, graphContentReaders);
 
     const adapter = new GraphMailboxAdapter(graphRepository);
     orgTools = createMailboxOrganizationTools(adapter, tokenManager);
@@ -1655,6 +1484,7 @@ export function createServer(options: ServerOptions = {}): Server {
         && graphContactsTools != null
         && graphTasksTools != null
         && graphCalendarTools != null
+        && graphMailTools != null
         && orgTools != null
           ? {
               rules: rulesTools,
@@ -1675,6 +1505,7 @@ export function createServer(options: ServerOptions = {}): Server {
               contactsGraph: graphContactsTools,
               tasksGraph: graphTasksTools,
               calendarGraph: graphCalendarTools,
+              mailGraph: graphMailTools,
               mailboxOrg: orgTools,
             }
           : null,
@@ -1684,8 +1515,9 @@ export function createServer(options: ServerOptions = {}): Server {
         && contactsTools != null
         && tasksTools != null
         && appleCalendarTools != null
+        && appleMailTools != null
         && orgTools != null
-          ? { notes: notesTools, contacts: contactsTools, tasks: tasksTools, calendar: appleCalendarTools, mailboxOrg: orgTools }
+          ? { notes: notesTools, contacts: contactsTools, tasks: tasksTools, calendar: appleCalendarTools, mail: appleMailTools, mailboxOrg: orgTools }
           : null,
     };
   }
@@ -1746,48 +1578,6 @@ export function createServer(options: ServerOptions = {}): Server {
   });
 
   return server;
-}
-
-// =============================================================================
-// Account Resolution Helper
-// =============================================================================
-
-/**
- * Resolves account_id parameter to an array of account IDs.
- * - undefined → [defaultAccountId]
- * - "all" → all account IDs
- * - number → [number]
- * - number[] → number[]
- */
-function resolveAccountIds(
-  accountId: number | number[] | 'all' | undefined,
-  accountRepository: IAccountRepository
-): number[] {
-  // Case: undefined → use default account
-  if (accountId === undefined) {
-    const defaultId = accountRepository.getDefaultAccountId();
-    return defaultId !== null ? [defaultId] : [];
-  }
-
-  // Case: "all" → use all accounts
-  if (accountId === 'all') {
-    const accounts = accountRepository.listAccounts();
-    return accounts.map(acc => acc.id);
-  }
-
-  // Case: single number → return as array
-  if (typeof accountId === 'number') {
-    return [accountId];
-  }
-
-  // Case: array of numbers → return as-is
-  if (Array.isArray(accountId)) {
-    return accountId;
-  }
-
-  // Fallback: default account
-  const defaultId = accountRepository.getDefaultAccountId();
-  return defaultId !== null ? [defaultId] : [];
 }
 
 // =============================================================================
@@ -1999,95 +1789,6 @@ async function handleAppleScriptToolCall(
           type: acc.type,
         })),
       };
-      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
-    }
-
-    // Mail tools
-    case 'list_folders': {
-      const params = args as { account_id?: number | number[] | 'all' } | undefined;
-      const accountIds = resolveAccountIds(params?.account_id, accountRepository);
-
-      // If querying multiple accounts, use grouped format
-      if (accountIds.length > 1 || params?.account_id === 'all') {
-        const foldersWithAccount = accountRepository.listMailFoldersByAccounts(accountIds);
-        const accounts = accountRepository.listAccounts();
-
-        // Group folders by account
-        const groupedByAccount = accountIds.map(accountId => {
-          const account = accounts.find(a => a.id === accountId);
-          const folders = foldersWithAccount
-            .filter(f => f.accountId === accountId)
-            .map(f => ({
-              id: f.id,
-              name: f.name,
-              unreadCount: f.unreadCount,
-              messageCount: f.messageCount,
-            }));
-
-          return {
-            account_id: accountId,
-            account_name: account?.name ?? null,
-            account_email: account?.email ?? null,
-            folders,
-          };
-        });
-
-        const result = { accounts: groupedByAccount };
-        return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
-      }
-
-      // Single account - use existing format for backward compatibility
-      const result = mailTools.listFolders({});
-      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
-    }
-
-    case 'list_emails': {
-      const params = ListEmailsInput.parse(args);
-      const result = mailTools.listEmails(params);
-      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
-    }
-
-    case 'search_emails': {
-      const params = SearchEmailsInput.parse(args);
-      const result = mailTools.searchEmails(params);
-      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
-    }
-
-    case 'get_email': {
-      const params = GetEmailInput.parse(args);
-      const result = mailTools.getEmail(params);
-      if (result == null) {
-        return { content: [{ type: 'text', text: 'Email not found' }], isError: true };
-      }
-      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
-    }
-
-    case 'get_emails': {
-      const params = GetEmailsInput.parse(args);
-      const results = params.email_ids.map((id) => {
-        const email = mailTools.getEmail({ email_id: id, include_body: params.include_body, strip_html: params.strip_html });
-        if (email == null) return { id, error: 'Not found' };
-        return email;
-      });
-      return { content: [{ type: 'text', text: JSON.stringify({ emails: results }, null, 2) }] };
-    }
-
-    case 'get_unread_count': {
-      const params = GetUnreadCountInput.parse(args ?? {});
-      const result = mailTools.getUnreadCount(params);
-      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
-    }
-
-    // Attachment tools
-    case 'list_attachments': {
-      const params = ListAttachmentsInput.parse(args);
-      const result = mailTools.listAttachments(params);
-      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
-    }
-
-    case 'download_attachment': {
-      const params = DownloadAttachmentInput.parse(args);
-      const result = mailTools.downloadAttachment(params);
       return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
     }
 
@@ -2392,30 +2093,6 @@ async function handleGraphToolCall(
   try {
     switch (name) {
       // Mail tools
-      case 'list_folders': {
-        const folders = await repository.listFoldersAsync();
-        const result = { folders: folders.map(transformFolderRow) };
-        return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
-      }
-
-      case 'list_emails': {
-        const params = ListEmailsInput.parse(args);
-        const emails = params.unread_only
-          ? await repository.listUnreadEmailsAsync(params.folder_id, params.limit, params.offset)
-          : await repository.listEmailsAsync(params.folder_id, params.limit, params.offset);
-        const result = { emails: emails.map(transformEmailRow) };
-        return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
-      }
-
-      case 'search_emails': {
-        const params = SearchEmailsInput.parse(args);
-        const emails = params.folder_id != null
-          ? await repository.searchEmailsInFolderAsync(params.folder_id, params.query, params.limit)
-          : await repository.searchEmailsAsync(params.query, params.limit);
-        const result = { emails: emails.map(transformEmailRow) };
-        return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
-      }
-
       case 'search_emails_advanced': {
         const params = SearchEmailsAdvancedInput.parse(args);
         const emails = params.folder_id != null
@@ -2440,69 +2117,10 @@ async function handleGraphToolCall(
         };
       }
 
-      case 'get_email': {
-        const params = GetEmailInput.parse(args);
-        const email = await repository.getEmailAsync(params.email_id);
-        if (email == null) {
-          return { content: [{ type: 'text', text: 'Email not found' }], isError: true };
-        }
-
-        let body: string | null = null;
-        if (params.include_body) {
-          body = await contentReaders.email.readEmailBodyAsync(email.dataFilePath);
-          if (params.strip_html && body != null) {
-            body = stripHtml(body);
-          }
-        }
-
-        const result = { ...transformEmailRow(email), body };
-        return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
-      }
-
-      case 'get_emails': {
-        const params = GetEmailsInput.parse(args);
-        const results = await Promise.all(
-          params.email_ids.map(async (id) => {
-            const email = await repository.getEmailAsync(id);
-            if (email == null) return { id, error: 'Not found' };
-            let body: string | null = null;
-            if (params.include_body) {
-              body = await contentReaders.email.readEmailBodyAsync(email.dataFilePath);
-              if (params.strip_html && body != null) body = stripHtml(body);
-            }
-            return { ...transformEmailRow(email), body };
-          })
-        );
-        return { content: [{ type: 'text', text: JSON.stringify({ emails: results }, null, 2) }] };
-      }
-
       case 'list_conversation': {
         const params = ListConversationInput.parse(args);
         const emails = await repository.listConversationAsync(params.message_id, params.limit);
         const result = { emails: emails.map(transformEmailRow) };
-        return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
-      }
-
-      case 'get_unread_count': {
-        const params = GetUnreadCountInput.parse(args ?? {});
-        const count = params.folder_id != null
-          ? await repository.getUnreadCountByFolderAsync(params.folder_id)
-          : await repository.getUnreadCountAsync();
-        const result = { total: count };
-        return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
-      }
-
-      // Attachment tools
-      case 'list_attachments': {
-        const params = ListAttachmentsInput.parse(args);
-        const attachments = await repository.listAttachmentsAsync(params.email_id);
-        const result = { attachments };
-        return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
-      }
-
-      case 'download_attachment': {
-        const params = DownloadAttachmentInput.parse(args);
-        const result = await repository.downloadAttachmentAsync(params.attachment_index);
         return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
       }
 
@@ -3121,30 +2739,8 @@ async function handleGraphToolCall(
 // Transform Helpers for Graph Mode
 // =============================================================================
 
-import type { FolderRow, EmailRow, EventRow } from './database/repository.js';
+import type { EmailRow, EventRow } from './database/repository.js';
 import { unixTimestampToLocalIso } from './graph/mappers/utils.js';
-
-function transformFolderRow(row: FolderRow): {
-  id: number;
-  name: string;
-  parentId: number | null;
-  specialType: number;
-  folderType: number;
-  accountId: number;
-  messageCount: number;
-  unreadCount: number;
-} {
-  return {
-    id: row.id,
-    name: row.name ?? 'Unnamed',
-    parentId: row.parentId,
-    specialType: row.specialType,
-    folderType: row.folderType,
-    accountId: row.accountId,
-    messageCount: row.messageCount,
-    unreadCount: row.unreadCount,
-  };
-}
 
 function transformEmailRow(row: EmailRow): {
   id: number;
@@ -3216,21 +2812,6 @@ function transformGraphEventRow(row: EventRow): {
     attendeeCount: row.attendeeCount,
     onlineMeetingUrl: row.onlineMeetingUrl ?? null,
   };
-}
-
-function stripHtml(html: string): string {
-  return html
-    .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
-    .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
-    .replace(/<[^>]+>/g, ' ')
-    .replace(/&nbsp;/g, ' ')
-    .replace(/&amp;/g, '&')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'")
-    .replace(/\s+/g, ' ')
-    .trim();
 }
 
 // =============================================================================

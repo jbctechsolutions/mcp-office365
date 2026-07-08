@@ -20,12 +20,42 @@ import type { SaveAttachmentResult } from '../applescript/parser.js';
 import { appleTimestampToIso } from '../utils/dates.js';
 import { extractPlainText } from '../parsers/html-stripper.js';
 import { NotFoundError, ValidationError, AttachmentTooLargeError, AttachmentSaveError } from '../utils/errors.js';
+import { defineTool } from '../registry/define-tool.js';
+import { requireGraphToolset, requireAppleScriptToolset } from '../registry/context.js';
+import type { ToolDefinition } from '../registry/types.js';
+import type { GraphMailTools } from './mail-graph.js';
+import type { AppleMailTools } from './mail-apple.js';
+
+// Mail is a dual-backend domain: the AppleScript backend serves it via
+// AppleMailTools; the Graph backend serves it via GraphMailTools. The advertised
+// (canonical) schemas are Graph-shaped — Graph is the default backend and the
+// AppleScript backend is frozen and adapts.
+declare module '../registry/types.js' {
+  interface GraphToolsets {
+    mailGraph: GraphMailTools;
+  }
+  interface AppleScriptToolsets {
+    mail: AppleMailTools;
+  }
+}
 
 // =============================================================================
 // Input Schemas
 // =============================================================================
 
 export const ListFoldersInput = z.strictObject({});
+
+/**
+ * Canonical (advertised) input for the `list_folders` tool. The Graph backend
+ * ignores `account_id` and returns the default mailbox's folders; the
+ * AppleScript backend uses it to support multi-account grouping.
+ */
+export const ListFoldersToolInput = z.strictObject({
+  account_id: z
+    .union([z.number(), z.array(z.number()), z.literal('all')])
+    .optional()
+    .describe('Account filter: number (specific account), array (multiple accounts), "all" (all accounts), or omit for default account'),
+});
 
 export const ListEmailsInput = z.strictObject({
   folder_id: z.number().int().positive().describe('The folder ID to list emails from'),
@@ -111,6 +141,7 @@ export const CheckNewEmailsInput = z.strictObject({
 // =============================================================================
 
 export type ListFoldersParams = z.infer<typeof ListFoldersInput>;
+export type ListFoldersToolParams = z.infer<typeof ListFoldersToolInput>;
 export type ListEmailsParams = z.infer<typeof ListEmailsInput>;
 export type SearchEmailsParams = z.infer<typeof SearchEmailsInput>;
 export type GetEmailParams = z.infer<typeof GetEmailInput>;
@@ -415,4 +446,122 @@ export function createMailTools(
   attachmentReader?: IAttachmentReader
 ): MailTools {
   return new MailTools(repository, contentReader, attachmentReader);
+}
+
+// =============================================================================
+// Registry Definitions (v3 registry-driven architecture, U2 — dual backend)
+// =============================================================================
+
+/**
+ * Registry tool definitions for the mail READ domain. Each handler branches on
+ * the active backend: Graph delegates to GraphMailTools; AppleScript delegates
+ * to AppleMailTools. Both toolsets return MCP content directly.
+ */
+export function mailToolDefinitions(): ToolDefinition[] {
+  return [
+    defineTool({
+      name: 'list_folders',
+      description: 'List all mail folders with message and unread counts. Can filter by account.',
+      input: ListFoldersToolInput,
+      annotations: { readOnlyHint: true },
+      destructive: false,
+      presets: ['mail'],
+      backends: ['graph', 'applescript'],
+      handler: (ctx, params) =>
+        ctx.backend === 'graph'
+          ? requireGraphToolset(ctx, 'mailGraph').listFolders(params)
+          : requireAppleScriptToolset(ctx, 'mail').listFolders(params),
+    }),
+    defineTool({
+      name: 'list_emails',
+      description: 'List emails in a folder with pagination',
+      input: ListEmailsInput,
+      annotations: { readOnlyHint: true },
+      destructive: false,
+      presets: ['mail'],
+      backends: ['graph', 'applescript'],
+      handler: (ctx, params) =>
+        ctx.backend === 'graph'
+          ? requireGraphToolset(ctx, 'mailGraph').listEmails(params)
+          : requireAppleScriptToolset(ctx, 'mail').listEmails(params),
+    }),
+    defineTool({
+      name: 'search_emails',
+      description: 'Search emails by subject, sender, or content',
+      input: SearchEmailsInput,
+      annotations: { readOnlyHint: true },
+      destructive: false,
+      presets: ['mail'],
+      backends: ['graph', 'applescript'],
+      handler: (ctx, params) =>
+        ctx.backend === 'graph'
+          ? requireGraphToolset(ctx, 'mailGraph').searchEmails(params)
+          : requireAppleScriptToolset(ctx, 'mail').searchEmails(params),
+    }),
+    defineTool({
+      name: 'get_email',
+      description: 'Get full email details including body',
+      input: GetEmailInput,
+      annotations: { readOnlyHint: true },
+      destructive: false,
+      presets: ['mail'],
+      backends: ['graph', 'applescript'],
+      handler: (ctx, params) =>
+        ctx.backend === 'graph'
+          ? requireGraphToolset(ctx, 'mailGraph').getEmail(params)
+          : requireAppleScriptToolset(ctx, 'mail').getEmail(params),
+    }),
+    defineTool({
+      name: 'get_emails',
+      description: 'Get multiple emails by ID in a single call (max 25). Useful for batch operations or summarizing threads.',
+      input: GetEmailsInput,
+      annotations: { readOnlyHint: true },
+      destructive: false,
+      presets: ['mail'],
+      backends: ['graph', 'applescript'],
+      handler: (ctx, params) =>
+        ctx.backend === 'graph'
+          ? requireGraphToolset(ctx, 'mailGraph').getEmails(params)
+          : requireAppleScriptToolset(ctx, 'mail').getEmails(params),
+    }),
+    defineTool({
+      name: 'get_unread_count',
+      description: 'Get unread email count',
+      input: GetUnreadCountInput,
+      annotations: { readOnlyHint: true },
+      destructive: false,
+      presets: ['mail'],
+      backends: ['graph', 'applescript'],
+      handler: (ctx, params) =>
+        ctx.backend === 'graph'
+          ? requireGraphToolset(ctx, 'mailGraph').getUnreadCount(params)
+          : requireAppleScriptToolset(ctx, 'mail').getUnreadCount(params),
+    }),
+    defineTool({
+      name: 'list_attachments',
+      description: 'List attachment metadata (name, size, type) for an email',
+      input: ListAttachmentsInput,
+      annotations: { readOnlyHint: true },
+      destructive: false,
+      presets: ['mail'],
+      backends: ['graph', 'applescript'],
+      handler: (ctx, params) =>
+        ctx.backend === 'graph'
+          ? requireGraphToolset(ctx, 'mailGraph').listAttachments(params)
+          : requireAppleScriptToolset(ctx, 'mail').listAttachments(params),
+    }),
+    defineTool({
+      name: 'download_attachment',
+      description: 'Download/save an email attachment to a file on disk. Returns the saved file path and size.',
+      input: DownloadAttachmentInput,
+      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+      destructive: false,
+      presets: ['mail'],
+      backends: ['graph', 'applescript'],
+      handler: (ctx, params) =>
+        ctx.backend === 'graph'
+          ? requireGraphToolset(ctx, 'mailGraph').downloadAttachment(params)
+          : requireAppleScriptToolset(ctx, 'mail').downloadAttachment(params),
+    }),
+  ];
 }
