@@ -947,6 +947,14 @@ describe('graph/repository', () => {
         const result = await repository.getContactAsync(mintSelfEncoded('contact', 'contact-1'));
         expect(result).toBeUndefined();
       });
+
+      it('rejects a token for a different entity kind (ID_ENTITY_MISMATCH) before hitting Graph', async () => {
+        const folderToken = mintSelfEncoded('folder', 'folder-1');
+        await expect(repository.getContactAsync(folderToken)).rejects.toMatchObject({
+          code: 'ID_ENTITY_MISMATCH',
+        });
+        expect(mockClient.getContact).not.toHaveBeenCalled();
+      });
     });
   });
 

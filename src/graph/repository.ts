@@ -33,7 +33,7 @@ import {
 import type { DeviceCodeCallback } from './auth/index.js';
 import { currentAccountId } from './auth/index.js';
 import { resolveId } from '../ids/resolver.js';
-import { mintSelfEncoded } from '../ids/token.js';
+import { mintSelfEncoded, type EntityType } from '../ids/token.js';
 import type { StateStore } from '../state/store.js';
 import type { CompiledSearch } from '../search/compiler.js';
 import { downloadAttachment, getDownloadDir } from './attachments.js';
@@ -142,8 +142,8 @@ export class GraphRepository implements IRepository {
    * no store; alias-backed tokens need {@link store}; a numeric id on Graph is
    * unsupported (D4). Throws a typed error on failure.
    */
-  private toGraphId(id: string | number): string {
-    return resolveId(id, this.accountId(), this.store).graphId;
+  private toGraphId(id: string | number, expectedEntityType?: EntityType): string {
+    return resolveId(id, this.accountId(), this.store, expectedEntityType).graphId;
   }
 
   // ===========================================================================
@@ -709,14 +709,14 @@ export class GraphRepository implements IRepository {
   }
 
   async getContactAsync(id: string | number): Promise<ContactRow | undefined> {
-    const graphId = this.toGraphId(id);
+    const graphId = this.toGraphId(id, 'contact');
     const contact = await this.client.getContact(graphId);
     return contact != null ? mapContactToContactRow(contact) : undefined;
   }
 
   /** Resolves a contact id (durable `ct_` token or raw Graph id) to its Graph id. */
   getContactGraphId(id: string | number): string {
-    return this.toGraphId(id);
+    return this.toGraphId(id, 'contact');
   }
 
   // ===========================================================================
@@ -764,7 +764,7 @@ export class GraphRepository implements IRepository {
   // ===========================================================================
 
   async getContactPhotoAsync(contactId: string | number): Promise<{ filePath: string; contentType: string }> {
-    const graphId = this.toGraphId(contactId);
+    const graphId = this.toGraphId(contactId, 'contact');
 
     const photoData = await this.client.getContactPhoto(graphId);
     const downloadDir = getDownloadDir();
@@ -774,7 +774,7 @@ export class GraphRepository implements IRepository {
   }
 
   async setContactPhotoAsync(contactId: string | number, filePath: string): Promise<void> {
-    const graphId = this.toGraphId(contactId);
+    const graphId = this.toGraphId(contactId, 'contact');
 
     const photoData = fs.readFileSync(filePath);
     const ext = path.extname(filePath).toLowerCase();
@@ -1611,7 +1611,7 @@ export class GraphRepository implements IRepository {
    * client.updateContact(). Throws if the contact is not cached.
    */
   async updateContactAsync(contactId: string | number, updates: Record<string, unknown>): Promise<void> {
-    const graphId = this.toGraphId(contactId);
+    const graphId = this.toGraphId(contactId, 'contact');
     await this.client.updateContact(graphId, updates);
   }
 
@@ -1623,7 +1623,7 @@ export class GraphRepository implements IRepository {
    * Throws if the contact is not cached.
    */
   async deleteContactAsync(contactId: string | number): Promise<void> {
-    const graphId = this.toGraphId(contactId);
+    const graphId = this.toGraphId(contactId, 'contact');
     await this.client.deleteContact(graphId);
   }
 
