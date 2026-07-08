@@ -154,7 +154,7 @@ export class CategoriesTools {
       };
     }
 
-    await this.repo.deleteCategoryAsync(result.token!.targetId);
+    await this.repo.deleteCategoryAsync((result.token!.targetId as number));
     return {
       content: [{
         type: 'text' as const,

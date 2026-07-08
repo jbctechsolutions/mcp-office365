@@ -115,6 +115,27 @@ describe('resolveId — legacy numeric + raw pass-through', () => {
   });
 });
 
+describe('resolveId — entity-type guard', () => {
+  it('rejects a token for the wrong entity kind with ID_ENTITY_MISMATCH', () => {
+    const folderToken = mintSelfEncoded('folder', 'FOLDER-1');
+    try {
+      resolveId(folderToken, ACCOUNT, store, 'contact');
+      expect.unreachable('should throw');
+    } catch (e) {
+      expect((e as { code?: string }).code).toBe(ErrorCode.ID_ENTITY_MISMATCH);
+    }
+  });
+
+  it('accepts a token whose entity kind matches the expected type', () => {
+    const contactToken = mintSelfEncoded('contact', 'CONTACT-1');
+    expect(resolveId(contactToken, ACCOUNT, store, 'contact').graphId).toBe('CONTACT-1');
+  });
+
+  it('still passes a raw Graph ID through when an entity type is expected', () => {
+    expect(resolveId('rawid', ACCOUNT, store, 'contact').graphId).toBe('rawid');
+  });
+});
+
 describe('registerComposite — collision policy (D1a)', () => {
   it('is idempotent for the same entity (re-mint returns the same token, no throw)', () => {
     const args = {

@@ -10,6 +10,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { GraphRepository, createGraphRepository } from '../../../src/graph/repository.js';
 import { hashStringToNumber } from '../../../src/graph/mappers/utils.js';
+import { mintSelfEncoded } from '../../../src/ids/token.js';
 import { downloadAttachment } from '../../../src/graph/attachments.js';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -901,15 +902,14 @@ describe('graph/repository', () => {
         expect(mockClient.searchContacts).toHaveBeenCalledWith('John', 50);
       });
 
-      it('caches contact IDs', async () => {
+      it('rows carry a durable ct_ token that decodes to the Graph id (U5)', async () => {
         mockClient.searchContacts.mockResolvedValue([
           { id: 'contact-1', displayName: 'John Doe' },
         ]);
 
-        await repository.searchContactsAsync('John', 50);
+        const result = await repository.searchContactsAsync('John', 50);
 
-        const graphId = repository.getGraphId('contact', hashStringToNumber('contact-1'));
-        expect(graphId).toBe('contact-1');
+        expect(result[0].id).toBe(mintSelfEncoded('contact', 'contact-1'));
       });
     });
 
@@ -920,41 +920,40 @@ describe('graph/repository', () => {
     });
 
     describe('getContactAsync', () => {
-      it('returns contact by numeric ID when cached', async () => {
-        // Populate cache
-        mockClient.searchContacts.mockResolvedValue([
-          { id: 'contact-1', displayName: 'John Doe' },
-        ]);
-        await repository.searchContactsAsync('John', 50);
-
+      it('resolves a ct_ token to the Graph id — no prior list/cache needed (cold state)', async () => {
         mockClient.getContact.mockResolvedValue({
           id: 'contact-1',
           displayName: 'John Doe',
           surname: 'Doe',
         });
 
-        const result = await repository.getContactAsync(hashStringToNumber('contact-1'));
+        // A fresh repository that never listed — the token alone resolves.
+        const token = mintSelfEncoded('contact', 'contact-1');
+        const result = await repository.getContactAsync(token);
 
         expect(result?.displayName).toBe('John Doe');
         expect(mockClient.getContact).toHaveBeenCalledWith('contact-1');
       });
 
-      it('returns undefined when contact ID not in cache', async () => {
-        const result = await repository.getContactAsync(99999);
+      it('rejects a legacy numeric id on the Graph backend (NUMERIC_ID_UNSUPPORTED, D4)', async () => {
+        await expect(repository.getContactAsync(99999)).rejects.toMatchObject({
+          code: 'NUMERIC_ID_UNSUPPORTED',
+        });
+      });
+
+      it('returns undefined when the contact is not found', async () => {
+        mockClient.getContact.mockResolvedValue(null);
+
+        const result = await repository.getContactAsync(mintSelfEncoded('contact', 'contact-1'));
         expect(result).toBeUndefined();
       });
 
-      it('returns undefined when contact is not found', async () => {
-        // Populate cache
-        mockClient.searchContacts.mockResolvedValue([
-          { id: 'contact-1', displayName: 'John' },
-        ]);
-        await repository.searchContactsAsync('John', 50);
-
-        mockClient.getContact.mockResolvedValue(null);
-
-        const result = await repository.getContactAsync(hashStringToNumber('contact-1'));
-        expect(result).toBeUndefined();
+      it('rejects a token for a different entity kind (ID_ENTITY_MISMATCH) before hitting Graph', async () => {
+        const folderToken = mintSelfEncoded('folder', 'folder-1');
+        await expect(repository.getContactAsync(folderToken)).rejects.toMatchObject({
+          code: 'ID_ENTITY_MISMATCH',
+        });
+        expect(mockClient.getContact).not.toHaveBeenCalled();
       });
     });
   });
@@ -2486,21 +2485,25 @@ describe('graph/repository', () => {
           },
         });
 
-        expect(numericId).toBe(hashStringToNumber('contact-new-1'));
+        expect(numericId).toBe(mintSelfEncoded('contact', 'contact-new-1'));
       });
 
-      it('adds result to idCache', async () => {
+      it('returns a durable ct_ token that resolves back to the new contact', async () => {
         mockClient.createContact.mockResolvedValue({
           id: 'contact-new-2',
           displayName: 'Jane',
         });
 
-        const numericId = await repository.createContactAsync({
+        const token = await repository.createContactAsync({
           given_name: 'Jane',
         });
 
-        const graphId = repository.getGraphId('contact', numericId);
-        expect(graphId).toBe('contact-new-2');
+        expect(token).toBe(mintSelfEncoded('contact', 'contact-new-2'));
+        // The token resolves with no cache — a follow-up get works cold.
+        mockClient.getContact.mockResolvedValue({ id: 'contact-new-2', displayName: 'Jane' });
+        const row = await repository.getContactAsync(token);
+        expect(row?.displayName).toBe('Jane');
+        expect(mockClient.getContact).toHaveBeenCalledWith('contact-new-2');
       });
 
       it('handles minimal fields (only given_name)', async () => {
@@ -2533,16 +2536,10 @@ describe('graph/repository', () => {
     });
 
     describe('updateContactAsync', () => {
-      it('looks up graph ID and calls client.updateContact', async () => {
-        // Populate contact cache
-        mockClient.listContacts.mockResolvedValue([
-          { id: 'contact-1', displayName: 'Existing Contact' },
-        ]);
-        await repository.listContactsAsync(50, 0);
-
+      it('resolves the ct_ token and calls client.updateContact — no prior list needed', async () => {
         mockClient.updateContact.mockResolvedValue(undefined);
 
-        await repository.updateContactAsync(hashStringToNumber('contact-1'), {
+        await repository.updateContactAsync(mintSelfEncoded('contact', 'contact-1'), {
           givenName: 'Updated',
         });
 
@@ -2551,37 +2548,26 @@ describe('graph/repository', () => {
         });
       });
 
-      it('throws if contact not in cache', async () => {
+      it('rejects a legacy numeric id on Graph (NUMERIC_ID_UNSUPPORTED)', async () => {
         await expect(
           repository.updateContactAsync(99999, { givenName: 'Nope' })
-        ).rejects.toThrow('Contact ID 99999 not found in cache. Try searching for or listing the item first to refresh the cache.');
+        ).rejects.toMatchObject({ code: 'NUMERIC_ID_UNSUPPORTED' });
       });
     });
 
     describe('deleteContactAsync', () => {
-      it('calls client.deleteContact and removes from idCache', async () => {
-        // Populate contact cache
-        mockClient.listContacts.mockResolvedValue([
-          { id: 'contact-del', displayName: 'To Delete' },
-        ]);
-        await repository.listContactsAsync(50, 0);
-
+      it('resolves the ct_ token and calls client.deleteContact — no prior list needed', async () => {
         mockClient.deleteContact.mockResolvedValue(undefined);
 
-        const numericId = hashStringToNumber('contact-del');
-        await repository.deleteContactAsync(numericId);
+        await repository.deleteContactAsync(mintSelfEncoded('contact', 'contact-del'));
 
         expect(mockClient.deleteContact).toHaveBeenCalledWith('contact-del');
-
-        // Verify it was removed from cache
-        const graphId = repository.getGraphId('contact', numericId);
-        expect(graphId).toBeUndefined();
       });
 
-      it('throws if contact not in cache', async () => {
+      it('rejects a legacy numeric id on Graph (NUMERIC_ID_UNSUPPORTED)', async () => {
         await expect(
           repository.deleteContactAsync(99999)
-        ).rejects.toThrow('Contact ID 99999 not found in cache. Try searching for or listing the item first to refresh the cache.');
+        ).rejects.toMatchObject({ code: 'NUMERIC_ID_UNSUPPORTED' });
       });
     });
   });
@@ -3108,7 +3094,8 @@ describe('graph/repository', () => {
         expect(repository.getGraphId('folder', 99999)).toBeUndefined();
         expect(repository.getGraphId('message', 99999)).toBeUndefined();
         expect(repository.getGraphId('event', 99999)).toBeUndefined();
-        expect(repository.getGraphId('contact', 99999)).toBeUndefined();
+        // 'contact' was removed from getGraphId in U5b — contacts resolve via
+        // durable ct_ tokens (getContactGraphId), not the numeric idCache.
       });
     });
 
@@ -3520,44 +3507,32 @@ describe('graph/repository', () => {
   describe('Contact Photos', () => {
     describe('getContactPhotoAsync', () => {
       it('downloads and saves photo, returns path', async () => {
-        // First cache the contact
-        mockClient.listContacts.mockResolvedValue([
-          { id: 'contact-1', displayName: 'Alice', emailAddresses: [], businessPhones: [] },
-        ]);
-        await repository.listContactsAsync(50, 0);
-
         const mockPhotoData = new ArrayBuffer(8);
         mockClient.getContactPhoto.mockResolvedValue(mockPhotoData);
 
-        const numericId = hashStringToNumber('contact-1');
-        const result = await repository.getContactPhotoAsync(numericId);
+        // Cold: the ct_ token resolves without a prior list.
+        const result = await repository.getContactPhotoAsync(mintSelfEncoded('contact', 'contact-1'));
 
+        const fileTag = hashStringToNumber('contact-1');
         expect(mockClient.getContactPhoto).toHaveBeenCalledWith('contact-1');
         expect(fs.writeFileSync).toHaveBeenCalledWith(
-          expect.stringContaining(`contact-${numericId}-photo.jpg`),
+          expect.stringContaining(`contact-${fileTag}-photo.jpg`),
           expect.any(Buffer),
         );
-        expect(result.filePath).toContain(`contact-${numericId}-photo.jpg`);
+        expect(result.filePath).toContain(`contact-${fileTag}-photo.jpg`);
         expect(result.contentType).toBe('image/jpeg');
       });
 
-      it('throws for unknown contact ID', async () => {
-        await expect(repository.getContactPhotoAsync(999999)).rejects.toThrow('not found in cache');
+      it('rejects a legacy numeric id on Graph (NUMERIC_ID_UNSUPPORTED)', async () => {
+        await expect(repository.getContactPhotoAsync(999999)).rejects.toMatchObject({ code: 'NUMERIC_ID_UNSUPPORTED' });
       });
     });
 
     describe('setContactPhotoAsync', () => {
       it('reads file and uploads', async () => {
-        // First cache the contact
-        mockClient.listContacts.mockResolvedValue([
-          { id: 'contact-2', displayName: 'Bob', emailAddresses: [], businessPhones: [] },
-        ]);
-        await repository.listContactsAsync(50, 0);
-
         mockClient.setContactPhoto.mockResolvedValue(undefined);
 
-        const numericId = hashStringToNumber('contact-2');
-        await repository.setContactPhotoAsync(numericId, '/tmp/photo.jpg');
+        await repository.setContactPhotoAsync(mintSelfEncoded('contact', 'contact-2'), '/tmp/photo.jpg');
 
         expect(fs.readFileSync).toHaveBeenCalledWith('/tmp/photo.jpg');
         expect(mockClient.setContactPhoto).toHaveBeenCalledWith(
@@ -3568,16 +3543,9 @@ describe('graph/repository', () => {
       });
 
       it('detects PNG content type', async () => {
-        // First cache the contact
-        mockClient.listContacts.mockResolvedValue([
-          { id: 'contact-3', displayName: 'Carol', emailAddresses: [], businessPhones: [] },
-        ]);
-        await repository.listContactsAsync(50, 0);
-
         mockClient.setContactPhoto.mockResolvedValue(undefined);
 
-        const numericId = hashStringToNumber('contact-3');
-        await repository.setContactPhotoAsync(numericId, '/tmp/photo.png');
+        await repository.setContactPhotoAsync(mintSelfEncoded('contact', 'contact-3'), '/tmp/photo.png');
 
         expect(mockClient.setContactPhoto).toHaveBeenCalledWith(
           'contact-3',
@@ -3586,8 +3554,8 @@ describe('graph/repository', () => {
         );
       });
 
-      it('throws for unknown contact ID', async () => {
-        await expect(repository.setContactPhotoAsync(999999, '/tmp/photo.jpg')).rejects.toThrow('not found in cache');
+      it('rejects a legacy numeric id on Graph (NUMERIC_ID_UNSUPPORTED)', async () => {
+        await expect(repository.setContactPhotoAsync(999999, '/tmp/photo.jpg')).rejects.toMatchObject({ code: 'NUMERIC_ID_UNSUPPORTED' });
       });
     });
   });

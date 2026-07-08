@@ -10,7 +10,7 @@
 import { describe, it, expect } from 'vitest';
 import type * as MicrosoftGraph from '@microsoft/microsoft-graph-types';
 import { mapContactToContactRow } from '../../../../src/graph/mappers/contact-mapper.js';
-import { hashStringToNumber } from '../../../../src/graph/mappers/utils.js';
+import { mintSelfEncoded, parseToken } from '../../../../src/ids/token.js';
 
 describe('graph/mappers/contact-mapper', () => {
   describe('mapContactToContactRow', () => {
@@ -23,7 +23,9 @@ describe('graph/mappers/contact-mapper', () => {
 
       const result = mapContactToContactRow(contact);
 
-      expect(result.id).toBe(hashStringToNumber('contact-123'));
+      // id is now a durable self-encoding ct_ token carrying the Graph id (U5).
+      expect(result.id).toBe(mintSelfEncoded('contact', 'contact-123'));
+      expect(parseToken(result.id as string)?.graphId).toBe('contact-123');
       expect(result.displayName).toBe('John Doe');
       expect(result.sortName).toBe('Doe');
       expect(result.folderId).toBe(0);
@@ -31,7 +33,7 @@ describe('graph/mappers/contact-mapper', () => {
       expect(result.dataFilePath).toBe('graph-contact:contact-123');
     });
 
-    it('handles contact with null id', () => {
+    it('handles contact with null id (empty id — no token)', () => {
       const contact: MicrosoftGraph.Contact = {
         id: undefined,
         displayName: 'Test Contact',
@@ -39,7 +41,8 @@ describe('graph/mappers/contact-mapper', () => {
 
       const result = mapContactToContactRow(contact);
 
-      expect(result.id).toBe(hashStringToNumber(''));
+      // A self-encoding token can't encode an empty id, so it stays empty.
+      expect(result.id).toBe('');
       expect(result.dataFilePath).toBe('graph-contact:');
     });
 

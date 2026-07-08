@@ -161,7 +161,7 @@ export class TaskAttachmentsTools {
       };
     }
 
-    await this.repo.deleteTaskAttachmentAsync(result.token!.targetId);
+    await this.repo.deleteTaskAttachmentAsync((result.token!.targetId as number));
     return {
       content: [{
         type: 'text' as const,

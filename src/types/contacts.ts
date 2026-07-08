@@ -21,7 +21,8 @@ export type ContactTypeValue = (typeof ContactType)[keyof typeof ContactType];
  * Contact summary for list views.
  */
 export interface ContactSummary {
-  readonly id: number;
+  // string durable token on Graph (U5); numeric on AppleScript/SQLite (D4).
+  readonly id: string | number;
   readonly folderId: number;
   readonly displayName: string | null;
   readonly sortName: string | null;

@@ -154,7 +154,7 @@ export class FocusedOverridesTools {
       };
     }
 
-    await this.repo.deleteFocusedOverrideAsync(result.token!.targetId);
+    await this.repo.deleteFocusedOverrideAsync((result.token!.targetId as number));
     return {
       content: [{
         type: 'text' as const,

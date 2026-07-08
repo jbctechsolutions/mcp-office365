@@ -161,7 +161,7 @@ export class LinkedResourcesTools {
       };
     }
 
-    await this.repo.deleteLinkedResourceAsync(result.token!.targetId);
+    await this.repo.deleteLinkedResourceAsync((result.token!.targetId as number));
     return {
       content: [{
         type: 'text' as const,

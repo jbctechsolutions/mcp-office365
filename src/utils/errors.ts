@@ -43,6 +43,7 @@ export const ErrorCode = {
   ID_STALE: 'ID_STALE',
   ID_COLLISION: 'ID_COLLISION',
   ID_FOREIGN_ACCOUNT: 'ID_FOREIGN_ACCOUNT',
+  ID_ENTITY_MISMATCH: 'ID_ENTITY_MISMATCH',
   NUMERIC_ID_UNSUPPORTED: 'NUMERIC_ID_UNSUPPORTED',
 } as const;
 
@@ -476,6 +477,18 @@ export class IdForeignAccountError extends OutlookMcpError {
     super(`ID ${token} belongs to a different account than the one signed in.`, {
       retriable: false,
       suggestion: 'Re-list the collection while signed in as the owning account.',
+    });
+  }
+}
+
+/** A durable token for one entity kind was passed where another was expected. */
+export class IdEntityMismatchError extends OutlookMcpError {
+  readonly code = ErrorCode.ID_ENTITY_MISMATCH;
+
+  constructor(token: string, expected: string, actual: string) {
+    super(`ID ${token} is a ${actual} token, but a ${expected} ID was expected.`, {
+      retriable: false,
+      suggestion: `Pass a ${expected} ID (re-list the ${expected} collection to get one).`,
     });
   }
 }

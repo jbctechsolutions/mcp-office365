@@ -348,7 +348,7 @@ export class PlannerTools {
       };
     }
 
-    await this.repo.deleteBucketAsync(result.token!.targetId);
+    await this.repo.deleteBucketAsync((result.token!.targetId as number));
     return {
       content: [{
         type: 'text' as const,
@@ -500,7 +500,7 @@ export class PlannerTools {
       };
     }
 
-    await this.repo.deletePlannerTaskAsync(result.token!.targetId);
+    await this.repo.deletePlannerTaskAsync((result.token!.targetId as number));
     return {
       content: [{
         type: 'text' as const,

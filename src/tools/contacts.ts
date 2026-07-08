@@ -55,8 +55,13 @@ export const SearchContactsInput = z.strictObject({
     .describe('Maximum number of contacts to return (1-100)'),
 });
 
+// A contact id accepts either a durable `ct_…` token (Graph backend, U5) or a
+// numeric id (AppleScript/SQLite backend, D4). The resolver rejects a numeric id
+// on Graph with NUMERIC_ID_UNSUPPORTED.
+const ContactIdSchema = z.union([z.string().min(1), z.number().int().positive()]);
+
 export const GetContactInput = z.strictObject({
-  contact_id: z.number().int().positive().describe('The contact ID to retrieve'),
+  contact_id: ContactIdSchema.describe('The contact ID to retrieve'),
 });
 
 // Contact write schemas (Graph API)
@@ -76,7 +81,7 @@ export const CreateContactInput = z.strictObject({
 });
 
 export const UpdateContactInput = z.strictObject({
-  contact_id: z.number().int().positive(),
+  contact_id: ContactIdSchema,
   given_name: z.string().optional(),
   surname: z.string().optional(),
   email: z.string().email().optional(),
@@ -92,20 +97,20 @@ export const UpdateContactInput = z.strictObject({
 });
 
 export const PrepareDeleteContactInput = z.strictObject({
-  contact_id: z.number().int().positive(),
+  contact_id: ContactIdSchema,
 });
 
 export const ConfirmDeleteContactInput = z.strictObject({
   token_id: z.uuid(),
-  contact_id: z.number().int().positive(),
+  contact_id: ContactIdSchema,
 });
 
 export const GetContactPhotoInput = z.strictObject({
-  contact_id: z.number().int().positive().describe('Contact ID'),
+  contact_id: ContactIdSchema.describe('Contact ID'),
 });
 
 export const SetContactPhotoInput = z.strictObject({
-  contact_id: z.number().int().positive().describe('Contact ID'),
+  contact_id: ContactIdSchema.describe('Contact ID'),
   file_path: z.string().describe('Path to the photo file (JPEG or PNG)'),
 });
 

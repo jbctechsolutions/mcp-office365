@@ -69,7 +69,11 @@ export interface ApprovalToken {
   readonly tokenId: string;
   readonly operation: OperationType;
   readonly targetType: TargetType;
-  readonly targetId: number;
+  /**
+   * Seal identifying the target. Numeric for legacy/AppleScript ids; a durable
+   * string token (e.g. `ct_…`) for Graph entities migrated to durable IDs (U5).
+   */
+  readonly targetId: string | number;
   readonly targetHash: string;
   readonly createdAt: number;
   readonly expiresAt: number;

@@ -123,7 +123,7 @@ export function hashEventForApproval(event: {
  * Used to detect if the contact changed between prepare and confirm.
  */
 export function hashContactForApproval(contact: {
-  id: number;
+  id: string | number;
   displayName: string | null;
   emailAddress: string | null;
 }): string {

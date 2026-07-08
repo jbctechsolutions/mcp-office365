@@ -773,6 +773,25 @@ describe('ApprovalTokenManager', () => {
       expect(other.validateToken(token.tokenId, 'delete_email', 42).error).toBe('NOT_FOUND');
     });
 
+    it('round-trips a string targetId (durable token) through the store and matches on consume', () => {
+      // A migrated Graph entity (U5) seals its approval on a ct_ token string,
+      // not a number. Persist under one manager, redeem under a fresh one.
+      const a = new ApprovalTokenManager({ store });
+      const token = a.generateToken({
+        operation: 'delete_contact',
+        targetType: 'contact',
+        targetId: 'ct_Y29udGFjdC0x',
+        targetHash: 'seal-ct',
+      });
+
+      const b = new ApprovalTokenManager({ store });
+      // A different (numeric) targetId must NOT match the string seal.
+      expect(b.validateToken(token.tokenId, 'delete_contact', 42).error).toBe('TARGET_MISMATCH');
+      // The exact string targetId matches and consumes once.
+      expect(b.consumeToken(token.tokenId, 'delete_contact', 'ct_Y29udGFjdC0x').valid).toBe(true);
+      expect(b.consumeToken(token.tokenId, 'delete_contact', 'ct_Y29udGFjdC0x').error).toBe('ALREADY_CONSUMED');
+    });
+
     it('resolves accountId lazily (thunk), so an account known only after auth still scopes', () => {
       // The manager is built before sign-in; the account arrives later. A thunk
       // returning the fallback at generate time and the real id at consume time
