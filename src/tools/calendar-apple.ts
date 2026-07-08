@@ -33,9 +33,28 @@ import type {
   EventUpdates,
 } from '../applescript/index.js';
 import type { ToolResult } from '../registry/types.js';
+import { ValidationError } from '../utils/errors.js';
 
 function jsonResult(data: unknown): ToolResult {
   return { content: [{ type: 'text', text: JSON.stringify(data, null, 2) }] };
+}
+
+/**
+ * The shared event_id schema is a `string | number` union (durable `ev_` tokens
+ * on Graph, numeric on AppleScript — D4). The AppleScript write path interpolates
+ * the id straight into osascript, so a non-numeric string (a Graph token, or any
+ * arbitrary/newline-bearing string) must be rejected here rather than reach the
+ * interpreter. This is the AppleScript analog of Graph's NUMERIC_ID_UNSUPPORTED:
+ * durable tokens are a Graph-only concept.
+ */
+function requireNumericEventId(id: string | number): number {
+  const n = typeof id === 'number' ? id : Number(id);
+  if (!Number.isInteger(n) || n <= 0) {
+    throw new ValidationError(
+      `The AppleScript backend requires a numeric event id; durable tokens are Graph-only. Got: ${JSON.stringify(id)}.`,
+    );
+  }
+  return n;
 }
 
 /**
@@ -126,7 +145,7 @@ export class AppleCalendarTools {
     }
 
     const result = this.calendarManager.respondToEvent(
-      params.event_id as number,
+      requireNumericEventId(params.event_id),
       params.response,
       params.send_response,
       params.comment
@@ -155,7 +174,7 @@ export class AppleCalendarTools {
     }
     const applyTo = params.apply_to ?? 'this_instance';
 
-    this.calendarManager.deleteEvent(params.event_id as number, applyTo);
+    this.calendarManager.deleteEvent(requireNumericEventId(params.event_id), applyTo);
 
     const deleteText = applyTo === 'all_in_series' ? ' (entire series)' : '';
     return {
@@ -194,7 +213,7 @@ export class AppleCalendarTools {
     };
 
     const applyTo = params.apply_to ?? 'this_instance';
-    const result = this.calendarManager.updateEvent(params.event_id as number, updates, applyTo);
+    const result = this.calendarManager.updateEvent(requireNumericEventId(params.event_id), updates, applyTo);
     const seriesSuffix = applyTo === 'all_in_series' ? ' (entire series)' : '';
 
     return {
