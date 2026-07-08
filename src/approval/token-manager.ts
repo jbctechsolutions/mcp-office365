@@ -147,7 +147,9 @@ export class ApprovalTokenManager {
   }
 
   private check(token: ApprovalToken, operation: OperationType, targetId: number): ValidationResult {
-    if (this.now() > token.expiresAt) {
+    // `>=` so validate agrees with the store's consume guard (expires_at > now):
+    // a token is expired at the exact expiry instant, on both paths.
+    if (this.now() >= token.expiresAt) {
       return { valid: false, error: 'EXPIRED' };
     }
     if (token.operation !== operation) {
