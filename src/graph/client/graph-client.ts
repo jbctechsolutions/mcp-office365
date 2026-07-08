@@ -309,10 +309,12 @@ export class GraphClient {
    */
   async searchMessagesFilter(filter: string, limit: number = 50): Promise<MicrosoftGraph.Message[]> {
     const client = await this.getClient();
+    // No $orderby: Graph returns InefficientFilter when a sender/flag $filter is
+    // combined with $orderby (D9 spike), and /me/messages already defaults to
+    // receivedDateTime desc, so results stay recent-first without it.
     const response = await client
       .api('/me/messages')
       .filter(filter)
-      .orderby('receivedDateTime desc')
       .select(MESSAGE_SEARCH_SELECT)
       .top(limit)
       .get() as PageCollection;
@@ -338,7 +340,13 @@ export class GraphClient {
   /**
    * Mixed property + free-text structured search (U7 / D9): `POST /search/query`
    * with a server-built KQL string — the only single-request path when both are
-   * present. Normalizes the hitsContainers response shape to a Message[].
+   * present. Normalizes the hitsContainers response to a Message[].
+   *
+   * Limitation (verified in the D9 spike): /search/query populates from/subject/
+   * receivedDateTime/isRead/hasAttachments/parentFolderId, but NOT toRecipients
+   * or flag, regardless of the requested fields — so mixed-mode results carry no
+   * recipient list or flag. Acceptable for a result list (sender/subject/date
+   * are present); the property-only and free-text-only paths are unaffected.
    */
   async searchMessagesQuery(kql: string, limit: number = 50): Promise<MicrosoftGraph.Message[]> {
     const client = await this.getClient();
@@ -355,7 +363,8 @@ export class GraphClient {
     };
     const response = (await client.api('/search/query').post(body)) as SearchQueryResponse;
     const hits = response.value?.[0]?.hitsContainers?.[0]?.hits ?? [];
-    return hits.map((h) => h.resource);
+    // Guard against a hit without a resource so no undefined enters the mapper.
+    return hits.map((h) => h.resource).filter((r): r is MicrosoftGraph.Message => r != null);
   }
 
   /**

@@ -324,14 +324,16 @@ describe('Graph API endpoint and method validation', () => {
       expect(apiCalls[0].topValue).toBe(30);
     });
 
-    it('searchMessagesFilter uses $filter + $orderby on /me/messages (U7)', async () => {
-      await client.searchMessagesFilter("from/emailAddress/address eq 'a@b.com'", 20);
+    it('searchMessagesFilter uses $filter on /me/messages, no $orderby (U7)', async () => {
+      await client.searchMessagesFilter('hasAttachments eq true', 20);
 
       expect(apiCalls).toHaveLength(1);
       expect(apiCalls[0].url).toBe('/me/messages');
       expect(apiCalls[0].method).toBe('get');
-      expect(apiCalls[0].filterExpr).toBe("from/emailAddress/address eq 'a@b.com'");
-      expect(apiCalls[0].orderbyExpr).toBe('receivedDateTime desc');
+      expect(apiCalls[0].filterExpr).toBe('hasAttachments eq true');
+      // No $orderby: Graph returns InefficientFilter if a filter is combined with
+      // it; /me/messages already defaults to receivedDateTime desc.
+      expect(apiCalls[0].orderbyExpr).toBeUndefined();
       expect(apiCalls[0].topValue).toBe(20);
     });
 
