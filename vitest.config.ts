@@ -29,5 +29,11 @@ export default defineConfig({
       },
     },
     testTimeout: 10000,
+    // Setup hooks (SQLite fixture builds for the AppleScript integration tests)
+    // occasionally exceed the 10s default on slow/contended CI runners
+    // (notably Windows + Node 20), producing flaky "Hook timed out" failures.
+    // The hooks are not slow by design; give them headroom without masking a
+    // genuine hang.
+    hookTimeout: 30000,
   },
 });
