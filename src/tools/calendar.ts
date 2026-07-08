@@ -36,6 +36,11 @@ declare module '../registry/types.js' {
 // Input Schemas
 // =============================================================================
 
+// An event id accepts either a durable `ev_…` token (Graph backend, U5) or a
+// numeric id (AppleScript/SQLite backend, D4). A numeric id on Graph is rejected
+// with NUMERIC_ID_UNSUPPORTED by the resolver.
+const EventIdSchema = z.union([z.string().min(1), z.number().int().positive()]);
+
 export const ListCalendarsInput = z.strictObject({});
 
 export const ListEventsInput = z.strictObject({
@@ -52,7 +57,7 @@ export const ListEventsInput = z.strictObject({
 });
 
 export const GetEventInput = z.strictObject({
-  event_id: z.number().int().positive().describe('The event ID to retrieve'),
+  event_id: EventIdSchema.describe('The event ID to retrieve'),
 });
 
 export const SearchEventsInput = z.strictObject({
@@ -72,7 +77,7 @@ export const SearchEventsInput = z.strictObject({
 );
 
 export const RespondToEventInput = z.strictObject({
-  event_id: z.number().int().positive().describe('The event ID to respond to'),
+  event_id: EventIdSchema.describe('The event ID to respond to'),
   response: z.enum(['accept', 'decline', 'tentative']).describe('Your response to the invitation'),
   send_response: z.boolean().default(true).describe('Whether to send response to organizer'),
   comment: z.string().optional().describe('Optional comment to include with response'),
@@ -227,7 +232,7 @@ export const CreateEventGraphInput = z.strictObject({
 //     reachable via these tools. The Graph (default) backend is unaffected.
 // See CHANGELOG / PR for the full migration matrix.
 export const UpdateEventInput = z.strictObject({
-  event_id: z.number().int().positive(),
+  event_id: EventIdSchema,
   subject: z.string().optional(),
   start: z.string().optional(),
   end: z.string().optional(),
@@ -246,25 +251,25 @@ export const UpdateEventInput = z.strictObject({
 });
 
 export const DeleteEventInput = z.strictObject({
-  event_id: z.number().int().positive().describe('The event ID to delete'),
+  event_id: EventIdSchema.describe('The event ID to delete'),
   apply_to: z.enum(['this_instance', 'all_in_series']).default('this_instance').describe(
     'For recurring events: delete single instance or entire series (default: this_instance)'
   ),
 });
 
 export const ListEventInstancesInput = z.strictObject({
-  event_id: z.number().int().positive().describe('Recurring event ID'),
+  event_id: EventIdSchema.describe('Recurring event ID'),
   start_date: z.string().describe('Start of date range (ISO 8601, e.g. 2024-01-01T00:00:00Z)'),
   end_date: z.string().describe('End of date range (ISO 8601, e.g. 2024-12-31T23:59:59Z)'),
 });
 
 export const PrepareDeleteEventInput = z.strictObject({
-  event_id: z.number().int().positive().describe('The event ID to delete'),
+  event_id: EventIdSchema.describe('The event ID to delete'),
 });
 
 export const ConfirmDeleteEventInput = z.strictObject({
   token_id: z.uuid().describe('The approval token from prepare_delete_event'),
-  event_id: z.number().int().positive().describe('The event ID to delete'),
+  event_id: EventIdSchema.describe('The event ID to delete'),
 });
 
 export const ListCalendarGroupsInput = z.strictObject({});
@@ -303,7 +308,8 @@ export type ListRoomsParams = z.infer<typeof ListRoomsInput>;
  * Result of creating a calendar event.
  */
 export interface CreateEventResult {
-  readonly id: number;
+  // Durable ev_ token on Graph (U5); numeric on AppleScript.
+  readonly id: string | number;
   readonly title: string;
   readonly start_date: string;
   readonly end_date: string;

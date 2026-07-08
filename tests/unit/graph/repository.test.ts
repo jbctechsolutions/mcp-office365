@@ -731,40 +731,36 @@ describe('graph/repository', () => {
     });
 
     describe('getEventAsync', () => {
-      it('returns event by numeric ID when cached', async () => {
-        // Populate cache via listEvents
-        mockClient.listEvents.mockResolvedValue([
-          { id: 'evt-1', subject: 'Meeting' },
-        ]);
-        await repository.listEventsAsync(50);
-
+      it('resolves an ev_ token to the Graph id — no prior list/cache needed (cold state)', async () => {
         mockClient.getEvent.mockResolvedValue({
           id: 'evt-1',
           subject: 'Team Meeting',
           start: { dateTime: '2024-01-15T10:00:00' },
         });
 
-        const result = await repository.getEventAsync(hashStringToNumber('evt-1'));
+        const result = await repository.getEventAsync(mintSelfEncoded('event', 'evt-1'));
 
         expect(mockClient.getEvent).toHaveBeenCalledWith('evt-1');
         expect(result).toBeDefined();
       });
 
-      it('returns undefined when event ID not in cache', async () => {
-        const result = await repository.getEventAsync(99999);
-        expect(result).toBeUndefined();
+      it('rejects a legacy numeric id on the Graph backend (NUMERIC_ID_UNSUPPORTED, D4)', async () => {
+        await expect(repository.getEventAsync(99999)).rejects.toMatchObject({
+          code: 'NUMERIC_ID_UNSUPPORTED',
+        });
       });
 
-      it('returns undefined when event is not found', async () => {
-        // Populate cache
-        mockClient.listEvents.mockResolvedValue([
-          { id: 'evt-1', subject: 'Meeting' },
-        ]);
-        await repository.listEventsAsync(50);
+      it('rejects a token for a different entity kind (ID_ENTITY_MISMATCH)', async () => {
+        await expect(
+          repository.getEventAsync(mintSelfEncoded('contact', 'contact-1'))
+        ).rejects.toMatchObject({ code: 'ID_ENTITY_MISMATCH' });
+        expect(mockClient.getEvent).not.toHaveBeenCalled();
+      });
 
+      it('returns undefined when the event is not found', async () => {
         mockClient.getEvent.mockResolvedValue(null);
 
-        const result = await repository.getEventAsync(hashStringToNumber('evt-1'));
+        const result = await repository.getEventAsync(mintSelfEncoded('event', 'evt-1'));
         expect(result).toBeUndefined();
       });
     });
@@ -805,20 +801,14 @@ describe('graph/repository', () => {
     });
 
     describe('listEventInstancesAsync', () => {
-      it('returns mapped event instances', async () => {
-        // Populate cache with the recurring event
-        mockClient.listEvents.mockResolvedValue([
-          { id: 'evt-recurring', subject: 'Weekly Standup', recurrence: {} },
-        ]);
-        await repository.listEventsAsync(50);
-
+      it('resolves the recurring-event token and returns mapped instances (cold)', async () => {
         mockClient.listEventInstances.mockResolvedValue([
           { id: 'inst-1', subject: 'Weekly Standup', start: { dateTime: '2024-01-08T10:00:00' } },
           { id: 'inst-2', subject: 'Weekly Standup', start: { dateTime: '2024-01-15T10:00:00' } },
         ]);
 
         const result = await repository.listEventInstancesAsync(
-          hashStringToNumber('evt-recurring'),
+          mintSelfEncoded('event', 'evt-recurring'),
           '2024-01-01T00:00:00Z',
           '2024-01-31T23:59:59Z'
         );
@@ -831,34 +821,29 @@ describe('graph/repository', () => {
         );
       });
 
-      it('caches instance IDs', async () => {
-        // Populate cache with the recurring event
-        mockClient.listEvents.mockResolvedValue([
-          { id: 'evt-recurring', subject: 'Weekly Standup' },
-        ]);
-        await repository.listEventsAsync(50);
-
+      it('returns instances whose ids are durable ev_ tokens that resolve cold', async () => {
         mockClient.listEventInstances.mockResolvedValue([
           { id: 'inst-1', subject: 'Weekly Standup' },
         ]);
 
-        await repository.listEventInstancesAsync(
-          hashStringToNumber('evt-recurring'),
+        const instances = await repository.listEventInstancesAsync(
+          mintSelfEncoded('event', 'evt-recurring'),
           '2024-01-01T00:00:00Z',
           '2024-01-31T23:59:59Z'
         );
 
-        // The instance ID should now be cached, so getEventAsync should work
+        expect(instances[0].id).toBe(mintSelfEncoded('event', 'inst-1'));
+        // That token resolves on getEvent with no cache.
         mockClient.getEvent.mockResolvedValue({ id: 'inst-1', subject: 'Weekly Standup' });
-        const event = await repository.getEventAsync(hashStringToNumber('inst-1'));
+        const event = await repository.getEventAsync(instances[0].id);
         expect(event).toBeDefined();
         expect(mockClient.getEvent).toHaveBeenCalledWith('inst-1');
       });
 
-      it('throws for unknown event ID', async () => {
+      it('rejects a legacy numeric id on Graph (NUMERIC_ID_UNSUPPORTED)', async () => {
         await expect(
           repository.listEventInstancesAsync(999999, '2024-01-01T00:00:00Z', '2024-01-31T23:59:59Z')
-        ).rejects.toThrow('not found in cache');
+        ).rejects.toMatchObject({ code: 'NUMERIC_ID_UNSUPPORTED' });
       });
     });
   });
@@ -2137,8 +2122,12 @@ describe('graph/repository', () => {
           undefined
         );
 
-        expect(numericId).toBe(hashStringToNumber('event-new-1'));
-        expect(repository.getGraphId('event', numericId)).toBe('event-new-1');
+        // Returns a durable ev_ token that resolves back to the new event.
+        expect(numericId).toBe(mintSelfEncoded('event', 'event-new-1'));
+        mockClient.getEvent.mockResolvedValue({ id: 'event-new-1', subject: 'Team Meeting' });
+        const row = await repository.getEventAsync(numericId);
+        expect(row).toBeDefined();
+        expect(mockClient.getEvent).toHaveBeenCalledWith('event-new-1');
       });
 
       it('includes location when provided', async () => {
@@ -2320,16 +2309,10 @@ describe('graph/repository', () => {
     });
 
     describe('updateEventAsync', () => {
-      it('looks up graph ID and calls updateEvent', async () => {
-        // Populate event cache
-        mockClient.listEvents.mockResolvedValue([
-          { id: 'event-upd', subject: 'Existing', start: {}, end: {} },
-        ]);
-        await repository.listEventsAsync(50, 0);
-
+      it('resolves the ev_ token and calls updateEvent — no prior list needed', async () => {
         mockClient.updateEvent.mockResolvedValue(undefined);
 
-        await repository.updateEventAsync(hashStringToNumber('event-upd'), {
+        await repository.updateEventAsync(mintSelfEncoded('event', 'event-upd'), {
           subject: 'Updated Meeting',
         });
 
@@ -2338,22 +2321,16 @@ describe('graph/repository', () => {
         });
       });
 
-      it('throws if event not in cache', async () => {
+      it('rejects a legacy numeric id on Graph (NUMERIC_ID_UNSUPPORTED)', async () => {
         await expect(
           repository.updateEventAsync(99999, { subject: 'Nope' })
-        ).rejects.toThrow('Event ID 99999 not found in cache. Try searching for or listing the item first to refresh the cache.');
+        ).rejects.toMatchObject({ code: 'NUMERIC_ID_UNSUPPORTED' });
       });
 
       it('passes online meeting fields through to updateEvent', async () => {
-        // Populate event cache
-        mockClient.listEvents.mockResolvedValue([
-          { id: 'event-online-upd', subject: 'Existing', start: {}, end: {} },
-        ]);
-        await repository.listEventsAsync(50, 0);
-
         mockClient.updateEvent.mockResolvedValue(undefined);
 
-        await repository.updateEventAsync(hashStringToNumber('event-online-upd'), {
+        await repository.updateEventAsync(mintSelfEncoded('event', 'event-online-upd'), {
           isOnlineMeeting: true,
           onlineMeetingProvider: 'teamsForBusiness',
         });
@@ -2366,41 +2343,27 @@ describe('graph/repository', () => {
     });
 
     describe('deleteEventAsync', () => {
-      it('deletes event and removes from cache', async () => {
-        // Populate event cache
-        mockClient.listEvents.mockResolvedValue([
-          { id: 'event-del', subject: 'To Delete', start: {}, end: {} },
-        ]);
-        await repository.listEventsAsync(50, 0);
-
+      it('resolves the ev_ token and calls deleteEvent — no prior list needed', async () => {
         mockClient.deleteEvent.mockResolvedValue(undefined);
 
-        const numericId = hashStringToNumber('event-del');
-        await repository.deleteEventAsync(numericId);
+        await repository.deleteEventAsync(mintSelfEncoded('event', 'event-del'));
 
         expect(mockClient.deleteEvent).toHaveBeenCalledWith('event-del');
-        expect(repository.getGraphId('event', numericId)).toBeUndefined();
       });
 
-      it('throws if event not in cache', async () => {
+      it('rejects a legacy numeric id on Graph (NUMERIC_ID_UNSUPPORTED)', async () => {
         await expect(
           repository.deleteEventAsync(99999)
-        ).rejects.toThrow('Event ID 99999 not found in cache. Try searching for or listing the item first to refresh the cache.');
+        ).rejects.toMatchObject({ code: 'NUMERIC_ID_UNSUPPORTED' });
       });
     });
 
     describe('respondToEventAsync', () => {
       it('responds to event with accept and comment', async () => {
-        // Populate event cache
-        mockClient.listEvents.mockResolvedValue([
-          { id: 'event-resp', subject: 'Invitation', start: {}, end: {} },
-        ]);
-        await repository.listEventsAsync(50, 0);
-
         mockClient.respondToEvent.mockResolvedValue(undefined);
 
         await repository.respondToEventAsync(
-          hashStringToNumber('event-resp'),
+          mintSelfEncoded('event', 'event-resp'),
           'accept',
           true,
           'Looking forward to it!'
@@ -2415,16 +2378,10 @@ describe('graph/repository', () => {
       });
 
       it('responds to event with decline without comment', async () => {
-        // Populate event cache
-        mockClient.listEvents.mockResolvedValue([
-          { id: 'event-resp2', subject: 'Decline This', start: {}, end: {} },
-        ]);
-        await repository.listEventsAsync(50, 0);
-
         mockClient.respondToEvent.mockResolvedValue(undefined);
 
         await repository.respondToEventAsync(
-          hashStringToNumber('event-resp2'),
+          mintSelfEncoded('event', 'event-resp2'),
           'decline',
           false
         );
@@ -2437,10 +2394,10 @@ describe('graph/repository', () => {
         );
       });
 
-      it('throws if event not in cache', async () => {
+      it('rejects a legacy numeric id on Graph (NUMERIC_ID_UNSUPPORTED)', async () => {
         await expect(
           repository.respondToEventAsync(99999, 'accept', true)
-        ).rejects.toThrow('Event ID 99999 not found in cache. Try searching for or listing the item first to refresh the cache.');
+        ).rejects.toMatchObject({ code: 'NUMERIC_ID_UNSUPPORTED' });
       });
     });
   });

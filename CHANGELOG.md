@@ -22,6 +22,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   cache). Contact id params accept a `ct_` token (Graph) or a numeric id
   (AppleScript); a numeric id on Graph returns `NUMERIC_ID_UNSUPPORTED`. First
   entity migrated; the rest follow.
+- **Durable event IDs (U5b, Graph backend).** `get_event` / `list_events` /
+  `search_events` / `create_event` / `update_event` / `delete_event` /
+  `respond_to_event` / `list_event_instances` now use durable `ev_…` tokens with
+  the same cold-resolve / `NUMERIC_ID_UNSUPPORTED` semantics as contacts. A
+  durable token for the wrong entity kind (e.g. a contact token as an event id)
+  is rejected with `ID_ENTITY_MISMATCH`.
 
 ## [3.0.0] - 2026-07-08
 

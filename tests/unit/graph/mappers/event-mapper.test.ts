@@ -11,6 +11,7 @@ import { describe, it, expect } from 'vitest';
 import type * as MicrosoftGraph from '@microsoft/microsoft-graph-types';
 import { mapEventToEventRow } from '../../../../src/graph/mappers/event-mapper.js';
 import { hashStringToNumber } from '../../../../src/graph/mappers/utils.js';
+import { mintSelfEncoded, parseToken } from '../../../../src/ids/token.js';
 
 describe('graph/mappers/event-mapper', () => {
   describe('mapEventToEventRow', () => {
@@ -33,7 +34,9 @@ describe('graph/mappers/event-mapper', () => {
 
       const result = mapEventToEventRow(event, 'calendar-456');
 
-      expect(result.id).toBe(hashStringToNumber('event-123'));
+      // id is now a durable self-encoding ev_ token carrying the Graph id (U5).
+      expect(result.id).toBe(mintSelfEncoded('event', 'event-123'));
+      expect(parseToken(result.id as string)?.graphId).toBe('event-123');
       expect(result.folderId).toBe(hashStringToNumber('calendar-456'));
       expect(result.isRecurring).toBe(1);
       expect(result.hasReminder).toBe(1);
@@ -49,7 +52,8 @@ describe('graph/mappers/event-mapper', () => {
 
       const result = mapEventToEventRow(event);
 
-      expect(result.id).toBe(hashStringToNumber(''));
+      // A self-encoding token can't encode an empty id, so it stays empty.
+      expect(result.id).toBe('');
       expect(result.dataFilePath).toBe('graph-event:');
     });
 

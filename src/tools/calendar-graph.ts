@@ -67,7 +67,7 @@ function transformFolderRow(row: FolderRow): {
  * Uses Unix timestamps (not Apple epoch) and includes subject from EventRow.
  */
 function transformGraphEventRow(row: EventRow): {
-  id: number;
+  id: string | number;
   folderId: number | null;
   title: string | null;
   startDate: string | null;
@@ -270,8 +270,8 @@ export class GraphCalendarTools {
       return { content: [{ type: 'text', text: 'Event not found' }], isError: true };
     }
 
-    const graphId = this.repository.getGraphId('event', params.event_id);
-    const graphEvent = graphId != null ? await this.repository.getClient().getEvent(graphId) : null;
+    const graphId = this.repository.getEventGraphId(params.event_id);
+    const graphEvent = await this.repository.getClient().getEvent(graphId);
     const hash = hashEventForApproval({
       id: params.event_id,
       subject: graphEvent?.subject ?? null,
@@ -295,8 +295,8 @@ export class GraphCalendarTools {
 
   async confirmDeleteEvent(params: ConfirmDeleteEventParams): Promise<ToolResult> {
     // Re-fetch the event and compute fresh hash for comparison
-    const graphId = this.repository.getGraphId('event', params.event_id);
-    const graphEvent = graphId != null ? await this.repository.getClient().getEvent(graphId) : null;
+    const graphId = this.repository.getEventGraphId(params.event_id);
+    const graphEvent = await this.repository.getClient().getEvent(graphId);
     const currentHash = hashEventForApproval({
       id: params.event_id,
       subject: graphEvent?.subject ?? null,
