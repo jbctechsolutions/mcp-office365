@@ -307,6 +307,37 @@ describe('graph/auth/device-code-flow', () => {
       // Critically, it does NOT fall into an unwatchable interactive device code.
       expect(mockAcquireTokenByDeviceCode).not.toHaveBeenCalled();
     });
+
+    it('re-authenticates interactively on an expired session when interactiveOnExpired is set (CLI path)', async () => {
+      const mockAccount: AccountInfo = {
+        homeAccountId: 'home-account-id',
+        environment: 'login.microsoftonline.com',
+        tenantId: 'tenant-id',
+        username: 'user@example.com',
+        localAccountId: 'local-account-id',
+      };
+      // Cached account whose refresh fails — but a terminal user CAN see the code.
+      mockGetAllAccounts.mockResolvedValue([mockAccount]);
+      mockAcquireTokenSilent.mockRejectedValue(new Error('invalid_grant'));
+      mockAcquireTokenByDeviceCode.mockResolvedValue({
+        accessToken: 'reauth-token',
+        account: mockAccount,
+        authority: '',
+        uniqueId: '',
+        tenantId: '',
+        scopes: [],
+        expiresOn: new Date(),
+        idToken: '',
+        idTokenClaims: {},
+        fromCache: false,
+        tokenType: 'Bearer',
+        correlationId: '',
+      });
+
+      const token = await getAccessToken(vi.fn(), { interactiveOnExpired: true });
+      expect(token).toBe('reauth-token');
+      expect(mockAcquireTokenByDeviceCode).toHaveBeenCalled();
+    });
   });
 
   describe('isAuthenticated', () => {

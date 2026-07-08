@@ -162,23 +162,26 @@ async function acquireTokenSilentDetailed(): Promise<SilentOutcome> {
  * 2. If that fails, prompts for device code authentication
  */
 export async function getAccessToken(
-  deviceCodeCallback: DeviceCodeCallback = defaultDeviceCodeCallback
+  deviceCodeCallback: DeviceCodeCallback = defaultDeviceCodeCallback,
+  options: { interactiveOnExpired?: boolean } = {}
 ): Promise<string> {
   const silent = await acquireTokenSilentDetailed();
   if (silent.status === 'ok') {
     return silent.result.accessToken;
   }
 
-  // A cached session that failed to refresh (expired/revoked, `invalid_grant`)
-  // must NOT fall into a fresh interactive device-code flow: in the MCP server
-  // that device code prints to an unwatched stderr and the call hangs until the
-  // code expires. Surface a typed AUTH_EXPIRED with the re-auth hint instead (U9).
-  if (silent.status === 'refresh_failed') {
+  // A cached session that failed to refresh (expired/revoked, `invalid_grant`):
+  // in the MCP server (default) we must NOT fall into a fresh interactive
+  // device-code flow — it prints to an unwatched stderr and the call hangs until
+  // the code expires — so surface a typed AUTH_EXPIRED with the re-auth hint (U9).
+  // The CLI `auth` command sets interactiveOnExpired so a user at a terminal can
+  // actually recover by re-authenticating (otherwise the hint would be circular).
+  if (silent.status === 'refresh_failed' && options.interactiveOnExpired !== true) {
     throw new GraphAuthRequiredError('session_expired');
   }
 
-  // No cached account at all — genuine first-time auth; the interactive device
-  // code is appropriate (this is the path the CLI `auth` command drives).
+  // No cached account (genuine first-time), or an interactive-capable caller on
+  // an expired session: the device code is appropriate.
   const result = await acquireTokenInteractive(deviceCodeCallback);
   return result.accessToken;
 }

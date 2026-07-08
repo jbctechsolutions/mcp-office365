@@ -49,7 +49,7 @@ describe('errors', () => {
       expect(ErrorCode.APPLESCRIPT_PERMISSION_DENIED).toBe('APPLESCRIPT_PERMISSION_DENIED');
       expect(ErrorCode.APPLESCRIPT_TIMEOUT).toBe('APPLESCRIPT_TIMEOUT');
       expect(ErrorCode.APPLESCRIPT_ERROR).toBe('APPLESCRIPT_ERROR');
-      expect(ErrorCode.GRAPH_AUTH_REQUIRED).toBe('GRAPH_AUTH_REQUIRED');
+      expect(ErrorCode.AUTH_EXPIRED).toBe('AUTH_EXPIRED');
       expect(ErrorCode.GRAPH_RATE_LIMITED).toBe('GRAPH_RATE_LIMITED');
       expect(ErrorCode.GRAPH_PERMISSION_DENIED).toBe('GRAPH_PERMISSION_DENIED');
       expect(ErrorCode.GRAPH_ERROR).toBe('GRAPH_ERROR');
