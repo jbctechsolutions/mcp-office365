@@ -31,6 +31,7 @@ import {
   hashStringToNumber,
 } from './mappers/index.js';
 import type { DeviceCodeCallback } from './auth/index.js';
+import type { CompiledSearch } from '../search/compiler.js';
 import { downloadAttachment, getDownloadDir } from './attachments.js';
 import type { PlanVisualizationData } from '../visualization/types.js';
 import * as fs from 'fs';
@@ -331,10 +332,12 @@ export class GraphRepository implements IRepository {
   }
 
   /**
-   * Advanced search using raw KQL query syntax.
+   * Structured advanced search (U7 / D9). Runs a compiled query on the correct
+   * Graph mechanism ($filter / quoted $search / /search/query), then caches IDs
+   * and maps to EmailRow[] exactly like the raw-KQL path it replaces.
    */
-  async searchEmailsAdvancedAsync(query: string, limit: number): Promise<EmailRow[]> {
-    const messages = await this.client.searchMessagesKql(query, limit);
+  async searchEmailsStructuredAsync(compiled: CompiledSearch, limit: number): Promise<EmailRow[]> {
+    const messages = await this.runStructuredSearch(compiled, limit);
     for (const msg of messages) {
       if (msg.id != null) {
         this.idCache.messages.set(hashStringToNumber(msg.id), msg.id);
@@ -346,24 +349,18 @@ export class GraphRepository implements IRepository {
     return messages.map((m) => mapMessageToEmailRow(m));
   }
 
-  /**
-   * Advanced search in a specific folder using raw KQL query syntax.
-   */
-  async searchEmailsAdvancedInFolderAsync(folderId: number, query: string, limit: number): Promise<EmailRow[]> {
-    const graphFolderId = this.idCache.folders.get(folderId);
-    if (graphFolderId == null) {
-      throw new Error(`Folder ID ${folderId} not found in cache. Try searching for or listing the item first to refresh the cache.`);
+  private runStructuredSearch(
+    compiled: CompiledSearch,
+    limit: number,
+  ): ReturnType<GraphClient['searchMessagesFilter']> {
+    switch (compiled.mechanism) {
+      case 'filter':
+        return this.client.searchMessagesFilter(compiled.filter, limit);
+      case 'search':
+        return this.client.searchMessagesSearchValue(compiled.search, limit);
+      case 'searchQuery':
+        return this.client.searchMessagesQuery(compiled.kql, limit);
     }
-    const messages = await this.client.searchMessagesKqlInFolder(graphFolderId, query, limit);
-    for (const msg of messages) {
-      if (msg.id != null) {
-        this.idCache.messages.set(hashStringToNumber(msg.id), msg.id);
-      }
-      if (msg.conversationId != null) {
-        this.idCache.conversations.set(hashStringToNumber(msg.conversationId), msg.conversationId);
-      }
-    }
-    return messages.map((m) => mapMessageToEmailRow(m));
   }
 
   async checkNewEmailsAsync(folderId: number): Promise<{ emails: EmailRow[]; isInitialSync: boolean }> {

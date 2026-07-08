@@ -26,8 +26,9 @@ vi.mock('../../../src/graph/client/index.js', () => ({
       listUnreadMessages: vi.fn(),
       searchMessages: vi.fn(),
       searchMessagesInFolder: vi.fn(),
-      searchMessagesKql: vi.fn(),
-      searchMessagesKqlInFolder: vi.fn(),
+      searchMessagesFilter: vi.fn(),
+      searchMessagesSearchValue: vi.fn(),
+      searchMessagesQuery: vi.fn(),
       listConversationMessages: vi.fn(),
       getMessagesDelta: vi.fn(),
       getMessage: vi.fn(),
@@ -478,38 +479,36 @@ describe('graph/repository', () => {
       });
     });
 
-    describe('searchEmailsAdvancedAsync', () => {
-      it('calls searchMessagesKql and caches results', async () => {
-        mockClient.searchMessagesKql.mockResolvedValue([
-          { id: 'msg-kql-1', subject: 'KQL result', conversationId: 'conv-kql' },
+    describe('searchEmailsStructuredAsync (U7)', () => {
+      it('dispatches a filter mechanism to searchMessagesFilter and caches results', async () => {
+        mockClient.searchMessagesFilter.mockResolvedValue([
+          { id: 'msg-f-1', subject: 'Filter result', conversationId: 'conv-f' },
         ]);
-
-        const results = await repository.searchEmailsAdvancedAsync('from:alice', 50);
+        const results = await repository.searchEmailsStructuredAsync(
+          { mechanism: 'filter', filter: "from/emailAddress/address eq 'a@b.com'" },
+          50,
+        );
         expect(results).toHaveLength(1);
-        expect(mockClient.searchMessagesKql).toHaveBeenCalledWith('from:alice', 50);
-        expect(results[0].subject).toBe('KQL result');
-      });
-    });
-
-    describe('searchEmailsAdvancedInFolderAsync', () => {
-      it('calls searchMessagesKqlInFolder with resolved folder ID', async () => {
-        // Populate folder cache
-        mockClient.listMailFolders.mockResolvedValue([{ id: 'folder-abc', displayName: 'Inbox' }]);
-        await repository.listFoldersAsync();
-
-        mockClient.searchMessagesKqlInFolder.mockResolvedValue([
-          { id: 'msg-kql-2', subject: 'Folder KQL result' },
-        ]);
-
-        const folderId = hashStringToNumber('folder-abc');
-        const results = await repository.searchEmailsAdvancedInFolderAsync(folderId, 'subject:"test"', 25);
-        expect(results).toHaveLength(1);
-        expect(mockClient.searchMessagesKqlInFolder).toHaveBeenCalledWith('folder-abc', 'subject:"test"', 25);
+        expect(mockClient.searchMessagesFilter).toHaveBeenCalledWith(
+          "from/emailAddress/address eq 'a@b.com'",
+          50,
+        );
+        expect(results[0].subject).toBe('Filter result');
       });
 
-      it('throws when folder not in cache', async () => {
-        await expect(repository.searchEmailsAdvancedInFolderAsync(99999, 'test', 50))
-          .rejects.toThrow('Folder ID 99999 not found in cache');
+      it('dispatches a search mechanism to searchMessagesSearchValue', async () => {
+        mockClient.searchMessagesSearchValue.mockResolvedValue([{ id: 'msg-s-1', subject: 'Search result' }]);
+        await repository.searchEmailsStructuredAsync({ mechanism: 'search', search: '"budget"' }, 25);
+        expect(mockClient.searchMessagesSearchValue).toHaveBeenCalledWith('"budget"', 25);
+      });
+
+      it('dispatches a searchQuery (mixed) mechanism to searchMessagesQuery', async () => {
+        mockClient.searchMessagesQuery.mockResolvedValue([{ id: 'msg-q-1', subject: 'KQL result' }]);
+        await repository.searchEmailsStructuredAsync(
+          { mechanism: 'searchQuery', kql: 'from:"a@b.com" AND body:"x"' },
+          10,
+        );
+        expect(mockClient.searchMessagesQuery).toHaveBeenCalledWith('from:"a@b.com" AND body:"x"', 10);
       });
     });
   });

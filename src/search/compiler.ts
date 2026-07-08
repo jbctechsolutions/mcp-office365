@@ -22,28 +22,33 @@
 
 import { ValidationError } from '../utils/errors.js';
 
-/** Structured, typed email-search criteria (replaces the raw `query` KQL). */
+/**
+ * Structured, typed email-search criteria (replaces the raw `query` KQL). Fields
+ * are `| undefined`-tolerant so a zod-parsed input object (which carries explicit
+ * `undefined` for absent optionals under exactOptionalPropertyTypes) passes
+ * directly; every field is guarded with `!= null` before use.
+ */
 export interface EmailSearchParams {
   /** Sender address (exact). Property → `$filter`. */
-  from?: string;
+  from?: string | undefined;
   /** Recipient address (exact). Property → `$filter`. */
-  to?: string;
+  to?: string | undefined;
   /** Received on/after this ISO date/datetime. Property → `$filter`. */
-  received_after?: string;
+  received_after?: string | undefined;
   /** Received on/before this ISO date/datetime. Property → `$filter`. */
-  received_before?: string;
+  received_before?: string | undefined;
   /** Only messages with attachments. Property → `$filter`. */
-  has_attachments?: boolean;
+  has_attachments?: boolean | undefined;
   /** Only unread messages. Property → `$filter`. */
-  is_unread?: boolean;
+  is_unread?: boolean | undefined;
   /** Importance level. Property → `$filter`. */
-  importance?: 'low' | 'normal' | 'high';
+  importance?: 'low' | 'normal' | 'high' | undefined;
   /** Subject contains (free-text — Graph `$filter` has no `contains` here). */
-  subject_contains?: string;
+  subject_contains?: string | undefined;
   /** Body contains (free-text). */
-  body_contains?: string;
+  body_contains?: string | undefined;
   /** Free-text across the message. */
-  text?: string;
+  text?: string | undefined;
 }
 
 /** The compiled query and which Graph mechanism executes it. */

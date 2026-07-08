@@ -78,6 +78,19 @@ export function shouldRetryGraphRequest(
 /** Generic Graph API entity (untyped). */
 type GraphEntity = Record<string, unknown>;
 
+/** Fields selected for message search results (shared across search mechanisms). */
+const MESSAGE_SEARCH_SELECT =
+  'id,subject,from,toRecipients,ccRecipients,receivedDateTime,sentDateTime,isRead,hasAttachments,importance,flag,bodyPreview,conversationId,internetMessageId,parentFolderId';
+
+/** Shape of a `POST /search/query` response (only the parts we read). */
+interface SearchQueryResponse {
+  value?: Array<{
+    hitsContainers?: Array<{
+      hits?: Array<{ resource: MicrosoftGraph.Message }>;
+    }>;
+  }>;
+}
+
 /**
  * Graph client wrapper with caching and token management.
  */
@@ -291,37 +304,58 @@ export class GraphClient {
   }
 
   /**
-   * Searches messages using raw KQL (Keyword Query Language).
-   * Unlike searchMessages, the query is passed directly without quote-wrapping,
-   * enabling KQL operators like from:, subject:, hasAttachments:, received>=, AND, OR.
+   * Property-only structured search (U7 / D9): `$filter` on messages. The filter
+   * string is built server-side by the search compiler (validated OData syntax).
    */
-  async searchMessagesKql(query: string, limit: number = 50): Promise<MicrosoftGraph.Message[]> {
+  async searchMessagesFilter(filter: string, limit: number = 50): Promise<MicrosoftGraph.Message[]> {
     const client = await this.getClient();
     const response = await client
       .api('/me/messages')
-      .search(query)
-      .select('id,subject,from,toRecipients,ccRecipients,receivedDateTime,sentDateTime,isRead,hasAttachments,importance,flag,bodyPreview,conversationId,internetMessageId,parentFolderId')
+      .filter(filter)
+      .orderby('receivedDateTime desc')
+      .select(MESSAGE_SEARCH_SELECT)
       .top(limit)
       .get() as PageCollection;
     return response.value as MicrosoftGraph.Message[];
   }
 
   /**
-   * Searches messages in a specific folder using raw KQL.
+   * Free-text structured search (U7 / D9): quoted `$search` on messages. The
+   * search value is built by the compiler already correctly quoted (e.g.
+   * `"subject:report"`), which the D9 spike confirmed property-scopes correctly.
    */
-  async searchMessagesKqlInFolder(
-    folderId: string,
-    query: string,
-    limit: number = 50
-  ): Promise<MicrosoftGraph.Message[]> {
+  async searchMessagesSearchValue(searchValue: string, limit: number = 50): Promise<MicrosoftGraph.Message[]> {
     const client = await this.getClient();
     const response = await client
-      .api(`/me/mailFolders/${folderId}/messages`)
-      .search(query)
-      .select('id,subject,from,toRecipients,ccRecipients,receivedDateTime,sentDateTime,isRead,hasAttachments,importance,flag,bodyPreview,conversationId,internetMessageId,parentFolderId')
+      .api('/me/messages')
+      .search(searchValue)
+      .select(MESSAGE_SEARCH_SELECT)
       .top(limit)
       .get() as PageCollection;
     return response.value as MicrosoftGraph.Message[];
+  }
+
+  /**
+   * Mixed property + free-text structured search (U7 / D9): `POST /search/query`
+   * with a server-built KQL string — the only single-request path when both are
+   * present. Normalizes the hitsContainers response shape to a Message[].
+   */
+  async searchMessagesQuery(kql: string, limit: number = 50): Promise<MicrosoftGraph.Message[]> {
+    const client = await this.getClient();
+    const body = {
+      requests: [
+        {
+          entityTypes: ['message'],
+          query: { queryString: kql },
+          from: 0,
+          size: limit,
+          fields: MESSAGE_SEARCH_SELECT.split(','),
+        },
+      ],
+    };
+    const response = (await client.api('/search/query').post(body)) as SearchQueryResponse;
+    const hits = response.value?.[0]?.hitsContainers?.[0]?.hits ?? [];
+    return hits.map((h) => h.resource);
   }
 
   /**

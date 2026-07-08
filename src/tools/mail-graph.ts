@@ -14,6 +14,7 @@ import type { GraphRepository } from '../graph/repository.js';
 import type { GraphContentReaders } from '../graph/content-readers.js';
 import type { FolderRow, EmailRow } from '../database/repository.js';
 import { unixTimestampToLocalIso } from '../graph/mappers/utils.js';
+import { compileEmailSearch } from '../search/compiler.js';
 import type { ToolResult } from '../registry/types.js';
 import type {
   ListFoldersToolParams,
@@ -206,9 +207,11 @@ export class GraphMailTools {
   }
 
   async searchEmailsAdvanced(params: SearchEmailsAdvancedParams): Promise<ToolResult> {
-    const emails = params.folder_id != null
-      ? await this.repository.searchEmailsAdvancedInFolderAsync(params.folder_id, params.query, params.limit)
-      : await this.repository.searchEmailsAdvancedAsync(params.query, params.limit);
+    const { limit, ...criteria } = params;
+    // Compile structured criteria to the correct Graph mechanism (U7/D9). An
+    // empty or malformed-date query throws a typed VALIDATION error → envelope.
+    const compiled = compileEmailSearch(criteria);
+    const emails = await this.repository.searchEmailsStructuredAsync(compiled, limit);
     return jsonResult({ emails: emails.map(transformEmailRow) });
   }
 

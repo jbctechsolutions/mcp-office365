@@ -87,11 +87,23 @@ export const SearchEmailsInput = z.strictObject({
     .describe('Maximum number of emails to return (1-100)'),
 });
 
+/**
+ * Structured email search (U7 / D9). Replaces raw KQL — the #1 failure class —
+ * with typed criteria compiled server-side to the correct Graph mechanism
+ * ($filter / quoted $search / /search/query), so operator syntax, quoting, and
+ * date formatting are handled for you. Provide at least one criterion.
+ */
 export const SearchEmailsAdvancedInput = z.strictObject({
-  query: z.string().min(1).describe(
-    'KQL search query. Examples: from:alice, subject:"quarterly report", hasAttachments:true, received>=2024-01-01. Combine with AND/OR.'
-  ),
-  folder_id: z.number().int().positive().optional().describe('Optional folder ID to search within'),
+  from: z.string().min(1).optional().describe('Sender email address (exact match)'),
+  to: z.string().min(1).optional().describe('Recipient email address (exact match)'),
+  subject_contains: z.string().min(1).optional().describe('Text the subject must contain'),
+  body_contains: z.string().min(1).optional().describe('Text the body must contain'),
+  text: z.string().min(1).optional().describe('Free-text search across the whole message'),
+  received_after: z.string().min(1).optional().describe('Received on/after this ISO date (YYYY-MM-DD) or datetime'),
+  received_before: z.string().min(1).optional().describe('Received on/before this ISO date (YYYY-MM-DD) or datetime'),
+  has_attachments: z.boolean().optional().describe('Only messages with attachments'),
+  is_unread: z.boolean().optional().describe('Only unread messages'),
+  importance: z.enum(['low', 'normal', 'high']).optional().describe('Importance level'),
   limit: z.number().int().min(1).max(100).default(50).describe('Maximum results (1-100)'),
 });
 
@@ -618,7 +630,7 @@ export function mailToolDefinitions(): ToolDefinition[] {
     // ---- Graph-only reads ----
     defineTool({
       name: 'search_emails_advanced',
-      description: 'Search emails using KQL (Keyword Query Language) for advanced queries. Supports operators: from:, to:, subject:, hasAttachments:true, received>=2024-01-01, AND, OR. (Graph API)',
+      description: 'Search emails with structured criteria (from, to, subject_contains, body_contains, text, received_after/before, has_attachments, is_unread, importance). Compiled server-side to the correct Graph query — no KQL syntax to get wrong. Dates are ISO (YYYY-MM-DD); mixed criteria use day-granular dates. Provide at least one criterion. (Graph API)',
       input: SearchEmailsAdvancedInput,
       annotations: { readOnlyHint: true },
       destructive: false,
