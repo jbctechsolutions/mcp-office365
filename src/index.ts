@@ -40,6 +40,8 @@ import {
   createGraphContentReadersWithClient,
   isAuthenticated,
   getAccessToken,
+  resolveAccountId,
+  currentAccountId,
   GraphMailboxAdapter,
   type GraphRepository,
   type GraphContentReaders,
@@ -179,7 +181,13 @@ export function createServer(options: ServerOptions = {}): Server {
   // tokens (U9b) so a two-phase approval survives a restart / a second window; a
   // corrupt/locked db degrades to in-memory (StateStore.open handles it).
   const stateStore = StateStore.open();
-  const tokenManager = new ApprovalTokenManager({ store: stateStore });
+  // accountId is a thunk: the signed-in account (homeAccountId) is only known
+  // after auth, later than this construction. resolveAccountId() populates it in
+  // initializeGraphBackend; currentAccountId() reads the memo at each token op.
+  const tokenManager = new ApprovalTokenManager({
+    store: stateStore,
+    accountId: currentAccountId,
+  });
 
   // Tools and backend state
   let initialized = false;
@@ -263,6 +271,11 @@ export function createServer(options: ServerOptions = {}): Server {
     if (!authenticated) {
       await getAccessToken();
     }
+
+    // Capture the signed-in account (homeAccountId) so approval tokens (D8) and
+    // the durable-ID alias table (D3) scope to this user, not the 'default'
+    // fallback. Best-effort — an unresolved account leaves the fallback in place.
+    await resolveAccountId();
 
     graphRepository = createGraphRepository();
     graphContentReaders = createGraphContentReadersWithClient(graphRepository.getClient());

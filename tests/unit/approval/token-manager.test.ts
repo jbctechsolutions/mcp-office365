@@ -772,5 +772,22 @@ describe('ApprovalTokenManager', () => {
       expect(other.lookupToken(token.tokenId)).toBeUndefined();
       expect(other.validateToken(token.tokenId, 'delete_email', 42).error).toBe('NOT_FOUND');
     });
+
+    it('resolves accountId lazily (thunk), so an account known only after auth still scopes', () => {
+      // The manager is built before sign-in; the account arrives later. A thunk
+      // returning the fallback at generate time and the real id at consume time
+      // must still key both ops the same when the id is stable across the call.
+      let account = 'acct-lazy';
+      const m = new ApprovalTokenManager({ store, accountId: () => account });
+      const token = m.generateToken(genParams);
+
+      // A second manager reading the same live thunk value resolves it.
+      const same = new ApprovalTokenManager({ store, accountId: () => account });
+      expect(same.lookupToken(token.tokenId)?.tokenId).toBe(token.tokenId);
+
+      // Once the thunk reports a different account, the token is out of scope.
+      account = 'acct-other';
+      expect(same.lookupToken(token.tokenId)).toBeUndefined();
+    });
   });
 });

@@ -36,8 +36,12 @@ export interface ApprovalTokenManagerOptions {
   ttlMs?: number;
   /** Durable store; omit for in-memory (tests / degraded mode). */
   store?: StateStore;
-  /** Account stamp for stored tokens (D7). Single-account server for v3.0.0. */
-  accountId?: string;
+  /**
+   * Account stamp for stored tokens (D7). May be a function, since the signed-in
+   * account (MSAL `homeAccountId`) is only known after auth — later than when
+   * this manager is constructed — and is resolved lazily at each token op.
+   */
+  accountId?: string | (() => string);
   /** Clock, for deterministic tests. */
   now?: () => number;
 }
@@ -46,7 +50,7 @@ export class ApprovalTokenManager {
   private readonly tokens = new Map<string, ApprovalToken>();
   private readonly ttlMs: number;
   private readonly store: StateStore | undefined;
-  private readonly accountId: string;
+  private readonly resolveAccountId: () => string;
   private readonly now: () => number;
 
   constructor(options: ApprovalTokenManagerOptions | number = {}) {
@@ -54,8 +58,14 @@ export class ApprovalTokenManager {
     const opts: ApprovalTokenManagerOptions = typeof options === 'number' ? { ttlMs: options } : options;
     this.ttlMs = opts.ttlMs ?? DEFAULT_TTL_MS;
     this.store = opts.store;
-    this.accountId = opts.accountId ?? 'default';
+    const account = opts.accountId ?? 'default';
+    this.resolveAccountId = typeof account === 'function' ? account : ((): string => account);
     this.now = opts.now ?? ((): number => Date.now());
+  }
+
+  /** The account scope for store ops, resolved fresh each call (D7). */
+  private get accountId(): string {
+    return this.resolveAccountId();
   }
 
   /**
