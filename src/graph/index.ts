@@ -30,6 +30,10 @@ export {
   signOut,
   resetMsalInstance,
   type DeviceCodeCallback,
+  DEFAULT_ACCOUNT_ID,
+  resolveAccountId,
+  currentAccountId,
+  resetAccountId,
 } from './auth/index.js';
 
 // Client exports

@@ -29,3 +29,10 @@ export {
   resetMsalInstance,
   type DeviceCodeCallback,
 } from './device-code-flow.js';
+
+export {
+  DEFAULT_ACCOUNT_ID,
+  resolveAccountId,
+  currentAccountId,
+  resetAccountId,
+} from './account-id.js';

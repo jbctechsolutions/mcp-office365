@@ -40,6 +40,9 @@ import {
   createGraphContentReadersWithClient,
   isAuthenticated,
   getAccessToken,
+  resolveAccountId,
+  currentAccountId,
+  DEFAULT_ACCOUNT_ID,
   GraphMailboxAdapter,
   type GraphRepository,
   type GraphContentReaders,
@@ -179,7 +182,13 @@ export function createServer(options: ServerOptions = {}): Server {
   // tokens (U9b) so a two-phase approval survives a restart / a second window; a
   // corrupt/locked db degrades to in-memory (StateStore.open handles it).
   const stateStore = StateStore.open();
-  const tokenManager = new ApprovalTokenManager({ store: stateStore });
+  // accountId is a thunk: the signed-in account (homeAccountId) is only known
+  // after auth, later than this construction. resolveAccountId() populates it in
+  // initializeGraphBackend; currentAccountId() reads the memo at each token op.
+  const tokenManager = new ApprovalTokenManager({
+    store: stateStore,
+    accountId: currentAccountId,
+  });
 
   // Tools and backend state
   let initialized = false;
@@ -263,6 +272,11 @@ export function createServer(options: ServerOptions = {}): Server {
     if (!authenticated) {
       await getAccessToken();
     }
+
+    // Capture the signed-in account (homeAccountId) so approval tokens (D8) and
+    // the durable-ID alias table (D3) scope to this user, not the 'default'
+    // fallback. Best-effort — an unresolved account leaves the fallback in place.
+    await resolveAccountId();
 
     graphRepository = createGraphRepository();
     graphContentReaders = createGraphContentReadersWithClient(graphRepository.getClient());
@@ -407,6 +421,16 @@ export function createServer(options: ServerOptions = {}): Server {
 
     try {
       await ensureInitialized();
+
+      // Self-heal the account identity: initializeGraphBackend resolves it once,
+      // but if getAccount() transiently returned null there (it swallows errors)
+      // the fallback would otherwise be pinned for the process lifetime — a token
+      // minted under 'default' is then NOT_FOUND in a sibling window/restart that
+      // resolves the real id. Retry until the real homeAccountId is memoized;
+      // once resolved this is a cheap sync no-op.
+      if (useGraphApi && currentAccountId() === DEFAULT_ACCOUNT_ID) {
+        await resolveAccountId();
+      }
 
       const registryResult = await registry.dispatch(name, args, buildToolContext(), surface);
       if (registryResult !== undefined) {
