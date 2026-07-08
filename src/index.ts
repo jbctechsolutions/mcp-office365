@@ -42,6 +42,7 @@ import {
   getAccessToken,
   resolveAccountId,
   currentAccountId,
+  DEFAULT_ACCOUNT_ID,
   GraphMailboxAdapter,
   type GraphRepository,
   type GraphContentReaders,
@@ -420,6 +421,16 @@ export function createServer(options: ServerOptions = {}): Server {
 
     try {
       await ensureInitialized();
+
+      // Self-heal the account identity: initializeGraphBackend resolves it once,
+      // but if getAccount() transiently returned null there (it swallows errors)
+      // the fallback would otherwise be pinned for the process lifetime — a token
+      // minted under 'default' is then NOT_FOUND in a sibling window/restart that
+      // resolves the real id. Retry until the real homeAccountId is memoized;
+      // once resolved this is a cheap sync no-op.
+      if (useGraphApi && currentAccountId() === DEFAULT_ACCOUNT_ID) {
+        await resolveAccountId();
+      }
 
       const registryResult = await registry.dispatch(name, args, buildToolContext(), surface);
       if (registryResult !== undefined) {

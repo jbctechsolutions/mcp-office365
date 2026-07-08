@@ -13,7 +13,14 @@
  * resolver need a scope key synchronously at call time. So the resolved id is
  * memoized after sign-in and read back via {@link currentAccountId}. Only a real
  * id is memoized — an unauthenticated lookup returns the `'default'` fallback
- * WITHOUT caching, so the real id is still picked up once sign-in completes.
+ * WITHOUT caching, so the real id is still picked up once sign-in completes. The
+ * caller retries {@link resolveAccountId} on each tool call while still on the
+ * fallback (see index.ts), so a transient miss at init can't pin the fallback.
+ *
+ * Single-account assumption (v3): `getAccount()` returns the first MSAL cache
+ * account, matching how the access token is acquired, so scope and auth identity
+ * agree within a process. A multi-account cache is out of scope for v3 — pinning
+ * the active account across the whole auth layer is a separate change.
  */
 
 import { getAccount } from './device-code-flow.js';
