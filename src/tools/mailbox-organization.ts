@@ -27,6 +27,22 @@ import {
   NotFoundError,
 } from '../utils/errors.js';
 import { appleTimestampToIso } from '../utils/dates.js';
+import { defineTool } from '../registry/define-tool.js';
+import { requireGraphToolset, requireAppleScriptToolset } from '../registry/context.js';
+import type { ToolContext, ToolDefinition, ToolResult } from '../registry/types.js';
+
+// Mailbox organization is a dual-backend domain served by a single
+// MailboxOrganizationTools instance (constructed against the AppleScript
+// repository or the Graph mailbox adapter). Registered on both toolset bags so
+// a single registry handler can branch on `ctx.backend`.
+declare module '../registry/types.js' {
+  interface GraphToolsets {
+    mailboxOrg: MailboxOrganizationTools;
+  }
+  interface AppleScriptToolsets {
+    mailboxOrg: MailboxOrganizationTools;
+  }
+}
 
 // =============================================================================
 // Input Schemas — Destructive Operations (Two-Phase)
@@ -741,4 +757,254 @@ export function createMailboxOrganizationTools(
   tokenManager: ApprovalTokenManager
 ): MailboxOrganizationTools {
   return new MailboxOrganizationTools(repository, tokenManager);
+}
+
+// =============================================================================
+// Registry Definitions (v3 registry-driven architecture, U2 — dual backend)
+// =============================================================================
+
+function jsonResult(data: unknown): ToolResult {
+  return { content: [{ type: 'text', text: JSON.stringify(data, null, 2) }] };
+}
+
+/** Resolves the shared org toolset from whichever backend bag is active. */
+function orgToolsFor(ctx: ToolContext): MailboxOrganizationTools {
+  return ctx.backend === 'graph'
+    ? requireGraphToolset(ctx, 'mailboxOrg')
+    : requireAppleScriptToolset(ctx, 'mailboxOrg');
+}
+
+const PREPARE_ANNOTATIONS = { readOnlyHint: false, destructiveHint: false, openWorldHint: true };
+const CONFIRM_ANNOTATIONS = { readOnlyHint: false, destructiveHint: true, openWorldHint: true };
+const WRITE_ANNOTATIONS = { readOnlyHint: false, destructiveHint: false, openWorldHint: true };
+
+/**
+ * Registry tool definitions for the mailbox-organization domain. Every handler
+ * resolves the shared MailboxOrganizationTools instance for the active backend
+ * and wraps its raw result to match the pre-registry dispatch behavior exactly.
+ *
+ * Note: the batch tools (prepare_batch_delete_emails, prepare_batch_move_emails,
+ * confirm_batch_operation) are intentionally NOT migrated here — their prepare_
+ * halves pair with confirm_batch_operation rather than a 1:1 confirm_batch_*
+ * tool, which the registry's prepare/confirm invariant forbids. They remain in
+ * the legacy dispatch.
+ */
+export function mailboxOrganizationToolDefinitions(): ToolDefinition[] {
+  return [
+    // ---- Destructive two-phase (prepare/confirm pairs) ----
+    defineTool({
+      name: 'prepare_delete_email',
+      description: 'Prepare to delete an email (move to trash). Returns a preview and approval token. Call confirm_delete_email to execute.',
+      input: PrepareDeleteEmailInput,
+      annotations: PREPARE_ANNOTATIONS,
+      destructive: true,
+      presets: ['mail'],
+      backends: ['graph', 'applescript'],
+      handler: async (ctx, params) => jsonResult(await orgToolsFor(ctx).prepareDeleteEmail(params)),
+    }),
+    defineTool({
+      name: 'confirm_delete_email',
+      description: 'Confirm deletion of an email using a token from prepare_delete_email',
+      input: ConfirmDeleteEmailInput,
+      annotations: CONFIRM_ANNOTATIONS,
+      destructive: true,
+      presets: ['mail'],
+      backends: ['graph', 'applescript'],
+      handler: async (ctx, params) => jsonResult(await orgToolsFor(ctx).confirmDeleteEmail(params)),
+    }),
+    defineTool({
+      name: 'prepare_move_email',
+      description: 'Prepare to move an email to another folder. Returns a preview and approval token. Call confirm_move_email to execute.',
+      input: PrepareMoveEmailInput,
+      annotations: PREPARE_ANNOTATIONS,
+      destructive: true,
+      presets: ['mail'],
+      backends: ['graph', 'applescript'],
+      handler: async (ctx, params) => jsonResult(await orgToolsFor(ctx).prepareMoveEmail(params)),
+    }),
+    defineTool({
+      name: 'confirm_move_email',
+      description: 'Confirm moving an email using a token from prepare_move_email',
+      input: ConfirmMoveEmailInput,
+      annotations: CONFIRM_ANNOTATIONS,
+      destructive: true,
+      presets: ['mail'],
+      backends: ['graph', 'applescript'],
+      handler: async (ctx, params) => jsonResult(await orgToolsFor(ctx).confirmMoveEmail(params)),
+    }),
+    defineTool({
+      name: 'prepare_archive_email',
+      description: 'Prepare to archive an email. Returns a preview and approval token. Call confirm_archive_email to execute.',
+      input: PrepareArchiveEmailInput,
+      annotations: PREPARE_ANNOTATIONS,
+      destructive: true,
+      presets: ['mail'],
+      backends: ['graph', 'applescript'],
+      handler: async (ctx, params) => jsonResult(await orgToolsFor(ctx).prepareArchiveEmail(params)),
+    }),
+    defineTool({
+      name: 'confirm_archive_email',
+      description: 'Confirm archiving an email using a token from prepare_archive_email',
+      input: ConfirmArchiveEmailInput,
+      annotations: CONFIRM_ANNOTATIONS,
+      destructive: true,
+      presets: ['mail'],
+      backends: ['graph', 'applescript'],
+      handler: async (ctx, params) => jsonResult(await orgToolsFor(ctx).confirmArchiveEmail(params)),
+    }),
+    defineTool({
+      name: 'prepare_junk_email',
+      description: 'Prepare to mark an email as junk. Returns a preview and approval token. Call confirm_junk_email to execute.',
+      input: PrepareJunkEmailInput,
+      annotations: PREPARE_ANNOTATIONS,
+      destructive: true,
+      presets: ['mail'],
+      backends: ['graph', 'applescript'],
+      handler: async (ctx, params) => jsonResult(await orgToolsFor(ctx).prepareJunkEmail(params)),
+    }),
+    defineTool({
+      name: 'confirm_junk_email',
+      description: 'Confirm marking an email as junk using a token from prepare_junk_email',
+      input: ConfirmJunkEmailInput,
+      annotations: CONFIRM_ANNOTATIONS,
+      destructive: true,
+      presets: ['mail'],
+      backends: ['graph', 'applescript'],
+      handler: async (ctx, params) => jsonResult(await orgToolsFor(ctx).confirmJunkEmail(params)),
+    }),
+    defineTool({
+      name: 'prepare_delete_folder',
+      description: 'Prepare to delete a mail folder. Returns a preview and approval token. Call confirm_delete_folder to execute.',
+      input: PrepareDeleteFolderInput,
+      annotations: PREPARE_ANNOTATIONS,
+      destructive: true,
+      presets: ['mail'],
+      backends: ['graph', 'applescript'],
+      handler: async (ctx, params) => jsonResult(await orgToolsFor(ctx).prepareDeleteFolder(params)),
+    }),
+    defineTool({
+      name: 'confirm_delete_folder',
+      description: 'Confirm deletion of a folder using a token from prepare_delete_folder',
+      input: ConfirmDeleteFolderInput,
+      annotations: CONFIRM_ANNOTATIONS,
+      destructive: true,
+      presets: ['mail'],
+      backends: ['graph', 'applescript'],
+      handler: async (ctx, params) => jsonResult(await orgToolsFor(ctx).confirmDeleteFolder(params)),
+    }),
+    defineTool({
+      name: 'prepare_empty_folder',
+      description: 'Prepare to empty a mail folder (delete all messages). Returns a preview and approval token. Call confirm_empty_folder to execute.',
+      input: PrepareEmptyFolderInput,
+      annotations: PREPARE_ANNOTATIONS,
+      destructive: true,
+      presets: ['mail'],
+      backends: ['graph', 'applescript'],
+      handler: async (ctx, params) => jsonResult(await orgToolsFor(ctx).prepareEmptyFolder(params)),
+    }),
+    defineTool({
+      name: 'confirm_empty_folder',
+      description: 'Confirm emptying a folder using a token from prepare_empty_folder',
+      input: ConfirmEmptyFolderInput,
+      annotations: CONFIRM_ANNOTATIONS,
+      destructive: true,
+      presets: ['mail'],
+      backends: ['graph', 'applescript'],
+      handler: async (ctx, params) => jsonResult(await orgToolsFor(ctx).confirmEmptyFolder(params)),
+    }),
+
+    // ---- Low-risk modifications ----
+    defineTool({
+      name: 'mark_email_read',
+      description: 'Mark an email as read',
+      input: MarkEmailReadInput,
+      annotations: WRITE_ANNOTATIONS,
+      destructive: false,
+      presets: ['mail'],
+      backends: ['graph', 'applescript'],
+      handler: async (ctx, params) => jsonResult(await orgToolsFor(ctx).markEmailRead(params)),
+    }),
+    defineTool({
+      name: 'mark_email_unread',
+      description: 'Mark an email as unread',
+      input: MarkEmailUnreadInput,
+      annotations: WRITE_ANNOTATIONS,
+      destructive: false,
+      presets: ['mail'],
+      backends: ['graph', 'applescript'],
+      handler: async (ctx, params) => jsonResult(await orgToolsFor(ctx).markEmailUnread(params)),
+    }),
+    defineTool({
+      name: 'set_email_flag',
+      description: 'Set a follow-up flag on an email',
+      input: SetEmailFlagInput,
+      annotations: WRITE_ANNOTATIONS,
+      destructive: false,
+      presets: ['mail'],
+      backends: ['graph', 'applescript'],
+      handler: async (ctx, params) => jsonResult(await orgToolsFor(ctx).setEmailFlag(params)),
+    }),
+    defineTool({
+      name: 'clear_email_flag',
+      description: 'Clear the follow-up flag from an email',
+      input: ClearEmailFlagInput,
+      annotations: WRITE_ANNOTATIONS,
+      destructive: false,
+      presets: ['mail'],
+      backends: ['graph', 'applescript'],
+      handler: async (ctx, params) => jsonResult(await orgToolsFor(ctx).clearEmailFlag(params)),
+    }),
+    defineTool({
+      name: 'set_email_categories',
+      description: 'Set categories on an email (replaces existing categories)',
+      input: SetEmailCategoriesInput,
+      annotations: WRITE_ANNOTATIONS,
+      destructive: false,
+      presets: ['mail'],
+      backends: ['graph', 'applescript'],
+      handler: async (ctx, params) => jsonResult(await orgToolsFor(ctx).setEmailCategories(params)),
+    }),
+    defineTool({
+      name: 'set_email_importance',
+      description: 'Set email importance/priority level (Graph API)',
+      input: SetEmailImportanceInput,
+      annotations: WRITE_ANNOTATIONS,
+      destructive: false,
+      presets: ['mail'],
+      backends: ['graph', 'applescript'],
+      handler: async (ctx, params) => jsonResult(await orgToolsFor(ctx).setEmailImportance(params)),
+    }),
+
+    // ---- Non-destructive folder operations ----
+    defineTool({
+      name: 'create_folder',
+      description: 'Create a new mail folder',
+      input: CreateFolderInput,
+      annotations: WRITE_ANNOTATIONS,
+      destructive: false,
+      presets: ['mail'],
+      backends: ['graph', 'applescript'],
+      handler: async (ctx, params) => jsonResult(await orgToolsFor(ctx).createFolder(params)),
+    }),
+    defineTool({
+      name: 'rename_folder',
+      description: 'Rename a mail folder',
+      input: RenameFolderInput,
+      annotations: WRITE_ANNOTATIONS,
+      destructive: false,
+      presets: ['mail'],
+      backends: ['graph', 'applescript'],
+      handler: async (ctx, params) => jsonResult(await orgToolsFor(ctx).renameFolder(params)),
+    }),
+    defineTool({
+      name: 'move_folder',
+      description: 'Move a mail folder under a different parent',
+      input: MoveFolderInput,
+      annotations: WRITE_ANNOTATIONS,
+      destructive: false,
+      presets: ['mail'],
+      backends: ['graph', 'applescript'],
+      handler: async (ctx, params) => jsonResult(await orgToolsFor(ctx).moveFolder(params)),
+    }),
+  ];
 }
