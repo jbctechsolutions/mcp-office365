@@ -86,7 +86,7 @@ import { PlannerVisualizationTools } from './tools/planner-visualization.js';
 import { SharePointTools } from './tools/sharepoint.js';
 import { ApprovalTokenManager } from './approval/index.js';
 import {
-  wrapError,
+  toErrorEnvelope,
   OutlookNotRunningError,
 } from './utils/errors.js';
 
@@ -391,11 +391,12 @@ export function createServer(options: ServerOptions = {}): Server {
         isError: true,
       } satisfies CallToolResult;
     } catch (error) {
-      const wrappedError = wrapError(error, 'An error occurred');
-      const message = `${wrappedError.code}: ${wrappedError.message}`;
+      // D10: every failure surfaces as a stable typed envelope
+      // ({ code, message, retriable, suggestion }) mapped at this single point.
+      const envelope = toErrorEnvelope(error);
 
       return {
-        content: [{ type: 'text', text: message }],
+        content: [{ type: 'text', text: JSON.stringify(envelope, null, 2) }],
         isError: true,
       } satisfies CallToolResult;
     }
