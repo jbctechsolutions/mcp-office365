@@ -61,11 +61,14 @@ jobs:
         env:
           VERSION_NUM: ${{ steps.version.outputs.VERSION }}
         run: |
-          # Extract changelog section for this version
-          VERSION="v${VERSION_NUM}"
-
-          # Read changelog and extract the section for this version
-          CHANGELOG=$(awk "/^## \[$VERSION\]/,/^## \[/" CHANGELOG.md | sed '$d')
+          # Extract the "## [VERSION]" section body (Keep-a-Changelog style, no
+          # leading 'v'). Flag-based rather than the awk range operator so the
+          # next-heading terminator can't also match the start heading.
+          CHANGELOG=$(awk -v ver="## [${VERSION_NUM}]" '
+            index($0, ver) == 1 { flag = 1; next }
+            /^## \[/ && flag { flag = 0 }
+            flag { print }
+          ' CHANGELOG.md)
 
           # If changelog section is empty, use a default message
           if [ -z "$CHANGELOG" ]; then

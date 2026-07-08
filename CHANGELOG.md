@@ -7,6 +7,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.0.0] - 2026-07-08
+
+Version 3.0.0 is a major release centered on **reliability, a typed error
+contract, structured search, durable state, and an MCP-native surface**. The
+codebase moved to a single **tool registry** (the 6747-line dispatch monolith is
+gone; `src/index.ts` is now a thin entrypoint). The AppleScript backend is
+**frozen and deprecated** (still functional, no new v3 features; removal targeted
+for v4). Notes tools continue to work.
+
+### ⚠️ Breaking changes — migration matrix
+
+| Area | v2 | v3 | What to change |
+| --- | --- | --- | --- |
+| **Tool errors** | plain text `GRAPH_ERROR: <message>` / `DATABASE_ERROR: <message>` | JSON envelope `{ "code", "message", "retriable", "suggestion" }` on `isError` results | Parse the JSON envelope; branch on the stable `code` (e.g. `AUTH_EXPIRED`, `THROTTLED`, `GRAPH_UNAVAILABLE`, `VALIDATION_ERROR`, `NOT_FOUND`, `READ_ONLY_MODE`) instead of string-prefix matching. |
+| **`search_emails_advanced`** | raw KQL `query: string` (+ `folder_id`) | structured criteria: `from`, `to`, `subject_contains`, `body_contains`, `text`, `received_after`, `received_before`, `has_attachments`, `is_unread`, `importance` | Replace the KQL string with structured params — no KQL to get wrong. `folder_id` removed (search is mailbox-wide; folder scoping returns in a later release). |
+| **Auth failure** | opaque `DATABASE_ERROR: post_request_failed: invalid_grant`, or a hung device-code prompt | typed `AUTH_EXPIRED` envelope with a `Run: npx @jbctechsolutions/mcp-office365 auth` hint | Re-authenticate via the CLI when you see `AUTH_EXPIRED`. First-time device-code auth is unchanged. |
+| **`--read-only`** | excluded only destructive tools | excludes **all** non-read tools (only `readOnlyHint: true` exposed); calling a write returns `READ_ONLY_MODE` | Non-destructive writes (e.g. `create_draft`, `mark_email_read`) are no longer available under `--read-only`. |
+| **Server version** | hardcoded | read from `package.json` | None (informational). |
+
+### Added
+- **Resilient Graph transport** — a middleware chain with jittered retry/backoff on `429` + `502/503/504` honoring `Retry-After`, restricted to idempotent reads (never `sendMail`/writes). Binary downloads (`download_file`, `download_library_file`, meeting recordings, photos) fixed to return bytes; `list_online_meetings` `$top` rejection fixed.
+- **Typed error envelope** — every failure returns `{ code, message, retriable, suggestion }` from a single mapping point, with a stable code vocabulary.
+- **`--preset <names>` and `--read-only` CLI flags** — scope the exposed tool surface (`mail`, `calendar`, `contacts`, `tasks`, `notes`, `teams`, `planner`, `files`, `sharepoint`, `excel`, `people`, `meetings`, or `all`). Every tool now carries MCP annotations.
+- **Durable state store** — SQLite at `~/.mcp-office365/state.db` (WAL, `0700`/`0600` at-rest permissions, account-stamped) backing durable IDs and approvals; degrades to in-memory if unavailable.
+- **Durable two-phase approvals** — approval tokens persist across restarts and windows with a 24h TTL and atomic, idempotent redemption.
+- **Structured email search** — compiled server-side to `$filter` / quoted `$search` / `POST /search/query`, eliminating the #1 KQL-rejection failure class.
+- **Auth resilience** — an expired/revoked session surfaces `AUTH_EXPIRED` (with a re-auth hint) instead of an opaque error or an unwatchable device-code hang.
+- **Durable-ID library** — self-encoding + alias-backed typed tokens with a universal resolver (the foundation; becoming the default ID scheme in a later release).
+
+### Changed
+- Registry-driven architecture: a single `ToolDefinition` source of truth; `src/index.ts` reduced from 6747 to ~440 lines. AppleScript backend frozen + deprecated.
+
+### Deferred to a later release
+- Making durable IDs the default ID scheme (replacing the numeric hash IDs) across all tools.
+- Canonical per-entity schemas with alias coercion + next-action hints.
+- Elicitation confirm mode (`--confirm elicit`).
+- Delta-sync local mirror + `what_changed`.
+
 ## [v2.5.0] - 2026-03-09
 
 ### Added
