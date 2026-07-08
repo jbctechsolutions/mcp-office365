@@ -3094,7 +3094,8 @@ describe('graph/repository', () => {
         expect(repository.getGraphId('folder', 99999)).toBeUndefined();
         expect(repository.getGraphId('message', 99999)).toBeUndefined();
         expect(repository.getGraphId('event', 99999)).toBeUndefined();
-        expect(repository.getGraphId('contact', 99999)).toBeUndefined();
+        // 'contact' was removed from getGraphId in U5b — contacts resolve via
+        // durable ct_ tokens (getContactGraphId), not the numeric idCache.
       });
     });
 
