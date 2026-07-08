@@ -216,6 +216,16 @@ export const CreateEventGraphInput = z.strictObject({
   { message: 'start_date must be before end_date', path: ['start_date'] }
 );
 
+// v3 note (deliberate, Graph-canonical): create_event/update_event advertise the
+// Graph superset schema for both backends. This is a documented breaking change
+// for the frozen AppleScript backend:
+//   - update_event fields use Graph names (subject/start/end/body), not the old
+//     AppleScript names (title/start_date/end_date/description).
+//   - recurrence uses the Graph {pattern, range} shape; AppleScript-only
+//     recurrence that Graph cannot express — monthly-by-date (day_of_month) and
+//     ordinal-monthly (week_of_month/day_of_week_monthly) — is no longer
+//     reachable via these tools. The Graph (default) backend is unaffected.
+// See CHANGELOG / PR for the full migration matrix.
 export const UpdateEventInput = z.strictObject({
   event_id: z.number().int().positive(),
   subject: z.string().optional(),

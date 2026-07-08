@@ -193,12 +193,14 @@ export class AppleCalendarTools {
       ...(params.is_all_day != null && { isAllDay: params.is_all_day }),
     };
 
-    const result = this.calendarManager.updateEvent(params.event_id, updates, params.apply_to ?? 'this_instance');
+    const applyTo = params.apply_to ?? 'this_instance';
+    const result = this.calendarManager.updateEvent(params.event_id, updates, applyTo);
+    const seriesSuffix = applyTo === 'all_in_series' ? ' (entire series)' : '';
 
     return {
       content: [{
         type: 'text',
-        text: `Successfully updated event ${result.id}. Updated fields: ${result.updatedFields.join(', ')}`,
+        text: `Successfully updated event ${result.id}${seriesSuffix}. Updated fields: ${result.updatedFields.join(', ')}`,
       }],
     };
   }
