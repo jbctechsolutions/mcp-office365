@@ -489,14 +489,27 @@ function graphStatusToEnvelope(status: number, message: string): ErrorEnvelope {
   }
 }
 
-/** True when `value` already has the {@link ErrorEnvelope} shape. */
+/** True when `code` is a member of the stable {@link ErrorCode} vocabulary. */
+export function isKnownErrorCode(code: string): code is ErrorCode {
+  return (Object.values(ErrorCode) as string[]).includes(code);
+}
+
+/**
+ * True when `value` already has the {@link ErrorEnvelope} shape *with a known
+ * code*. Requiring a real {@link ErrorCode} (not just any string) means an
+ * unrelated JSON payload that happens to carry `code`/`message`/`retriable`
+ * fields is not mistaken for an envelope by {@link ensureErrorEnvelopeText}.
+ */
 export function isErrorEnvelope(value: unknown): value is ErrorEnvelope {
+  const candidate = value as Partial<Record<keyof ErrorEnvelope, unknown>>;
   return (
     typeof value === 'object' &&
     value !== null &&
-    typeof (value as ErrorEnvelope).code === 'string' &&
-    typeof (value as ErrorEnvelope).message === 'string' &&
-    typeof (value as ErrorEnvelope).retriable === 'boolean'
+    typeof candidate.code === 'string' &&
+    isKnownErrorCode(candidate.code) &&
+    typeof candidate.message === 'string' &&
+    typeof candidate.retriable === 'boolean' &&
+    (candidate.suggestion === undefined || typeof candidate.suggestion === 'string')
   );
 }
 

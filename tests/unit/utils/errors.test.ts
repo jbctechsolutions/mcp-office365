@@ -511,10 +511,22 @@ describe('errors', () => {
     });
 
     it('rejects shapes missing a required field or with wrong types', () => {
-      expect(isErrorEnvelope({ code: 'X', message: 'x' })).toBe(false); // no retriable
+      expect(isErrorEnvelope({ code: 'GRAPH_ERROR', message: 'x' })).toBe(false); // no retriable
       expect(isErrorEnvelope({ code: 1, message: 'x', retriable: false })).toBe(false); // code not string
       expect(isErrorEnvelope(null)).toBe(false);
       expect(isErrorEnvelope('str')).toBe(false);
+    });
+
+    it('rejects an unknown code even when the rest of the shape matches', () => {
+      // A tool payload that happens to carry code/message/retriable fields must
+      // not be mistaken for an envelope.
+      expect(isErrorEnvelope({ code: 'X', message: 'x', retriable: false })).toBe(false);
+    });
+
+    it('rejects a non-string suggestion', () => {
+      expect(
+        isErrorEnvelope({ code: 'GRAPH_ERROR', message: 'x', retriable: false, suggestion: 5 })
+      ).toBe(false);
     });
   });
 
@@ -542,6 +554,14 @@ describe('errors', () => {
       const parsed = JSON.parse(out) as { code: string; message: string };
       expect(parsed.code).toBe(ErrorCode.GRAPH_ERROR);
       expect(parsed.message).toBe('{"foo":1}');
+    });
+
+    it('wraps envelope-shaped JSON whose code is not a known ErrorCode', () => {
+      const payload = '{"code":"X","message":"x","retriable":false}';
+      const out = ensureErrorEnvelopeText(payload);
+      const parsed = JSON.parse(out) as { code: string; message: string };
+      expect(parsed.code).toBe(ErrorCode.GRAPH_ERROR);
+      expect(parsed.message).toBe(payload);
     });
   });
 });

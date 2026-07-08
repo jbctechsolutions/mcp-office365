@@ -412,8 +412,17 @@ export function createServer(options: ServerOptions = {}): Server {
         return normalizeToolResult(registryResult as CallToolResult);
       }
 
+      // An unregistered/filtered-out tool name is a request-validation failure,
+      // not a Graph backend failure — emit VALIDATION_ERROR directly rather than
+      // routing through toErrorEnvelope (which would label it GRAPH_ERROR).
+      const unknownToolEnvelope: ErrorEnvelope = {
+        code: ErrorCode.VALIDATION_ERROR,
+        message: `Unknown tool: ${name}`,
+        retriable: false,
+        suggestion: 'Call ListTools to inspect the available tools for the current backend.',
+      };
       return {
-        content: [{ type: 'text', text: JSON.stringify(toErrorEnvelope(new Error(`Unknown tool: ${name}`)), null, 2) }],
+        content: [{ type: 'text', text: JSON.stringify(unknownToolEnvelope, null, 2) }],
         isError: true,
       } satisfies CallToolResult;
     } catch (error) {
