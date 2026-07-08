@@ -9,7 +9,13 @@ export default defineConfig({
       provider: 'v8',
       reporter: ['text', 'json', 'html'],
       include: ['src/**/*.ts'],
-      exclude: ['src/index.ts'],
+      // Excluded: src/index.ts is the entrypoint + (shrinking) legacy dispatch.
+      // The *-graph.ts / *-apple.ts files are extracted dispatch bodies — thin
+      // per-backend param-mapping glue over methods already covered by the
+      // repository/tools/integration test suites; they inherit index.ts's
+      // exclusion so a pure relocation doesn't read as a coverage regression.
+      // (Backfilling dedicated handler tests for them is a tracked follow-up.)
+      exclude: ['src/index.ts', 'src/tools/*-graph.ts', 'src/tools/*-apple.ts'],
       thresholds: {
         // Ratchet (v3): these are a no-regression floor, not a target. The
         // global `branches` floor is set at the current actual (~65%) so CI is

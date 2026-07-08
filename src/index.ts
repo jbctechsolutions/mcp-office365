@@ -35,7 +35,6 @@ import {
   type ICalendarWriter,
   type ICalendarManager,
   type IMailSender,
-  type RecurrenceConfig,
 } from './applescript/index.js';
 import {
   createGraphRepository,
@@ -55,6 +54,8 @@ import { parseCliCommand, handleAuthCommand, createAuthMutex } from './cli.js';
 const pkg = createRequire(import.meta.url)('../package.json') as { version: string };
 import { createMailTools } from './tools/mail.js';
 import { createCalendarTools } from './tools/calendar.js';
+import { GraphCalendarTools } from './tools/calendar-graph.js';
+import { AppleCalendarTools } from './tools/calendar-apple.js';
 import { createContactsTools } from './tools/contacts.js';
 import { GraphContactsTools, transformContactRow } from './tools/contacts-graph.js';
 import { createTasksTools } from './tools/tasks.js';
@@ -97,12 +98,6 @@ import {
   ListAttachmentsInput,
   DownloadAttachmentInput,
   CheckNewEmailsInput,
-  ListCalendarsInput,
-  ListEventsInput,
-  GetEventInput,
-  SearchEventsInput,
-  CreateEventInput,
-  RespondToEventInput,
   PrepareBatchDeleteEmailsInput,
   PrepareBatchMoveEmailsInput,
   ConfirmBatchOperationInput,
@@ -123,7 +118,6 @@ import {
   AddDraftInlineImageInput,
 } from './tools/index.js';
 import { ApprovalTokenManager, hashEventForApproval, hashContactForApproval, hashTaskForApproval } from './approval/index.js';
-import type { CreateEventResult } from './tools/index.js';
 import {
   wrapError,
   OutlookNotRunningError,
@@ -371,278 +365,6 @@ const TOOLS: Tool[] = [
   },
   // Calendar tools
   {
-    name: 'list_calendars',
-    description: 'List all calendar folders',
-    inputSchema: {
-      type: 'object',
-      properties: {},
-      required: [],
-    },
-  },
-  {
-    name: 'list_events',
-    description: 'List calendar events with optional date range filtering',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        calendar_id: {
-          type: 'number',
-          description: 'Optional calendar folder ID',
-        },
-        start_date: {
-          type: 'string',
-          description: 'Start date filter (ISO 8601 format)',
-        },
-        end_date: {
-          type: 'string',
-          description: 'End date filter (ISO 8601 format)',
-        },
-        limit: {
-          type: 'number',
-          description: 'Maximum number of events to return (1-100, default 50)',
-          default: 50,
-        },
-      },
-      required: [],
-    },
-  },
-  {
-    name: 'get_event',
-    description: 'Get event details',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        event_id: {
-          type: 'number',
-          description: 'The event ID to retrieve',
-        },
-      },
-      required: ['event_id'],
-    },
-  },
-  {
-    name: 'search_events',
-    description: 'Search events by title and/or date range across all calendars',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        query: {
-          type: 'string',
-          description: 'Search query for event titles',
-        },
-        start_date: {
-          type: 'string',
-          description: 'Start date filter in ISO 8601 format (events starting on or after this date)',
-        },
-        end_date: {
-          type: 'string',
-          description: 'End date filter in ISO 8601 format (events ending on or before this date)',
-        },
-        limit: {
-          type: 'number',
-          description: 'Maximum number of events to return (1-100, default 50)',
-          default: 50,
-        },
-      },
-      required: [],
-    },
-  },
-  {
-    name: 'create_event',
-    description: 'Create a new calendar event in Outlook. Supports online Teams meetings via is_online_meeting flag.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        title: {
-          type: 'string',
-          description: 'Event title/subject',
-        },
-        start_date: {
-          type: 'string',
-          description: 'Start date in ISO 8601 UTC format (e.g., 2026-02-03T14:00:00Z). Times are interpreted as UTC.',
-        },
-        end_date: {
-          type: 'string',
-          description: 'End date in ISO 8601 UTC format (e.g., 2026-02-03T15:00:00Z). Times are interpreted as UTC.',
-        },
-        calendar_id: {
-          type: 'number',
-          description: 'Optional calendar ID to create the event in (defaults to primary calendar)',
-        },
-        location: {
-          type: 'string',
-          description: 'Event location',
-        },
-        description: {
-          type: 'string',
-          description: 'Event description/body text',
-        },
-        is_all_day: {
-          type: 'boolean',
-          description: 'Whether this is an all-day event (default false)',
-          default: false,
-        },
-        recurrence: {
-          type: 'object',
-          description: 'Recurrence pattern to make this a repeating event',
-          properties: {
-            frequency: {
-              type: 'string',
-              enum: ['daily', 'weekly', 'monthly', 'yearly'],
-              description: 'How often the event repeats',
-            },
-            interval: {
-              type: 'number',
-              description: 'Number of frequency units between occurrences (default 1)',
-              default: 1,
-            },
-            days_of_week: {
-              type: 'array',
-              items: { type: 'string', enum: ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'] },
-              description: 'Days of the week for weekly recurrence (e.g., ["monday", "wednesday"])',
-            },
-            day_of_month: {
-              type: 'number',
-              description: 'Day of the month for monthly recurrence (e.g., 15)',
-            },
-            week_of_month: {
-              type: 'string',
-              enum: ['first', 'second', 'third', 'fourth', 'last'],
-              description: 'Week of the month for ordinal monthly recurrence (e.g., "third" for 3rd Thursday)',
-            },
-            day_of_week_monthly: {
-              type: 'string',
-              enum: ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'],
-              description: 'Day of week for ordinal monthly recurrence (used with week_of_month)',
-            },
-            end: {
-              type: 'object',
-              description: 'When the recurrence ends (default: no end)',
-              oneOf: [
-                { properties: { type: { const: 'no_end' } }, required: ['type'] },
-                { properties: { type: { const: 'end_date' }, date: { type: 'string', description: 'End date in ISO 8601 format' } }, required: ['type', 'date'] },
-                { properties: { type: { const: 'end_after_count' }, count: { type: 'number', description: 'Number of occurrences' } }, required: ['type', 'count'] },
-              ],
-            },
-          },
-          required: ['frequency'],
-        },
-        is_online_meeting: {
-          type: 'boolean',
-          description: 'Create as online Teams meeting (default false)',
-          default: false,
-        },
-        online_meeting_provider: {
-          type: 'string',
-          enum: ['teamsForBusiness', 'skypeForBusiness', 'skypeForConsumer'],
-          description: 'Online meeting provider (default: teamsForBusiness)',
-        },
-      },
-      required: ['title', 'start_date', 'end_date'],
-    },
-  },
-  {
-    name: 'respond_to_event',
-    description: 'Respond to a meeting invitation (accept, decline, or tentative). Updates your response status and optionally notifies the organizer.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        event_id: {
-          type: 'number',
-          description: 'The event ID to respond to',
-        },
-        response: {
-          type: 'string',
-          enum: ['accept', 'decline', 'tentative'],
-          description: 'Your response to the invitation',
-        },
-        send_response: {
-          type: 'boolean',
-          description: 'Whether to send response to organizer (default true)',
-          default: true,
-        },
-        comment: {
-          type: 'string',
-          description: 'Optional comment to include with response',
-        },
-      },
-      required: ['event_id', 'response'],
-    },
-  },
-  {
-    name: 'delete_event',
-    description: 'Delete a calendar event. For recurring events, you can delete a single instance or the entire series.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        event_id: {
-          type: 'number',
-          description: 'The event ID to delete',
-        },
-        apply_to: {
-          type: 'string',
-          enum: ['this_instance', 'all_in_series'],
-          description: 'For recurring events: delete single instance or entire series (default: this_instance)',
-          default: 'this_instance',
-        },
-      },
-      required: ['event_id'],
-    },
-  },
-  {
-    name: 'update_event',
-    description: 'Update a calendar event. All fields are optional - only specified fields will be updated. Supports online Teams meetings via is_online_meeting flag. For recurring events, you can update a single instance or the entire series.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        event_id: {
-          type: 'number',
-          description: 'The event ID to update',
-        },
-        apply_to: {
-          type: 'string',
-          enum: ['this_instance', 'all_in_series'],
-          description: 'For recurring events: update single instance or entire series (default: this_instance)',
-          default: 'this_instance',
-        },
-        title: {
-          type: 'string',
-          description: 'New event title',
-        },
-        start_date: {
-          type: 'string',
-          description: 'New start date (ISO 8601 UTC format)',
-        },
-        end_date: {
-          type: 'string',
-          description: 'New end date (ISO 8601 UTC format)',
-        },
-        location: {
-          type: 'string',
-          description: 'New location',
-        },
-        description: {
-          type: 'string',
-          description: 'New description',
-        },
-        is_all_day: {
-          type: 'boolean',
-          description: 'Whether event is all day',
-        },
-        is_online_meeting: {
-          type: 'boolean',
-          description: 'Set as online Teams meeting',
-        },
-        online_meeting_provider: {
-          type: 'string',
-          enum: ['teamsForBusiness', 'skypeForBusiness', 'skypeForConsumer'],
-          description: 'Online meeting provider (default: teamsForBusiness)',
-        },
-      },
-      required: ['event_id'],
-    },
-  },
-  {
     name: 'prepare_delete_event',
     description: 'Prepare to delete a calendar event. Returns a preview and approval token. Call confirm_delete_event to execute.',
     inputSchema: {
@@ -663,19 +385,6 @@ const TOOLS: Tool[] = [
         event_id: { type: 'number', description: 'The event ID to delete' },
       },
       required: ['token_id', 'event_id'],
-    },
-  },
-  {
-    name: 'list_event_instances',
-    description: 'List instances of a recurring event within a date range. Instance IDs can be used with update_event and delete_event. (Graph API)',
-    inputSchema: {
-      type: 'object' as const,
-      properties: {
-        event_id: { type: 'number', description: 'Recurring event ID' },
-        start_date: { type: 'string', description: 'Start of date range (ISO 8601, e.g. 2024-01-01T00:00:00Z)' },
-        end_date: { type: 'string', description: 'End of date range (ISO 8601, e.g. 2024-12-31T23:59:59Z)' },
-      },
-      required: ['event_id', 'start_date', 'end_date'],
     },
   },
   // Contact tools
@@ -1807,6 +1516,8 @@ export function createServer(options: ServerOptions = {}): Server {
   let graphContentReaders: GraphContentReaders | null = null;
   let graphContactsTools: GraphContactsTools | null = null;
   let graphTasksTools: GraphTasksTools | null = null;
+  let graphCalendarTools: GraphCalendarTools | null = null;
+  let appleCalendarTools: AppleCalendarTools | null = null;
 
   /**
    * Initializes AppleScript backend.
@@ -1829,6 +1540,7 @@ export function createServer(options: ServerOptions = {}): Server {
     calendarWriter = createCalendarWriter();
     calendarManager = createCalendarManager();
     mailSender = createMailSender();
+    appleCalendarTools = new AppleCalendarTools(calendarTools, calendarWriter, calendarManager);
 
     initialized = true;
   }
@@ -1848,6 +1560,7 @@ export function createServer(options: ServerOptions = {}): Server {
     graphContentReaders = createGraphContentReadersWithClient(graphRepository.getClient());
     graphContactsTools = new GraphContactsTools(graphRepository, graphContentReaders);
     graphTasksTools = new GraphTasksTools(graphRepository, graphContentReaders);
+    graphCalendarTools = new GraphCalendarTools(graphRepository, graphContentReaders);
 
     const adapter = new GraphMailboxAdapter(graphRepository);
     orgTools = createMailboxOrganizationTools(adapter, tokenManager);
@@ -1908,7 +1621,6 @@ export function createServer(options: ServerOptions = {}): Server {
     'confirm_delete_contact_folder',
     'get_contact_photo',
     'set_contact_photo',
-    'list_event_instances',
     'get_mail_tips',
     'get_message_headers',
     'get_message_mime',
@@ -1942,6 +1654,7 @@ export function createServer(options: ServerOptions = {}): Server {
         && excelTools != null
         && graphContactsTools != null
         && graphTasksTools != null
+        && graphCalendarTools != null
         && orgTools != null
           ? {
               rules: rulesTools,
@@ -1961,6 +1674,7 @@ export function createServer(options: ServerOptions = {}): Server {
               excel: excelTools,
               contactsGraph: graphContactsTools,
               tasksGraph: graphTasksTools,
+              calendarGraph: graphCalendarTools,
               mailboxOrg: orgTools,
             }
           : null,
@@ -1969,8 +1683,9 @@ export function createServer(options: ServerOptions = {}): Server {
         && notesTools != null
         && contactsTools != null
         && tasksTools != null
+        && appleCalendarTools != null
         && orgTools != null
-          ? { notes: notesTools, contacts: contactsTools, tasks: tasksTools, mailboxOrg: orgTools }
+          ? { notes: notesTools, contacts: contactsTools, tasks: tasksTools, calendar: appleCalendarTools, mailboxOrg: orgTools }
           : null,
     };
   }
@@ -2376,185 +2091,6 @@ async function handleAppleScriptToolCall(
       return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
     }
 
-    // Calendar tools
-    case 'list_calendars': {
-      const params = ListCalendarsInput.parse(args ?? {});
-      const result = calendarTools.listCalendars(params);
-      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
-    }
-
-    case 'list_events': {
-      const params = ListEventsInput.parse(args ?? {});
-      const result = calendarTools.listEvents(params);
-      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
-    }
-
-    case 'get_event': {
-      const params = GetEventInput.parse(args);
-      const result = calendarTools.getEvent(params);
-      if (result == null) {
-        return { content: [{ type: 'text', text: 'Event not found' }], isError: true };
-      }
-      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
-    }
-
-    case 'search_events': {
-      const params = SearchEventsInput.parse(args);
-      const result = calendarTools.searchEvents(params);
-      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
-    }
-
-    case 'create_event': {
-      if (calendarWriter == null) {
-        return {
-          content: [{ type: 'text', text: 'Event creation is not available' }],
-          isError: true,
-        };
-      }
-      const params = CreateEventInput.parse(args);
-      const writerParams: { title: string; startDate: string; endDate: string; calendarId?: number; location?: string; description?: string; isAllDay?: boolean; recurrence?: RecurrenceConfig } = {
-        title: params.title,
-        startDate: params.start_date,
-        endDate: params.end_date,
-      };
-      if (params.calendar_id != null) writerParams.calendarId = params.calendar_id;
-      if (params.location != null) writerParams.location = params.location;
-      if (params.description != null) writerParams.description = params.description;
-      if (params.is_all_day != null) writerParams.isAllDay = params.is_all_day;
-
-      if (params.recurrence != null) {
-        const rec = params.recurrence;
-        const recConfig: RecurrenceConfig = {
-          frequency: rec.frequency,
-          interval: rec.interval,
-        };
-        const mut = recConfig as { -readonly [K in keyof RecurrenceConfig]: RecurrenceConfig[K] };
-        if (rec.days_of_week != null) mut.daysOfWeek = rec.days_of_week;
-        if (rec.day_of_month != null) mut.dayOfMonth = rec.day_of_month;
-        if (rec.week_of_month != null) mut.weekOfMonth = rec.week_of_month;
-        if (rec.day_of_week_monthly != null) mut.dayOfWeekMonthly = rec.day_of_week_monthly;
-        if (rec.end.type === 'end_date') mut.endDate = rec.end.date;
-        if (rec.end.type === 'end_after_count') mut.endAfterCount = rec.end.count;
-        writerParams.recurrence = recConfig;
-      }
-
-      const created = calendarWriter.createEvent(writerParams);
-
-      const result: CreateEventResult = {
-        id: created.id,
-        title: params.title,
-        start_date: params.start_date,
-        end_date: params.end_date,
-        calendar_id: created.calendarId,
-        location: params.location ?? null,
-        description: params.description ?? null,
-        is_all_day: params.is_all_day,
-        is_recurring: params.recurrence != null,
-      };
-
-      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
-    }
-
-    case 'respond_to_event': {
-      if (calendarManager == null) {
-        return {
-          content: [{ type: 'text', text: 'Event response is not available' }],
-          isError: true,
-        };
-      }
-      const params = RespondToEventInput.parse(args);
-
-      const result = calendarManager.respondToEvent(
-        params.event_id,
-        params.response,
-        params.send_response,
-        params.comment
-      );
-
-      const responseText = params.response === 'accept'
-        ? 'accepted'
-        : params.response === 'decline'
-        ? 'declined'
-        : 'tentatively accepted';
-
-      return {
-        content: [{
-          type: 'text',
-          text: `Successfully ${responseText} event ${result.eventId}`,
-        }],
-      };
-    }
-
-    case 'delete_event': {
-      if (calendarManager == null) {
-        return {
-          content: [{ type: 'text', text: 'Event deletion is not available' }],
-          isError: true,
-        };
-      }
-      const params = args as { event_id: number; apply_to?: 'this_instance' | 'all_in_series' };
-      const applyTo = params.apply_to ?? 'this_instance';
-
-      calendarManager.deleteEvent(params.event_id, applyTo);
-
-      const deleteText = applyTo === 'all_in_series' ? ' (entire series)' : '';
-      return {
-        content: [{
-          type: 'text',
-          text: `Successfully deleted event ${params.event_id}${deleteText}`,
-        }],
-      };
-    }
-
-    case 'update_event': {
-      if (calendarManager == null) {
-        return {
-          content: [{ type: 'text', text: 'Event update is not available' }],
-          isError: true,
-        };
-      }
-      const params = args as {
-        event_id: number;
-        apply_to?: 'this_instance' | 'all_in_series';
-        title?: string;
-        start_date?: string;
-        end_date?: string;
-        location?: string;
-        description?: string;
-        is_all_day?: boolean;
-      };
-
-      // Validate date ordering if both dates are provided
-      if (params.start_date != null && params.end_date != null) {
-        if (new Date(params.start_date).getTime() >= new Date(params.end_date).getTime()) {
-          return {
-            content: [{ type: 'text', text: 'start_date must be before end_date' }],
-            isError: true,
-          };
-        }
-      }
-
-      const applyTo = params.apply_to ?? 'this_instance';
-      const updates: import('./applescript/index.js').EventUpdates = {
-        ...(params.title != null && { title: params.title }),
-        ...(params.start_date != null && { startDate: params.start_date }),
-        ...(params.end_date != null && { endDate: params.end_date }),
-        ...(params.location != null && { location: params.location }),
-        ...(params.description != null && { description: params.description }),
-        ...(params.is_all_day != null && { isAllDay: params.is_all_day }),
-      };
-
-      const result = calendarManager.updateEvent(params.event_id, updates, applyTo);
-
-      const updateText = applyTo === 'all_in_series' ? ' (entire series)' : '';
-      return {
-        content: [{
-          type: 'text',
-          text: `Successfully updated event ${result.id}${updateText}. Updated fields: ${result.updatedFields.join(', ')}`,
-        }],
-      };
-    }
-
     // Contact tools
     // Note tools
     // Email sending tool
@@ -2626,78 +2162,6 @@ async function handleAppleScriptToolCall(
 // Calendar Write — Zod Schemas (Graph API)
 // =============================================================================
 
-const GraphCreateEventInput = z.strictObject({
-  title: z.string().min(1),
-  start_date: z.string().refine((s) => !isNaN(Date.parse(s)), { message: 'Must be a valid ISO 8601 date string' }),
-  end_date: z.string().refine((s) => !isNaN(Date.parse(s)), { message: 'Must be a valid ISO 8601 date string' }),
-  calendar_id: z.number().int().positive().optional(),
-  location: z.string().optional(),
-  description: z.string().optional(),
-  is_all_day: z.boolean().optional().default(false),
-  attendees: z.array(z.object({
-    email: z.string().email(),
-    name: z.string().optional(),
-    type: z.enum(['required', 'optional']).optional(),
-  })).optional(),
-  recurrence: z.object({
-    pattern: z.object({
-      type: z.enum(['daily', 'weekly', 'monthly', 'yearly']),
-      interval: z.number().int().positive(),
-      daysOfWeek: z.array(z.string()).optional(),
-    }),
-    range: z.object({
-      type: z.enum(['endDate', 'noEnd', 'numbered']),
-      startDate: z.string(),
-      endDate: z.string().optional(),
-      numberOfOccurrences: z.number().int().positive().optional(),
-    }),
-  }).optional(),
-  is_online_meeting: z.boolean().optional().describe('Create as online Teams meeting'),
-  online_meeting_provider: z.enum(['teamsForBusiness', 'skypeForBusiness', 'skypeForConsumer']).optional().describe('Online meeting provider (default: teamsForBusiness)'),
-}).refine(
-  (data) => new Date(data.start_date).getTime() < new Date(data.end_date).getTime(),
-  { message: 'start_date must be before end_date', path: ['start_date'] }
-);
-
-const UpdateEventInput = z.strictObject({
-  event_id: z.number().int().positive(),
-  subject: z.string().optional(),
-  start: z.string().optional(),
-  end: z.string().optional(),
-  timezone: z.string().optional(),
-  location: z.string().optional(),
-  body: z.string().optional(),
-  body_type: z.enum(['text', 'html']).optional(),
-  attendees: z.array(z.object({
-    email: z.string().email(),
-    name: z.string().optional(),
-    type: z.enum(['required', 'optional']).optional(),
-  })).optional(),
-  is_all_day: z.boolean().optional(),
-  recurrence: z.object({
-    pattern: z.object({
-      type: z.enum(['daily', 'weekly', 'monthly', 'yearly']),
-      interval: z.number().int().positive(),
-      daysOfWeek: z.array(z.string()).optional(),
-    }),
-    range: z.object({
-      type: z.enum(['endDate', 'noEnd', 'numbered']),
-      startDate: z.string(),
-      endDate: z.string().optional(),
-      numberOfOccurrences: z.number().int().positive().optional(),
-    }),
-  }).optional(),
-  is_online_meeting: z.boolean().optional().describe('Create as online Teams meeting'),
-  online_meeting_provider: z.enum(['teamsForBusiness', 'skypeForBusiness', 'skypeForConsumer']).optional().describe('Online meeting provider (default: teamsForBusiness)'),
-});
-
-const RespondToEventGraphInput = z.strictObject({
-  event_id: z.number().int().positive(),
-  response: z.enum(['accept', 'decline', 'tentative']),
-  send_response: z.boolean().default(true),
-  comment: z.string().optional(),
-});
-
 const PrepareDeleteEventInput = z.strictObject({
   event_id: z.number().int().positive(),
 });
@@ -2705,12 +2169,6 @@ const PrepareDeleteEventInput = z.strictObject({
 const ConfirmDeleteEventInput = z.strictObject({
   token_id: z.uuid(),
   event_id: z.number().int().positive(),
-});
-
-const ListEventInstancesInput = z.strictObject({
-  event_id: z.number().int().positive().describe('Recurring event ID'),
-  start_date: z.string().describe('Start of date range (ISO 8601, e.g. 2024-01-01T00:00:00Z)'),
-  end_date: z.string().describe('End of date range (ISO 8601, e.g. 2024-12-31T23:59:59Z)'),
 });
 
 // =============================================================================
@@ -3046,187 +2504,6 @@ async function handleGraphToolCall(
         const params = DownloadAttachmentInput.parse(args);
         const result = await repository.downloadAttachmentAsync(params.attachment_index);
         return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
-      }
-
-      // Calendar tools
-      case 'list_calendars': {
-        const calendars = await repository.listCalendarsAsync();
-        const result = { calendars: calendars.map(transformFolderRow) };
-        return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
-      }
-
-      case 'list_events': {
-        const params = ListEventsInput.parse(args ?? {});
-        let events;
-        if (params.start_date != null && params.end_date != null) {
-          const startTs = Math.floor(new Date(params.start_date).getTime() / 1000);
-          const endTs = Math.floor(new Date(params.end_date).getTime() / 1000);
-          events = await repository.listEventsByDateRangeAsync(startTs, endTs, params.limit);
-        } else if (params.calendar_id != null) {
-          events = await repository.listEventsByFolderAsync(params.calendar_id, params.limit);
-        } else {
-          events = await repository.listEventsAsync(params.limit);
-        }
-        const result = { events: events.map(transformGraphEventRow) };
-        return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
-      }
-
-      case 'get_event': {
-        const params = GetEventInput.parse(args);
-        const event = await repository.getEventAsync(params.event_id);
-        if (event == null) {
-          return { content: [{ type: 'text', text: 'Event not found' }], isError: true };
-        }
-
-        const details = await contentReaders.event.readEventDetailsAsync(event.dataFilePath);
-        const result = { ...transformGraphEventRow(event), ...details };
-        return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
-      }
-
-      case 'search_events': {
-        const params = SearchEventsInput.parse(args);
-        // Graph doesn't have direct event search, so we filter client-side
-        const allEvents = await repository.listEventsAsync(1000);
-        const events = allEvents.filter((e) => {
-          const row = transformGraphEventRow(e);
-          // Filter by title if query provided
-          if (params.query != null) {
-            const title = row.title?.toLowerCase() ?? '';
-            if (!title.includes(params.query.toLowerCase())) return false;
-          }
-          // Filter by date range if provided
-          if (params.start_date != null && row.startDate != null) {
-            if (new Date(row.startDate) < new Date(params.start_date)) return false;
-          }
-          if (params.end_date != null && row.endDate != null) {
-            if (new Date(row.endDate) > new Date(params.end_date)) return false;
-          }
-          return true;
-        });
-        const result = { events: events.slice(0, params.limit).map(transformGraphEventRow) };
-        return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
-      }
-
-      case 'create_event': {
-        const params = GraphCreateEventInput.parse(args);
-        const createParams: Parameters<typeof repository.createEventAsync>[0] = {
-          subject: params.title,
-          start: params.start_date,
-          end: params.end_date,
-        };
-        if (params.location != null) createParams.location = params.location;
-        if (params.description != null) createParams.body = params.description;
-        createParams.bodyType = 'text';
-        if (params.is_all_day) createParams.isAllDay = params.is_all_day;
-        if (params.attendees != null) {
-          createParams.attendees = params.attendees.map((a) => {
-            const att: { email: string; name?: string; type?: 'required' | 'optional' } = { email: a.email };
-            if (a.name != null) att.name = a.name;
-            if (a.type != null) att.type = a.type;
-            return att;
-          });
-        }
-        if (params.recurrence != null) {
-          const rec = params.recurrence;
-          const pattern: { type: 'daily' | 'weekly' | 'monthly' | 'yearly'; interval: number; daysOfWeek?: string[] } = {
-            type: rec.pattern.type,
-            interval: rec.pattern.interval,
-          };
-          if (rec.pattern.daysOfWeek != null) pattern.daysOfWeek = rec.pattern.daysOfWeek;
-          const range: { type: 'endDate' | 'noEnd' | 'numbered'; startDate: string; endDate?: string; numberOfOccurrences?: number } = {
-            type: rec.range.type,
-            startDate: rec.range.startDate,
-          };
-          if (rec.range.endDate != null) range.endDate = rec.range.endDate;
-          if (rec.range.numberOfOccurrences != null) range.numberOfOccurrences = rec.range.numberOfOccurrences;
-          createParams.recurrence = { pattern, range };
-        }
-        if (params.calendar_id != null) createParams.calendarId = params.calendar_id;
-        if (params.is_online_meeting != null) createParams.is_online_meeting = params.is_online_meeting;
-        if (params.online_meeting_provider != null) createParams.online_meeting_provider = params.online_meeting_provider;
-        const numericId = await repository.createEventAsync(createParams);
-
-        const result: CreateEventResult = {
-          id: numericId,
-          title: params.title,
-          start_date: params.start_date,
-          end_date: params.end_date,
-          calendar_id: params.calendar_id ?? null,
-          location: params.location ?? null,
-          description: params.description ?? null,
-          is_all_day: params.is_all_day,
-          is_recurring: params.recurrence != null,
-        };
-        return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
-      }
-
-      case 'update_event': {
-        const params = UpdateEventInput.parse(args);
-        const updates: Record<string, unknown> = {};
-        const tz = params.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
-
-        if (params.subject != null) updates.subject = params.subject;
-        if (params.start != null) updates.start = { dateTime: params.start, timeZone: tz };
-        if (params.end != null) updates.end = { dateTime: params.end, timeZone: tz };
-        if (params.location != null) updates.location = { displayName: params.location };
-        if (params.body != null) {
-          updates.body = {
-            contentType: params.body_type ?? 'text',
-            content: params.body,
-          };
-        }
-        if (params.is_all_day != null) updates.isAllDay = params.is_all_day;
-        if (params.attendees != null) {
-          updates.attendees = params.attendees.map((a) => ({
-            emailAddress: { address: a.email, name: a.name },
-            type: a.type ?? 'required',
-          }));
-        }
-        if (params.recurrence != null) updates.recurrence = params.recurrence;
-        if (params.is_online_meeting != null) {
-          updates.isOnlineMeeting = params.is_online_meeting;
-          if (params.is_online_meeting) {
-            updates.onlineMeetingProvider = params.online_meeting_provider ?? 'teamsForBusiness';
-          }
-        }
-
-        await repository.updateEventAsync(params.event_id, updates);
-        return {
-          content: [{ type: 'text', text: `Successfully updated event ${params.event_id}` }],
-        };
-      }
-
-      case 'respond_to_event': {
-        const params = RespondToEventGraphInput.parse(args);
-        await repository.respondToEventAsync(
-          params.event_id,
-          params.response,
-          params.send_response,
-          params.comment
-        );
-        const responseText = params.response === 'accept'
-          ? 'accepted'
-          : params.response === 'decline'
-          ? 'declined'
-          : 'tentatively accepted';
-        return {
-          content: [{ type: 'text', text: `Successfully ${responseText} event ${params.event_id}` }],
-        };
-      }
-
-      case 'delete_event': {
-        // For Graph API, direct delete_event is also supported (for AppleScript compatibility)
-        const params = PrepareDeleteEventInput.parse(args);
-        await repository.deleteEventAsync(params.event_id);
-        return {
-          content: [{ type: 'text', text: `Successfully deleted event ${params.event_id}` }],
-        };
-      }
-
-      case 'list_event_instances': {
-        const params = ListEventInstancesInput.parse(args);
-        const instances = await repository.listEventInstancesAsync(params.event_id, params.start_date, params.end_date);
-        return { content: [{ type: 'text', text: JSON.stringify({ instances: instances.map(transformGraphEventRow), count: instances.length }, null, 2) }] };
       }
 
       case 'prepare_delete_event': {

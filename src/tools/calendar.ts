@@ -13,6 +13,24 @@ import { z } from 'zod';
 import type { IRepository, EventRow, FolderRow } from '../database/repository.js';
 import type { CalendarFolder, EventSummary, Event, Attendee } from '../types/index.js';
 import { appleTimestampToIso, isoToAppleTimestamp } from '../utils/dates.js';
+import { defineTool } from '../registry/define-tool.js';
+import { requireGraphToolset, requireAppleScriptToolset } from '../registry/context.js';
+import type { ToolDefinition } from '../registry/types.js';
+import type { GraphCalendarTools } from './calendar-graph.js';
+import type { AppleCalendarTools } from './calendar-apple.js';
+
+// Calendar is a dual-backend domain: the AppleScript backend serves it via
+// AppleCalendarTools; the Graph backend serves it via GraphCalendarTools. The
+// advertised (canonical) write schemas are Graph-shaped — Graph is the default
+// backend and the AppleScript backend is frozen and adapts.
+declare module '../registry/types.js' {
+  interface GraphToolsets {
+    calendarGraph: GraphCalendarTools;
+  }
+  interface AppleScriptToolsets {
+    calendar: AppleCalendarTools;
+  }
+}
 
 // =============================================================================
 // Input Schemas
@@ -149,6 +167,87 @@ export const CreateEventInput = z.strictObject({
   { message: 'start_date must be before end_date', path: ['start_date'] }
 );
 
+// -----------------------------------------------------------------------------
+// Canonical (advertised) write schemas — Graph-shaped.
+//
+// The two backends historically parsed different schemas for writes. The Graph
+// schema is the canonical advertised input for each tool; the AppleScript
+// backend receives the superset params and maps only the fields it supports.
+// -----------------------------------------------------------------------------
+
+const graphIsoDateString = z
+  .string()
+  .refine((s) => !isNaN(Date.parse(s)), { message: 'Must be a valid ISO 8601 date string' });
+
+const GraphRecurrenceInput = z.object({
+  pattern: z.object({
+    type: z.enum(['daily', 'weekly', 'monthly', 'yearly']),
+    interval: z.number().int().positive(),
+    daysOfWeek: z.array(z.string()).optional(),
+  }),
+  range: z.object({
+    type: z.enum(['endDate', 'noEnd', 'numbered']),
+    startDate: z.string(),
+    endDate: z.string().optional(),
+    numberOfOccurrences: z.number().int().positive().optional(),
+  }),
+});
+
+const GraphAttendeesInput = z.array(z.object({
+  email: z.string().email(),
+  name: z.string().optional(),
+  type: z.enum(['required', 'optional']).optional(),
+})).optional();
+
+export const CreateEventGraphInput = z.strictObject({
+  title: z.string().min(1),
+  start_date: graphIsoDateString,
+  end_date: graphIsoDateString,
+  calendar_id: z.number().int().positive().optional(),
+  location: z.string().optional(),
+  description: z.string().optional(),
+  is_all_day: z.boolean().optional().default(false),
+  attendees: GraphAttendeesInput,
+  recurrence: GraphRecurrenceInput.optional(),
+  is_online_meeting: z.boolean().optional().describe('Create as online Teams meeting'),
+  online_meeting_provider: z.enum(['teamsForBusiness', 'skypeForBusiness', 'skypeForConsumer']).optional().describe('Online meeting provider (default: teamsForBusiness)'),
+}).refine(
+  (data) => new Date(data.start_date).getTime() < new Date(data.end_date).getTime(),
+  { message: 'start_date must be before end_date', path: ['start_date'] }
+);
+
+export const UpdateEventInput = z.strictObject({
+  event_id: z.number().int().positive(),
+  subject: z.string().optional(),
+  start: z.string().optional(),
+  end: z.string().optional(),
+  timezone: z.string().optional(),
+  location: z.string().optional(),
+  body: z.string().optional(),
+  body_type: z.enum(['text', 'html']).optional(),
+  attendees: GraphAttendeesInput,
+  is_all_day: z.boolean().optional(),
+  recurrence: GraphRecurrenceInput.optional(),
+  is_online_meeting: z.boolean().optional().describe('Create as online Teams meeting'),
+  online_meeting_provider: z.enum(['teamsForBusiness', 'skypeForBusiness', 'skypeForConsumer']).optional().describe('Online meeting provider (default: teamsForBusiness)'),
+  apply_to: z.enum(['this_instance', 'all_in_series']).optional().describe(
+    'For recurring events (AppleScript backend): update single instance or entire series (default: this_instance). Ignored by the Graph backend.',
+  ),
+});
+
+export const DeleteEventInput = z.strictObject({
+  event_id: z.number().int().positive().describe('The event ID to delete'),
+  apply_to: z.enum(['this_instance', 'all_in_series']).default('this_instance').describe(
+    'For recurring events: delete single instance or entire series (default: this_instance)'
+  ),
+});
+
+export const ListEventInstancesInput = z.strictObject({
+  event_id: z.number().int().positive().describe('Recurring event ID'),
+  start_date: z.string().describe('Start of date range (ISO 8601, e.g. 2024-01-01T00:00:00Z)'),
+  end_date: z.string().describe('End of date range (ISO 8601, e.g. 2024-12-31T23:59:59Z)'),
+});
+
 // =============================================================================
 // Type Definitions
 // =============================================================================
@@ -160,6 +259,10 @@ export type SearchEventsParams = z.infer<typeof SearchEventsInput>;
 export type CreateEventParams = z.infer<typeof CreateEventInput>;
 export type RecurrenceParams = z.infer<typeof RecurrenceInput>;
 export type RespondToEventParams = z.infer<typeof RespondToEventInput>;
+export type CreateEventGraphParams = z.infer<typeof CreateEventGraphInput>;
+export type UpdateEventParams = z.infer<typeof UpdateEventInput>;
+export type DeleteEventParams = z.infer<typeof DeleteEventInput>;
+export type ListEventInstancesParams = z.infer<typeof ListEventInstancesInput>;
 
 /**
  * Result of creating a calendar event.
@@ -349,4 +452,132 @@ export function createCalendarTools(
   contentReader: IEventContentReader = nullEventContentReader
 ): CalendarTools {
   return new CalendarTools(repository, contentReader);
+}
+
+// =============================================================================
+// Registry Definitions (v3 registry-driven architecture, U2 — dual backend)
+// =============================================================================
+
+/**
+ * Registry tool definitions for the calendar domain. Each handler branches on
+ * the active backend: Graph delegates to GraphCalendarTools; AppleScript
+ * delegates to AppleCalendarTools. Both toolsets return MCP content directly.
+ */
+export function calendarToolDefinitions(): ToolDefinition[] {
+  return [
+    defineTool({
+      name: 'list_calendars',
+      description: 'List all calendar folders',
+      input: ListCalendarsInput,
+      annotations: { readOnlyHint: true },
+      destructive: false,
+      presets: ['calendar'],
+      backends: ['graph', 'applescript'],
+      handler: (ctx) =>
+        ctx.backend === 'graph'
+          ? requireGraphToolset(ctx, 'calendarGraph').listCalendars()
+          : requireAppleScriptToolset(ctx, 'calendar').listCalendars(),
+    }),
+    defineTool({
+      name: 'list_events',
+      description: 'List calendar events with optional date range filtering',
+      input: ListEventsInput,
+      annotations: { readOnlyHint: true },
+      destructive: false,
+      presets: ['calendar'],
+      backends: ['graph', 'applescript'],
+      handler: (ctx, params) =>
+        ctx.backend === 'graph'
+          ? requireGraphToolset(ctx, 'calendarGraph').listEvents(params)
+          : requireAppleScriptToolset(ctx, 'calendar').listEvents(params),
+    }),
+    defineTool({
+      name: 'get_event',
+      description: 'Get event details',
+      input: GetEventInput,
+      annotations: { readOnlyHint: true },
+      destructive: false,
+      presets: ['calendar'],
+      backends: ['graph', 'applescript'],
+      handler: (ctx, params) =>
+        ctx.backend === 'graph'
+          ? requireGraphToolset(ctx, 'calendarGraph').getEvent(params)
+          : requireAppleScriptToolset(ctx, 'calendar').getEvent(params),
+    }),
+    defineTool({
+      name: 'search_events',
+      description: 'Search events by title and/or date range across all calendars',
+      input: SearchEventsInput,
+      annotations: { readOnlyHint: true },
+      destructive: false,
+      presets: ['calendar'],
+      backends: ['graph', 'applescript'],
+      handler: (ctx, params) =>
+        ctx.backend === 'graph'
+          ? requireGraphToolset(ctx, 'calendarGraph').searchEvents(params)
+          : requireAppleScriptToolset(ctx, 'calendar').searchEvents(params),
+    }),
+    defineTool({
+      name: 'create_event',
+      description: 'Create a new calendar event in Outlook. Supports online Teams meetings via is_online_meeting flag.',
+      input: CreateEventGraphInput,
+      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+      destructive: false,
+      presets: ['calendar'],
+      backends: ['graph', 'applescript'],
+      handler: (ctx, params) =>
+        ctx.backend === 'graph'
+          ? requireGraphToolset(ctx, 'calendarGraph').createEvent(params)
+          : requireAppleScriptToolset(ctx, 'calendar').createEvent(params),
+    }),
+    defineTool({
+      name: 'respond_to_event',
+      description: 'Respond to a meeting invitation (accept, decline, or tentative). Updates your response status and optionally notifies the organizer.',
+      input: RespondToEventInput,
+      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+      destructive: false,
+      presets: ['calendar'],
+      backends: ['graph', 'applescript'],
+      handler: (ctx, params) =>
+        ctx.backend === 'graph'
+          ? requireGraphToolset(ctx, 'calendarGraph').respondToEvent(params)
+          : requireAppleScriptToolset(ctx, 'calendar').respondToEvent(params),
+    }),
+    defineTool({
+      name: 'delete_event',
+      description: 'Delete a calendar event. For recurring events, you can delete a single instance or the entire series.',
+      input: DeleteEventInput,
+      annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+      destructive: true,
+      presets: ['calendar'],
+      backends: ['graph', 'applescript'],
+      handler: (ctx, params) =>
+        ctx.backend === 'graph'
+          ? requireGraphToolset(ctx, 'calendarGraph').deleteEvent(params)
+          : requireAppleScriptToolset(ctx, 'calendar').deleteEvent(params),
+    }),
+    defineTool({
+      name: 'update_event',
+      description: 'Update a calendar event. All fields are optional - only specified fields will be updated. Supports online Teams meetings via is_online_meeting flag. For recurring events, you can update a single instance or the entire series.',
+      input: UpdateEventInput,
+      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+      destructive: false,
+      presets: ['calendar'],
+      backends: ['graph', 'applescript'],
+      handler: (ctx, params) =>
+        ctx.backend === 'graph'
+          ? requireGraphToolset(ctx, 'calendarGraph').updateEvent(params)
+          : requireAppleScriptToolset(ctx, 'calendar').updateEvent(params),
+    }),
+    defineTool({
+      name: 'list_event_instances',
+      description: 'List instances of a recurring event within a date range. Instance IDs can be used with update_event and delete_event. (Graph API)',
+      input: ListEventInstancesInput,
+      annotations: { readOnlyHint: true },
+      destructive: false,
+      presets: ['calendar'],
+      backends: ['graph'],
+      handler: (ctx, params) => requireGraphToolset(ctx, 'calendarGraph').listEventInstances(params),
+    }),
+  ];
 }
