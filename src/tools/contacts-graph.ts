@@ -37,7 +37,7 @@ function jsonResult(data: unknown): ToolResult {
  * backend's contact tools.
  */
 export function transformContactRow(row: ContactRow): {
-  id: number;
+  id: string | number;
   displayName: string | null;
   sortName: string | null;
 } {
@@ -133,8 +133,8 @@ export class GraphContactsTools {
       return { content: [{ type: 'text', text: 'Contact not found' }], isError: true };
     }
 
-    const graphId = this.repository.getGraphId('contact', params.contact_id);
-    const graphContact = graphId != null ? await this.repository.getClient().getContact(graphId) : null;
+    const graphId = this.repository.getContactGraphId(params.contact_id);
+    const graphContact = await this.repository.getClient().getContact(graphId);
     const hash = hashContactForApproval({
       id: params.contact_id,
       displayName: graphContact?.displayName ?? null,
@@ -157,8 +157,8 @@ export class GraphContactsTools {
   }
 
   async confirmDeleteContact(params: ConfirmDeleteContactParams): Promise<ToolResult> {
-    const graphId = this.repository.getGraphId('contact', params.contact_id);
-    const graphContact = graphId != null ? await this.repository.getClient().getContact(graphId) : null;
+    const graphId = this.repository.getContactGraphId(params.contact_id);
+    const graphContact = await this.repository.getClient().getContact(graphId);
     const currentHash = hashContactForApproval({
       id: params.contact_id,
       displayName: graphContact?.displayName ?? null,

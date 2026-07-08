@@ -9,16 +9,20 @@
 
 import type * as MicrosoftGraph from '@microsoft/microsoft-graph-types';
 import type { ContactRow } from '../../database/repository.js';
-import { hashStringToNumber, createGraphContentPath } from './utils.js';
+import { mintSelfEncoded } from '../../ids/token.js';
+import { createGraphContentPath } from './utils.js';
 
 /**
- * Maps a Graph Contact to a ContactRow.
+ * Maps a Graph Contact to a ContactRow. The `id` is a durable self-encoding
+ * `ct_` token (U5): it carries the Graph contact id, so it resolves by decode on
+ * any machine and survives a cold state store. An id-less contact (shouldn't
+ * happen for real Graph data) falls back to an empty id.
  */
 export function mapContactToContactRow(contact: MicrosoftGraph.Contact): ContactRow {
   const contactId = contact.id ?? '';
 
   return {
-    id: hashStringToNumber(contactId),
+    id: contactId.length > 0 ? mintSelfEncoded('contact', contactId) : '',
     folderId: 0, // Graph contacts don't have folders in the same way
     displayName: contact.displayName ?? null,
     sortName: contact.surname ?? contact.displayName ?? null,

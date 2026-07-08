@@ -13,6 +13,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   signed-in user across all plans (`GET /me/planner/tasks`). Each task carries
   its own `planId`, so no plan-by-plan enumeration is needed to find "my tasks".
 
+### Changed
+
+- **Durable contact IDs (U5b, Graph backend).** `get_contact` / `list_contacts`
+  / `search_contacts` / `update_contact` / `delete_contact` / contact photos now
+  use durable `ct_…` tokens that carry the immutable Graph id — they resolve on
+  any machine and survive a cold state store (no more in-session numeric-hash
+  cache). Contact id params accept a `ct_` token (Graph) or a numeric id
+  (AppleScript); a numeric id on Graph returns `NUMERIC_ID_UNSUPPORTED`. First
+  entity migrated; the rest follow.
+
 ## [3.0.0] - 2026-07-08
 
 Version 3.0.0 is a major release centered on **reliability, a typed error

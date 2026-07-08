@@ -31,6 +31,10 @@ import {
   hashStringToNumber,
 } from './mappers/index.js';
 import type { DeviceCodeCallback } from './auth/index.js';
+import { currentAccountId } from './auth/index.js';
+import { resolveId } from '../ids/resolver.js';
+import { mintSelfEncoded } from '../ids/token.js';
+import type { StateStore } from '../state/store.js';
 import type { CompiledSearch } from '../search/compiler.js';
 import { downloadAttachment, getDownloadDir } from './attachments.js';
 import type { PlanVisualizationData } from '../visualization/types.js';
@@ -45,7 +49,6 @@ interface IdCache {
   messages: Map<number, string>;
   conversations: Map<number, string>;
   events: Map<number, string>;
-  contacts: Map<number, string>;
   tasks: Map<number, { taskListId: string; taskId: string }>;
   taskLists: Map<number, string>;
   attachments: Map<number, { messageId: string; attachmentId: string }>;
@@ -84,13 +87,14 @@ interface IdCache {
  */
 export class GraphRepository implements IRepository {
   private readonly client: GraphClient;
+  private readonly store: StateStore | undefined;
+  private readonly accountId: () => string;
   private readonly deltaLinks: Map<number, string> = new Map();
   private readonly idCache: IdCache = {
     folders: new Map(),
     messages: new Map(),
     conversations: new Map(),
     events: new Map(),
-    contacts: new Map(),
     tasks: new Map(),
     taskLists: new Map(),
     attachments: new Map(),
@@ -122,8 +126,24 @@ export class GraphRepository implements IRepository {
     libraryDriveItems: new Map(),
   };
 
-  constructor(deviceCodeCallback?: DeviceCodeCallback) {
+  constructor(
+    deviceCodeCallback?: DeviceCodeCallback,
+    store?: StateStore,
+    accountId: () => string = currentAccountId,
+  ) {
     this.client = new GraphClient(deviceCodeCallback);
+    this.store = store;
+    this.accountId = accountId;
+  }
+
+  /**
+   * Resolves any id a tool receives — a durable token, a raw Graph id, or a
+   * legacy numeric id — to a live Graph id (U5). Self-encoding tokens decode with
+   * no store; alias-backed tokens need {@link store}; a numeric id on Graph is
+   * unsupported (D4). Throws a typed error on failure.
+   */
+  private toGraphId(id: string | number): string {
+    return resolveId(id, this.accountId(), this.store).graphId;
   }
 
   // ===========================================================================
@@ -669,15 +689,9 @@ export class GraphRepository implements IRepository {
   }
 
   async listContactsAsync(limit: number, offset: number): Promise<ContactRow[]> {
+    // Rows carry self-encoding `ct_` tokens (the mapper mints them), so there is
+    // no numeric-id cache to populate — the token decodes to the Graph id.
     const contacts = await this.client.listContacts(limit, offset);
-
-    for (const contact of contacts) {
-      if (contact.id != null) {
-        const numericId = hashStringToNumber(contact.id);
-        this.idCache.contacts.set(numericId, contact.id);
-      }
-    }
-
     return contacts.map(mapContactToContactRow);
   }
 
@@ -687,29 +701,22 @@ export class GraphRepository implements IRepository {
 
   async searchContactsAsync(query: string, limit: number): Promise<ContactRow[]> {
     const contacts = await this.client.searchContacts(query, limit);
-
-    for (const contact of contacts) {
-      if (contact.id != null) {
-        const numericId = hashStringToNumber(contact.id);
-        this.idCache.contacts.set(numericId, contact.id);
-      }
-    }
-
     return contacts.map(mapContactToContactRow);
   }
 
-  getContact(_id: number): ContactRow | undefined {
+  getContact(_id: string | number): ContactRow | undefined {
     throw new Error('Use getContactAsync() for Graph repository');
   }
 
-  async getContactAsync(id: number): Promise<ContactRow | undefined> {
-    const graphId = this.idCache.contacts.get(id);
-    if (graphId == null) {
-      return undefined;
-    }
-
+  async getContactAsync(id: string | number): Promise<ContactRow | undefined> {
+    const graphId = this.toGraphId(id);
     const contact = await this.client.getContact(graphId);
     return contact != null ? mapContactToContactRow(contact) : undefined;
+  }
+
+  /** Resolves a contact id (durable `ct_` token or raw Graph id) to its Graph id. */
+  getContactGraphId(id: string | number): string {
+    return this.toGraphId(id);
   }
 
   // ===========================================================================
@@ -749,32 +756,25 @@ export class GraphRepository implements IRepository {
     const graphId = this.idCache.contactFolders.get(folderId);
     if (graphId == null) throw new Error(`Contact folder ID ${folderId} not found in cache. Try searching for or listing the item first to refresh the cache.`);
     const contacts = await this.client.listContactsInFolder(graphId, limit);
-    return contacts.map((c) => {
-      if (c.id != null) {
-        this.idCache.contacts.set(hashStringToNumber(c.id), c.id);
-      }
-      return mapContactToContactRow(c);
-    });
+    return contacts.map(mapContactToContactRow);
   }
 
   // ===========================================================================
   // Contact Photos
   // ===========================================================================
 
-  async getContactPhotoAsync(contactId: number): Promise<{ filePath: string; contentType: string }> {
-    const graphId = this.idCache.contacts.get(contactId);
-    if (graphId == null) throw new Error(`Contact ID ${contactId} not found in cache. Try searching for or listing the item first to refresh the cache.`);
+  async getContactPhotoAsync(contactId: string | number): Promise<{ filePath: string; contentType: string }> {
+    const graphId = this.toGraphId(contactId);
 
     const photoData = await this.client.getContactPhoto(graphId);
     const downloadDir = getDownloadDir();
-    const filePath = path.join(downloadDir, `contact-${contactId}-photo.jpg`);
+    const filePath = path.join(downloadDir, `contact-${hashStringToNumber(graphId)}-photo.jpg`);
     fs.writeFileSync(filePath, Buffer.from(photoData));
     return { filePath, contentType: 'image/jpeg' };
   }
 
-  async setContactPhotoAsync(contactId: number, filePath: string): Promise<void> {
-    const graphId = this.idCache.contacts.get(contactId);
-    if (graphId == null) throw new Error(`Contact ID ${contactId} not found in cache. Try searching for or listing the item first to refresh the cache.`);
+  async setContactPhotoAsync(contactId: string | number, filePath: string): Promise<void> {
+    const graphId = this.toGraphId(contactId);
 
     const photoData = fs.readFileSync(filePath);
     const ext = path.extname(filePath).toLowerCase();
@@ -925,7 +925,7 @@ export class GraphRepository implements IRepository {
   /**
    * Gets the Graph string ID from a numeric ID.
    */
-  getGraphId(type: 'folder' | 'message' | 'event' | 'contact', numericId: number): string | undefined {
+  getGraphId(type: 'folder' | 'message' | 'event', numericId: number): string | undefined {
     switch (type) {
       case 'folder':
         return this.idCache.folders.get(numericId);
@@ -933,8 +933,6 @@ export class GraphRepository implements IRepository {
         return this.idCache.messages.get(numericId);
       case 'event':
         return this.idCache.events.get(numericId);
-      case 'contact':
-        return this.idCache.contacts.get(numericId);
     }
   }
 
@@ -1580,7 +1578,7 @@ export class GraphRepository implements IRepository {
     state?: string;
     postal_code?: string;
     country?: string;
-  }): Promise<number> {
+  }): Promise<string> {
     const graphContact: Record<string, unknown> = {};
     if (params.given_name != null) graphContact.givenName = params.given_name;
     if (params.surname != null) graphContact.surname = params.surname;
@@ -1603,9 +1601,7 @@ export class GraphRepository implements IRepository {
 
     const created = await this.client.createContact(graphContact);
     const graphId = created.id!;
-    const numericId = hashStringToNumber(graphId);
-    this.idCache.contacts.set(numericId, graphId);
-    return numericId;
+    return mintSelfEncoded('contact', graphId);
   }
 
   /**
@@ -1614,9 +1610,8 @@ export class GraphRepository implements IRepository {
    * Looks up the Graph string ID from idCache.contacts, then calls
    * client.updateContact(). Throws if the contact is not cached.
    */
-  async updateContactAsync(contactId: number, updates: Record<string, unknown>): Promise<void> {
-    const graphId = this.idCache.contacts.get(contactId);
-    if (graphId == null) throw new Error(`Contact ID ${contactId} not found in cache. Try searching for or listing the item first to refresh the cache.`);
+  async updateContactAsync(contactId: string | number, updates: Record<string, unknown>): Promise<void> {
+    const graphId = this.toGraphId(contactId);
     await this.client.updateContact(graphId, updates);
   }
 
@@ -1627,11 +1622,9 @@ export class GraphRepository implements IRepository {
    * client.deleteContact(), and removes the entry from idCache.
    * Throws if the contact is not cached.
    */
-  async deleteContactAsync(contactId: number): Promise<void> {
-    const graphId = this.idCache.contacts.get(contactId);
-    if (graphId == null) throw new Error(`Contact ID ${contactId} not found in cache. Try searching for or listing the item first to refresh the cache.`);
+  async deleteContactAsync(contactId: string | number): Promise<void> {
+    const graphId = this.toGraphId(contactId);
     await this.client.deleteContact(graphId);
-    this.idCache.contacts.delete(contactId);
   }
 
   // ===========================================================================
@@ -3570,6 +3563,10 @@ export class GraphRepository implements IRepository {
 /**
  * Creates a Microsoft Graph API repository.
  */
-export function createGraphRepository(deviceCodeCallback?: DeviceCodeCallback): GraphRepository {
-  return new GraphRepository(deviceCodeCallback);
+export function createGraphRepository(
+  deviceCodeCallback?: DeviceCodeCallback,
+  store?: StateStore,
+  accountId?: () => string,
+): GraphRepository {
+  return new GraphRepository(deviceCodeCallback, store, accountId);
 }

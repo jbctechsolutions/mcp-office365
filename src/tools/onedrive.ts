@@ -357,7 +357,7 @@ export class OneDriveTools {
       };
     }
 
-    await this.repo.deleteDriveItemAsync(result.token!.targetId);
+    await this.repo.deleteDriveItemAsync((result.token!.targetId as number));
     return {
       content: [{
         type: 'text' as const,

@@ -278,7 +278,7 @@ export function createServer(options: ServerOptions = {}): Server {
     // fallback. Best-effort — an unresolved account leaves the fallback in place.
     await resolveAccountId();
 
-    graphRepository = createGraphRepository();
+    graphRepository = createGraphRepository(undefined, stateStore, currentAccountId);
     graphContentReaders = createGraphContentReadersWithClient(graphRepository.getClient());
     graphContactsTools = new GraphContactsTools(graphRepository, graphContentReaders, tokenManager);
     graphContactFoldersTools = new GraphContactFoldersTools(graphRepository, tokenManager);

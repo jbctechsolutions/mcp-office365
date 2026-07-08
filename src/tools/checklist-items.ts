@@ -183,7 +183,7 @@ export class ChecklistItemsTools {
       };
     }
 
-    await this.repo.deleteChecklistItemAsync(result.token!.targetId);
+    await this.repo.deleteChecklistItemAsync((result.token!.targetId as number));
     return {
       content: [{
         type: 'text' as const,

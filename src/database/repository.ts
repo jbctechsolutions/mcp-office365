@@ -69,7 +69,9 @@ export interface EventRow {
 }
 
 export interface ContactRow {
-  readonly id: number;
+  // Durable string token (`ct_…`) on the Graph backend (U5); numeric on the
+  // AppleScript/SQLite backend (D4).
+  readonly id: string | number;
   readonly folderId: number;
   readonly displayName: string | null;
   readonly sortName: string | null;
@@ -132,7 +134,7 @@ export interface IRepository {
   // Contacts
   listContacts(limit: number, offset: number): ContactRow[];
   searchContacts(query: string, limit: number): ContactRow[];
-  getContact(id: number): ContactRow | undefined;
+  getContact(id: string | number): ContactRow | undefined;
 
   // Tasks
   listTasks(limit: number, offset: number): TaskRow[];
@@ -367,7 +369,7 @@ export class OutlookRepository implements IRepository {
     });
   }
 
-  getContact(id: number): ContactRow | undefined {
+  getContact(id: string | number): ContactRow | undefined {
     return this.connection.execute((db) => {
       const stmt = db.prepare(queries.GET_CONTACT);
       return stmt.get(id) as ContactRow | undefined;

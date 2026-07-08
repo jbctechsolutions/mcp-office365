@@ -214,7 +214,7 @@ export class ExcelTools {
     const range = metadata['range'] as string;
     const values = metadata['values'] as unknown[][];
 
-    await this.repo.updateWorksheetRangeAsync(result.token!.targetId, worksheetName, range, values);
+    await this.repo.updateWorksheetRangeAsync((result.token!.targetId as number), worksheetName, range, values);
     return {
       content: [{
         type: 'text' as const,

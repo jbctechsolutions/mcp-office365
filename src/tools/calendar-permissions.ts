@@ -160,7 +160,7 @@ export class CalendarPermissionsTools {
       };
     }
 
-    await this.repo.deleteCalendarPermissionAsync(result.token!.targetId);
+    await this.repo.deleteCalendarPermissionAsync((result.token!.targetId as number));
     return {
       content: [{
         type: 'text' as const,
