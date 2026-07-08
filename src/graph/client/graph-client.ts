@@ -14,7 +14,7 @@
  */
 
 import 'isomorphic-fetch';
-import { Client, type PageCollection } from '@microsoft/microsoft-graph-client';
+import { Client, ResponseType, type PageCollection } from '@microsoft/microsoft-graph-client';
 import type * as MicrosoftGraph from '@microsoft/microsoft-graph-types';
 
 import { getAccessToken, type DeviceCodeCallback } from '../auth/index.js';
@@ -690,7 +690,7 @@ export class GraphClient {
     const client = await this.getClient();
     return await client
       .api(`/me/contacts/${contactId}/photo/$value`)
-      .get() as ArrayBuffer;
+      .responseType(ResponseType.ARRAYBUFFER).get() as ArrayBuffer;
   }
 
   /**
@@ -1898,7 +1898,7 @@ export class GraphClient {
 
   async getUserPhoto(identifier: string): Promise<ArrayBuffer> {
     const client = await this.getClient();
-    return await client.api(`/users/${identifier}/photo/$value`).get() as ArrayBuffer;
+    return await client.api(`/users/${identifier}/photo/$value`).responseType(ResponseType.ARRAYBUFFER).get() as ArrayBuffer;
   }
 
   async getUserPresence(identifier: string): Promise<MicrosoftGraph.Presence> {
@@ -1940,11 +1940,11 @@ export class GraphClient {
 
   async listOnlineMeetings(limit: number = 20): Promise<GraphEntity[]> {
     const client = await this.getClient();
+    // Graph rejects $top on /me/onlineMeetings, so limit client-side.
     const response = await client.api('/me/onlineMeetings')
-      .top(limit)
       .orderby('startDateTime desc')
       .get() as GraphCollectionResponse<GraphEntity>;
-    return response.value;
+    return response.value.slice(0, limit);
   }
 
   async getOnlineMeeting(meetingId: string): Promise<GraphEntity> {
@@ -1960,7 +1960,7 @@ export class GraphClient {
 
   async getMeetingRecordingContent(meetingId: string, recordingId: string): Promise<ArrayBuffer> {
     const client = await this.getClient();
-    return await client.api(`/me/onlineMeetings/${meetingId}/recordings/${recordingId}/content`).get() as ArrayBuffer;
+    return await client.api(`/me/onlineMeetings/${meetingId}/recordings/${recordingId}/content`).responseType(ResponseType.ARRAYBUFFER).get() as ArrayBuffer;
   }
 
   async listMeetingTranscripts(meetingId: string): Promise<GraphEntity[]> {
@@ -2046,7 +2046,7 @@ export class GraphClient {
 
   async downloadDriveItem(itemId: string): Promise<ArrayBuffer> {
     const client = await this.getClient();
-    return await client.api(`/me/drive/items/${itemId}/content`).get() as ArrayBuffer;
+    return await client.api(`/me/drive/items/${itemId}/content`).responseType(ResponseType.ARRAYBUFFER).get() as ArrayBuffer;
   }
 
   async uploadDriveItem(parentPath: string, fileName: string, content: Buffer): Promise<GraphEntity> {
@@ -2132,7 +2132,7 @@ export class GraphClient {
    */
   async downloadLibraryFile(driveId: string, itemId: string): Promise<ArrayBuffer> {
     const client = await this.getClient();
-    return await client.api(`/drives/${driveId}/items/${itemId}/content`).get() as ArrayBuffer;
+    return await client.api(`/drives/${driveId}/items/${itemId}/content`).responseType(ResponseType.ARRAYBUFFER).get() as ArrayBuffer;
   }
 }
 
