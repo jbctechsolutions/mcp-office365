@@ -29,6 +29,10 @@ declare module '../registry/types.js' {
 
 export const ListTaskListsInput = z.strictObject({});
 
+export const CreateTaskListInput = z.strictObject({
+  display_name: z.string().min(1).describe('Name for the new task list'),
+});
+
 export const RenameTaskListInput = z.strictObject({
   task_list_id: z.number().int().positive().describe('Task list ID'),
   name: z.string().min(1).describe('New name for the task list'),
@@ -47,6 +51,7 @@ export const ConfirmDeleteTaskListInput = z.strictObject({
 // Type Exports
 // =============================================================================
 
+export type CreateTaskListParams = z.infer<typeof CreateTaskListInput>;
 export type RenameTaskListParams = z.infer<typeof RenameTaskListInput>;
 export type PrepareDeleteTaskListParams = z.infer<typeof PrepareDeleteTaskListInput>;
 export type ConfirmDeleteTaskListParams = z.infer<typeof ConfirmDeleteTaskListInput>;
@@ -71,6 +76,11 @@ export class GraphTaskListsTools {
   async listTaskLists(): Promise<ToolResult> {
     const lists = await this.repository.listTaskListsAsync();
     return jsonResult({ task_lists: lists });
+  }
+
+  async createTaskList(params: CreateTaskListParams): Promise<ToolResult> {
+    const numericId = await this.repository.createTaskListAsync(params.display_name);
+    return jsonResult({ id: numericId, display_name: params.display_name, status: 'created' });
   }
 
   async renameTaskList(params: RenameTaskListParams): Promise<ToolResult> {
@@ -132,6 +142,16 @@ export function taskListsToolDefinitions(): ToolDefinition[] {
       presets: ['tasks'],
       backends: ['graph'],
       handler: (ctx) => tools(ctx).listTaskLists(),
+    }),
+    defineTool({
+      name: 'create_task_list',
+      description: 'Create a new task list',
+      input: CreateTaskListInput,
+      annotations: { readOnlyHint: false, destructiveHint: false },
+      destructive: false,
+      presets: ['tasks'],
+      backends: ['graph'],
+      handler: (ctx, params) => tools(ctx).createTaskList(params),
     }),
     defineTool({
       name: 'rename_task_list',

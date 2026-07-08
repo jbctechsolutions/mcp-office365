@@ -783,11 +783,10 @@ const WRITE_ANNOTATIONS = { readOnlyHint: false, destructiveHint: false, openWor
  * resolves the shared MailboxOrganizationTools instance for the active backend
  * and wraps its raw result to match the pre-registry dispatch behavior exactly.
  *
- * Note: the batch tools (prepare_batch_delete_emails, prepare_batch_move_emails,
- * confirm_batch_operation) are intentionally NOT migrated here — their prepare_
- * halves pair with confirm_batch_operation rather than a 1:1 confirm_batch_*
- * tool, which the registry's prepare/confirm invariant forbids. They remain in
- * the legacy dispatch.
+ * Note: the batch tools (prepare_batch_delete_emails, prepare_batch_move_emails)
+ * pair many-to-one with a single confirm_batch_operation rather than a 1:1
+ * confirm_batch_* tool. The contract harness's prepare/confirm invariant carries
+ * an explicit exception for this batch pairing.
  */
 export function mailboxOrganizationToolDefinitions(): ToolDefinition[] {
   return [
@@ -911,6 +910,38 @@ export function mailboxOrganizationToolDefinitions(): ToolDefinition[] {
       presets: ['mail'],
       backends: ['graph', 'applescript'],
       handler: async (ctx, params) => jsonResult(await orgToolsFor(ctx).confirmEmptyFolder(params)),
+    }),
+
+    // ---- Batch destructive operations (many-to-one confirm) ----
+    defineTool({
+      name: 'prepare_batch_delete_emails',
+      description: 'Prepare to delete multiple emails. Returns individual tokens per email so you can selectively confirm. Call confirm_batch_operation to execute.',
+      input: PrepareBatchDeleteEmailsInput,
+      annotations: PREPARE_ANNOTATIONS,
+      destructive: true,
+      presets: ['mail'],
+      backends: ['graph', 'applescript'],
+      handler: async (ctx, params) => jsonResult(await orgToolsFor(ctx).prepareBatchDeleteEmails(params)),
+    }),
+    defineTool({
+      name: 'prepare_batch_move_emails',
+      description: 'Prepare to move multiple emails. Returns individual tokens per email so you can selectively confirm. Call confirm_batch_operation to execute.',
+      input: PrepareBatchMoveEmailsInput,
+      annotations: PREPARE_ANNOTATIONS,
+      destructive: true,
+      presets: ['mail'],
+      backends: ['graph', 'applescript'],
+      handler: async (ctx, params) => jsonResult(await orgToolsFor(ctx).prepareBatchMoveEmails(params)),
+    }),
+    defineTool({
+      name: 'confirm_batch_operation',
+      description: 'Confirm a batch operation using tokens from prepare_batch_delete_emails or prepare_batch_move_emails. You may selectively confirm by omitting tokens.',
+      input: ConfirmBatchOperationInput,
+      annotations: CONFIRM_ANNOTATIONS,
+      destructive: true,
+      presets: ['mail'],
+      backends: ['graph', 'applescript'],
+      handler: async (ctx, params) => jsonResult(await orgToolsFor(ctx).confirmBatchOperation(params)),
     }),
 
     // ---- Low-risk modifications ----

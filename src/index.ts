@@ -21,7 +21,6 @@ import {
   ListToolsRequestSchema,
   type Tool,
 } from '@modelcontextprotocol/sdk/types.js';
-import { z } from 'zod';
 
 import {
   createAppleScriptRepository,
@@ -64,6 +63,8 @@ import { GraphContactFoldersTools } from './tools/contact-folders.js';
 import { createTasksTools } from './tools/tasks.js';
 import { GraphTasksTools } from './tools/tasks-graph.js';
 import { GraphTaskListsTools } from './tools/task-lists.js';
+import { GraphMailboxSettingsTools } from './tools/mailbox-settings.js';
+import { AccountsTools } from './tools/accounts.js';
 import { createNotesTools } from './tools/notes.js';
 import { createMailboxOrganizationTools } from './tools/mailbox-organization.js';
 import { createMailSendTools } from './tools/mail-send.js';
@@ -83,15 +84,7 @@ import { OneDriveTools } from './tools/onedrive.js';
 import { PlannerTools } from './tools/planner.js';
 import { PlannerVisualizationTools } from './tools/planner-visualization.js';
 import { SharePointTools } from './tools/sharepoint.js';
-import {
-  SearchEmailsAdvancedInput,
-  ListConversationInput,
-  CheckNewEmailsInput,
-  PrepareBatchDeleteEmailsInput,
-  PrepareBatchMoveEmailsInput,
-  ConfirmBatchOperationInput,
-} from './tools/index.js';
-import { ApprovalTokenManager, hashEventForApproval } from './approval/index.js';
+import { ApprovalTokenManager } from './approval/index.js';
 import {
   wrapError,
   OutlookNotRunningError,
@@ -120,145 +113,6 @@ function shouldUseGraphApi(): boolean {
 // =============================================================================
 
 const TOOLS: Tool[] = [
-  // Account tools
-  {
-    name: 'list_accounts',
-    description: 'List all Exchange accounts configured in Outlook with their details',
-    inputSchema: {
-      type: 'object',
-      properties: {},
-      required: [],
-    },
-  },
-  // Mail tools
-  {
-    name: 'search_emails_advanced',
-    description: 'Search emails using KQL (Keyword Query Language) for advanced queries. Supports operators: from:, to:, subject:, hasAttachments:true, received>=2024-01-01, AND, OR. (Graph API)',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        query: { type: 'string', description: 'KQL search query (e.g., from:alice AND subject:"report")' },
-        folder_id: { type: 'number', description: 'Optional folder ID to search within' },
-        limit: { type: 'number', description: 'Maximum results (default: 50)', default: 50 },
-      },
-      required: ['query'],
-    },
-  },
-  {
-    name: 'check_new_emails',
-    description: 'Check for new or changed emails since last check using delta sync. First call returns recent messages (initial sync). Subsequent calls return only new/changed messages.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        folder_id: { type: 'number', description: 'Folder ID to check for new emails' },
-      },
-      required: ['folder_id'],
-    },
-  },
-  {
-    name: 'list_conversation',
-    description: 'List all messages in an email conversation/thread, ordered chronologically. Provide any message ID from the thread.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        message_id: { type: 'number', description: 'Any message ID from the conversation' },
-        limit: { type: 'number', description: 'Maximum messages to return (default: 25)', default: 25 },
-      },
-      required: ['message_id'],
-    },
-  },
-  // Calendar tools
-  {
-    name: 'prepare_delete_event',
-    description: 'Prepare to delete a calendar event. Returns a preview and approval token. Call confirm_delete_event to execute.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        event_id: { type: 'number', description: 'The event ID to delete' },
-      },
-      required: ['event_id'],
-    },
-  },
-  {
-    name: 'confirm_delete_event',
-    description: 'Confirm deletion of a calendar event using a token from prepare_delete_event',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        token_id: { type: 'string', description: 'The approval token from prepare_delete_event' },
-        event_id: { type: 'number', description: 'The event ID to delete' },
-      },
-      required: ['token_id', 'event_id'],
-    },
-  },
-  // Task tools
-  {
-    name: 'create_task_list',
-    description: 'Create a new task list',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        display_name: { type: 'string', description: 'Name for the new task list' },
-      },
-      required: ['display_name'],
-    },
-  },
-  // =========================================================================
-  // Mailbox Organization — Destructive (Two-Phase Approval)
-  // =========================================================================
-  {
-    name: 'prepare_batch_delete_emails',
-    description: 'Prepare to delete multiple emails. Returns individual tokens per email so you can selectively confirm. Call confirm_batch_operation to execute.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        email_ids: {
-          type: 'array',
-          items: { type: 'number' },
-          description: 'The email IDs to delete (max 50)',
-        },
-      },
-      required: ['email_ids'],
-    },
-  },
-  {
-    name: 'prepare_batch_move_emails',
-    description: 'Prepare to move multiple emails. Returns individual tokens per email so you can selectively confirm. Call confirm_batch_operation to execute.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        email_ids: {
-          type: 'array',
-          items: { type: 'number' },
-          description: 'The email IDs to move (max 50)',
-        },
-        destination_folder_id: { type: 'number', description: 'The destination folder ID' },
-      },
-      required: ['email_ids', 'destination_folder_id'],
-    },
-  },
-  {
-    name: 'confirm_batch_operation',
-    description: 'Confirm a batch operation using tokens from prepare_batch_delete_emails or prepare_batch_move_emails. You may selectively confirm by omitting tokens.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        tokens: {
-          type: 'array',
-          items: {
-            type: 'object',
-            properties: {
-              token_id: { type: 'string', description: 'The approval token' },
-              email_id: { type: 'number', description: 'The email ID' },
-            },
-            required: ['token_id', 'email_id'],
-          },
-          description: 'Array of token/email pairs to confirm',
-        },
-      },
-      required: ['tokens'],
-    },
-  },
   // Email sending tool
   {
     name: 'send_email',
@@ -343,174 +197,6 @@ const TOOLS: Tool[] = [
         },
       },
       required: ['to', 'subject', 'body'],
-    },
-  },
-  // Automatic replies (OOF) tools
-  {
-    name: 'get_automatic_replies',
-    description: 'Get the current automatic replies (out-of-office) settings',
-    inputSchema: {
-      type: 'object' as const,
-      properties: {},
-      required: [],
-    },
-  },
-  {
-    name: 'set_automatic_replies',
-    description: 'Set automatic replies (out-of-office) settings',
-    inputSchema: {
-      type: 'object' as const,
-      properties: {
-        status: {
-          type: 'string',
-          enum: ['disabled', 'alwaysEnabled', 'scheduled'],
-          description: 'OOF status',
-        },
-        external_audience: {
-          type: 'string',
-          enum: ['none', 'contactsOnly', 'all'],
-          description: 'Who sees external reply',
-        },
-        internal_reply_message: {
-          type: 'string',
-          description: 'Reply for internal senders (HTML)',
-        },
-        external_reply_message: {
-          type: 'string',
-          description: 'Reply for external senders (HTML)',
-        },
-        scheduled_start: {
-          type: 'string',
-          description: 'Schedule start (ISO 8601)',
-        },
-        scheduled_end: {
-          type: 'string',
-          description: 'Schedule end (ISO 8601)',
-        },
-      },
-      required: ['status'],
-    },
-  },
-  // Mailbox settings tools
-  {
-    name: 'get_mailbox_settings',
-    description: 'Get the current mailbox settings (language, time zone, date/time formats, working hours)',
-    inputSchema: {
-      type: 'object' as const,
-      properties: {},
-      required: [],
-    },
-  },
-  {
-    name: 'update_mailbox_settings',
-    description: 'Update mailbox settings (language, time zone, date/time formats)',
-    inputSchema: {
-      type: 'object' as const,
-      properties: {
-        language: {
-          type: 'string',
-          description: 'Locale code (e.g. en-US)',
-        },
-        time_zone: {
-          type: 'string',
-          description: 'Time zone (e.g. America/New_York)',
-        },
-        date_format: {
-          type: 'string',
-          description: 'Date format string',
-        },
-        time_format: {
-          type: 'string',
-          description: 'Time format string',
-        },
-      },
-      required: [],
-    },
-  },
-  // Mail tips tool
-  {
-    name: 'get_mail_tips',
-    description: 'Get mail tips (automatic replies, mailbox full, delivery restrictions, max message size) for email addresses (Graph API)',
-    inputSchema: {
-      type: 'object' as const,
-      properties: {
-        email_addresses: {
-          type: 'array',
-          items: { type: 'string' },
-          description: 'Email addresses to check (1-20)',
-          minItems: 1,
-          maxItems: 20,
-        },
-      },
-      required: ['email_addresses'],
-    },
-  },
-  // Message headers & MIME tools
-  {
-    name: 'get_message_headers',
-    description: 'Get internet message headers (SPF, DKIM, routing, etc.) for an email (Graph API)',
-    inputSchema: {
-      type: 'object' as const,
-      properties: {
-        email_id: { type: 'number', description: 'Email ID' },
-      },
-      required: ['email_id'],
-    },
-  },
-  {
-    name: 'get_message_mime',
-    description: 'Download the full MIME content (.eml) of an email to a local file (Graph API)',
-    inputSchema: {
-      type: 'object' as const,
-      properties: {
-        email_id: { type: 'number', description: 'Email ID' },
-      },
-      required: ['email_id'],
-    },
-  },
-  // Calendar Group tools
-  {
-    name: 'list_calendar_groups',
-    description: 'List all calendar groups (Graph API)',
-    inputSchema: {
-      type: 'object' as const,
-      properties: {},
-      required: [],
-    },
-  },
-  {
-    name: 'create_calendar_group',
-    description: 'Create a new calendar group (Graph API)',
-    inputSchema: {
-      type: 'object' as const,
-      properties: {
-        name: { type: 'string', description: 'Calendar group name' },
-      },
-      required: ['name'],
-    },
-  },
-  // Room lists & rooms tools
-  {
-    name: 'list_room_lists',
-    description: 'List all room lists (building/floor groupings) in the organization (Graph API)',
-    inputSchema: {
-      type: 'object' as const,
-      properties: {},
-      required: [],
-    },
-  },
-  {
-    name: 'list_rooms',
-    description: 'List meeting rooms, optionally filtered by a room list email from list_room_lists (Graph API)',
-    inputSchema: {
-      type: 'object' as const,
-      properties: {
-        room_list_email: {
-          type: 'string',
-          description: 'Room list email to filter by (from list_room_lists)',
-        },
-      },
-      required: [],
     },
   },
   // Teams tools are served by the tool registry (v3, U2).
@@ -610,6 +296,8 @@ export function createServer(options: ServerOptions = {}): Server {
   let appleCalendarTools: AppleCalendarTools | null = null;
   let graphMailTools: GraphMailTools | null = null;
   let appleMailTools: AppleMailTools | null = null;
+  let graphMailboxSettingsTools: GraphMailboxSettingsTools | null = null;
+  let accountsTools: AccountsTools | null = null;
 
   /**
    * Initializes AppleScript backend.
@@ -623,6 +311,7 @@ export function createServer(options: ServerOptions = {}): Server {
     const contentReaders = createAppleScriptContentReaders();
 
     accountRepository = createAccountRepository();
+    accountsTools = new AccountsTools(accountRepository);
     mailTools = createMailTools(repository, contentReaders.email, contentReaders.attachment);
     calendarTools = createCalendarTools(repository, contentReaders.event);
     contactsTools = createContactsTools(repository, contentReaders.contact);
@@ -655,8 +344,11 @@ export function createServer(options: ServerOptions = {}): Server {
     graphContactFoldersTools = new GraphContactFoldersTools(graphRepository, tokenManager);
     graphTasksTools = new GraphTasksTools(graphRepository, graphContentReaders, tokenManager);
     graphTaskListsTools = new GraphTaskListsTools(graphRepository, tokenManager);
-    graphCalendarTools = new GraphCalendarTools(graphRepository, graphContentReaders);
+    graphCalendarTools = new GraphCalendarTools(graphRepository, graphContentReaders, tokenManager);
     graphMailTools = new GraphMailTools(graphRepository, graphContentReaders);
+    graphMailboxSettingsTools = new GraphMailboxSettingsTools(graphRepository);
+    accountRepository = createAccountRepository();
+    accountsTools = new AccountsTools(accountRepository);
 
     const adapter = new GraphMailboxAdapter(graphRepository);
     orgTools = createMailboxOrganizationTools(adapter, tokenManager);
@@ -694,23 +386,11 @@ export function createServer(options: ServerOptions = {}): Server {
     }
   }
 
-  // Tools that only exist when using Graph API (signature + scheduling)
-  const GRAPH_ONLY_TOOL_NAMES = new Set([
-    'list_conversation',
-    'search_emails_advanced',
-    'check_new_emails',
-    'get_automatic_replies',
-    'set_automatic_replies',
-    'get_mailbox_settings',
-    'update_mailbox_settings',
-    'get_mail_tips',
-    'get_message_headers',
-    'get_message_mime',
-    'list_calendar_groups',
-    'create_calendar_group',
-    'list_room_lists',
-    'list_rooms',
-  ]);
+  // Tools that only exist when using Graph API but are still served by the
+  // legacy TOOLS array. All previously graph-only legacy tools have migrated to
+  // the tool registry (which applies its own per-backend filter), so this set
+  // is now empty.
+  const GRAPH_ONLY_TOOL_NAMES = new Set<string>([]);
 
   /** Builds the runtime context for registry handlers (post-initialization). */
   function buildToolContext(): ToolContext {
@@ -740,6 +420,8 @@ export function createServer(options: ServerOptions = {}): Server {
         && graphTaskListsTools != null
         && graphCalendarTools != null
         && graphMailTools != null
+        && graphMailboxSettingsTools != null
+        && accountsTools != null
         && sendTools != null
         && schedulingTools != null
         && orgTools != null
@@ -768,6 +450,8 @@ export function createServer(options: ServerOptions = {}): Server {
               mailSend: sendTools,
               scheduling: schedulingTools,
               mailboxOrg: orgTools,
+              mailboxSettings: graphMailboxSettingsTools,
+              accounts: accountsTools,
             }
           : null,
       applescript:
@@ -778,7 +462,8 @@ export function createServer(options: ServerOptions = {}): Server {
         && appleCalendarTools != null
         && appleMailTools != null
         && orgTools != null
-          ? { notes: notesTools, contacts: contactsTools, tasks: tasksTools, calendar: appleCalendarTools, mail: appleMailTools, mailboxOrg: orgTools }
+        && accountsTools != null
+          ? { notes: notesTools, contacts: contactsTools, tasks: tasksTools, calendar: appleCalendarTools, mail: appleMailTools, mailboxOrg: orgTools, accounts: accountsTools }
           : null,
     };
   }
@@ -847,32 +532,15 @@ export function createServer(options: ServerOptions = {}): Server {
 
 type ToolResult = { content: Array<{ type: string; text: string }>; isError?: boolean };
 
-async function handleOrgToolCall(
+function handleOrgToolCall(
   name: string,
-  args: unknown,
-  orgTools: ReturnType<typeof createMailboxOrganizationTools>
-): Promise<ToolResult | null> {
+  _args: unknown,
+  _orgTools: ReturnType<typeof createMailboxOrganizationTools>
+): ToolResult | null {
+  // All mailbox-organization tools (including the batch operations) are served
+  // by the tool registry (v3, U2). This legacy hook is retained as a no-op
+  // fallback and always returns null.
   switch (name) {
-    // Batch operations remain in the legacy dispatch: their prepare_ halves
-    // pair with confirm_batch_operation (not a 1:1 confirm_batch_* tool), which
-    // the registry's prepare/confirm invariant does not permit. All other
-    // mailbox-organization tools are served by the registry.
-    case 'prepare_batch_delete_emails': {
-      const params = PrepareBatchDeleteEmailsInput.parse(args);
-      const result = await orgTools.prepareBatchDeleteEmails(params);
-      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
-    }
-    case 'prepare_batch_move_emails': {
-      const params = PrepareBatchMoveEmailsInput.parse(args);
-      const result = await orgTools.prepareBatchMoveEmails(params);
-      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
-    }
-    case 'confirm_batch_operation': {
-      const params = ConfirmBatchOperationInput.parse(args);
-      const result = await orgTools.confirmBatchOperation(params);
-      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
-    }
-
     default:
       return null;
   }
@@ -882,6 +550,7 @@ async function handleOrgToolCall(
 // AppleScript Tool Handler
 // =============================================================================
 
+// eslint-disable-next-line @typescript-eslint/require-await
 async function handleAppleScriptToolCall(
   name: string,
   args: unknown,
@@ -897,26 +566,11 @@ async function handleAppleScriptToolCall(
   mailSender: IMailSender | null
 ): Promise<ToolResult> {
   // Handle mailbox organization tools (shared between backends)
-  const orgResult = await handleOrgToolCall(name, args, orgTools);
+  const orgResult = handleOrgToolCall(name, args, orgTools);
   if (orgResult != null) return orgResult;
 
   switch (name) {
-    // Account tools
-    case 'list_accounts': {
-      const accounts = accountRepository.listAccounts();
-      const result = {
-        accounts: accounts.map(acc => ({
-          id: acc.id,
-          name: acc.name,
-          email: acc.email,
-          type: acc.type,
-        })),
-      };
-      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
-    }
-
-    // Contact tools
-    // Note tools
+    // Account tools (list_accounts) are served by the tool registry (v3, U2).
     // Email sending tool
     case 'send_email': {
       if (mailSender == null) {
@@ -983,306 +637,41 @@ async function handleAppleScriptToolCall(
 }
 
 // =============================================================================
-// Calendar Write — Zod Schemas (Graph API)
-// =============================================================================
-
-const PrepareDeleteEventInput = z.strictObject({
-  event_id: z.number().int().positive(),
-});
-
-const ConfirmDeleteEventInput = z.strictObject({
-  token_id: z.uuid(),
-  event_id: z.number().int().positive(),
-});
-
-// =============================================================================
-// Task Write — Zod Schemas (Graph API)
-// =============================================================================
-
-const CreateTaskListGraphInput = z.strictObject({
-  display_name: z.string().min(1),
-});
-
-const GetAutomaticRepliesInput = z.strictObject({});
-
-const SetAutomaticRepliesInput = z.strictObject({
-  status: z.enum(['disabled', 'alwaysEnabled', 'scheduled']).describe('OOF status'),
-  external_audience: z.enum(['none', 'contactsOnly', 'all']).optional().describe('Who sees external reply'),
-  internal_reply_message: z.string().optional().describe('Reply for internal senders (HTML)'),
-  external_reply_message: z.string().optional().describe('Reply for external senders (HTML)'),
-  scheduled_start: z.string().optional().describe('Schedule start (ISO 8601)'),
-  scheduled_end: z.string().optional().describe('Schedule end (ISO 8601)'),
-});
-
-const GetMailboxSettingsInput = z.strictObject({});
-
-const UpdateMailboxSettingsInput = z.strictObject({
-  language: z.string().optional().describe('Locale code (e.g. en-US)'),
-  time_zone: z.string().optional().describe('Time zone (e.g. America/New_York)'),
-  date_format: z.string().optional().describe('Date format string'),
-  time_format: z.string().optional().describe('Time format string'),
-});
-
-const GetMailTipsInput = z.strictObject({
-  email_addresses: z.array(z.string().email()).min(1).max(20).describe('Email addresses to check'),
-});
-
-const GetMessageHeadersInput = z.strictObject({
-  email_id: z.number().int().positive().describe('Email ID'),
-});
-
-const GetMessageMimeInput = z.strictObject({
-  email_id: z.number().int().positive().describe('Email ID'),
-});
-
-const CreateCalendarGroupInput = z.strictObject({
-  name: z.string().min(1).describe('Calendar group name'),
-});
-
-const ListRoomsInput = z.strictObject({
-  room_list_email: z.string().email().optional().describe('Room list email to filter by (from list_room_lists)'),
-});
-
-// =============================================================================
 // Graph API Tool Handler
 // =============================================================================
 
+// eslint-disable-next-line @typescript-eslint/require-await
 async function handleGraphToolCall(
   name: string,
   args: unknown,
-  repository: GraphRepository,
-  contentReaders: GraphContentReaders,
+  _repository: GraphRepository,
+  _contentReaders: GraphContentReaders,
   orgTools: ReturnType<typeof createMailboxOrganizationTools>,
-  rulesTools: MailRulesTools,
-  categoriesTools: CategoriesTools,
-  calendarPermissionsTools: CalendarPermissionsTools,
-  focusedOverridesTools: FocusedOverridesTools,
-  teamsTools: TeamsTools,
-  checklistItemsTools: ChecklistItemsTools,
-  linkedResourcesTools: LinkedResourcesTools,
-  taskAttachmentsTools: TaskAttachmentsTools,
-  peopleTools: PeopleTools,
-  plannerTools: PlannerTools,
-  plannerVisualizationTools: PlannerVisualizationTools,
-  meetingsTools: MeetingsTools,
-  oneDriveTools: OneDriveTools,
-  sharePointTools: SharePointTools,
-  excelTools: ExcelTools,
-  tokenManager: ApprovalTokenManager
+  _rulesTools: MailRulesTools,
+  _categoriesTools: CategoriesTools,
+  _calendarPermissionsTools: CalendarPermissionsTools,
+  _focusedOverridesTools: FocusedOverridesTools,
+  _teamsTools: TeamsTools,
+  _checklistItemsTools: ChecklistItemsTools,
+  _linkedResourcesTools: LinkedResourcesTools,
+  _taskAttachmentsTools: TaskAttachmentsTools,
+  _peopleTools: PeopleTools,
+  _plannerTools: PlannerTools,
+  _plannerVisualizationTools: PlannerVisualizationTools,
+  _meetingsTools: MeetingsTools,
+  _oneDriveTools: OneDriveTools,
+  _sharePointTools: SharePointTools,
+  _excelTools: ExcelTools,
+  _tokenManager: ApprovalTokenManager
 ): Promise<ToolResult> {
   // Handle mailbox organization tools (shared between backends)
-  const orgResult = await handleOrgToolCall(name, args, orgTools);
+  const orgResult = handleOrgToolCall(name, args, orgTools);
   if (orgResult != null) return orgResult;
 
+  // All Graph-backend tools are served by the tool registry (v3, U2); this
+  // legacy switch retains only the unknown-tool fallback.
   try {
     switch (name) {
-      // Mail tools
-      case 'search_emails_advanced': {
-        const params = SearchEmailsAdvancedInput.parse(args);
-        const emails = params.folder_id != null
-          ? await repository.searchEmailsAdvancedInFolderAsync(params.folder_id, params.query, params.limit)
-          : await repository.searchEmailsAdvancedAsync(params.query, params.limit);
-        const result = { emails: emails.map(transformEmailRow) };
-        return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
-      }
-
-      case 'check_new_emails': {
-        const params = CheckNewEmailsInput.parse(args);
-        const deltaResult = await repository.checkNewEmailsAsync(params.folder_id);
-        return {
-          content: [{
-            type: 'text',
-            text: JSON.stringify({
-              emails: deltaResult.emails.map(transformEmailRow),
-              is_initial_sync: deltaResult.isInitialSync,
-              count: deltaResult.emails.length,
-            }, null, 2),
-          }],
-        };
-      }
-
-      case 'list_conversation': {
-        const params = ListConversationInput.parse(args);
-        const emails = await repository.listConversationAsync(params.message_id, params.limit);
-        const result = { emails: emails.map(transformEmailRow) };
-        return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
-      }
-
-      case 'prepare_delete_event': {
-        const params = PrepareDeleteEventInput.parse(args);
-        const event = await repository.getEventAsync(params.event_id);
-        if (event == null) {
-          return { content: [{ type: 'text', text: 'Event not found' }], isError: true };
-        }
-
-        const graphId = repository.getGraphId('event', params.event_id);
-        const graphEvent = graphId != null ? await repository.getClient().getEvent(graphId) : null;
-        const hash = hashEventForApproval({
-          id: params.event_id,
-          subject: graphEvent?.subject ?? null,
-          startDateTime: graphEvent?.start?.dateTime ?? null,
-        });
-
-        const token = tokenManager.generateToken({
-          operation: 'delete_event',
-          targetType: 'event',
-          targetId: params.event_id,
-          targetHash: hash,
-        });
-
-        const result = {
-          token_id: token.tokenId,
-          expires_at: new Date(token.expiresAt).toISOString(),
-          event: transformGraphEventRow(event),
-          action: 'This event will be permanently deleted.',
-        };
-        return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
-      }
-
-      case 'confirm_delete_event': {
-        const params = ConfirmDeleteEventInput.parse(args);
-
-        // Re-fetch the event and compute fresh hash for comparison
-        const graphId = repository.getGraphId('event', params.event_id);
-        const graphEvent = graphId != null ? await repository.getClient().getEvent(graphId) : null;
-        const currentHash = hashEventForApproval({
-          id: params.event_id,
-          subject: graphEvent?.subject ?? null,
-          startDateTime: graphEvent?.start?.dateTime ?? null,
-        });
-
-        const validation = tokenManager.consumeToken(params.token_id, 'delete_event', params.event_id);
-        if (!validation.valid) {
-          const errorMessages: Record<string, string> = {
-            NOT_FOUND: 'Token not found or already used',
-            EXPIRED: 'Token has expired. Please call prepare_delete_event again.',
-            OPERATION_MISMATCH: 'Token was not generated for delete_event',
-            TARGET_MISMATCH: 'Token was generated for a different event',
-            ALREADY_CONSUMED: 'Token has already been used',
-          };
-          return {
-            content: [{ type: 'text', text: errorMessages[validation.error ?? ''] ?? 'Invalid token' }],
-            isError: true,
-          };
-        }
-
-        // Check that the event hasn't changed since prepare
-        if (validation.token!.targetHash !== currentHash) {
-          return {
-            content: [{ type: 'text', text: 'Event has changed since prepare was called. Please call prepare_delete_event again.' }],
-            isError: true,
-          };
-        }
-
-        await repository.deleteEventAsync(params.event_id);
-        return {
-          content: [{ type: 'text', text: `Successfully deleted event ${params.event_id}` }],
-        };
-      }
-
-      // Task tools
-      case 'create_task_list': {
-        const params = CreateTaskListGraphInput.parse(args);
-        const numericId = await repository.createTaskListAsync(params.display_name);
-        const result = {
-          id: numericId,
-          display_name: params.display_name,
-          status: 'created',
-        };
-        return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
-      }
-
-      // Note tools - NOT SUPPORTED in Graph API
-      // Mail rules, master categories, and focused inbox overrides are served
-      // by the tool registry (v3, U2).
-
-      // Automatic replies (OOF) tools
-      case 'get_automatic_replies': {
-        GetAutomaticRepliesInput.parse(args ?? {});
-        const result = await repository.getAutomaticRepliesAsync();
-        return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
-      }
-
-      case 'set_automatic_replies': {
-        const params = SetAutomaticRepliesInput.parse(args);
-        const replyParams: Parameters<typeof repository.setAutomaticRepliesAsync>[0] = {
-          status: params.status,
-        };
-        if (params.external_audience != null) replyParams.externalAudience = params.external_audience;
-        if (params.internal_reply_message != null) replyParams.internalReplyMessage = params.internal_reply_message;
-        if (params.external_reply_message != null) replyParams.externalReplyMessage = params.external_reply_message;
-        if (params.scheduled_start != null) replyParams.scheduledStartDateTime = params.scheduled_start;
-        if (params.scheduled_end != null) replyParams.scheduledEndDateTime = params.scheduled_end;
-        await repository.setAutomaticRepliesAsync(replyParams);
-        return { content: [{ type: 'text', text: JSON.stringify({ success: true, status: params.status }, null, 2) }] };
-      }
-
-      // Mailbox settings tools
-      case 'get_mailbox_settings': {
-        GetMailboxSettingsInput.parse(args ?? {});
-        const result = await repository.getMailboxSettingsAsync();
-        return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
-      }
-
-      case 'update_mailbox_settings': {
-        const params = UpdateMailboxSettingsInput.parse(args);
-        const settingsParams: Parameters<typeof repository.updateMailboxSettingsAsync>[0] = {};
-        if (params.language != null) settingsParams.language = params.language;
-        if (params.time_zone != null) settingsParams.timeZone = params.time_zone;
-        if (params.date_format != null) settingsParams.dateFormat = params.date_format;
-        if (params.time_format != null) settingsParams.timeFormat = params.time_format;
-        await repository.updateMailboxSettingsAsync(settingsParams);
-        return { content: [{ type: 'text', text: JSON.stringify({ success: true }, null, 2) }] };
-      }
-
-      case 'get_mail_tips': {
-        const params = GetMailTipsInput.parse(args);
-        const tips = await repository.getMailTipsAsync(params.email_addresses);
-        return { content: [{ type: 'text', text: JSON.stringify({ mail_tips: tips }, null, 2) }] };
-      }
-
-      case 'get_message_headers': {
-        const params = GetMessageHeadersInput.parse(args);
-        const headers = await repository.getMessageHeadersAsync(params.email_id);
-        return { content: [{ type: 'text', text: JSON.stringify({ headers }, null, 2) }] };
-      }
-
-      case 'get_message_mime': {
-        const params = GetMessageMimeInput.parse(args);
-        const result = await repository.getMessageMimeAsync(params.email_id);
-        return { content: [{ type: 'text', text: JSON.stringify({ success: true, file_path: result.filePath }, null, 2) }] };
-      }
-
-      // Calendar group tools
-      case 'list_calendar_groups': {
-        const groups = await repository.listCalendarGroupsAsync();
-        return { content: [{ type: 'text', text: JSON.stringify({ calendar_groups: groups }, null, 2) }] };
-      }
-
-      case 'create_calendar_group': {
-        const params = CreateCalendarGroupInput.parse(args);
-        const groupId = await repository.createCalendarGroupAsync(params.name);
-        return { content: [{ type: 'text', text: JSON.stringify({ success: true, calendar_group_id: groupId, message: 'Calendar group created' }, null, 2) }] };
-      }
-
-      // Calendar permissions are served by the tool registry (v3, U2).
-
-      // Room lists & rooms tools
-      case 'list_room_lists': {
-        const roomLists = await repository.listRoomListsAsync();
-        return { content: [{ type: 'text', text: JSON.stringify({ room_lists: roomLists }, null, 2) }] };
-      }
-
-      case 'list_rooms': {
-        const params = ListRoomsInput.parse(args);
-        const rooms = await repository.listRoomsAsync(params.room_list_email);
-        return { content: [{ type: 'text', text: JSON.stringify({ rooms }, null, 2) }] };
-      }
-
-      // Teams, checklist items, linked resources, task attachments, people,
-      // planner, planner visualization, online meetings, Excel, OneDrive, and
-      // SharePoint are served by the tool registry (v3, U2).
-
       default:
         return {
           content: [{ type: 'text', text: `Unknown tool: ${name}` }],
@@ -1295,85 +684,6 @@ async function handleGraphToolCall(
       error instanceof Error ? error : undefined
     );
   }
-}
-
-// =============================================================================
-// Transform Helpers for Graph Mode
-// =============================================================================
-
-import type { EmailRow, EventRow } from './database/repository.js';
-import { unixTimestampToLocalIso } from './graph/mappers/utils.js';
-
-function transformEmailRow(row: EmailRow): {
-  id: number;
-  folderId: number | null;
-  subject: string | null;
-  sender: string | null;
-  senderAddress: string | null;
-  preview: string | null;
-  isRead: boolean;
-  timeReceived: string | null;
-  timeSent: string | null;
-  hasAttachment: boolean;
-  priority: number | null;
-  flagStatus: number | null;
-  categories: readonly string[];
-} {
-  return {
-    id: row.id,
-    folderId: row.folderId,
-    subject: row.subject,
-    sender: row.sender,
-    senderAddress: row.senderAddress,
-    preview: row.preview,
-    isRead: row.isRead === 1,
-    timeReceived: unixTimestampToLocalIso(row.timeReceived),
-    timeSent: unixTimestampToLocalIso(row.timeSent),
-    hasAttachment: row.hasAttachment === 1,
-    priority: row.priority,
-    flagStatus: row.flagStatus,
-    categories: parseEmailCategories(row.categories),
-  };
-}
-
-function parseEmailCategories(buffer: Buffer | null): string[] {
-  if (buffer == null || buffer.length === 0) return [];
-  try {
-    const text = buffer.toString('utf-8');
-    return text.includes('\0')
-      ? text.split('\0').filter(s => s.length > 0)
-      : text.split(',').map(s => s.trim()).filter(s => s.length > 0);
-  } catch {
-    return [];
-  }
-}
-
-/**
- * Transforms an EventRow from the Graph backend.
- * Uses Unix timestamps (not Apple epoch) and includes subject from EventRow.
- */
-function transformGraphEventRow(row: EventRow): {
-  id: number;
-  folderId: number | null;
-  title: string | null;
-  startDate: string | null;
-  endDate: string | null;
-  isRecurring: boolean;
-  hasReminder: boolean;
-  attendeeCount: number | null;
-  onlineMeetingUrl: string | null;
-} {
-  return {
-    id: row.id,
-    folderId: row.folderId,
-    title: row.subject ?? null,
-    startDate: unixTimestampToLocalIso(row.startDate),
-    endDate: unixTimestampToLocalIso(row.endDate),
-    isRecurring: row.isRecurring === 1,
-    hasReminder: row.hasReminder === 1,
-    attendeeCount: row.attendeeCount,
-    onlineMeetingUrl: row.onlineMeetingUrl ?? null,
-  };
 }
 
 // =============================================================================

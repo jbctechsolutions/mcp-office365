@@ -37,6 +37,8 @@ import { mailboxOrganizationToolDefinitions } from '../tools/mailbox-organizatio
 import { mailToolDefinitions } from '../tools/mail.js';
 import { mailSendToolDefinitions } from '../tools/mail-send.js';
 import { schedulingToolDefinitions } from '../tools/scheduling.js';
+import { mailboxSettingsToolDefinitions } from '../tools/mailbox-settings.js';
+import { accountsToolDefinitions } from '../tools/accounts.js';
 
 export function allToolDefinitions(): ToolDefinition[] {
   return [
@@ -65,6 +67,8 @@ export function allToolDefinitions(): ToolDefinition[] {
     ...mailToolDefinitions(),
     ...mailSendToolDefinitions(),
     ...schedulingToolDefinitions(),
+    ...mailboxSettingsToolDefinitions(),
+    ...accountsToolDefinitions(),
     // U2: append each migrated domain's definitions here.
   ];
 }

@@ -14,6 +14,7 @@ import type { GraphRepository } from '../graph/repository.js';
 import type { GraphContentReaders } from '../graph/content-readers.js';
 import type { EventRow, FolderRow } from '../database/repository.js';
 import { unixTimestampToLocalIso } from '../graph/mappers/utils.js';
+import { hashEventForApproval, type ApprovalTokenManager } from '../approval/index.js';
 import type { ToolResult } from '../registry/types.js';
 import type {
   CreateEventResult,
@@ -25,6 +26,10 @@ import type {
   DeleteEventParams,
   RespondToEventParams,
   ListEventInstancesParams,
+  PrepareDeleteEventParams,
+  ConfirmDeleteEventParams,
+  CreateCalendarGroupParams,
+  ListRoomsParams,
 } from './calendar.js';
 
 function jsonResult(data: unknown): ToolResult {
@@ -92,7 +97,8 @@ function transformGraphEventRow(row: EventRow): {
 export class GraphCalendarTools {
   constructor(
     private readonly repository: GraphRepository,
-    private readonly contentReaders: GraphContentReaders
+    private readonly contentReaders: GraphContentReaders,
+    private readonly tokenManager: ApprovalTokenManager
   ) {}
 
   async listCalendars(): Promise<ToolResult> {
@@ -256,5 +262,91 @@ export class GraphCalendarTools {
   async listEventInstances(params: ListEventInstancesParams): Promise<ToolResult> {
     const instances = await this.repository.listEventInstancesAsync(params.event_id, params.start_date, params.end_date);
     return jsonResult({ instances: instances.map(transformGraphEventRow), count: instances.length });
+  }
+
+  async prepareDeleteEvent(params: PrepareDeleteEventParams): Promise<ToolResult> {
+    const event = await this.repository.getEventAsync(params.event_id);
+    if (event == null) {
+      return { content: [{ type: 'text', text: 'Event not found' }], isError: true };
+    }
+
+    const graphId = this.repository.getGraphId('event', params.event_id);
+    const graphEvent = graphId != null ? await this.repository.getClient().getEvent(graphId) : null;
+    const hash = hashEventForApproval({
+      id: params.event_id,
+      subject: graphEvent?.subject ?? null,
+      startDateTime: graphEvent?.start?.dateTime ?? null,
+    });
+
+    const token = this.tokenManager.generateToken({
+      operation: 'delete_event',
+      targetType: 'event',
+      targetId: params.event_id,
+      targetHash: hash,
+    });
+
+    return jsonResult({
+      token_id: token.tokenId,
+      expires_at: new Date(token.expiresAt).toISOString(),
+      event: transformGraphEventRow(event),
+      action: 'This event will be permanently deleted.',
+    });
+  }
+
+  async confirmDeleteEvent(params: ConfirmDeleteEventParams): Promise<ToolResult> {
+    // Re-fetch the event and compute fresh hash for comparison
+    const graphId = this.repository.getGraphId('event', params.event_id);
+    const graphEvent = graphId != null ? await this.repository.getClient().getEvent(graphId) : null;
+    const currentHash = hashEventForApproval({
+      id: params.event_id,
+      subject: graphEvent?.subject ?? null,
+      startDateTime: graphEvent?.start?.dateTime ?? null,
+    });
+
+    const validation = this.tokenManager.consumeToken(params.token_id, 'delete_event', params.event_id);
+    if (!validation.valid) {
+      const errorMessages: Record<string, string> = {
+        NOT_FOUND: 'Token not found or already used',
+        EXPIRED: 'Token has expired. Please call prepare_delete_event again.',
+        OPERATION_MISMATCH: 'Token was not generated for delete_event',
+        TARGET_MISMATCH: 'Token was generated for a different event',
+        ALREADY_CONSUMED: 'Token has already been used',
+      };
+      return {
+        content: [{ type: 'text', text: errorMessages[validation.error ?? ''] ?? 'Invalid token' }],
+        isError: true,
+      };
+    }
+
+    // Check that the event hasn't changed since prepare
+    if (validation.token!.targetHash !== currentHash) {
+      return {
+        content: [{ type: 'text', text: 'Event has changed since prepare was called. Please call prepare_delete_event again.' }],
+        isError: true,
+      };
+    }
+
+    await this.repository.deleteEventAsync(params.event_id);
+    return { content: [{ type: 'text', text: `Successfully deleted event ${params.event_id}` }] };
+  }
+
+  async listCalendarGroups(): Promise<ToolResult> {
+    const groups = await this.repository.listCalendarGroupsAsync();
+    return jsonResult({ calendar_groups: groups });
+  }
+
+  async createCalendarGroup(params: CreateCalendarGroupParams): Promise<ToolResult> {
+    const groupId = await this.repository.createCalendarGroupAsync(params.name);
+    return jsonResult({ success: true, calendar_group_id: groupId, message: 'Calendar group created' });
+  }
+
+  async listRoomLists(): Promise<ToolResult> {
+    const roomLists = await this.repository.listRoomListsAsync();
+    return jsonResult({ room_lists: roomLists });
+  }
+
+  async listRooms(params: ListRoomsParams): Promise<ToolResult> {
+    const rooms = await this.repository.listRoomsAsync(params.room_list_email);
+    return jsonResult({ rooms });
   }
 }
