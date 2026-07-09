@@ -32,7 +32,7 @@ export const CreateCategoryInput = z.strictObject({
 });
 
 export const PrepareDeleteCategoryInput = z.strictObject({
-  category_id: z.number().int().positive().describe('Category ID to delete'),
+  category_id: z.string().min(1).describe('Category ID to delete'),
 });
 
 export const ConfirmDeleteCategoryInput = z.strictObject({
@@ -52,9 +52,9 @@ export type ConfirmDeleteCategoryParams = z.infer<typeof ConfirmDeleteCategoryIn
 // =============================================================================
 
 export interface ICategoriesRepository {
-  listCategoriesAsync(): Promise<Array<{ id: number; name: string; color: string }>>;
-  createCategoryAsync(name: string, color: string): Promise<number>;
-  deleteCategoryAsync(categoryId: number): Promise<void>;
+  listCategoriesAsync(): Promise<Array<{ id: string; name: string; color: string }>>;
+  createCategoryAsync(name: string, color: string): Promise<string>;
+  deleteCategoryAsync(categoryId: string | number): Promise<void>;
 }
 
 // =============================================================================
@@ -154,7 +154,7 @@ export class CategoriesTools {
       };
     }
 
-    await this.repo.deleteCategoryAsync((result.token!.targetId as number));
+    await this.repo.deleteCategoryAsync((result.token!.targetId as string));
     return {
       content: [{
         type: 'text' as const,

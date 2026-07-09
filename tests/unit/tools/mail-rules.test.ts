@@ -30,8 +30,8 @@ describe('MailRulesTools', () => {
   describe('listMailRules', () => {
     it('returns rules from the repository', async () => {
       const mockRules = [
-        { id: 1, displayName: 'Rule 1', sequence: 1, isEnabled: true, conditions: {}, actions: {} },
-        { id: 2, displayName: 'Rule 2', sequence: 2, isEnabled: false, conditions: {}, actions: {} },
+        { id: 'mr_1', displayName: 'Rule 1', sequence: 1, isEnabled: true, conditions: {}, actions: {} },
+        { id: 'mr_2', displayName: 'Rule 2', sequence: 2, isEnabled: false, conditions: {}, actions: {} },
       ];
       vi.mocked(repo.listMailRulesAsync).mockResolvedValue(mockRules);
 
@@ -45,7 +45,7 @@ describe('MailRulesTools', () => {
 
   describe('createMailRule', () => {
     it('builds correct Graph rule object and creates', async () => {
-      vi.mocked(repo.createMailRuleAsync).mockResolvedValue(42);
+      vi.mocked(repo.createMailRuleAsync).mockResolvedValue('mr_42');
 
       const result = await tools.createMailRule({
         display_name: 'Test Rule',
@@ -75,12 +75,12 @@ describe('MailRulesTools', () => {
 
       const parsed = JSON.parse(result.content[0].text);
       expect(parsed.success).toBe(true);
-      expect(parsed.rule_id).toBe(42);
+      expect(parsed.rule_id).toBe('mr_42');
     });
 
     it('resolves move_to_folder to Graph folder ID', async () => {
       vi.mocked(repo.getFolderGraphId).mockReturnValue('graph-folder-id-abc');
-      vi.mocked(repo.createMailRuleAsync).mockResolvedValue(99);
+      vi.mocked(repo.createMailRuleAsync).mockResolvedValue('mr_99');
 
       await tools.createMailRule({
         display_name: 'Move Rule',
@@ -119,7 +119,7 @@ describe('MailRulesTools', () => {
     });
 
     it('handles forward_to addresses', async () => {
-      vi.mocked(repo.createMailRuleAsync).mockResolvedValue(10);
+      vi.mocked(repo.createMailRuleAsync).mockResolvedValue('mr_10');
 
       await tools.createMailRule({
         display_name: 'Forward Rule',
@@ -145,13 +145,13 @@ describe('MailRulesTools', () => {
 
   describe('prepareDeleteMailRule', () => {
     it('generates an approval token', () => {
-      const result = tools.prepareDeleteMailRule({ rule_id: 42 });
+      const result = tools.prepareDeleteMailRule({ rule_id: 'mr_42' });
 
       const parsed = JSON.parse(result.content[0].text);
       expect(parsed.token_id).toBeDefined();
       expect(typeof parsed.token_id).toBe('string');
       expect(parsed.expires_at).toBeDefined();
-      expect(parsed.rule_id).toBe(42);
+      expect(parsed.rule_id).toBe('mr_42');
       expect(parsed.action).toContain('confirm_delete_mail_rule');
     });
   });
@@ -161,21 +161,21 @@ describe('MailRulesTools', () => {
       vi.mocked(repo.deleteMailRuleAsync).mockResolvedValue(undefined);
 
       // Generate a token first
-      const prepareResult = tools.prepareDeleteMailRule({ rule_id: 42 });
+      const prepareResult = tools.prepareDeleteMailRule({ rule_id: 'mr_42' });
       const { token_id } = JSON.parse(prepareResult.content[0].text);
 
-      const result = await tools.confirmDeleteMailRule({ token_id, rule_id: 42 });
+      const result = await tools.confirmDeleteMailRule({ token_id, rule_id: 'mr_42' });
 
       const parsed = JSON.parse(result.content[0].text);
       expect(parsed.success).toBe(true);
       expect(parsed.message).toBe('Mail rule deleted');
-      expect(repo.deleteMailRuleAsync).toHaveBeenCalledWith(42);
+      expect(repo.deleteMailRuleAsync).toHaveBeenCalledWith('mr_42');
     });
 
     it('returns error for invalid token', async () => {
       const result = await tools.confirmDeleteMailRule({
         token_id: '00000000-0000-0000-0000-000000000000',
-        rule_id: 42,
+        rule_id: 'mr_42',
       });
 
       const parsed = JSON.parse(result.content[0].text);
@@ -187,24 +187,24 @@ describe('MailRulesTools', () => {
     it('returns error for already consumed token', async () => {
       vi.mocked(repo.deleteMailRuleAsync).mockResolvedValue(undefined);
 
-      const prepareResult = tools.prepareDeleteMailRule({ rule_id: 42 });
+      const prepareResult = tools.prepareDeleteMailRule({ rule_id: 'mr_42' });
       const { token_id } = JSON.parse(prepareResult.content[0].text);
 
       // Consume the token
-      await tools.confirmDeleteMailRule({ token_id, rule_id: 42 });
+      await tools.confirmDeleteMailRule({ token_id, rule_id: 'mr_42' });
 
       // Try to use it again
-      const result = await tools.confirmDeleteMailRule({ token_id, rule_id: 42 });
+      const result = await tools.confirmDeleteMailRule({ token_id, rule_id: 'mr_42' });
 
       const parsed = JSON.parse(result.content[0].text);
       expect(parsed.success).toBe(false);
     });
 
     it('returns error for wrong rule ID', async () => {
-      const prepareResult = tools.prepareDeleteMailRule({ rule_id: 42 });
+      const prepareResult = tools.prepareDeleteMailRule({ rule_id: 'mr_42' });
       const { token_id } = JSON.parse(prepareResult.content[0].text);
 
-      const result = await tools.confirmDeleteMailRule({ token_id, rule_id: 99 });
+      const result = await tools.confirmDeleteMailRule({ token_id, rule_id: 'mr_99' });
 
       const parsed = JSON.parse(result.content[0].text);
       expect(parsed.success).toBe(false);

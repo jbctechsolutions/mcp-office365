@@ -156,6 +156,38 @@ describe('ids/token — composite / alias-backed', () => {
     expect(parsed?.kind).toBe('alias');
     expect(parsed?.entityType).toBe('taskList');
   });
+
+  it('mints an mr_ token for mailRule and classifies it as alias', () => {
+    const token = mintComposite('mailRule', 'k');
+    expect(token.startsWith('mr_')).toBe(true);
+    const parsed = parseToken(token);
+    expect(parsed?.kind).toBe('alias');
+    expect(parsed?.entityType).toBe('mailRule');
+  });
+
+  it('mints a cf_ token for contactFolder and classifies it as alias', () => {
+    const token = mintComposite('contactFolder', 'k');
+    expect(token.startsWith('cf_')).toBe(true);
+    const parsed = parseToken(token);
+    expect(parsed?.kind).toBe('alias');
+    expect(parsed?.entityType).toBe('contactFolder');
+  });
+
+  it('mints a cg_ token for category and classifies it as alias', () => {
+    const token = mintComposite('category', 'k');
+    expect(token.startsWith('cg_')).toBe(true);
+    const parsed = parseToken(token);
+    expect(parsed?.kind).toBe('alias');
+    expect(parsed?.entityType).toBe('category');
+  });
+
+  it('mints an fo_ token for focusedOverride and classifies it as alias', () => {
+    const token = mintComposite('focusedOverride', 'k');
+    expect(token.startsWith('fo_')).toBe(true);
+    const parsed = parseToken(token);
+    expect(parsed?.kind).toBe('alias');
+    expect(parsed?.entityType).toBe('focusedOverride');
+  });
 });
 
 describe('ids/token — parse guards', () => {

@@ -51,12 +51,12 @@ export const CreateMailRuleInput = z.strictObject({
 });
 
 export const PrepareDeleteMailRuleInput = z.strictObject({
-  rule_id: z.number().int().positive().describe('The rule ID to delete'),
+  rule_id: z.string().min(1).describe('The rule ID to delete'),
 });
 
 export const ConfirmDeleteMailRuleInput = z.strictObject({
   token_id: z.string().uuid().describe('Approval token from prepare_delete_mail_rule'),
-  rule_id: z.number().int().positive().describe('The rule ID to delete'),
+  rule_id: z.string().min(1).describe('The rule ID to delete'),
 });
 
 // =============================================================================
@@ -72,9 +72,9 @@ export type ConfirmDeleteMailRuleParams = z.infer<typeof ConfirmDeleteMailRuleIn
 // =============================================================================
 
 export interface IMailRulesRepository {
-  listMailRulesAsync(): Promise<Array<{ id: number; displayName: string; sequence: number; isEnabled: boolean; conditions: unknown; actions: unknown }>>;
-  createMailRuleAsync(rule: Record<string, unknown>): Promise<number>;
-  deleteMailRuleAsync(ruleId: number): Promise<void>;
+  listMailRulesAsync(): Promise<Array<{ id: string; displayName: string; sequence: number; isEnabled: boolean; conditions: unknown; actions: unknown }>>;
+  createMailRuleAsync(rule: Record<string, unknown>): Promise<string>;
+  deleteMailRuleAsync(ruleId: string | number): Promise<void>;
   /** Resolve a folder ID (durable `fd_` token or raw Graph id) for move_to_folder action. */
   getFolderGraphId(folderId: string): string;
 }

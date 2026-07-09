@@ -1,6 +1,14 @@
 # mcp-office365 v4.0.0 — Status & Next Steps
 
-_Last updated: 2026-07-09 (driveItems #47 merged). Working branch: `mcp-server-fixes` worktree. `main` is the release target._
+_Last updated: 2026-07-09. Working branch: `mcp-server-fixes` worktree. `main` is the release target._
+
+**Session progress (this run):** #47 driveItems (dr_), #48 teams+channels pilot (tm_/cn_),
+#49 chats/chatMessages/channelMessages (ch_/cm_/xm_), #51 tasks+taskLists (td_/tl_),
+#52 task sub-resources (ci_/lr_/ta_). **Teams + To-Do domains fully durable.** Adversarial
+review caught 2 real bugs pre-merge (driveItem empty-id guard #47; sub-entity schema break #51).
+Follow-up issue #50 (channel reply operability). Remaining alias wave: mail/contact sub-resources,
+calendar, meetings, SharePoint chain, Planner. Then U5b-3, union cleanup, U6/U11/U12, coverage
+tools, release.
 
 ## Release strategy (decided)
 

@@ -29,8 +29,8 @@ describe('FocusedOverridesTools', () => {
   describe('listFocusedOverrides', () => {
     it('returns overrides from the repository', async () => {
       const mockOverrides = [
-        { id: 1, senderAddress: 'a@b.com', classifyAs: 'focused' },
-        { id: 2, senderAddress: 'c@d.com', classifyAs: 'other' },
+        { id: 'fo_1', senderAddress: 'a@b.com', classifyAs: 'focused' },
+        { id: 'fo_2', senderAddress: 'c@d.com', classifyAs: 'other' },
       ];
       vi.mocked(repo.listFocusedOverridesAsync).mockResolvedValue(mockOverrides);
 
@@ -44,27 +44,27 @@ describe('FocusedOverridesTools', () => {
 
   describe('createFocusedOverride', () => {
     it('creates an override and returns the ID', async () => {
-      vi.mocked(repo.createFocusedOverrideAsync).mockResolvedValue(42);
+      vi.mocked(repo.createFocusedOverrideAsync).mockResolvedValue('fo_42');
 
       const result = await tools.createFocusedOverride({ sender_address: 'a@b.com', classify_as: 'focused' });
 
       expect(repo.createFocusedOverrideAsync).toHaveBeenCalledWith('a@b.com', 'focused');
       const parsed = JSON.parse(result.content[0].text);
       expect(parsed.success).toBe(true);
-      expect(parsed.override_id).toBe(42);
+      expect(parsed.override_id).toBe('fo_42');
       expect(parsed.message).toBe('Focused override created');
     });
   });
 
   describe('prepareDeleteFocusedOverride', () => {
     it('generates an approval token', () => {
-      const result = tools.prepareDeleteFocusedOverride({ override_id: 42 });
+      const result = tools.prepareDeleteFocusedOverride({ override_id: 'fo_42' });
 
       const parsed = JSON.parse(result.content[0].text);
       expect(parsed.approval_token).toBeDefined();
       expect(typeof parsed.approval_token).toBe('string');
       expect(parsed.expires_at).toBeDefined();
-      expect(parsed.override_id).toBe(42);
+      expect(parsed.override_id).toBe('fo_42');
       expect(parsed.action).toContain('confirm_delete_focused_override');
     });
   });
@@ -74,7 +74,7 @@ describe('FocusedOverridesTools', () => {
       vi.mocked(repo.deleteFocusedOverrideAsync).mockResolvedValue(undefined);
 
       // Generate a token first
-      const prepareResult = tools.prepareDeleteFocusedOverride({ override_id: 42 });
+      const prepareResult = tools.prepareDeleteFocusedOverride({ override_id: 'fo_42' });
       const { approval_token } = JSON.parse(prepareResult.content[0].text);
 
       const result = await tools.confirmDeleteFocusedOverride({ approval_token });
@@ -82,7 +82,7 @@ describe('FocusedOverridesTools', () => {
       const parsed = JSON.parse(result.content[0].text);
       expect(parsed.success).toBe(true);
       expect(parsed.message).toBe('Focused override deleted');
-      expect(repo.deleteFocusedOverrideAsync).toHaveBeenCalledWith(42);
+      expect(repo.deleteFocusedOverrideAsync).toHaveBeenCalledWith('fo_42');
     });
 
     it('returns error for invalid token', async () => {
@@ -99,7 +99,7 @@ describe('FocusedOverridesTools', () => {
     it('returns error for already consumed token', async () => {
       vi.mocked(repo.deleteFocusedOverrideAsync).mockResolvedValue(undefined);
 
-      const prepareResult = tools.prepareDeleteFocusedOverride({ override_id: 42 });
+      const prepareResult = tools.prepareDeleteFocusedOverride({ override_id: 'fo_42' });
       const { approval_token } = JSON.parse(prepareResult.content[0].text);
 
       // Consume the token

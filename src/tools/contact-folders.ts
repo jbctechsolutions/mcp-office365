@@ -34,12 +34,12 @@ export const CreateContactFolderInput = z.strictObject({
 });
 
 export const PrepareDeleteContactFolderInput = z.strictObject({
-  folder_id: z.number().int().positive().describe('Contact folder ID to delete'),
+  folder_id: z.string().min(1).describe('Contact folder ID to delete'),
 });
 
 export const ConfirmDeleteContactFolderInput = z.strictObject({
   token_id: z.string().uuid().describe('Approval token from prepare_delete_contact_folder'),
-  folder_id: z.number().int().positive().describe('The contact folder ID to delete'),
+  folder_id: z.string().min(1).describe('The contact folder ID to delete'),
 });
 
 // =============================================================================

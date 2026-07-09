@@ -127,7 +127,7 @@ export const ListAttachmentsInput = z.strictObject({
 
 export const DownloadAttachmentInput = z.strictObject({
   email_id: EmailIdSchema.describe('The email ID containing the attachment'),
-  attachment_index: z.number().int().positive().describe('The 1-based index of the attachment (from list_attachments)'),
+  attachment_id: z.string().min(1).describe('Attachment ID (at_ token from list_attachments)'),
   save_path: z.string().min(1).describe('Absolute file path where the attachment should be saved'),
 });
 

@@ -32,7 +32,7 @@ export const CreateFocusedOverrideInput = z.strictObject({
 });
 
 export const PrepareDeleteFocusedOverrideInput = z.strictObject({
-  override_id: z.number().int().positive().describe('Override ID to delete'),
+  override_id: z.string().min(1).describe('Override ID to delete'),
 });
 
 export const ConfirmDeleteFocusedOverrideInput = z.strictObject({
@@ -52,9 +52,9 @@ export type ConfirmDeleteFocusedOverrideParams = z.infer<typeof ConfirmDeleteFoc
 // =============================================================================
 
 export interface IFocusedOverridesRepository {
-  listFocusedOverridesAsync(): Promise<Array<{ id: number; senderAddress: string; classifyAs: string }>>;
-  createFocusedOverrideAsync(senderAddress: string, classifyAs: 'focused' | 'other'): Promise<number>;
-  deleteFocusedOverrideAsync(overrideId: number): Promise<void>;
+  listFocusedOverridesAsync(): Promise<Array<{ id: string; senderAddress: string; classifyAs: string }>>;
+  createFocusedOverrideAsync(senderAddress: string, classifyAs: 'focused' | 'other'): Promise<string>;
+  deleteFocusedOverrideAsync(overrideId: string | number): Promise<void>;
 }
 
 // =============================================================================
@@ -154,7 +154,7 @@ export class FocusedOverridesTools {
       };
     }
 
-    await this.repo.deleteFocusedOverrideAsync((result.token!.targetId as number));
+    await this.repo.deleteFocusedOverrideAsync((result.token!.targetId as string));
     return {
       content: [{
         type: 'text' as const,
