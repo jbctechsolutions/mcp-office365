@@ -120,6 +120,10 @@ vi.mock('../../../src/graph/client/index.js', () => ({
       // Calendar group operations
       listCalendarGroups: vi.fn(),
       createCalendarGroup: vi.fn(),
+      // Calendar permission operations
+      listCalendarPermissions: vi.fn(),
+      createCalendarPermission: vi.fn(),
+      deleteCalendarPermission: vi.fn(),
       // Room lists & rooms operations
       listRoomLists: vi.fn(),
       listRooms: vi.fn(),
@@ -156,6 +160,13 @@ vi.mock('../../../src/graph/client/index.js', () => ({
       searchDriveItems: vi.fn(),
       listRecentDriveItems: vi.fn(),
       listSharedWithMe: vi.fn(),
+      // Online meeting operations
+      listOnlineMeetings: vi.fn(),
+      getOnlineMeeting: vi.fn(),
+      listMeetingRecordings: vi.fn(),
+      getMeetingRecordingContent: vi.fn(),
+      listMeetingTranscripts: vi.fn(),
+      getMeetingTranscriptContent: vi.fn(),
     };
   }),
 }));
@@ -3524,8 +3535,11 @@ describe('graph/repository', () => {
   });
 
   describe('Calendar Groups', () => {
+    // Orphan entity (U5b): no Graph URL takes a calendar-group id as a path
+    // segment, so listCalendarGroupsAsync/createCalendarGroupAsync return the
+    // raw Graph id string rather than minting a token — never resolved back.
     describe('listCalendarGroupsAsync', () => {
-      it('returns mapped calendar groups', async () => {
+      it('returns the raw Graph id (no token minted)', async () => {
         mockClient.listCalendarGroups.mockResolvedValue([
           { id: 'cg-1', name: 'My Calendars', classId: '0006' },
           { id: 'cg-2', name: 'Other Calendars', classId: '0006' },
@@ -3534,22 +3548,11 @@ describe('graph/repository', () => {
         const result = await repository.listCalendarGroupsAsync();
 
         expect(result).toHaveLength(2);
-        expect(result[0].id).toBe(hashStringToNumber('cg-1'));
+        expect(result[0].id).toBe('cg-1');
         expect(result[0].name).toBe('My Calendars');
         expect(result[0].classId).toBe('0006');
-        expect(result[1].id).toBe(hashStringToNumber('cg-2'));
+        expect(result[1].id).toBe('cg-2');
         expect(result[1].name).toBe('Other Calendars');
-      });
-
-      it('caches IDs for later lookup', async () => {
-        mockClient.listCalendarGroups.mockResolvedValue([
-          { id: 'cg-1', name: 'My Calendars', classId: '0006' },
-        ]);
-
-        await repository.listCalendarGroupsAsync();
-
-        const cache = (repository as any).idCache.calendarGroups;
-        expect(cache.get(hashStringToNumber('cg-1'))).toBe('cg-1');
       });
 
       it('handles empty results', async () => {
@@ -3573,7 +3576,7 @@ describe('graph/repository', () => {
     });
 
     describe('createCalendarGroupAsync', () => {
-      it('creates a calendar group and returns numeric ID', async () => {
+      it('creates a calendar group and returns the raw Graph id (no token minted)', async () => {
         mockClient.createCalendarGroup.mockResolvedValue({
           id: 'cg-new',
           name: 'Work',
@@ -3582,20 +3585,319 @@ describe('graph/repository', () => {
 
         const result = await repository.createCalendarGroupAsync('Work');
 
-        expect(result).toBe(hashStringToNumber('cg-new'));
+        expect(result).toBe('cg-new');
         expect(mockClient.createCalendarGroup).toHaveBeenCalledWith('Work');
       });
+    });
+  });
 
-      it('caches the new calendar group ID', async () => {
-        mockClient.createCalendarGroup.mockResolvedValue({
-          id: 'cg-new',
-          name: 'Personal',
+  // ===========================================================================
+  // Calendar Permissions
+  // ===========================================================================
+
+  describe('Calendar Permissions', () => {
+    describe('listCalendarPermissionsAsync', () => {
+      it('mints durable cp_ tokens from the calendar fd_ token', async () => {
+        mockClient.listCalendarPermissions.mockResolvedValue([
+          { id: 'perm-1', emailAddress: { address: 'alice@example.com' }, role: 'read', isRemovable: true, isInsideOrganization: true },
+          { id: 'perm-2', emailAddress: { address: 'bob@example.com' }, role: 'write', isRemovable: true, isInsideOrganization: false },
+        ]);
+
+        const result = await repository.listCalendarPermissionsAsync(mintSelfEncoded('folder', 'cal-1'));
+
+        expect(result).toHaveLength(2);
+        expect(result[0].id).toMatch(/^cp_/);
+        expect(result[0].id).not.toBe(result[1].id);
+        expect(result[0].emailAddress).toBe('alice@example.com');
+        expect(result[0].role).toBe('read');
+        expect(result[1].emailAddress).toBe('bob@example.com');
+        expect(mockClient.listCalendarPermissions).toHaveBeenCalledWith('cal-1');
+      });
+
+      it('defaults role, isRemovable, isInsideOrganization when missing', async () => {
+        mockClient.listCalendarPermissions.mockResolvedValue([
+          { id: 'perm-1', emailAddress: { address: 'x@example.com' } },
+        ]);
+
+        const result = await repository.listCalendarPermissionsAsync(mintSelfEncoded('folder', 'cal-1'));
+
+        expect(result[0].role).toBe('none');
+        expect(result[0].isRemovable).toBe(false);
+        expect(result[0].isInsideOrganization).toBe(false);
+      });
+    });
+
+    describe('createCalendarPermissionAsync', () => {
+      it('creates a permission and returns a resolvable cp_ token', async () => {
+        const calTok = mintSelfEncoded('folder', 'cal-1');
+        mockClient.createCalendarPermission.mockResolvedValue({ id: 'perm-new' });
+
+        const permTok = await repository.createCalendarPermissionAsync(calTok, 'alice@example.com', 'read');
+
+        expect(permTok).toMatch(/^cp_/);
+        expect(mockClient.createCalendarPermission).toHaveBeenCalledWith('cal-1', {
+          emailAddress: { address: 'alice@example.com', name: 'alice@example.com' },
+          role: 'read',
         });
 
-        await repository.createCalendarGroupAsync('Personal');
+        mockClient.deleteCalendarPermission.mockResolvedValue(undefined);
+        await repository.deleteCalendarPermissionAsync(permTok);
+        expect(mockClient.deleteCalendarPermission).toHaveBeenCalledWith('cal-1', 'perm-new');
+      });
+    });
 
-        const cache = (repository as any).idCache.calendarGroups;
-        expect(cache.get(hashStringToNumber('cg-new'))).toBe('cg-new');
+    describe('deleteCalendarPermissionAsync', () => {
+      it('resolves the cp_ token to (calendarId, permissionId) and deletes', async () => {
+        mockClient.listCalendarPermissions.mockResolvedValue([
+          { id: 'perm-1', emailAddress: { address: 'alice@example.com' }, role: 'read' },
+        ]);
+        const permissions = await repository.listCalendarPermissionsAsync(mintSelfEncoded('folder', 'cal-1'));
+        const permTok = permissions[0].id;
+
+        mockClient.deleteCalendarPermission.mockResolvedValue(undefined);
+        await repository.deleteCalendarPermissionAsync(permTok);
+
+        expect(mockClient.deleteCalendarPermission).toHaveBeenCalledWith('cal-1', 'perm-1');
+      });
+
+      it('rejects a legacy numeric permission id', async () => {
+        await expect(repository.deleteCalendarPermissionAsync(999999)).rejects.toThrow('not supported');
+      });
+
+      it('rejects an unknown cp_ token', async () => {
+        await expect(repository.deleteCalendarPermissionAsync('cp_bogus')).rejects.toThrow('Unknown or unresolvable');
+      });
+    });
+  });
+
+  // ===========================================================================
+  // Online Meetings
+  // ===========================================================================
+
+  describe('Online Meetings', () => {
+    describe('listOnlineMeetingsAsync', () => {
+      it('mints durable om_ tokens', async () => {
+        mockClient.listOnlineMeetings.mockResolvedValue([
+          { id: 'meet-1', subject: 'Sprint Planning', startDateTime: '2026-03-01T10:00:00Z', endDateTime: '2026-03-01T11:00:00Z', joinWebUrl: 'https://teams.microsoft.com/1' },
+          { id: 'meet-2', subject: 'Standup', startDateTime: '2026-03-02T09:00:00Z', endDateTime: '2026-03-02T09:15:00Z', joinWebUrl: 'https://teams.microsoft.com/2' },
+        ]);
+
+        const result = await repository.listOnlineMeetingsAsync();
+
+        expect(result).toHaveLength(2);
+        expect(result[0].id).toMatch(/^om_/);
+        expect(result[0].id).not.toBe(result[1].id);
+        expect(result[0].subject).toBe('Sprint Planning');
+        expect(result[1].subject).toBe('Standup');
+        expect(mockClient.listOnlineMeetings).toHaveBeenCalledWith(20);
+      });
+
+      it('passes a custom limit', async () => {
+        mockClient.listOnlineMeetings.mockResolvedValue([]);
+
+        await repository.listOnlineMeetingsAsync(5);
+
+        expect(mockClient.listOnlineMeetings).toHaveBeenCalledWith(5);
+      });
+    });
+
+    describe('getOnlineMeetingAsync', () => {
+      it('resolves the om_ token to the Graph id', async () => {
+        mockClient.listOnlineMeetings.mockResolvedValue([
+          { id: 'meet-1', subject: 'Sprint Planning', startDateTime: '2026-03-01T10:00:00Z', endDateTime: '2026-03-01T11:00:00Z', joinWebUrl: 'https://teams.microsoft.com/1' },
+        ]);
+        const meetings = await repository.listOnlineMeetingsAsync();
+        const meetTok = meetings[0].id;
+
+        mockClient.getOnlineMeeting.mockResolvedValue({
+          subject: 'Sprint Planning',
+          startDateTime: '2026-03-01T10:00:00Z',
+          endDateTime: '2026-03-01T11:00:00Z',
+          joinWebUrl: 'https://teams.microsoft.com/1',
+          participants: { organizer: {} },
+        });
+
+        const result = await repository.getOnlineMeetingAsync(meetTok);
+
+        expect(result?.id).toBe(meetTok);
+        expect(result?.subject).toBe('Sprint Planning');
+        expect(mockClient.getOnlineMeeting).toHaveBeenCalledWith('meet-1');
+      });
+
+      it('re-lists on a cold-miss om_ token then resolves', async () => {
+        // An om_ token minted in a prior session isn't in this store's alias
+        // table; getOnlineMeetingAsync re-lists (deterministic re-mint) and
+        // retries the resolve, matching the resolveTeamId self-heal pattern.
+        mockClient.listOnlineMeetings.mockResolvedValue([
+          { id: 'meet-1', subject: 'Sprint Planning', startDateTime: '', endDateTime: '', joinWebUrl: '' },
+        ]);
+        const meetings = await repository.listOnlineMeetingsAsync();
+        const meetTok = meetings[0].id;
+
+        const fresh = StateStore.open({ dir: '/tmp/mcp-o365-repo-test-meetings-cold', warn: () => {} });
+        const repo2 = createGraphRepository(undefined, fresh);
+        const client2 = (repo2 as any).client;
+        client2.listOnlineMeetings.mockResolvedValue([
+          { id: 'meet-1', subject: 'Sprint Planning', startDateTime: '', endDateTime: '', joinWebUrl: '' },
+        ]);
+        client2.getOnlineMeeting.mockResolvedValue({ subject: 'Sprint Planning', participants: null });
+
+        const result = await repo2.getOnlineMeetingAsync(meetTok);
+
+        expect(result?.subject).toBe('Sprint Planning');
+        expect(client2.listOnlineMeetings).toHaveBeenCalled();
+        expect(client2.getOnlineMeeting).toHaveBeenCalledWith('meet-1');
+      });
+
+      it('returns undefined when the token is unresolvable even after re-list', async () => {
+        mockClient.listOnlineMeetings.mockResolvedValue([]);
+
+        const result = await repository.getOnlineMeetingAsync('om_bogus');
+
+        expect(result).toBeUndefined();
+      });
+    });
+  });
+
+  // ===========================================================================
+  // Meeting Recordings
+  // ===========================================================================
+
+  describe('Meeting Recordings', () => {
+    describe('listMeetingRecordingsAsync', () => {
+      it('resolves the parent om_ token and mints rc_ tokens', async () => {
+        mockClient.listOnlineMeetings.mockResolvedValue([
+          { id: 'meet-1', subject: 'Sprint Planning', startDateTime: '', endDateTime: '', joinWebUrl: '' },
+        ]);
+        const meetings = await repository.listOnlineMeetingsAsync();
+        const meetTok = meetings[0].id;
+
+        mockClient.listMeetingRecordings.mockResolvedValue([
+          { id: 'rec-1', createdDateTime: '2026-03-01T11:05:00Z', recordingContentUrl: 'https://graph.microsoft.com/rec1' },
+        ]);
+
+        const result = await repository.listMeetingRecordingsAsync(meetTok);
+
+        expect(result).toHaveLength(1);
+        expect(result[0].id).toMatch(/^rc_/);
+        expect(mockClient.listMeetingRecordings).toHaveBeenCalledWith('meet-1');
+      });
+
+      it('rejects an unknown parent om_ token', async () => {
+        await expect(repository.listMeetingRecordingsAsync('om_bogus')).rejects.toThrow('Unknown or unresolvable');
+      });
+    });
+
+    describe('downloadMeetingRecordingAsync', () => {
+      it('resolves the rc_ token to (meetingId, recordingId) and downloads', async () => {
+        mockClient.listOnlineMeetings.mockResolvedValue([
+          { id: 'meet-1', subject: '', startDateTime: '', endDateTime: '', joinWebUrl: '' },
+        ]);
+        const meetings = await repository.listOnlineMeetingsAsync();
+        const meetTok = meetings[0].id;
+
+        mockClient.listMeetingRecordings.mockResolvedValue([
+          { id: 'rec-1', createdDateTime: '', recordingContentUrl: '' },
+        ]);
+        const recordings = await repository.listMeetingRecordingsAsync(meetTok);
+        const recTok = recordings[0].id;
+
+        mockClient.getMeetingRecordingContent.mockResolvedValue(new ArrayBuffer(8));
+
+        const outputPath = await repository.downloadMeetingRecordingAsync(recTok, '/tmp/recording.mp4');
+
+        expect(outputPath).toBe('/tmp/recording.mp4');
+        expect(mockClient.getMeetingRecordingContent).toHaveBeenCalledWith('meet-1', 'rec-1');
+        expect(fs.writeFileSync).toHaveBeenCalledWith('/tmp/recording.mp4', expect.any(Buffer));
+      });
+
+      it('rejects a legacy numeric recording id', async () => {
+        await expect(repository.downloadMeetingRecordingAsync(999999, '/tmp/out.mp4')).rejects.toThrow('not supported');
+      });
+
+      it('rejects an unknown rc_ token', async () => {
+        await expect(repository.downloadMeetingRecordingAsync('rc_bogus', '/tmp/out.mp4')).rejects.toThrow('Unknown or unresolvable');
+      });
+    });
+  });
+
+  // ===========================================================================
+  // Meeting Transcripts
+  // ===========================================================================
+
+  describe('Meeting Transcripts', () => {
+    describe('listMeetingTranscriptsAsync', () => {
+      it('resolves the parent om_ token and mints tr_ tokens', async () => {
+        mockClient.listOnlineMeetings.mockResolvedValue([
+          { id: 'meet-1', subject: '', startDateTime: '', endDateTime: '', joinWebUrl: '' },
+        ]);
+        const meetings = await repository.listOnlineMeetingsAsync();
+        const meetTok = meetings[0].id;
+
+        mockClient.listMeetingTranscripts.mockResolvedValue([
+          { id: 'tr-1', createdDateTime: '2026-03-01T11:05:00Z', contentUrl: 'https://graph.microsoft.com/tr1' },
+        ]);
+
+        const result = await repository.listMeetingTranscriptsAsync(meetTok);
+
+        expect(result).toHaveLength(1);
+        expect(result[0].id).toMatch(/^tr_/);
+        expect(mockClient.listMeetingTranscripts).toHaveBeenCalledWith('meet-1');
+      });
+
+      it('rejects an unknown parent om_ token', async () => {
+        await expect(repository.listMeetingTranscriptsAsync('om_bogus')).rejects.toThrow('Unknown or unresolvable');
+      });
+    });
+
+    describe('getMeetingTranscriptContentAsync', () => {
+      it('resolves the tr_ token to (meetingId, transcriptId) and fetches content', async () => {
+        mockClient.listOnlineMeetings.mockResolvedValue([
+          { id: 'meet-1', subject: '', startDateTime: '', endDateTime: '', joinWebUrl: '' },
+        ]);
+        const meetings = await repository.listOnlineMeetingsAsync();
+        const meetTok = meetings[0].id;
+
+        mockClient.listMeetingTranscripts.mockResolvedValue([
+          { id: 'tr-1', createdDateTime: '', contentUrl: '' },
+        ]);
+        const transcripts = await repository.listMeetingTranscriptsAsync(meetTok);
+        const trTok = transcripts[0].id;
+
+        mockClient.getMeetingTranscriptContent.mockResolvedValue('WEBVTT\n\ncontent');
+
+        const content = await repository.getMeetingTranscriptContentAsync(trTok);
+
+        expect(content).toBe('WEBVTT\n\ncontent');
+        expect(mockClient.getMeetingTranscriptContent).toHaveBeenCalledWith('meet-1', 'tr-1', 'text/vtt');
+      });
+
+      it('passes a custom format', async () => {
+        mockClient.listOnlineMeetings.mockResolvedValue([
+          { id: 'meet-1', subject: '', startDateTime: '', endDateTime: '', joinWebUrl: '' },
+        ]);
+        const meetings = await repository.listOnlineMeetingsAsync();
+        const meetTok = meetings[0].id;
+
+        mockClient.listMeetingTranscripts.mockResolvedValue([
+          { id: 'tr-1', createdDateTime: '', contentUrl: '' },
+        ]);
+        const transcripts = await repository.listMeetingTranscriptsAsync(meetTok);
+        const trTok = transcripts[0].id;
+
+        mockClient.getMeetingTranscriptContent.mockResolvedValue('plain text');
+
+        await repository.getMeetingTranscriptContentAsync(trTok, 'text/plain');
+
+        expect(mockClient.getMeetingTranscriptContent).toHaveBeenCalledWith('meet-1', 'tr-1', 'text/plain');
+      });
+
+      it('rejects a legacy numeric transcript id', async () => {
+        await expect(repository.getMeetingTranscriptContentAsync(999999)).rejects.toThrow('not supported');
+      });
+
+      it('rejects an unknown tr_ token', async () => {
+        await expect(repository.getMeetingTranscriptContentAsync('tr_bogus')).rejects.toThrow('Unknown or unresolvable');
       });
     });
   });

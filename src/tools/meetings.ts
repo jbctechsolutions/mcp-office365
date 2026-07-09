@@ -31,24 +31,24 @@ export const ListOnlineMeetingsInput = z.strictObject({
 });
 
 export const GetOnlineMeetingInput = z.strictObject({
-  meeting_id: z.number().int().positive().describe('Meeting ID from list_online_meetings'),
+  meeting_id: z.string().min(1).describe('Meeting ID (om_ token from list_online_meetings)'),
 });
 
 export const ListMeetingRecordingsInput = z.strictObject({
-  meeting_id: z.number().int().positive().describe('Meeting ID from list_online_meetings'),
+  meeting_id: z.string().min(1).describe('Meeting ID (om_ token from list_online_meetings)'),
 });
 
 export const DownloadMeetingRecordingInput = z.strictObject({
-  recording_id: z.number().int().positive().describe('Recording ID from list_meeting_recordings'),
+  recording_id: z.string().min(1).describe('Recording ID (rc_ token from list_meeting_recordings)'),
   output_path: z.string().min(1).describe('Local file path to save the recording'),
 });
 
 export const ListMeetingTranscriptsInput = z.strictObject({
-  meeting_id: z.number().int().positive().describe('Meeting ID from list_online_meetings'),
+  meeting_id: z.string().min(1).describe('Meeting ID (om_ token from list_online_meetings)'),
 });
 
 export const GetMeetingTranscriptContentInput = z.strictObject({
-  transcript_id: z.number().int().positive().describe('Transcript ID from list_meeting_transcripts'),
+  transcript_id: z.string().min(1).describe('Transcript ID (tr_ token from list_meeting_transcripts)'),
   format: z.enum(['text/vtt', 'text/plain']).optional().describe('Transcript format (default text/vtt)'),
 });
 
@@ -69,20 +69,20 @@ export type GetMeetingTranscriptContentParams = z.infer<typeof GetMeetingTranscr
 
 export interface IMeetingsRepository {
   listOnlineMeetingsAsync(limit?: number): Promise<Array<{
-    id: number; subject: string; startDateTime: string; endDateTime: string; joinUrl: string;
+    id: string; subject: string; startDateTime: string; endDateTime: string; joinUrl: string;
   }>>;
-  getOnlineMeetingAsync(meetingId: number): Promise<{
-    id: number; subject: string; startDateTime: string; endDateTime: string; joinUrl: string;
+  getOnlineMeetingAsync(meetingId: string | number): Promise<{
+    id: string; subject: string; startDateTime: string; endDateTime: string; joinUrl: string;
     participants: unknown;
   } | undefined>;
-  listMeetingRecordingsAsync(meetingId: number): Promise<Array<{
-    id: number; createdDateTime: string; recordingContentUrl: string;
+  listMeetingRecordingsAsync(meetingId: string | number): Promise<Array<{
+    id: string; createdDateTime: string; recordingContentUrl: string;
   }>>;
-  downloadMeetingRecordingAsync(recordingId: number, outputPath: string): Promise<string>;
-  listMeetingTranscriptsAsync(meetingId: number): Promise<Array<{
-    id: number; createdDateTime: string; contentUrl: string;
+  downloadMeetingRecordingAsync(recordingId: string | number, outputPath: string): Promise<string>;
+  listMeetingTranscriptsAsync(meetingId: string | number): Promise<Array<{
+    id: string; createdDateTime: string; contentUrl: string;
   }>>;
-  getMeetingTranscriptContentAsync(transcriptId: number, format?: string): Promise<string>;
+  getMeetingTranscriptContentAsync(transcriptId: string | number, format?: string): Promise<string>;
 }
 
 // =============================================================================
