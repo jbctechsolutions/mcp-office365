@@ -56,9 +56,6 @@ interface IdCache {
   focusedOverrides: Map<number, string>;
   calendarGroups: Map<number, string>;
   calendarPermissions: Map<number, { calendarId: string; permissionId: string }>;
-  channelMessages: Map<number, { teamId: string; channelId: string; messageId: string }>;
-  chats: Map<number, string>;
-  chatMessages: Map<number, { chatId: string; messageId: string }>;
   checklistItems: Map<number, { taskListId: string; taskId: string; checklistItemId: string }>;
   linkedResources: Map<number, { taskListId: string; taskId: string; linkedResourceId: string }>;
   taskAttachments: Map<number, { taskListId: string; taskId: string; attachmentId: string }>;
@@ -94,9 +91,6 @@ export class GraphRepository implements IRepository {
     focusedOverrides: new Map(),
     calendarGroups: new Map(),
     calendarPermissions: new Map(),
-    channelMessages: new Map(),
-    chats: new Map(),
-    chatMessages: new Map(),
     checklistItems: new Map(),
     linkedResources: new Map(),
     taskAttachments: new Map(),
@@ -236,13 +230,16 @@ export class GraphRepository implements IRepository {
     throw new Error(`Plan ID ${planId} not found. Verify the ID is correct by calling list_plans.`);
   }
 
-  private async resolveChatId(chatId: number): Promise<string> {
-    let graphId = this.idCache.chats.get(chatId);
-    if (graphId != null) return graphId;
-    await this.listChatsAsync();
-    graphId = this.idCache.chats.get(chatId);
-    if (graphId != null) return graphId;
-    throw new Error(`Chat ID ${chatId} not found. Verify the ID is correct by calling list_chats.`);
+  private async resolveChatId(chatId: string | number): Promise<string> {
+    try {
+      return this.toGraphId(chatId, 'chat');
+    } catch (e) {
+      if (e instanceof IdUnknownError) {
+        await this.listChatsAsync();
+        return this.toGraphId(chatId, 'chat');
+      }
+      throw e;
+    }
   }
 
   // ===========================================================================
@@ -2181,17 +2178,15 @@ export class GraphRepository implements IRepository {
    * Lists recent messages in a channel.
    */
   async listChannelMessagesAsync(channelId: string | number, limit: number = 25): Promise<Array<{
-    id: number; senderName: string; senderEmail: string; bodyPreview: string;
+    id: string; senderName: string; senderEmail: string; bodyPreview: string;
     bodyContent: string; contentType: string; createdDateTime: string;
   }>> {
     const { teamId, channelId: graphChannelId } = this.toGraphParts(channelId, 'channel', ['teamId', 'channelId']);
     const messages = await this.client.listChannelMessages(teamId, graphChannelId, limit);
     return messages.map((msg) => {
       const graphId = msg.id!;
-      const numericId = hashStringToNumber(graphId);
-      this.idCache.channelMessages.set(numericId, { teamId, channelId: graphChannelId, messageId: graphId });
       return {
-        id: numericId,
+        id: this.mintAliasComposite('channelMessage', { teamId, channelId: graphChannelId, messageId: graphId }),
         senderName: msg.from?.user?.displayName ?? msg.from?.application?.displayName ?? '',
         senderEmail: ((msg.from?.user as unknown as Record<string, unknown> | undefined)?.email as string | undefined) ?? '',
         bodyPreview: msg.body?.content?.substring(0, 200) ?? '',
@@ -2205,22 +2200,20 @@ export class GraphRepository implements IRepository {
   /**
    * Gets a specific channel message with its replies.
    */
-  async getChannelMessageAsync(messageId: number): Promise<{
-    id: number; senderName: string; senderEmail: string; bodyContent: string;
+  async getChannelMessageAsync(messageId: string | number): Promise<{
+    id: string; senderName: string; senderEmail: string; bodyContent: string;
     contentType: string; createdDateTime: string;
-    replies: Array<{ id: number; senderName: string; senderEmail: string; bodyContent: string; contentType: string; createdDateTime: string }>;
+    replies: Array<{ id: string; senderName: string; senderEmail: string; bodyContent: string; contentType: string; createdDateTime: string }>;
   }> {
-    const cached = this.idCache.channelMessages.get(messageId);
-    if (cached == null) throw new Error(`Message ID ${messageId} not found in cache. Try listing channel messages first.`);
+    const { teamId, channelId, messageId: graphMessageId } = this.toGraphParts(messageId, 'channelMessage', ['teamId', 'channelId', 'messageId']);
     const [msg, repliesRaw] = await Promise.all([
-      this.client.getChannelMessage(cached.teamId, cached.channelId, cached.messageId),
-      this.client.listChannelMessageReplies(cached.teamId, cached.channelId, cached.messageId),
+      this.client.getChannelMessage(teamId, channelId, graphMessageId),
+      this.client.listChannelMessageReplies(teamId, channelId, graphMessageId),
     ]);
     const replies = repliesRaw.map((r) => {
       const rGraphId = r.id!;
-      const rNumericId = hashStringToNumber(rGraphId);
       return {
-        id: rNumericId,
+        id: this.mintAliasComposite('channelMessage', { teamId, channelId, messageId: rGraphId }),
         senderName: r.from?.user?.displayName ?? r.from?.application?.displayName ?? '',
         senderEmail: ((r.from?.user as unknown as Record<string, unknown> | undefined)?.email as string | undefined) ?? '',
         bodyContent: r.body?.content ?? '',
@@ -2229,7 +2222,7 @@ export class GraphRepository implements IRepository {
       };
     });
     return {
-      id: messageId,
+      id: String(messageId),
       senderName: msg.from?.user?.displayName ?? msg.from?.application?.displayName ?? '',
       senderEmail: ((msg.from?.user as unknown as Record<string, unknown> | undefined)?.email as string | undefined) ?? '',
       bodyContent: msg.body?.content ?? '',
@@ -2242,26 +2235,20 @@ export class GraphRepository implements IRepository {
   /**
    * Sends a new message to a channel.
    */
-  async sendChannelMessageAsync(channelId: string | number, body: string, contentType: string = 'html'): Promise<number> {
+  async sendChannelMessageAsync(channelId: string | number, body: string, contentType: string = 'html'): Promise<string> {
     const { teamId, channelId: graphChannelId } = this.toGraphParts(channelId, 'channel', ['teamId', 'channelId']);
     const msg = await this.client.sendChannelMessage(teamId, graphChannelId, body, contentType);
     const graphId = msg.id!;
-    const numericId = hashStringToNumber(graphId);
-    this.idCache.channelMessages.set(numericId, { teamId, channelId: graphChannelId, messageId: graphId });
-    return numericId;
+    return this.mintAliasComposite('channelMessage', { teamId, channelId: graphChannelId, messageId: graphId });
   }
 
   /**
    * Replies to a channel message.
    */
-  async replyToChannelMessageAsync(messageId: number, body: string, contentType: string = 'html'): Promise<number> {
-    const cached = this.idCache.channelMessages.get(messageId);
-    if (cached == null) throw new Error(`Message ID ${messageId} not found in cache. Try listing channel messages first.`);
-    const reply = await this.client.replyToChannelMessage(cached.teamId, cached.channelId, cached.messageId, body, contentType);
-    const graphId = reply.id!;
-    const numericId = hashStringToNumber(graphId);
-    this.idCache.channelMessages.set(numericId, { teamId: cached.teamId, channelId: cached.channelId, messageId: graphId });
-    return numericId;
+  async replyToChannelMessageAsync(messageId: string | number, body: string, contentType: string = 'html'): Promise<string> {
+    const { teamId, channelId, messageId: graphMessageId } = this.toGraphParts(messageId, 'channelMessage', ['teamId', 'channelId', 'messageId']);
+    const reply = await this.client.replyToChannelMessage(teamId, channelId, graphMessageId, body, contentType);
+    return this.mintAliasComposite('channelMessage', { teamId, channelId, messageId: reply.id! });
   }
 
   // ===========================================================================
@@ -2269,19 +2256,17 @@ export class GraphRepository implements IRepository {
   // ===========================================================================
 
   async listChatsAsync(limit: number = 25): Promise<Array<{
-    id: number; topic: string; chatType: string; lastMessagePreview: string; createdDateTime: string;
+    id: string; topic: string; chatType: string; lastMessagePreview: string; createdDateTime: string;
   }>> {
     const chats = await this.client.listChats(limit);
     return chats.map((chat) => {
       const graphId = chat.id!;
-      const numericId = hashStringToNumber(graphId);
-      this.idCache.chats.set(numericId, graphId);
       const chatRecord = chat as unknown as Record<string, unknown>;
       const preview = chatRecord.lastMessagePreview as Record<string, unknown> | undefined;
       const previewBody = preview?.body as Record<string, unknown> | undefined;
       const previewContent = (previewBody?.content as string | undefined)?.substring(0, 200) ?? '';
       return {
-        id: numericId,
+        id: this.mintAlias('chat', graphId),
         topic: chat.topic ?? '',
         chatType: chat.chatType ?? 'oneOnOne',
         lastMessagePreview: previewContent,
@@ -2290,13 +2275,13 @@ export class GraphRepository implements IRepository {
     });
   }
 
-  async getChatAsync(chatId: number): Promise<{
-    id: number; topic: string; chatType: string; createdDateTime: string; webUrl: string;
+  async getChatAsync(chatId: string | number): Promise<{
+    id: string; topic: string; chatType: string; createdDateTime: string; webUrl: string;
   }> {
     const graphId = await this.resolveChatId(chatId);
     const chat = await this.client.getChat(graphId);
     return {
-      id: chatId,
+      id: String(chatId),
       topic: chat.topic ?? '',
       chatType: chat.chatType ?? 'oneOnOne',
       createdDateTime: chat.createdDateTime ?? '',
@@ -2304,18 +2289,16 @@ export class GraphRepository implements IRepository {
     };
   }
 
-  async listChatMessagesAsync(chatId: number, limit: number = 25): Promise<Array<{
-    id: number; senderName: string; senderEmail: string; bodyPreview: string;
+  async listChatMessagesAsync(chatId: string | number, limit: number = 25): Promise<Array<{
+    id: string; senderName: string; senderEmail: string; bodyPreview: string;
     bodyContent: string; contentType: string; createdDateTime: string;
   }>> {
     const graphChatId = await this.resolveChatId(chatId);
     const messages = await this.client.listChatMessages(graphChatId, limit);
     return messages.map((msg) => {
       const graphId = msg.id!;
-      const numericId = hashStringToNumber(graphId);
-      this.idCache.chatMessages.set(numericId, { chatId: graphChatId, messageId: graphId });
       return {
-        id: numericId,
+        id: this.mintAliasComposite('chatMessage', { chatId: graphChatId, messageId: graphId }),
         senderName: msg.from?.user?.displayName ?? msg.from?.application?.displayName ?? '',
         senderEmail: ((msg.from?.user as unknown as Record<string, unknown> | undefined)?.email as string | undefined) ?? '',
         bodyPreview: msg.body?.content?.substring(0, 200) ?? '',
@@ -2326,20 +2309,18 @@ export class GraphRepository implements IRepository {
     });
   }
 
-  async sendChatMessageAsync(chatId: number, body: string, contentType: string = 'html'): Promise<number> {
+  async sendChatMessageAsync(chatId: string | number, body: string, contentType: string = 'html'): Promise<string> {
     const graphChatId = await this.resolveChatId(chatId);
     const msg = await this.client.sendChatMessage(graphChatId, body, contentType);
     const graphId = msg.id!;
-    const numericId = hashStringToNumber(graphId);
-    this.idCache.chatMessages.set(numericId, { chatId: graphChatId, messageId: graphId });
-    return numericId;
+    return this.mintAliasComposite('chatMessage', { chatId: graphChatId, messageId: graphId });
   }
 
   // ===========================================================================
   // Message Reactions
   // ===========================================================================
 
-  async listMessageReactionsAsync(messageId: number, messageType: 'channel' | 'chat'): Promise<Array<{
+  async listMessageReactionsAsync(messageId: string | number, messageType: 'channel' | 'chat'): Promise<Array<{
     reactionType: string;
     user: { displayName: string };
     createdDateTime: string;
@@ -2358,43 +2339,37 @@ export class GraphRepository implements IRepository {
     };
 
     if (messageType === 'channel') {
-      const cached = this.idCache.channelMessages.get(messageId);
-      if (cached == null) throw new Error(`Message ID ${messageId} not found in cache. Try listing channel messages first.`);
-      const msg = await this.client.getChannelMessage(cached.teamId, cached.channelId, cached.messageId);
+      const { teamId, channelId, messageId: graphMessageId } = this.toGraphParts(messageId, 'channelMessage', ['teamId', 'channelId', 'messageId']);
+      const msg = await this.client.getChannelMessage(teamId, channelId, graphMessageId);
       return mapReactions(msg as unknown as Record<string, unknown>);
     } else {
-      const cached = this.idCache.chatMessages.get(messageId);
-      if (cached == null) throw new Error(`Message ID ${messageId} not found in cache. Try listing chat messages first.`);
-      const msg = await this.client.getChatMessage(cached.chatId, cached.messageId);
+      const { chatId, messageId: graphMessageId } = this.toGraphParts(messageId, 'chatMessage', ['chatId', 'messageId']);
+      const msg = await this.client.getChatMessage(chatId, graphMessageId);
       return mapReactions(msg as unknown as Record<string, unknown>);
     }
   }
 
-  async addMessageReactionAsync(messageId: number, messageType: 'channel' | 'chat', reactionType: string): Promise<void> {
+  async addMessageReactionAsync(messageId: string | number, messageType: 'channel' | 'chat', reactionType: string): Promise<void> {
     if (messageType === 'channel') {
-      const cached = this.idCache.channelMessages.get(messageId);
-      if (cached == null) throw new Error(`Message ID ${messageId} not found in cache. Try listing channel messages first.`);
-      await this.client.setChannelMessageReaction(cached.teamId, cached.channelId, cached.messageId, reactionType);
+      const { teamId, channelId, messageId: graphMessageId } = this.toGraphParts(messageId, 'channelMessage', ['teamId', 'channelId', 'messageId']);
+      await this.client.setChannelMessageReaction(teamId, channelId, graphMessageId, reactionType);
     } else {
-      const cached = this.idCache.chatMessages.get(messageId);
-      if (cached == null) throw new Error(`Message ID ${messageId} not found in cache. Try listing chat messages first.`);
-      await this.client.setChatMessageReaction(cached.chatId, cached.messageId, reactionType);
+      const { chatId, messageId: graphMessageId } = this.toGraphParts(messageId, 'chatMessage', ['chatId', 'messageId']);
+      await this.client.setChatMessageReaction(chatId, graphMessageId, reactionType);
     }
   }
 
-  async removeMessageReactionAsync(messageId: number, messageType: 'channel' | 'chat', reactionType: string): Promise<void> {
+  async removeMessageReactionAsync(messageId: string | number, messageType: 'channel' | 'chat', reactionType: string): Promise<void> {
     if (messageType === 'channel') {
-      const cached = this.idCache.channelMessages.get(messageId);
-      if (cached == null) throw new Error(`Message ID ${messageId} not found in cache. Try listing channel messages first.`);
-      await this.client.unsetChannelMessageReaction(cached.teamId, cached.channelId, cached.messageId, reactionType);
+      const { teamId, channelId, messageId: graphMessageId } = this.toGraphParts(messageId, 'channelMessage', ['teamId', 'channelId', 'messageId']);
+      await this.client.unsetChannelMessageReaction(teamId, channelId, graphMessageId, reactionType);
     } else {
-      const cached = this.idCache.chatMessages.get(messageId);
-      if (cached == null) throw new Error(`Message ID ${messageId} not found in cache. Try listing chat messages first.`);
-      await this.client.unsetChatMessageReaction(cached.chatId, cached.messageId, reactionType);
+      const { chatId, messageId: graphMessageId } = this.toGraphParts(messageId, 'chatMessage', ['chatId', 'messageId']);
+      await this.client.unsetChatMessageReaction(chatId, graphMessageId, reactionType);
     }
   }
 
-  async listChatMembersAsync(chatId: number): Promise<Array<{ displayName: string; email: string; roles: string[] }>> {
+  async listChatMembersAsync(chatId: string | number): Promise<Array<{ displayName: string; email: string; roles: string[] }>> {
     const graphChatId = await this.resolveChatId(chatId);
     const members = await this.client.listChatMembers(graphChatId);
     return members.map((m) => ({

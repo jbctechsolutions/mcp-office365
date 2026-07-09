@@ -66,6 +66,38 @@ no-console warning is expected).
   categories, calendar permissions, calendar groups, mail rules move-target(? migrated), excel.
   These use `hashStringToNumber` + `idCache.*` maps. Their tool params are still `z.number()`.
 
+## Alias-backed composite pattern (LOCKED by #48 — copy this for the wave)
+
+Established in `repository.ts` by the teams+channels pilot (commit `8a3654b`):
+- **`mintAlias(entityType, graphId)`** — single-Graph-id entities. `registerComposite`
+  with `parts:{id:graphId}`, stored `graphId`.
+- **`mintAliasComposite(entityType, parts)`** — multi-id entities. Stores
+  `graphId: JSON.stringify(parts)`; `parts` is also the canonical key.
+- **`toGraphParts<K>(id, entityType, keys)`** — generic resolver; JSON-parses the
+  alias value, validates every required key is a non-empty string (else `ID_UNKNOWN`).
+  Generic over keys so destructured fields are non-optional under `noUncheckedIndexedAccess`.
+- **Parent cold-miss re-list** (`resolveTeamId`): try `toGraphId`; on `IdUnknownError`
+  re-list the parent (deterministic re-mint) then retry. Only `IdUnknownError` is caught
+  (not `ID_ENTITY_MISMATCH`/`NUMERIC_ID_UNSUPPORTED`/`ID_FOREIGN_ACCOUNT`).
+- **Store**: `this.store` (always present in prod; in-memory-degraded still works).
+  Repo tests thread `StateStore.open({dir})` in `beforeEach` (fs mocked → in-memory).
+- **Confirm flows**: relax `z.number()`→`z.string()`; fix `targetId as number`→`as string`.
+- **Known tradeoff (documented, accepted):** composite child tokens are NOT cold-durable
+  and can't self-heal (no parent handle to re-list) — machine-scoped, `ID_UNKNOWN` on a
+  cold store. On-disk store persists across restarts (common case fine). Adversarial review
+  #48 flagged this asymmetry; it's the deliberate alias-backed choice (short + account-scoped).
+
+## Alias prefix allocation (whole wave — avoid collisions)
+
+Existing alias: `pl`=plan `pt`=plannerTask `ch`=chat `tm`=team `at`=attachment(mail)
+`cn`=channel `cm`=chatMessage `ci`=checklistItem. **Decision: ALL remaining composites
+are alias-backed** (one mechanical pattern; `td` task moves self→alias). New prefixes:
+`td`=task(→alias) `tl`=taskList `xm`=channelMessage `lr`=linkedResource `ta`=taskAttachment
+`cp`=calendarPermission `pb`=plannerBucket `rc`=recording `tr`=transcript `dl`=documentLibrary
+`li`=libraryDriveItem `mr`=mailRule `cf`=contactFolder `cg`=category `fo`=focusedOverride
+`om`=onlineMeeting `si`=site. Each entity PR adds its EntityType(s)+prefix(es) to `token.ts`
++ token.test.ts, then wires repo+tools per the locked pattern above.
+
 ## Process / cadence (keep doing this)
 
 1. Cut a branch off latest `origin/main` (**use `git fetch --no-tags origin main:refs/remotes/origin/main`

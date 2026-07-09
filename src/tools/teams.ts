@@ -66,7 +66,7 @@ export const ListChannelMessagesInput = z.strictObject({
 });
 
 export const GetChannelMessageInput = z.strictObject({
-  message_id: z.number().int().positive().describe('Message ID from list_channel_messages'),
+  message_id: z.string().min(1).describe('Message ID (xm_ token from list_channel_messages)'),
 });
 
 export const PrepareSendChannelMessageInput = z.strictObject({
@@ -80,7 +80,7 @@ export const ConfirmSendChannelMessageInput = z.strictObject({
 });
 
 export const PrepareReplyChannelMessageInput = z.strictObject({
-  message_id: z.number().int().positive().describe('Message ID to reply to'),
+  message_id: z.string().min(1).describe('Message ID (xm_ token) to reply to'),
   body: z.string().min(1).describe('Reply body'),
   content_type: z.enum(['text', 'html']).optional().describe('Content type (default: html)'),
 });
@@ -94,16 +94,16 @@ export const ListChatsInput = z.strictObject({
 });
 
 export const GetChatInput = z.strictObject({
-  chat_id: z.number().int().positive().describe('Chat ID from list_chats'),
+  chat_id: z.string().min(1).describe('Chat ID (ch_ token from list_chats)'),
 });
 
 export const ListChatMessagesInput = z.strictObject({
-  chat_id: z.number().int().positive().describe('Chat ID from list_chats'),
+  chat_id: z.string().min(1).describe('Chat ID (ch_ token from list_chats)'),
   limit: z.number().int().min(1).max(50).optional().describe('Max messages to return (default 25, max 50)'),
 });
 
 export const PrepareSendChatMessageInput = z.strictObject({
-  chat_id: z.number().int().positive().describe('Chat ID to send message to'),
+  chat_id: z.string().min(1).describe('Chat ID (ch_ token) to send message to'),
   body: z.string().min(1).describe('Message body'),
   content_type: z.enum(['text', 'html']).optional().describe('Content type (default: html)'),
 });
@@ -113,16 +113,16 @@ export const ConfirmSendChatMessageInput = z.strictObject({
 });
 
 export const ListChatMembersInput = z.strictObject({
-  chat_id: z.number().int().positive().describe('Chat ID from list_chats'),
+  chat_id: z.string().min(1).describe('Chat ID (ch_ token from list_chats)'),
 });
 
 export const ListMessageReactionsInput = z.strictObject({
-  message_id: z.number().describe('Numeric message ID'),
+  message_id: z.string().min(1).describe('Message ID (cm_/xm_ token)'),
   message_type: z.enum(['channel', 'chat']).describe('Whether this is a channel message or chat message'),
 });
 
 export const PrepareAddMessageReactionInput = z.strictObject({
-  message_id: z.number().describe('Numeric message ID'),
+  message_id: z.string().min(1).describe('Message ID (cm_/xm_ token)'),
   message_type: z.enum(['channel', 'chat']).describe('Whether this is a channel message or chat message'),
   reaction_type: z.string().describe('Reaction emoji name (e.g., "like", "heart", "laugh", "surprised", "sad", "angry")'),
 });
@@ -132,7 +132,7 @@ export const ConfirmAddMessageReactionInput = z.strictObject({
 });
 
 export const RemoveMessageReactionInput = z.strictObject({
-  message_id: z.number().describe('Numeric message ID'),
+  message_id: z.string().min(1).describe('Message ID (cm_/xm_ token)'),
   message_type: z.enum(['channel', 'chat']).describe('Whether this is a channel message or chat message'),
   reaction_type: z.string().describe('Reaction emoji name to remove'),
 });
@@ -178,27 +178,27 @@ export interface ITeamsRepository {
   deleteChannelAsync(channelId: string): Promise<void>;
   listTeamMembersAsync(teamId: string): Promise<Array<{ id: string; displayName: string; email: string; roles: string[] }>>;
   listChannelMessagesAsync(channelId: string, limit?: number): Promise<Array<{
-    id: number; senderName: string; senderEmail: string; bodyPreview: string;
+    id: string; senderName: string; senderEmail: string; bodyPreview: string;
     bodyContent: string; contentType: string; createdDateTime: string;
   }>>;
-  getChannelMessageAsync(messageId: number): Promise<{
-    id: number; senderName: string; senderEmail: string; bodyContent: string;
+  getChannelMessageAsync(messageId: string): Promise<{
+    id: string; senderName: string; senderEmail: string; bodyContent: string;
     contentType: string; createdDateTime: string;
-    replies: Array<{ id: number; senderName: string; senderEmail: string; bodyContent: string; contentType: string; createdDateTime: string }>;
+    replies: Array<{ id: string; senderName: string; senderEmail: string; bodyContent: string; contentType: string; createdDateTime: string }>;
   }>;
-  sendChannelMessageAsync(channelId: string, body: string, contentType?: string): Promise<number>;
-  replyToChannelMessageAsync(messageId: number, body: string, contentType?: string): Promise<number>;
-  listChatsAsync(limit?: number): Promise<Array<{ id: number; topic: string; chatType: string; lastMessagePreview: string; createdDateTime: string }>>;
-  getChatAsync(chatId: number): Promise<{ id: number; topic: string; chatType: string; createdDateTime: string; webUrl: string }>;
-  listChatMessagesAsync(chatId: number, limit?: number): Promise<Array<{
-    id: number; senderName: string; senderEmail: string; bodyPreview: string;
+  sendChannelMessageAsync(channelId: string, body: string, contentType?: string): Promise<string>;
+  replyToChannelMessageAsync(messageId: string, body: string, contentType?: string): Promise<string>;
+  listChatsAsync(limit?: number): Promise<Array<{ id: string; topic: string; chatType: string; lastMessagePreview: string; createdDateTime: string }>>;
+  getChatAsync(chatId: string): Promise<{ id: string; topic: string; chatType: string; createdDateTime: string; webUrl: string }>;
+  listChatMessagesAsync(chatId: string, limit?: number): Promise<Array<{
+    id: string; senderName: string; senderEmail: string; bodyPreview: string;
     bodyContent: string; contentType: string; createdDateTime: string;
   }>>;
-  sendChatMessageAsync(chatId: number, body: string, contentType?: string): Promise<number>;
-  listChatMembersAsync(chatId: number): Promise<Array<{ displayName: string; email: string; roles: string[] }>>;
-  listMessageReactionsAsync(messageId: number, messageType: 'channel' | 'chat'): Promise<Array<{ reactionType: string; user: { displayName: string }; createdDateTime: string }>>;
-  addMessageReactionAsync(messageId: number, messageType: 'channel' | 'chat', reactionType: string): Promise<void>;
-  removeMessageReactionAsync(messageId: number, messageType: 'channel' | 'chat', reactionType: string): Promise<void>;
+  sendChatMessageAsync(chatId: string, body: string, contentType?: string): Promise<string>;
+  listChatMembersAsync(chatId: string): Promise<Array<{ displayName: string; email: string; roles: string[] }>>;
+  listMessageReactionsAsync(messageId: string, messageType: 'channel' | 'chat'): Promise<Array<{ reactionType: string; user: { displayName: string }; createdDateTime: string }>>;
+  addMessageReactionAsync(messageId: string, messageType: 'channel' | 'chat', reactionType: string): Promise<void>;
+  removeMessageReactionAsync(messageId: string, messageType: 'channel' | 'chat', reactionType: string): Promise<void>;
 }
 
 // =============================================================================
@@ -505,7 +505,7 @@ export class TeamsTools {
       };
     }
     const { body, contentType } = result.token!.metadata as { body: string; contentType: string };
-    const replyId = await this.repo.replyToChannelMessageAsync((result.token!.targetId as number), body, contentType);
+    const replyId = await this.repo.replyToChannelMessageAsync((result.token!.targetId as string), body, contentType);
     return {
       content: [{
         type: 'text' as const,
@@ -609,7 +609,7 @@ export class TeamsTools {
       };
     }
     const { body, contentType } = result.token!.metadata as { body: string; contentType: string };
-    const messageId = await this.repo.sendChatMessageAsync((result.token!.targetId as number), body, contentType);
+    const messageId = await this.repo.sendChatMessageAsync((result.token!.targetId as string), body, contentType);
     return {
       content: [{
         type: 'text' as const,
@@ -700,7 +700,7 @@ export class TeamsTools {
       };
     }
     const { reaction_type, message_type } = result.token!.metadata as { reaction_type: string; message_type: 'channel' | 'chat' };
-    await this.repo.addMessageReactionAsync((result.token!.targetId as number), message_type, reaction_type);
+    await this.repo.addMessageReactionAsync((result.token!.targetId as string), message_type, reaction_type);
     return {
       content: [{
         type: 'text' as const,
