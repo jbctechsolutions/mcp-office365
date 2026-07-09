@@ -226,16 +226,14 @@ export const UpdateEventInput = z.strictObject({
   recurrence: GraphRecurrenceInput.optional(),
   is_online_meeting: z.boolean().optional().describe('Create as online Teams meeting'),
   online_meeting_provider: z.enum(['teamsForBusiness', 'skypeForBusiness', 'skypeForConsumer']).optional().describe('Online meeting provider (default: teamsForBusiness)'),
-  apply_to: z.enum(['this_instance', 'all_in_series']).optional().describe(
-    'Reserved for recurring-event scoping; not currently used by update_event (default: this_instance).',
-  ),
 });
 
 export const DeleteEventInput = z.strictObject({
-  event_id: EventIdSchema.describe('The event ID to delete'),
-  apply_to: z.enum(['this_instance', 'all_in_series']).default('this_instance').describe(
-    'For recurring events: delete single instance or entire series (default: this_instance)'
-  ),
+  // To delete one occurrence of a recurring series, pass that occurrence's own
+  // event_id (from list_event_instances); to delete the whole series, pass the
+  // master event_id. Graph deletes exactly the id given — there is no separate
+  // instance-vs-series flag.
+  event_id: EventIdSchema.describe('The event ID to delete (an occurrence id deletes just that occurrence; the master id deletes the series)'),
 });
 
 export const ListEventInstancesInput = z.strictObject({
