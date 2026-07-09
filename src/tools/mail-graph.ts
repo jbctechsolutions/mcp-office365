@@ -70,7 +70,7 @@ function transformFolderRow(row: FolderRow): {
  * the legacy graph-mode transform.
  */
 function transformEmailRow(row: EmailRow): {
-  id: string | number;
+  id: string;
   folderId: string;
   subject: string | null;
   sender: string | null;

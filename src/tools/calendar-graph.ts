@@ -68,7 +68,7 @@ function transformFolderRow(row: FolderRow): {
  * Uses Unix timestamps (not Apple epoch) and includes subject from EventRow.
  */
 function transformGraphEventRow(row: EventRow): {
-  id: string | number;
+  id: string;
   folderId: string;
   title: string | null;
   startDate: string | null;

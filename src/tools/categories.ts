@@ -56,7 +56,7 @@ export type ConfirmDeleteCategoryParams = z.infer<typeof ConfirmDeleteCategoryIn
 export interface ICategoriesRepository {
   listCategoriesAsync(): Promise<Array<{ id: string; name: string; color: string }>>;
   createCategoryAsync(name: string, color: string): Promise<string>;
-  deleteCategoryAsync(categoryId: string | number): Promise<void>;
+  deleteCategoryAsync(categoryId: string): Promise<void>;
 }
 
 // =============================================================================
@@ -156,7 +156,7 @@ export class CategoriesTools {
       };
     }
 
-    await this.repo.deleteCategoryAsync((result.token!.targetId as string));
+    await this.repo.deleteCategoryAsync((result.token!.targetId));
     return {
       content: [{
         type: 'text' as const,

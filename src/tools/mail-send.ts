@@ -62,7 +62,7 @@ export interface CreateDraftResult {
 }
 
 export interface IMailSendRepository {
-  getEmailAsync(id: string | number): Promise<EmailRow | undefined>;
+  getEmailAsync(id: string): Promise<EmailRow | undefined>;
   createDraftAsync(params: {
     subject: string;
     body: string;
@@ -71,9 +71,9 @@ export interface IMailSendRepository {
     cc?: string[];
     bcc?: string[];
   }): Promise<CreateDraftResult>;
-  updateDraftAsync(draftId: string | number, updates: Record<string, unknown>): Promise<void>;
+  updateDraftAsync(draftId: string, updates: Record<string, unknown>): Promise<void>;
   listDraftsAsync(limit: number, offset: number): Promise<EmailRow[]>;
-  sendDraftAsync(draftId: string | number): Promise<void>;
+  sendDraftAsync(draftId: string): Promise<void>;
   sendMailAsync(params: {
     subject: string;
     body: string;
@@ -82,14 +82,14 @@ export interface IMailSendRepository {
     cc?: string[];
     bcc?: string[];
   }): Promise<void>;
-  replyMessageAsync(messageId: string | number, comment: string, replyAll: boolean): Promise<void>;
-  forwardMessageAsync(messageId: string | number, toRecipients: string[], comment?: string): Promise<void>;
-  replyAsDraftAsync(messageId: string | number, replyAll?: boolean, comment?: string, bodyType?: string): Promise<CreateDraftResult>;
-  forwardAsDraftAsync(messageId: string | number, toRecipients?: string[], comment?: string, bodyType?: string): Promise<CreateDraftResult>;
+  replyMessageAsync(messageId: string, comment: string, replyAll: boolean): Promise<void>;
+  forwardMessageAsync(messageId: string, toRecipients: string[], comment?: string): Promise<void>;
+  replyAsDraftAsync(messageId: string, replyAll?: boolean, comment?: string, bodyType?: string): Promise<CreateDraftResult>;
+  forwardAsDraftAsync(messageId: string, toRecipients?: string[], comment?: string, bodyType?: string): Promise<CreateDraftResult>;
   /** Returns the Graph client for direct API operations (e.g., attachment uploads). */
   getGraphClient(): GraphClient;
   /** Resolves a draft id (durable `em_` token or raw Graph id) to its Graph id. */
-  getGraphIdForDraft(draftId: string | number): string;
+  getGraphIdForDraft(draftId: string): string;
 }
 
 // =============================================================================
@@ -275,7 +275,7 @@ export type ForwardAsDraftParams = z.infer<typeof ForwardAsDraftInput>;
 // =============================================================================
 
 function draftPreview(row: EmailRow): {
-  id: string | number;
+  id: string;
   subject: string | null;
   to: string | null;
   cc: string | null;
@@ -289,7 +289,7 @@ function draftPreview(row: EmailRow): {
 }
 
 function messagePreview(row: EmailRow): {
-  id: string | number;
+  id: string;
   subject: string | null;
   sender: string | null;
   senderAddress: string | null;
@@ -515,7 +515,7 @@ export class MailSendTools {
     const token = this.tokenManager.generateToken({
       operation: 'send_email',
       targetType: 'email',
-      targetId: 0,
+      targetId: '0',
       targetHash: hash,
       metadata: {
         subject: params.subject,
@@ -758,7 +758,7 @@ export class MailSendTools {
   // Private Helpers
   // ---------------------------------------------------------------------------
 
-  private async requireEmail(emailId: string | number): Promise<EmailRow> {
+  private async requireEmail(emailId: string): Promise<EmailRow> {
     const email = await this.repository.getEmailAsync(emailId);
     if (email == null) {
       throw new NotFoundError('Email', emailId);
@@ -773,7 +773,7 @@ export class MailSendTools {
   private async consumeAndVerifyDraft(
     tokenId: string,
     operation: OperationType,
-    draftId: string | number
+    draftId: string
   ): Promise<ApprovalToken> {
     const result = this.tokenManager.consumeToken(tokenId, operation, draftId);
     if (!result.valid) {
@@ -805,7 +805,7 @@ export class MailSendTools {
    * The targetId is 0, so we use that for validation.
    */
   private consumeTokenForSendEmail(tokenId: string): ApprovalToken {
-    const result = this.tokenManager.consumeToken(tokenId, 'send_email', 0);
+    const result = this.tokenManager.consumeToken(tokenId, 'send_email', '0');
     if (!result.valid) {
       throwValidationError(result.error!);
     }
@@ -820,7 +820,7 @@ export class MailSendTools {
   private consumeTokenForMessage(
     tokenId: string,
     operation: OperationType,
-    messageId: string | number
+    messageId: string
   ): ApprovalToken {
     const result = this.tokenManager.consumeToken(tokenId, operation, messageId);
     if (!result.valid) {

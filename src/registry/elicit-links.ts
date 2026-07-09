@@ -109,7 +109,7 @@ function batchTokenIds(result: ToolResult): string[] {
 
 interface TokenPair {
   token_id: string;
-  email_id: string | number;
+  email_id: string;
 }
 
 /** The `{ token_id, email_id }` pairs the batch confirm expects. */
@@ -119,7 +119,7 @@ function batchPairs(result: ToolResult): TokenPair[] {
     const tokenId = entry['token_id'];
     const email = entry['email'] as Record<string, unknown> | undefined;
     const emailId = email?.['id'] ?? entry['email_id'];
-    if (typeof tokenId === 'string' && (typeof emailId === 'string' || typeof emailId === 'number')) {
+    if (typeof tokenId === 'string' && typeof emailId === 'string') {
       pairs.push({ token_id: tokenId, email_id: emailId });
     }
   }

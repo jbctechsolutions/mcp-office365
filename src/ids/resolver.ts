@@ -38,15 +38,11 @@ export interface ResolvedId {
  * Throws a typed {@link import('../utils/errors.js').OutlookMcpError} on failure.
  */
 export function resolveId(
-  id: string | number,
+  id: string,
   accountId: string,
   store: StateStore | undefined,
   expectedEntityType?: EntityType,
 ): ResolvedId {
-  if (typeof id === 'number') {
-    throw new NumericIdUnsupportedError(id);
-  }
-
   // A bare all-digits string is a legacy v2 hash id (Graph ids and durable
   // tokens are never purely numeric), so surface the same actionable
   // NUMERIC_ID_UNSUPPORTED rather than passing it through to Graph as an opaque

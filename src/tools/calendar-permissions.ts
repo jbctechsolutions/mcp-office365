@@ -62,7 +62,7 @@ export type ConfirmDeleteCalendarPermissionParams = z.infer<typeof ConfirmDelete
 export interface ICalendarPermissionsRepository {
   listCalendarPermissionsAsync(calendarId: string): Promise<Array<{ id: string; emailAddress: string; role: string; isRemovable: boolean; isInsideOrganization: boolean }>>;
   createCalendarPermissionAsync(calendarId: string, email: string, role: string): Promise<string>;
-  deleteCalendarPermissionAsync(permissionId: string | number): Promise<void>;
+  deleteCalendarPermissionAsync(permissionId: string): Promise<void>;
 }
 
 // =============================================================================
@@ -162,7 +162,7 @@ export class CalendarPermissionsTools {
       };
     }
 
-    await this.repo.deleteCalendarPermissionAsync((result.token!.targetId as string));
+    await this.repo.deleteCalendarPermissionAsync((result.token!.targetId));
     return {
       content: [{
         type: 'text' as const,

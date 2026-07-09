@@ -54,7 +54,7 @@ export const SearchContactsInput = z.strictObject({
 // A contact id accepts either a durable `ct_…` token (Graph backend, U5) or a
 // numeric id (AppleScript/SQLite backend, D4). The resolver rejects a numeric id
 // on Graph with NUMERIC_ID_UNSUPPORTED.
-const ContactIdSchema = z.union([z.string().min(1), z.number().int().positive()]);
+const ContactIdSchema = Id.contact;
 
 export const GetContactInput = z.strictObject({
   contact_id: ContactIdSchema.describe('The contact ID to retrieve'),

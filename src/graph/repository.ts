@@ -70,7 +70,7 @@ export class GraphRepository implements IRepository {
    * no store; alias-backed tokens need {@link store}; a numeric id on Graph is
    * unsupported (D4). Throws a typed error on failure.
    */
-  private toGraphId(id: string | number, expectedEntityType?: EntityType): string {
+  private toGraphId(id: string, expectedEntityType?: EntityType): string {
     return resolveId(id, this.accountId(), this.store, expectedEntityType).graphId;
   }
 
@@ -124,7 +124,7 @@ export class GraphRepository implements IRepository {
    * result — every requested field is a guaranteed non-empty string.
    */
   private toGraphParts<K extends string>(
-    id: string | number,
+    id: string,
     entityType: EntityType,
     keys: readonly K[],
   ): Record<K, string> {
@@ -154,7 +154,7 @@ export class GraphRepository implements IRepository {
   // Cache Resolvers (auto-fetch parent on cache miss)
   // ===========================================================================
 
-  private async resolveTeamId(teamId: string | number): Promise<string> {
+  private async resolveTeamId(teamId: string): Promise<string> {
     // tm_ tokens resolve from the alias store. On a cold miss (never listed this
     // session, or a lost store) re-list — listTeamsAsync deterministically
     // re-mints and re-stores the same token — then resolve again.
@@ -169,7 +169,7 @@ export class GraphRepository implements IRepository {
     }
   }
 
-  private async resolvePlanId(planId: string | number): Promise<string> {
+  private async resolvePlanId(planId: string): Promise<string> {
     // pl_ tokens resolve from the alias store. On a cold miss (never listed this
     // session, or a lost store) re-list — listPlansAsync deterministically
     // re-mints and re-stores the same token — then resolve again.
@@ -234,7 +234,7 @@ export class GraphRepository implements IRepository {
     }
   }
 
-  private async resolveChatId(chatId: string | number): Promise<string> {
+  private async resolveChatId(chatId: string): Promise<string> {
     try {
       return this.toGraphId(chatId, 'chat');
     } catch (e) {
@@ -379,11 +379,11 @@ export class GraphRepository implements IRepository {
     };
   }
 
-  getEmail(_id: number): EmailRow | undefined {
+  getEmail(_id: string): EmailRow | undefined {
     throw new Error('Use getEmailAsync() for Graph repository');
   }
 
-  async getEmailAsync(id: string | number): Promise<EmailRow | undefined> {
+  async getEmailAsync(id: string): Promise<EmailRow | undefined> {
     const graphId = this.toGraphId(id, 'message');
     const message = await this.client.getMessage(graphId);
     return message != null ? mapMessageToEmailRow(message) : undefined;
@@ -419,7 +419,7 @@ export class GraphRepository implements IRepository {
    * id), fetches the message to read its raw Graph conversationId, then queries
    * for all messages with that ID. No cache required.
    */
-  async listConversationAsync(messageId: string | number, limit: number): Promise<EmailRow[]> {
+  async listConversationAsync(messageId: string, limit: number): Promise<EmailRow[]> {
     const graphId = this.toGraphId(messageId, 'message');
     const message = await this.client.getMessage(graphId);
     if (message == null) throw new Error('Message not found');
@@ -495,23 +495,23 @@ export class GraphRepository implements IRepository {
     return events.map((e) => mapEventToEventRow(e));
   }
 
-  getEvent(_id: string | number): EventRow | undefined {
+  getEvent(_id: string): EventRow | undefined {
     throw new Error('Use getEventAsync() for Graph repository');
   }
 
-  async getEventAsync(id: string | number): Promise<EventRow | undefined> {
+  async getEventAsync(id: string): Promise<EventRow | undefined> {
     const graphId = this.toGraphId(id, 'event');
     const event = await this.client.getEvent(graphId);
     return event != null ? mapEventToEventRow(event) : undefined;
   }
 
   /** Resolves an event id (durable `ev_` token or raw Graph id) to its Graph id. */
-  getEventGraphId(id: string | number): string {
+  getEventGraphId(id: string): string {
     return this.toGraphId(id, 'event');
   }
 
   async listEventInstancesAsync(
-    eventId: string | number,
+    eventId: string,
     startDate: string,
     endDate: string
   ): Promise<EventRow[]> {
@@ -544,18 +544,18 @@ export class GraphRepository implements IRepository {
     return contacts.map(mapContactToContactRow);
   }
 
-  getContact(_id: string | number): ContactRow | undefined {
+  getContact(_id: string): ContactRow | undefined {
     throw new Error('Use getContactAsync() for Graph repository');
   }
 
-  async getContactAsync(id: string | number): Promise<ContactRow | undefined> {
+  async getContactAsync(id: string): Promise<ContactRow | undefined> {
     const graphId = this.toGraphId(id, 'contact');
     const contact = await this.client.getContact(graphId);
     return contact != null ? mapContactToContactRow(contact) : undefined;
   }
 
   /** Resolves a contact id (durable `ct_` token or raw Graph id) to its Graph id. */
-  getContactGraphId(id: string | number): string {
+  getContactGraphId(id: string): string {
     return this.toGraphId(id, 'contact');
   }
 
@@ -580,12 +580,12 @@ export class GraphRepository implements IRepository {
     return this.mintAlias('contactFolder', created.id!);
   }
 
-  async deleteContactFolderAsync(folderId: string | number): Promise<void> {
+  async deleteContactFolderAsync(folderId: string): Promise<void> {
     const graphId = this.toGraphId(folderId, 'contactFolder');
     await this.client.deleteContactFolder(graphId);
   }
 
-  async listContactsInFolderAsync(folderId: string | number, limit: number = 100): Promise<ContactRow[]> {
+  async listContactsInFolderAsync(folderId: string, limit: number = 100): Promise<ContactRow[]> {
     const graphId = this.toGraphId(folderId, 'contactFolder');
     const contacts = await this.client.listContactsInFolder(graphId, limit);
     return contacts.map(mapContactToContactRow);
@@ -595,7 +595,7 @@ export class GraphRepository implements IRepository {
   // Contact Photos
   // ===========================================================================
 
-  async getContactPhotoAsync(contactId: string | number): Promise<{ filePath: string; contentType: string }> {
+  async getContactPhotoAsync(contactId: string): Promise<{ filePath: string; contentType: string }> {
     const graphId = this.toGraphId(contactId, 'contact');
 
     const photoData = await this.client.getContactPhoto(graphId);
@@ -605,7 +605,7 @@ export class GraphRepository implements IRepository {
     return { filePath, contentType: 'image/jpeg' };
   }
 
-  async setContactPhotoAsync(contactId: string | number, filePath: string): Promise<void> {
+  async setContactPhotoAsync(contactId: string, filePath: string): Promise<void> {
     const graphId = this.toGraphId(contactId, 'contact');
 
     const photoData = fs.readFileSync(filePath);
@@ -668,11 +668,11 @@ export class GraphRepository implements IRepository {
       });
   }
 
-  getTask(_id: number): TaskRow | undefined {
+  getTask(_id: string): TaskRow | undefined {
     throw new Error('Use getTaskAsync() for Graph repository');
   }
 
-  async getTaskAsync(id: string | number): Promise<TaskRow | undefined> {
+  async getTaskAsync(id: string): Promise<TaskRow | undefined> {
     let taskInfo: { taskListId: string; taskId: string };
     try {
       taskInfo = this.toGraphParts(id, 'task', ['taskListId', 'taskId']);
@@ -750,14 +750,14 @@ export class GraphRepository implements IRepository {
    * Resolves a draft id (durable `em_` token or raw Graph id) to its Graph id
    * (satisfies IMailSendRepository). Drafts are messages.
    */
-  getGraphIdForDraft(draftId: string | number): string {
+  getGraphIdForDraft(draftId: string): string {
     return this.toGraphId(draftId, 'message');
   }
 
   /**
    * Gets task info (Graph taskListId/taskId) from a durable `td_` token.
    */
-  getTaskInfo(id: string | number): { taskListId: string; taskId: string } | undefined {
+  getTaskInfo(id: string): { taskListId: string; taskId: string } | undefined {
     try {
       return this.toGraphParts(id, 'task', ['taskListId', 'taskId']);
     } catch {
@@ -768,7 +768,7 @@ export class GraphRepository implements IRepository {
   /**
    * Gets the Graph string ID for a task list from a durable `tl_` token.
    */
-  getTaskListGraphId(id: string | number): string | undefined {
+  getTaskListGraphId(id: string): string | undefined {
     try {
       return this.toGraphId(id, 'taskList');
     } catch {
@@ -781,28 +781,28 @@ export class GraphRepository implements IRepository {
   // ===========================================================================
 
   // Sync versions throw — use async versions from index.ts handler
-  moveEmail(_emailId: number, _destinationFolderId: string): void {
+  moveEmail(_emailId: string, _destinationFolderId: string): void {
     throw new Error('Use moveEmailAsync() for Graph repository');
   }
-  deleteEmail(_emailId: number): void {
+  deleteEmail(_emailId: string): void {
     throw new Error('Use deleteEmailAsync() for Graph repository');
   }
-  archiveEmail(_emailId: number): void {
+  archiveEmail(_emailId: string): void {
     throw new Error('Use archiveEmailAsync() for Graph repository');
   }
-  junkEmail(_emailId: number): void {
+  junkEmail(_emailId: string): void {
     throw new Error('Use junkEmailAsync() for Graph repository');
   }
-  markEmailRead(_emailId: number, _isRead: boolean): void {
+  markEmailRead(_emailId: string, _isRead: boolean): void {
     throw new Error('Use markEmailReadAsync() for Graph repository');
   }
-  setEmailFlag(_emailId: number, _flagStatus: number): void {
+  setEmailFlag(_emailId: string, _flagStatus: number): void {
     throw new Error('Use setEmailFlagAsync() for Graph repository');
   }
-  setEmailCategories(_emailId: number, _categories: string[]): void {
+  setEmailCategories(_emailId: string, _categories: string[]): void {
     throw new Error('Use setEmailCategoriesAsync() for Graph repository');
   }
-  setEmailImportance(_emailId: number, _importance: string): void {
+  setEmailImportance(_emailId: string, _importance: string): void {
     throw new Error('Use setEmailImportanceAsync() for Graph repository');
   }
   createFolder(_name: string, _parentFolderId?: string): FolderRow {
@@ -823,33 +823,33 @@ export class GraphRepository implements IRepository {
 
   // Async implementations
 
-  async moveEmailAsync(emailId: string | number, destinationFolderId: string): Promise<void> {
+  async moveEmailAsync(emailId: string, destinationFolderId: string): Promise<void> {
     const graphMessageId = this.toGraphId(emailId, 'message');
     const graphFolderId = this.toGraphId(destinationFolderId, 'folder');
     await this.client.moveMessage(graphMessageId, graphFolderId);
   }
 
-  async deleteEmailAsync(emailId: string | number): Promise<void> {
+  async deleteEmailAsync(emailId: string): Promise<void> {
     const graphId = this.toGraphId(emailId, 'message');
     await this.client.deleteMessage(graphId);
   }
 
-  async archiveEmailAsync(emailId: string | number): Promise<void> {
+  async archiveEmailAsync(emailId: string): Promise<void> {
     const graphId = this.toGraphId(emailId, 'message');
     await this.client.archiveMessage(graphId);
   }
 
-  async junkEmailAsync(emailId: string | number): Promise<void> {
+  async junkEmailAsync(emailId: string): Promise<void> {
     const graphId = this.toGraphId(emailId, 'message');
     await this.client.junkMessage(graphId);
   }
 
-  async markEmailReadAsync(emailId: string | number, isRead: boolean): Promise<void> {
+  async markEmailReadAsync(emailId: string, isRead: boolean): Promise<void> {
     const graphId = this.toGraphId(emailId, 'message');
     await this.client.updateMessage(graphId, { isRead });
   }
 
-  async setEmailFlagAsync(emailId: string | number, flagStatus: number): Promise<void> {
+  async setEmailFlagAsync(emailId: string, flagStatus: number): Promise<void> {
     const graphId = this.toGraphId(emailId, 'message');
     const flagStatusMap: Record<number, string> = {
       0: 'notFlagged',
@@ -861,12 +861,12 @@ export class GraphRepository implements IRepository {
     });
   }
 
-  async setEmailCategoriesAsync(emailId: string | number, categories: string[]): Promise<void> {
+  async setEmailCategoriesAsync(emailId: string, categories: string[]): Promise<void> {
     const graphId = this.toGraphId(emailId, 'message');
     await this.client.updateMessage(graphId, { categories });
   }
 
-  async setEmailImportanceAsync(emailId: string | number, importance: string): Promise<void> {
+  async setEmailImportanceAsync(emailId: string, importance: string): Promise<void> {
     const graphId = this.toGraphId(emailId, 'message');
     await this.client.updateMessage(graphId, { importance });
   }
@@ -947,7 +947,7 @@ export class GraphRepository implements IRepository {
    *
    * Resolves the draft id to its Graph id, then calls the client.
    */
-  async updateDraftAsync(draftId: string | number, updates: Record<string, unknown>): Promise<void> {
+  async updateDraftAsync(draftId: string, updates: Record<string, unknown>): Promise<void> {
     const graphId = this.toGraphId(draftId, 'message');
     await this.client.updateDraft(graphId, updates);
   }
@@ -966,7 +966,7 @@ export class GraphRepository implements IRepository {
    *
    * Resolves the id to its Graph id, then calls the client.
    */
-  async sendDraftAsync(draftId: string | number): Promise<void> {
+  async sendDraftAsync(draftId: string): Promise<void> {
     const graphId = this.toGraphId(draftId, 'message');
     await this.client.sendDraft(graphId);
   }
@@ -1008,7 +1008,7 @@ export class GraphRepository implements IRepository {
    *
    * Resolves the id to its Graph id, then calls the client.
    */
-  async replyMessageAsync(messageId: string | number, comment: string, replyAll: boolean): Promise<void> {
+  async replyMessageAsync(messageId: string, comment: string, replyAll: boolean): Promise<void> {
     const graphId = this.toGraphId(messageId, 'message');
     await this.client.replyMessage(graphId, comment, replyAll);
   }
@@ -1019,7 +1019,7 @@ export class GraphRepository implements IRepository {
    * Resolves the id to its Graph id, converts recipient email strings to
    * Recipient objects, then calls the client.
    */
-  async forwardMessageAsync(messageId: string | number, toRecipients: string[], comment?: string): Promise<void> {
+  async forwardMessageAsync(messageId: string, toRecipients: string[], comment?: string): Promise<void> {
     const graphId = this.toGraphId(messageId, 'message');
     const recipients = toRecipients.map(addr => ({
       emailAddress: { address: addr },
@@ -1040,7 +1040,7 @@ export class GraphRepository implements IRepository {
    * @returns A durable `em_` token and the raw Graph id of the new draft.
    */
   async replyAsDraftAsync(
-    messageId: string | number,
+    messageId: string,
     replyAll = false,
     comment?: string,
     bodyType: string = 'text',
@@ -1066,7 +1066,7 @@ export class GraphRepository implements IRepository {
    * @returns A durable `em_` token and the raw Graph id of the new draft.
    */
   async forwardAsDraftAsync(
-    messageId: string | number,
+    messageId: string,
     toRecipients?: string[],
     comment?: string,
     bodyType: string = 'text',
@@ -1167,7 +1167,7 @@ export class GraphRepository implements IRepository {
    *
    * @returns Array of attachment metadata objects.
    */
-  async listAttachmentsAsync(emailId: string | number): Promise<Array<{
+  async listAttachmentsAsync(emailId: string): Promise<Array<{
     id: string;
     name: string;
     size: number;
@@ -1200,7 +1200,7 @@ export class GraphRepository implements IRepository {
    * @returns Metadata about the downloaded file including its local path.
    */
   async downloadAttachmentAsync(
-    attachmentId: string | number,
+    attachmentId: string,
   ): Promise<{ filePath: string; name: string; size: number; contentType: string }> {
     const cached = this.toGraphParts(attachmentId, 'attachment', ['messageId', 'attachmentId']);
 
@@ -1299,7 +1299,7 @@ export class GraphRepository implements IRepository {
    * Looks up the Graph string ID from idCache.events, then calls
    * client.updateEvent(). Throws if the event is not cached.
    */
-  async updateEventAsync(eventId: string | number, updates: Record<string, unknown>): Promise<void> {
+  async updateEventAsync(eventId: string, updates: Record<string, unknown>): Promise<void> {
     const graphId = this.toGraphId(eventId, 'event');
     await this.client.updateEvent(graphId, updates);
   }
@@ -1311,7 +1311,7 @@ export class GraphRepository implements IRepository {
    * client.deleteEvent(), and removes the entry from idCache.
    * Throws if the event is not cached.
    */
-  async deleteEventAsync(eventId: string | number): Promise<void> {
+  async deleteEventAsync(eventId: string): Promise<void> {
     const graphId = this.toGraphId(eventId, 'event');
     await this.client.deleteEvent(graphId);
   }
@@ -1323,7 +1323,7 @@ export class GraphRepository implements IRepository {
    * client.respondToEvent(). Throws if the event is not cached.
    */
   async respondToEventAsync(
-    eventId: string | number,
+    eventId: string,
     response: 'accept' | 'decline' | 'tentative',
     sendResponse: boolean,
     comment?: string
@@ -1387,7 +1387,7 @@ export class GraphRepository implements IRepository {
    * Looks up the Graph string ID from idCache.contacts, then calls
    * client.updateContact(). Throws if the contact is not cached.
    */
-  async updateContactAsync(contactId: string | number, updates: Record<string, unknown>): Promise<void> {
+  async updateContactAsync(contactId: string, updates: Record<string, unknown>): Promise<void> {
     const graphId = this.toGraphId(contactId, 'contact');
     await this.client.updateContact(graphId, updates);
   }
@@ -1399,7 +1399,7 @@ export class GraphRepository implements IRepository {
    * client.deleteContact(), and removes the entry from idCache.
    * Throws if the contact is not cached.
    */
-  async deleteContactAsync(contactId: string | number): Promise<void> {
+  async deleteContactAsync(contactId: string): Promise<void> {
     const graphId = this.toGraphId(contactId, 'contact');
     await this.client.deleteContact(graphId);
   }
@@ -1417,7 +1417,7 @@ export class GraphRepository implements IRepository {
    */
   async createTaskAsync(params: {
     title: string;
-    task_list_id: string | number;
+    task_list_id: string;
     body?: string;
     body_type?: 'text' | 'html';
     due_date?: string;
@@ -1495,7 +1495,7 @@ export class GraphRepository implements IRepository {
   /**
    * Updates an existing task.
    */
-  async updateTaskAsync(taskId: string | number, updates: Record<string, unknown>): Promise<void> {
+  async updateTaskAsync(taskId: string, updates: Record<string, unknown>): Promise<void> {
     const { taskListId, taskId: gTaskId } = this.toGraphParts(taskId, 'task', ['taskListId', 'taskId']);
     await this.client.updateTask(taskListId, gTaskId, updates);
   }
@@ -1506,7 +1506,7 @@ export class GraphRepository implements IRepository {
    * Convenience method that calls updateTaskAsync with status: 'completed'
    * and the current time as completedDateTime.
    */
-  async completeTaskAsync(taskId: string | number): Promise<void> {
+  async completeTaskAsync(taskId: string): Promise<void> {
     await this.updateTaskAsync(taskId, {
       status: 'completed',
       completedDateTime: {
@@ -1519,7 +1519,7 @@ export class GraphRepository implements IRepository {
   /**
    * Deletes a task.
    */
-  async deleteTaskAsync(taskId: string | number): Promise<void> {
+  async deleteTaskAsync(taskId: string): Promise<void> {
     const { taskListId, taskId: gTaskId } = this.toGraphParts(taskId, 'task', ['taskListId', 'taskId']);
     await this.client.deleteTask(taskListId, gTaskId);
   }
@@ -1535,7 +1535,7 @@ export class GraphRepository implements IRepository {
   /**
    * Renames a task list.
    */
-  async renameTaskListAsync(listId: string | number, name: string): Promise<void> {
+  async renameTaskListAsync(listId: string, name: string): Promise<void> {
     const graphId = this.toGraphId(listId, 'taskList');
     await this.client.updateTaskList(graphId, { displayName: name });
   }
@@ -1543,7 +1543,7 @@ export class GraphRepository implements IRepository {
   /**
    * Deletes a task list.
    */
-  async deleteTaskListAsync(listId: string | number): Promise<void> {
+  async deleteTaskListAsync(listId: string): Promise<void> {
     const graphId = this.toGraphId(listId, 'taskList');
     await this.client.deleteTaskList(graphId);
   }
@@ -1552,7 +1552,7 @@ export class GraphRepository implements IRepository {
   // Checklist Items
   // ===========================================================================
 
-  async listChecklistItemsAsync(taskId: string | number): Promise<Array<{
+  async listChecklistItemsAsync(taskId: string): Promise<Array<{
     id: string; displayName: string; isChecked: boolean; createdDateTime: string;
   }>> {
     const taskInfo = this.toGraphParts(taskId, 'task', ['taskListId', 'taskId']);
@@ -1568,13 +1568,13 @@ export class GraphRepository implements IRepository {
     });
   }
 
-  async createChecklistItemAsync(taskId: string | number, displayName: string, isChecked: boolean = false): Promise<string> {
+  async createChecklistItemAsync(taskId: string, displayName: string, isChecked: boolean = false): Promise<string> {
     const taskInfo = this.toGraphParts(taskId, 'task', ['taskListId', 'taskId']);
     const item = await this.client.createChecklistItem(taskInfo.taskListId, taskInfo.taskId, displayName, isChecked);
     return this.mintAliasComposite('checklistItem', { taskListId: taskInfo.taskListId, taskId: taskInfo.taskId, checklistItemId: item.id! });
   }
 
-  async updateChecklistItemAsync(checklistItemId: string | number, updates: { displayName?: string; isChecked?: boolean }): Promise<void> {
+  async updateChecklistItemAsync(checklistItemId: string, updates: { displayName?: string; isChecked?: boolean }): Promise<void> {
     const cached = this.toGraphParts(checklistItemId, 'checklistItem', ['taskListId', 'taskId', 'checklistItemId']);
     const graphUpdates: Record<string, unknown> = {};
     if (updates.displayName != null) graphUpdates['displayName'] = updates.displayName;
@@ -1582,7 +1582,7 @@ export class GraphRepository implements IRepository {
     await this.client.updateChecklistItem(cached.taskListId, cached.taskId, cached.checklistItemId, graphUpdates);
   }
 
-  async deleteChecklistItemAsync(checklistItemId: string | number): Promise<void> {
+  async deleteChecklistItemAsync(checklistItemId: string): Promise<void> {
     const cached = this.toGraphParts(checklistItemId, 'checklistItem', ['taskListId', 'taskId', 'checklistItemId']);
     await this.client.deleteChecklistItem(cached.taskListId, cached.taskId, cached.checklistItemId);
   }
@@ -1591,7 +1591,7 @@ export class GraphRepository implements IRepository {
   // Linked Resources
   // ===========================================================================
 
-  async listLinkedResourcesAsync(taskId: string | number): Promise<Array<{
+  async listLinkedResourcesAsync(taskId: string): Promise<Array<{
     id: string; webUrl: string; applicationName: string; displayName: string;
   }>> {
     const taskInfo = this.toGraphParts(taskId, 'task', ['taskListId', 'taskId']);
@@ -1607,13 +1607,13 @@ export class GraphRepository implements IRepository {
     });
   }
 
-  async createLinkedResourceAsync(taskId: string | number, webUrl: string, applicationName: string, displayName?: string): Promise<string> {
+  async createLinkedResourceAsync(taskId: string, webUrl: string, applicationName: string, displayName?: string): Promise<string> {
     const taskInfo = this.toGraphParts(taskId, 'task', ['taskListId', 'taskId']);
     const item = await this.client.createLinkedResource(taskInfo.taskListId, taskInfo.taskId, webUrl, applicationName, displayName);
     return this.mintAliasComposite('linkedResource', { taskListId: taskInfo.taskListId, taskId: taskInfo.taskId, linkedResourceId: item.id! });
   }
 
-  async deleteLinkedResourceAsync(linkedResourceId: string | number): Promise<void> {
+  async deleteLinkedResourceAsync(linkedResourceId: string): Promise<void> {
     const cached = this.toGraphParts(linkedResourceId, 'linkedResource', ['taskListId', 'taskId', 'linkedResourceId']);
     await this.client.deleteLinkedResource(cached.taskListId, cached.taskId, cached.linkedResourceId);
   }
@@ -1622,7 +1622,7 @@ export class GraphRepository implements IRepository {
   // Task Attachments
   // ===========================================================================
 
-  async listTaskAttachmentsAsync(taskId: string | number): Promise<Array<{
+  async listTaskAttachmentsAsync(taskId: string): Promise<Array<{
     id: string; name: string; size: number; contentType: string;
   }>> {
     const taskInfo = this.toGraphParts(taskId, 'task', ['taskListId', 'taskId']);
@@ -1638,13 +1638,13 @@ export class GraphRepository implements IRepository {
     });
   }
 
-  async createTaskAttachmentAsync(taskId: string | number, name: string, contentBytes: string, contentType?: string): Promise<string> {
+  async createTaskAttachmentAsync(taskId: string, name: string, contentBytes: string, contentType?: string): Promise<string> {
     const taskInfo = this.toGraphParts(taskId, 'task', ['taskListId', 'taskId']);
     const item = await this.client.createTaskAttachment(taskInfo.taskListId, taskInfo.taskId, name, contentBytes, contentType);
     return this.mintAliasComposite('taskAttachment', { taskListId: taskInfo.taskListId, taskId: taskInfo.taskId, attachmentId: item.id! });
   }
 
-  async deleteTaskAttachmentAsync(taskAttachmentId: string | number): Promise<void> {
+  async deleteTaskAttachmentAsync(taskAttachmentId: string): Promise<void> {
     const cached = this.toGraphParts(taskAttachmentId, 'taskAttachment', ['taskListId', 'taskId', 'attachmentId']);
     await this.client.deleteTaskAttachment(cached.taskListId, cached.taskId, cached.attachmentId);
   }
@@ -1682,7 +1682,7 @@ export class GraphRepository implements IRepository {
   /**
    * Deletes an inbox mail rule.
    */
-  async deleteMailRuleAsync(ruleId: string | number): Promise<void> {
+  async deleteMailRuleAsync(ruleId: string): Promise<void> {
     const graphId = this.toGraphId(ruleId, 'mailRule');
     await this.client.deleteMailRule(graphId);
   }
@@ -1807,7 +1807,7 @@ export class GraphRepository implements IRepository {
   /**
    * Deletes a master category.
    */
-  async deleteCategoryAsync(categoryId: string | number): Promise<void> {
+  async deleteCategoryAsync(categoryId: string): Promise<void> {
     const graphId = this.toGraphId(categoryId, 'category');
     await this.client.deleteMasterCategory(graphId);
   }
@@ -1842,7 +1842,7 @@ export class GraphRepository implements IRepository {
   /**
    * Deletes a focused inbox override.
    */
-  async deleteFocusedOverrideAsync(overrideId: string | number): Promise<void> {
+  async deleteFocusedOverrideAsync(overrideId: string): Promise<void> {
     const graphId = this.toGraphId(overrideId, 'focusedOverride');
     await this.client.deleteFocusedOverride(graphId);
   }
@@ -1854,7 +1854,7 @@ export class GraphRepository implements IRepository {
   /**
    * Gets internet message headers for an email.
    */
-  async getMessageHeadersAsync(emailId: string | number): Promise<Array<{ name: string; value: string }>> {
+  async getMessageHeadersAsync(emailId: string): Promise<Array<{ name: string; value: string }>> {
     const graphId = this.toGraphId(emailId, 'message');
     return await this.client.getMessageHeaders(graphId);
   }
@@ -1862,7 +1862,7 @@ export class GraphRepository implements IRepository {
   /**
    * Gets the MIME content of a message and saves it as an .eml file.
    */
-  async getMessageMimeAsync(emailId: string | number): Promise<{ filePath: string }> {
+  async getMessageMimeAsync(emailId: string): Promise<{ filePath: string }> {
     const graphId = this.toGraphId(emailId, 'message');
     const mime = await this.client.getMessageMime(graphId);
     const downloadDir = getDownloadDir();
@@ -1972,7 +1972,7 @@ export class GraphRepository implements IRepository {
   /**
    * Deletes a calendar permission.
    */
-  async deleteCalendarPermissionAsync(permissionId: string | number): Promise<void> {
+  async deleteCalendarPermissionAsync(permissionId: string): Promise<void> {
     const { calendarId, permissionId: permId } = this.toGraphParts(permissionId, 'calendarPermission', ['calendarId', 'permissionId']);
     await this.client.deleteCalendarPermission(calendarId, permId);
   }
@@ -2021,7 +2021,7 @@ export class GraphRepository implements IRepository {
   /**
    * Lists all channels in a team with cached numeric IDs.
    */
-  async listChannelsAsync(teamId: string | number): Promise<Array<{ id: string; name: string; description: string; membershipType: string }>> {
+  async listChannelsAsync(teamId: string): Promise<Array<{ id: string; name: string; description: string; membershipType: string }>> {
     const graphTeamId = await this.resolveTeamId(teamId);
     const channels = await this.client.listChannels(graphTeamId);
     return channels.map((ch) => {
@@ -2034,7 +2034,7 @@ export class GraphRepository implements IRepository {
   /**
    * Gets a specific channel by durable cn_ token.
    */
-  async getChannelAsync(channelId: string | number): Promise<{ id: string; name: string; description: string; membershipType: string; webUrl: string }> {
+  async getChannelAsync(channelId: string): Promise<{ id: string; name: string; description: string; membershipType: string; webUrl: string }> {
     const { teamId, channelId: graphChannelId } = this.toGraphParts(channelId, 'channel', ['teamId', 'channelId']);
     const ch = await this.client.getChannel(teamId, graphChannelId);
     return { id: String(channelId), name: ch.displayName ?? '', description: ch.description ?? '', membershipType: ch.membershipType ?? 'standard', webUrl: ch.webUrl ?? '' };
@@ -2043,7 +2043,7 @@ export class GraphRepository implements IRepository {
   /**
    * Creates a new channel in a team.
    */
-  async createChannelAsync(teamId: string | number, name: string, description?: string): Promise<string> {
+  async createChannelAsync(teamId: string, name: string, description?: string): Promise<string> {
     const graphTeamId = await this.resolveTeamId(teamId);
     const ch = await this.client.createChannel(graphTeamId, name, description);
     return this.mintAliasComposite('channel', { teamId: graphTeamId, channelId: ch.id! });
@@ -2052,7 +2052,7 @@ export class GraphRepository implements IRepository {
   /**
    * Updates a channel's properties.
    */
-  async updateChannelAsync(channelId: string | number, updates: { name?: string; description?: string }): Promise<void> {
+  async updateChannelAsync(channelId: string, updates: { name?: string; description?: string }): Promise<void> {
     const { teamId, channelId: graphChannelId } = this.toGraphParts(channelId, 'channel', ['teamId', 'channelId']);
     const graphUpdates: Record<string, unknown> = {};
     if (updates.name != null) graphUpdates['displayName'] = updates.name;
@@ -2063,7 +2063,7 @@ export class GraphRepository implements IRepository {
   /**
    * Deletes a channel.
    */
-  async deleteChannelAsync(channelId: string | number): Promise<void> {
+  async deleteChannelAsync(channelId: string): Promise<void> {
     const { teamId, channelId: graphChannelId } = this.toGraphParts(channelId, 'channel', ['teamId', 'channelId']);
     await this.client.deleteChannel(teamId, graphChannelId);
   }
@@ -2071,7 +2071,7 @@ export class GraphRepository implements IRepository {
   /**
    * Lists members of a team.
    */
-  async listTeamMembersAsync(teamId: string | number): Promise<Array<{ id: string; displayName: string; email: string; roles: string[] }>> {
+  async listTeamMembersAsync(teamId: string): Promise<Array<{ id: string; displayName: string; email: string; roles: string[] }>> {
     const graphTeamId = await this.resolveTeamId(teamId);
     const members = await this.client.listTeamMembers(graphTeamId);
     return members.map((m) => ({
@@ -2089,7 +2089,7 @@ export class GraphRepository implements IRepository {
   /**
    * Lists recent messages in a channel.
    */
-  async listChannelMessagesAsync(channelId: string | number, limit: number = 25): Promise<Array<{
+  async listChannelMessagesAsync(channelId: string, limit: number = 25): Promise<Array<{
     id: string; senderName: string; senderEmail: string; bodyPreview: string;
     bodyContent: string; contentType: string; createdDateTime: string;
   }>> {
@@ -2112,7 +2112,7 @@ export class GraphRepository implements IRepository {
   /**
    * Gets a specific channel message with its replies.
    */
-  async getChannelMessageAsync(messageId: string | number): Promise<{
+  async getChannelMessageAsync(messageId: string): Promise<{
     id: string; senderName: string; senderEmail: string; bodyContent: string;
     contentType: string; createdDateTime: string;
     replies: Array<{ id: string; senderName: string; senderEmail: string; bodyContent: string; contentType: string; createdDateTime: string }>;
@@ -2153,7 +2153,7 @@ export class GraphRepository implements IRepository {
   /**
    * Sends a new message to a channel.
    */
-  async sendChannelMessageAsync(channelId: string | number, body: string, contentType: string = 'html'): Promise<string> {
+  async sendChannelMessageAsync(channelId: string, body: string, contentType: string = 'html'): Promise<string> {
     const { teamId, channelId: graphChannelId } = this.toGraphParts(channelId, 'channel', ['teamId', 'channelId']);
     const msg = await this.client.sendChannelMessage(teamId, graphChannelId, body, contentType);
     const graphId = msg.id!;
@@ -2163,7 +2163,7 @@ export class GraphRepository implements IRepository {
   /**
    * Replies to a channel message.
    */
-  async replyToChannelMessageAsync(messageId: string | number, body: string, contentType: string = 'html'): Promise<string> {
+  async replyToChannelMessageAsync(messageId: string, body: string, contentType: string = 'html'): Promise<string> {
     const { teamId, channelId, messageId: graphMessageId } = this.toGraphParts(messageId, 'channelMessage', ['teamId', 'channelId', 'messageId']);
     const reply = await this.client.replyToChannelMessage(teamId, channelId, graphMessageId, body, contentType);
     return this.mintAliasComposite('channelMessage', { teamId, channelId, messageId: reply.id! });
@@ -2193,7 +2193,7 @@ export class GraphRepository implements IRepository {
     });
   }
 
-  async getChatAsync(chatId: string | number): Promise<{
+  async getChatAsync(chatId: string): Promise<{
     id: string; topic: string; chatType: string; createdDateTime: string; webUrl: string;
   }> {
     const graphId = await this.resolveChatId(chatId);
@@ -2207,7 +2207,7 @@ export class GraphRepository implements IRepository {
     };
   }
 
-  async listChatMessagesAsync(chatId: string | number, limit: number = 25): Promise<Array<{
+  async listChatMessagesAsync(chatId: string, limit: number = 25): Promise<Array<{
     id: string; senderName: string; senderEmail: string; bodyPreview: string;
     bodyContent: string; contentType: string; createdDateTime: string;
   }>> {
@@ -2227,7 +2227,7 @@ export class GraphRepository implements IRepository {
     });
   }
 
-  async sendChatMessageAsync(chatId: string | number, body: string, contentType: string = 'html'): Promise<string> {
+  async sendChatMessageAsync(chatId: string, body: string, contentType: string = 'html'): Promise<string> {
     const graphChatId = await this.resolveChatId(chatId);
     const msg = await this.client.sendChatMessage(graphChatId, body, contentType);
     const graphId = msg.id!;
@@ -2238,7 +2238,7 @@ export class GraphRepository implements IRepository {
   // Message Reactions
   // ===========================================================================
 
-  async listMessageReactionsAsync(messageId: string | number, messageType: 'channel' | 'chat'): Promise<Array<{
+  async listMessageReactionsAsync(messageId: string, messageType: 'channel' | 'chat'): Promise<Array<{
     reactionType: string;
     user: { displayName: string };
     createdDateTime: string;
@@ -2267,7 +2267,7 @@ export class GraphRepository implements IRepository {
     }
   }
 
-  async addMessageReactionAsync(messageId: string | number, messageType: 'channel' | 'chat', reactionType: string): Promise<void> {
+  async addMessageReactionAsync(messageId: string, messageType: 'channel' | 'chat', reactionType: string): Promise<void> {
     if (messageType === 'channel') {
       const { teamId, channelId, messageId: graphMessageId } = this.toGraphParts(messageId, 'channelMessage', ['teamId', 'channelId', 'messageId']);
       await this.client.setChannelMessageReaction(teamId, channelId, graphMessageId, reactionType);
@@ -2277,7 +2277,7 @@ export class GraphRepository implements IRepository {
     }
   }
 
-  async removeMessageReactionAsync(messageId: string | number, messageType: 'channel' | 'chat', reactionType: string): Promise<void> {
+  async removeMessageReactionAsync(messageId: string, messageType: 'channel' | 'chat', reactionType: string): Promise<void> {
     if (messageType === 'channel') {
       const { teamId, channelId, messageId: graphMessageId } = this.toGraphParts(messageId, 'channelMessage', ['teamId', 'channelId', 'messageId']);
       await this.client.unsetChannelMessageReaction(teamId, channelId, graphMessageId, reactionType);
@@ -2287,7 +2287,7 @@ export class GraphRepository implements IRepository {
     }
   }
 
-  async listChatMembersAsync(chatId: string | number): Promise<Array<{ displayName: string; email: string; roles: string[] }>> {
+  async listChatMembersAsync(chatId: string): Promise<Array<{ displayName: string; email: string; roles: string[] }>> {
     const graphChatId = await this.resolveChatId(chatId);
     const members = await this.client.listChatMembers(graphChatId);
     return members.map((m) => ({
@@ -2320,7 +2320,7 @@ export class GraphRepository implements IRepository {
   /**
    * Gets a specific plan.
    */
-  async getPlanAsync(planId: string | number): Promise<{ id: string; title: string; owner: string; createdDateTime: string; etag: string }> {
+  async getPlanAsync(planId: string): Promise<{ id: string; title: string; owner: string; createdDateTime: string; etag: string }> {
     const graphPlanId = await this.resolvePlanId(planId);
     const plan = await this.client.getPlan(graphPlanId);
     return {
@@ -2344,7 +2344,7 @@ export class GraphRepository implements IRepository {
    * Updates a plan (U5b-5: fetches a fresh etag immediately before the write —
    * etags are never cached across calls).
    */
-  async updatePlanAsync(planId: string | number, updates: { title?: string }): Promise<void> {
+  async updatePlanAsync(planId: string, updates: { title?: string }): Promise<void> {
     const graphPlanId = await this.resolvePlanId(planId);
     const graphUpdates: Record<string, unknown> = {};
     if (updates.title != null) graphUpdates['title'] = updates.title;
@@ -2361,7 +2361,7 @@ export class GraphRepository implements IRepository {
   /**
    * Lists all buckets in a plan, minting durable pb_ tokens.
    */
-  async listBucketsAsync(planId: string | number): Promise<Array<{ id: string; name: string; planId: string; orderHint: string }>> {
+  async listBucketsAsync(planId: string): Promise<Array<{ id: string; name: string; planId: string; orderHint: string }>> {
     const graphPlanId = await this.resolvePlanId(planId);
     const buckets = await this.client.listBuckets(graphPlanId);
     return buckets.map((bucket) => {
@@ -2378,7 +2378,7 @@ export class GraphRepository implements IRepository {
   /**
    * Creates a new bucket in a plan.
    */
-  async createBucketAsync(planId: string | number, name: string): Promise<string> {
+  async createBucketAsync(planId: string, name: string): Promise<string> {
     const graphPlanId = await this.resolvePlanId(planId);
     const bucket = await this.client.createBucket(graphPlanId, name);
     return this.mintAlias('plannerBucket', bucket.id!);
@@ -2387,7 +2387,7 @@ export class GraphRepository implements IRepository {
   /**
    * Updates a bucket (U5b-5: fetches a fresh etag immediately before the write).
    */
-  async updateBucketAsync(bucketId: string | number, updates: { name?: string }): Promise<void> {
+  async updateBucketAsync(bucketId: string, updates: { name?: string }): Promise<void> {
     const graphBucketId = this.toGraphId(bucketId, 'plannerBucket');
     const graphUpdates: Record<string, unknown> = {};
     if (updates.name != null) graphUpdates['name'] = updates.name;
@@ -2400,7 +2400,7 @@ export class GraphRepository implements IRepository {
   /**
    * Deletes a bucket (U5b-5: fetches a fresh etag immediately before the write).
    */
-  async deleteBucketAsync(bucketId: string | number): Promise<void> {
+  async deleteBucketAsync(bucketId: string): Promise<void> {
     const graphBucketId = this.toGraphId(bucketId, 'plannerBucket');
     await this.withFreshEtag(
       async () => this.extractEtag(await this.client.getBucket(graphBucketId)),
@@ -2415,7 +2415,7 @@ export class GraphRepository implements IRepository {
   /**
    * Lists all tasks in a plan, minting durable pt_ tokens.
    */
-  async listPlannerTasksAsync(planId: string | number): Promise<Array<{
+  async listPlannerTasksAsync(planId: string): Promise<Array<{
     id: string; title: string; bucketId: string | null; assignees: string[];
     percentComplete: number; priority: number; startDateTime: string;
     dueDateTime: string; createdDateTime: string;
@@ -2470,7 +2470,7 @@ export class GraphRepository implements IRepository {
   /**
    * Gets a specific planner task.
    */
-  async getPlannerTaskAsync(taskId: string | number): Promise<{
+  async getPlannerTaskAsync(taskId: string): Promise<{
     id: string; title: string; bucketId: string | null; assignees: string[];
     percentComplete: number; priority: number; startDateTime: string;
     dueDateTime: string; createdDateTime: string; conversationThreadId: string;
@@ -2498,9 +2498,9 @@ export class GraphRepository implements IRepository {
    * Creates a new planner task.
    */
   async createPlannerTaskAsync(
-    planId: string | number,
+    planId: string,
     title: string,
-    bucketId?: string | number,
+    bucketId?: string,
     assignments?: Record<string, object>,
     priority?: number,
     startDate?: string,
@@ -2523,10 +2523,10 @@ export class GraphRepository implements IRepository {
    * Updates a planner task (U5b-5: fetches a fresh etag immediately before the write).
    */
   async updatePlannerTaskAsync(
-    taskId: string | number,
+    taskId: string,
     updates: {
       title?: string;
-      bucketId?: string | number;
+      bucketId?: string;
       percentComplete?: number;
       priority?: number;
       startDate?: string;
@@ -2552,7 +2552,7 @@ export class GraphRepository implements IRepository {
   /**
    * Deletes a planner task (U5b-5: fetches a fresh etag immediately before the write).
    */
-  async deletePlannerTaskAsync(taskId: string | number): Promise<void> {
+  async deletePlannerTaskAsync(taskId: string): Promise<void> {
     const gTaskId = this.toGraphId(taskId, 'plannerTask');
     await this.withFreshEtag(
       async () => this.extractEtag(await this.client.getPlannerTask(gTaskId)),
@@ -2568,7 +2568,7 @@ export class GraphRepository implements IRepository {
    * Gets details for a planner task (description, checklist, references). Task
    * details piggyback the pt_ task token — they have no id of their own.
    */
-  async getPlannerTaskDetailsAsync(taskId: string | number): Promise<{
+  async getPlannerTaskDetailsAsync(taskId: string): Promise<{
     id: string; description: string; checklist: Record<string, unknown>;
     references: Record<string, unknown>; etag: string;
   }> {
@@ -2592,7 +2592,7 @@ export class GraphRepository implements IRepository {
    * Partial failures are handled gracefully: tasks whose detail fetch failed will
    * have `details` set to `undefined`.
    */
-  async listPlannerTasksWithDetailsAsync(planId: string | number): Promise<Array<{
+  async listPlannerTasksWithDetailsAsync(planId: string): Promise<Array<{
     id: string; title: string; bucketId: string | null; assignees: string[];
     percentComplete: number; priority: number; startDateTime: string;
     dueDateTime: string; createdDateTime: string;
@@ -2648,7 +2648,7 @@ export class GraphRepository implements IRepository {
    * etag).
    */
   async updatePlannerTaskDetailsAsync(
-    taskId: string | number,
+    taskId: string,
     updates: {
       description?: string;
       checklist?: Record<string, object>;
@@ -2673,7 +2673,7 @@ export class GraphRepository implements IRepository {
   /**
    * Assembles plan, buckets, and tasks into a unified visualization data object.
    */
-  async getPlanVisualizationDataAsync(planId: string | number): Promise<PlanVisualizationData> {
+  async getPlanVisualizationDataAsync(planId: string): Promise<PlanVisualizationData> {
     const plan = await this.getPlanAsync(planId);
     const buckets = await this.listBucketsAsync(planId);
     const tasks = await this.listPlannerTasksAsync(planId);
@@ -2721,7 +2721,7 @@ export class GraphRepository implements IRepository {
     });
   }
 
-  async getOnlineMeetingAsync(meetingId: string | number): Promise<{
+  async getOnlineMeetingAsync(meetingId: string): Promise<{
     id: string; subject: string; startDateTime: string; endDateTime: string; joinUrl: string;
     participants: unknown;
   } | undefined> {
@@ -2759,7 +2759,7 @@ export class GraphRepository implements IRepository {
     return mapMeeting(meeting);
   }
 
-  async listMeetingRecordingsAsync(meetingId: string | number): Promise<Array<{
+  async listMeetingRecordingsAsync(meetingId: string): Promise<Array<{
     id: string; createdDateTime: string; recordingContentUrl: string;
   }>> {
     const graphMeetingId = this.toGraphId(meetingId, 'onlineMeeting');
@@ -2774,14 +2774,14 @@ export class GraphRepository implements IRepository {
     });
   }
 
-  async downloadMeetingRecordingAsync(recordingId: string | number, outputPath: string): Promise<string> {
+  async downloadMeetingRecordingAsync(recordingId: string, outputPath: string): Promise<string> {
     const { meetingId, recordingId: recId } = this.toGraphParts(recordingId, 'recording', ['meetingId', 'recordingId']);
     const content = await this.client.getMeetingRecordingContent(meetingId, recId);
     fs.writeFileSync(outputPath, Buffer.from(content));
     return outputPath;
   }
 
-  async listMeetingTranscriptsAsync(meetingId: string | number): Promise<Array<{
+  async listMeetingTranscriptsAsync(meetingId: string): Promise<Array<{
     id: string; createdDateTime: string; contentUrl: string;
   }>> {
     const graphMeetingId = this.toGraphId(meetingId, 'onlineMeeting');
@@ -2796,7 +2796,7 @@ export class GraphRepository implements IRepository {
     });
   }
 
-  async getMeetingTranscriptContentAsync(transcriptId: string | number, format?: string): Promise<string> {
+  async getMeetingTranscriptContentAsync(transcriptId: string, format?: string): Promise<string> {
     const { meetingId, transcriptId: tId } = this.toGraphParts(transcriptId, 'transcript', ['meetingId', 'transcriptId']);
     return await this.client.getMeetingTranscriptContent(meetingId, tId, format ?? 'text/vtt');
   }
@@ -3037,7 +3037,7 @@ export class GraphRepository implements IRepository {
   /**
    * Gets details for a specific SharePoint site.
    */
-  async getSiteAsync(siteId: string | number): Promise<{ id: string; name: string; webUrl: string; displayName: string; description: string }> {
+  async getSiteAsync(siteId: string): Promise<{ id: string; name: string; webUrl: string; displayName: string; description: string }> {
     const graphId = this.toGraphId(siteId, 'site');
     const site = await this.client.getSite(graphId);
     return {
@@ -3052,7 +3052,7 @@ export class GraphRepository implements IRepository {
   /**
    * Lists document libraries for a SharePoint site, minting durable dl_ tokens.
    */
-  async listDocumentLibrariesAsync(siteId: string | number): Promise<Array<{ id: string; name: string; webUrl: string; driveType: string }>> {
+  async listDocumentLibrariesAsync(siteId: string): Promise<Array<{ id: string; name: string; webUrl: string; driveType: string }>> {
     const graphSiteId = this.toGraphId(siteId, 'site');
     const drives = await this.client.listDocumentLibraries(graphSiteId);
     const result: Array<{ id: string; name: string; webUrl: string; driveType: string }> = [];
@@ -3073,7 +3073,7 @@ export class GraphRepository implements IRepository {
   /**
    * Lists items in a document library or folder, minting durable li_ tokens.
    */
-  async listLibraryItemsAsync(libraryId: string | number, folderId?: string | number): Promise<Array<{
+  async listLibraryItemsAsync(libraryId: string, folderId?: string): Promise<Array<{
     id: string; name: string; size: number; webUrl: string;
     lastModifiedDateTime: string; isFolder: boolean;
   }>> {
@@ -3106,7 +3106,7 @@ export class GraphRepository implements IRepository {
   /**
    * Downloads a file from a document library to the specified path.
    */
-  async downloadLibraryFileAsync(itemId: string | number, outputPath: string): Promise<string> {
+  async downloadLibraryFileAsync(itemId: string, outputPath: string): Promise<string> {
     const cached = this.toGraphParts(itemId, 'libraryDriveItem', ['driveId', 'itemId']);
     const content = await this.client.downloadLibraryFile(cached.driveId, cached.itemId);
     const resolvedPath = path.resolve(outputPath);
@@ -3131,7 +3131,7 @@ export class GraphRepository implements IRepository {
    * Lists the SharePoint lists in a site, minting durable sl_ tokens. Each list
    * token carries the {siteId, listId} tuple its Graph URL needs.
    */
-  async listSharePointListsAsync(siteId: string | number): Promise<Array<{
+  async listSharePointListsAsync(siteId: string): Promise<Array<{
     id: string; name: string; displayName: string; description: string; webUrl: string;
   }>> {
     const graphSiteId = this.toGraphId(siteId, 'site');
@@ -3155,7 +3155,7 @@ export class GraphRepository implements IRepository {
   /**
    * Gets a specific SharePoint list, resolving the sl_ token to its tuple.
    */
-  async getSharePointListAsync(listId: string | number): Promise<{
+  async getSharePointListAsync(listId: string): Promise<{
     id: string; name: string; displayName: string; description: string; webUrl: string;
   }> {
     const { siteId, listId: graphListId } = this.toGraphParts(listId, 'sharePointList', ['siteId', 'listId']);
@@ -3172,7 +3172,7 @@ export class GraphRepository implements IRepository {
   /**
    * Creates a SharePoint list in a site, minting a durable sl_ token.
    */
-  async createSharePointListAsync(siteId: string | number, displayName: string, description?: string): Promise<string> {
+  async createSharePointListAsync(siteId: string, displayName: string, description?: string): Promise<string> {
     const graphSiteId = this.toGraphId(siteId, 'site');
     const body: Record<string, unknown> = {
       displayName,
@@ -3195,7 +3195,7 @@ export class GraphRepository implements IRepository {
    * Lists the column definitions for a SharePoint list. Columns are addressed by
    * name in item field values, so they carry no durable token.
    */
-  async listSharePointListColumnsAsync(listId: string | number): Promise<Array<{
+  async listSharePointListColumnsAsync(listId: string): Promise<Array<{
     id: string; name: string; displayName: string; columnType: string; required: boolean; readOnly: boolean;
   }>> {
     const { siteId, listId: graphListId } = this.toGraphParts(listId, 'sharePointList', ['siteId', 'listId']);
@@ -3214,7 +3214,7 @@ export class GraphRepository implements IRepository {
    * Lists the items in a SharePoint list, minting durable sn_ tokens that carry
    * the {siteId, listId, itemId} tuple.
    */
-  async listSharePointListItemsAsync(listId: string | number, limit: number = 50): Promise<Array<{
+  async listSharePointListItemsAsync(listId: string, limit: number = 50): Promise<Array<{
     id: string; fields: Record<string, unknown>; webUrl: string;
     createdDateTime: string; lastModifiedDateTime: string;
   }>> {
@@ -3242,7 +3242,7 @@ export class GraphRepository implements IRepository {
   /**
    * Gets a specific SharePoint list item, resolving the sn_ token to its tuple.
    */
-  async getSharePointListItemAsync(itemId: string | number): Promise<{
+  async getSharePointListItemAsync(itemId: string): Promise<{
     id: string; fields: Record<string, unknown>; webUrl: string;
     createdDateTime: string; lastModifiedDateTime: string;
   }> {
@@ -3260,7 +3260,7 @@ export class GraphRepository implements IRepository {
   /**
    * Creates an item in a SharePoint list, minting a durable sn_ token.
    */
-  async createSharePointListItemAsync(listId: string | number, fields: Record<string, unknown>): Promise<string> {
+  async createSharePointListItemAsync(listId: string, fields: Record<string, unknown>): Promise<string> {
     const { siteId, listId: graphListId } = this.toGraphParts(listId, 'sharePointList', ['siteId', 'listId']);
     const created = await this.client.createSharePointListItem(siteId, graphListId, fields);
     const newItemId = created.id as string | undefined;
@@ -3274,7 +3274,7 @@ export class GraphRepository implements IRepository {
   /**
    * Updates the field values of a SharePoint list item.
    */
-  async updateSharePointListItemAsync(itemId: string | number, fields: Record<string, unknown>): Promise<void> {
+  async updateSharePointListItemAsync(itemId: string, fields: Record<string, unknown>): Promise<void> {
     const { siteId, listId, itemId: graphItemId } = this.toGraphParts(itemId, 'sharePointListItem', ['siteId', 'listId', 'itemId']);
     await this.client.updateSharePointListItem(siteId, listId, graphItemId, fields);
   }
@@ -3282,7 +3282,7 @@ export class GraphRepository implements IRepository {
   /**
    * Deletes an item from a SharePoint list.
    */
-  async deleteSharePointListItemAsync(itemId: string | number): Promise<void> {
+  async deleteSharePointListItemAsync(itemId: string): Promise<void> {
     const { siteId, listId, itemId: graphItemId } = this.toGraphParts(itemId, 'sharePointListItem', ['siteId', 'listId', 'itemId']);
     await this.client.deleteSharePointListItem(siteId, listId, graphItemId);
   }

@@ -340,7 +340,7 @@ export class TeamsTools {
       };
     }
 
-    await this.repo.deleteChannelAsync((result.token!.targetId as string));
+    await this.repo.deleteChannelAsync((result.token!.targetId));
     return {
       content: [{
         type: 'text' as const,
@@ -444,7 +444,7 @@ export class TeamsTools {
       };
     }
     const { body, contentType } = result.token!.metadata as { body: string; contentType: string };
-    const messageId = await this.repo.sendChannelMessageAsync((result.token!.targetId as string), body, contentType);
+    const messageId = await this.repo.sendChannelMessageAsync((result.token!.targetId), body, contentType);
     return {
       content: [{
         type: 'text' as const,
@@ -508,7 +508,7 @@ export class TeamsTools {
       };
     }
     const { body, contentType } = result.token!.metadata as { body: string; contentType: string };
-    const replyId = await this.repo.replyToChannelMessageAsync((result.token!.targetId as string), body, contentType);
+    const replyId = await this.repo.replyToChannelMessageAsync((result.token!.targetId), body, contentType);
     return {
       content: [{
         type: 'text' as const,
@@ -612,7 +612,7 @@ export class TeamsTools {
       };
     }
     const { body, contentType } = result.token!.metadata as { body: string; contentType: string };
-    const messageId = await this.repo.sendChatMessageAsync((result.token!.targetId as string), body, contentType);
+    const messageId = await this.repo.sendChatMessageAsync((result.token!.targetId), body, contentType);
     return {
       content: [{
         type: 'text' as const,
@@ -703,7 +703,7 @@ export class TeamsTools {
       };
     }
     const { reaction_type, message_type } = result.token!.metadata as { reaction_type: string; message_type: 'channel' | 'chat' };
-    await this.repo.addMessageReactionAsync((result.token!.targetId as string), message_type, reaction_type);
+    await this.repo.addMessageReactionAsync((result.token!.targetId), message_type, reaction_type);
     return {
       content: [{
         type: 'text' as const,

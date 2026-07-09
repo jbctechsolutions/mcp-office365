@@ -231,7 +231,7 @@ export type MoveFolderParams = z.infer<typeof MoveFolderInput>;
 // =============================================================================
 
 function emailPreview(row: EmailRow): {
-  id: string | number;
+  id: string;
   subject: string | null;
   sender: string | null;
   senderAddress: string | null;
@@ -566,7 +566,7 @@ export class MailboxOrganizationTools {
   }
 
   async confirmBatchOperation(params: ConfirmBatchOperationParams): Promise<{
-    results: Array<{ email_id: string | number; success: true } | { email_id: string | number; success: false; error: string }>;
+    results: Array<{ email_id: string; success: true } | { email_id: string; success: false; error: string }>;
     summary: { total: number; succeeded: number; failed: number };
   }> {
     const results = [];
@@ -683,7 +683,7 @@ export class MailboxOrganizationTools {
   // Private Helpers
   // ---------------------------------------------------------------------------
 
-  private async requireEmail(emailId: string | number): Promise<EmailRow> {
+  private async requireEmail(emailId: string): Promise<EmailRow> {
     const email = await this.repository.getEmail(emailId);
     if (email == null) {
       throw new NotFoundError('Email', emailId);
@@ -706,7 +706,7 @@ export class MailboxOrganizationTools {
   private async consumeAndVerifyEmail(
     tokenId: string,
     operation: OperationType,
-    emailId: string | number
+    emailId: string
   ): Promise<ApprovalToken> {
     const result = this.tokenManager.consumeToken(tokenId, operation, emailId);
     if (!result.valid) {

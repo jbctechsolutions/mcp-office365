@@ -72,7 +72,7 @@ export type GenerateBurndownChartParams = z.infer<typeof GenerateBurndownChartIn
 // =============================================================================
 
 export interface IPlannerVisualizationRepository {
-  getPlanVisualizationDataAsync(planId: string | number): Promise<PlanVisualizationData>;
+  getPlanVisualizationDataAsync(planId: string): Promise<PlanVisualizationData>;
 }
 
 // =============================================================================

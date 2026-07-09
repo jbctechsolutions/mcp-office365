@@ -22,7 +22,7 @@ export type ContactTypeValue = (typeof ContactType)[keyof typeof ContactType];
  */
 export interface ContactSummary {
   // string durable token on Graph (U5); numeric on AppleScript/SQLite (D4).
-  readonly id: string | number;
+  readonly id: string;
   readonly folderId: number;
   readonly displayName: string | null;
   readonly sortName: string | null;

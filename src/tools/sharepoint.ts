@@ -69,13 +69,13 @@ export type DownloadLibraryFileParams = z.infer<typeof DownloadLibraryFileInput>
 export interface ISharePointRepository {
   listSitesAsync(): Promise<Array<{ id: string; name: string; webUrl: string; displayName: string }>>;
   searchSitesAsync(query: string): Promise<Array<{ id: string; name: string; webUrl: string; displayName: string }>>;
-  getSiteAsync(siteId: string | number): Promise<{ id: string; name: string; webUrl: string; displayName: string; description: string }>;
-  listDocumentLibrariesAsync(siteId: string | number): Promise<Array<{ id: string; name: string; webUrl: string; driveType: string }>>;
-  listLibraryItemsAsync(libraryId: string | number, folderId?: string | number): Promise<Array<{
+  getSiteAsync(siteId: string): Promise<{ id: string; name: string; webUrl: string; displayName: string; description: string }>;
+  listDocumentLibrariesAsync(siteId: string): Promise<Array<{ id: string; name: string; webUrl: string; driveType: string }>>;
+  listLibraryItemsAsync(libraryId: string, folderId?: string): Promise<Array<{
     id: string; name: string; size: number; webUrl: string;
     lastModifiedDateTime: string; isFolder: boolean;
   }>>;
-  downloadLibraryFileAsync(itemId: string | number, outputPath: string): Promise<string>;
+  downloadLibraryFileAsync(itemId: string, outputPath: string): Promise<string>;
 }
 
 // =============================================================================

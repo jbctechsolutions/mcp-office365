@@ -38,8 +38,8 @@ function jsonResult(data: unknown): ToolResult {
  * backend's task tools.
  */
 export function transformTaskRow(row: TaskRow): {
-  id: string | number;
-  folderId: string | number;
+  id: string;
+  folderId: string;
   name: string | null;
   isCompleted: boolean;
   dueDate: string | null;
