@@ -242,7 +242,10 @@ function rowToToken(row: ApprovalTokenRow): ApprovalToken | null {
     tokenId: row.token,
     operation: row.action as OperationType,
     targetType: target.targetType,
-    targetId: target.targetId,
+    // Coerce to string: a token persisted by a pre-v4 build may carry a numeric
+    // targetId (e.g. the send_email/upload_file sentinel `0`), which would else
+    // fail the strict `!==` target check against v4's string ids within the TTL.
+    targetId: String(target.targetId),
     targetHash: target.targetHash ?? row.contentHash ?? '',
     createdAt: row.createdAt,
     expiresAt: row.expiresAt,
