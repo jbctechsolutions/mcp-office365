@@ -6,7 +6,7 @@
 
 MCP server for Microsoft 365 -- mail, calendar, contacts, tasks, teams, people, and planner.
 
-A [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) server that provides **181 tools** for full read/write access to Microsoft 365. Manage your emails, calendar events, contacts, tasks, notes, Teams channels and chats, people directory, and Planner boards directly through MCP.
+A [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) server that provides **221 tools** for full read/write access to Microsoft 365 via the Microsoft Graph API. Manage your emails, calendar events, contacts, tasks, OneNote notes, Teams channels and chats, people directory, and Planner boards directly through MCP.
 
 ## Features Overview
 
@@ -31,15 +31,14 @@ A [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) server that p
 | Checklist Items | 5 | Subtasks on To Do tasks |
 | Linked Resources | 4 | Linked resources on To Do tasks |
 | Task Attachments | 4 | File attachments on To Do tasks |
-| Notes (AppleScript only) | 3 | List, read, and search Outlook notes |
+| OneNote | 6 | Browse notebooks/sections/pages, search, and create pages |
 | Scheduling | 2 | Free/busy availability, meeting time suggestions |
 | Teams -- Channels | 8 | Channel CRUD, team members |
 | Teams -- Channel Messages | 6 | Read and send channel messages with replies |
 | Teams -- Chats | 6 | 1:1 and group chats, send messages |
 | People & Presence | 8 | People search, org chart, presence status |
-| Planner | 17 | Plans, buckets, tasks, task details with ETag |
-| Accounts | 1 | List configured Exchange accounts |
-| **Total** | **181** | |
+| Planner | 18 | Plans, buckets, tasks, task details with ETag |
+| **Total** | **221** | |
 
 ## Quick Start
 
@@ -49,13 +48,7 @@ A [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) server that p
 npx -y @jbctechsolutions/mcp-office365
 ```
 
-By default the server uses the **Microsoft Graph API** backend (cross-platform, full read/write access).
-
-To use the **AppleScript backend** (classic Outlook for Mac only, limited features), set the environment variable:
-
-```bash
-USE_APPLESCRIPT=1
-```
+The server connects to Microsoft 365 via the **Microsoft Graph API** (cross-platform, full read/write access).
 
 ### Pre-authenticate (optional)
 
@@ -101,28 +94,12 @@ In a client config, add them to `args`:
 
 Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
 
-**Graph API backend (default):**
 ```json
 {
   "mcpServers": {
     "office365": {
       "command": "npx",
       "args": ["-y", "@jbctechsolutions/mcp-office365"]
-    }
-  }
-}
-```
-
-**AppleScript backend** (macOS + classic Outlook only):
-```json
-{
-  "mcpServers": {
-    "office365": {
-      "command": "npx",
-      "args": ["-y", "@jbctechsolutions/mcp-office365"],
-      "env": {
-        "USE_APPLESCRIPT": "1"
-      }
     }
   }
 }
@@ -203,16 +180,7 @@ For production, work accounts with conditional access, or full control over the 
 
 ## Tool Reference
 
-All 181 tools listed below. Tools marked *(Graph API)* require `USE_GRAPH_API=1`. Tools marked *(AppleScript only)* are not available with Graph API.
-
-<details>
-<summary><strong>Accounts (1)</strong></summary>
-
-| Tool | Description |
-|------|-------------|
-| `list_accounts` | List all Exchange accounts configured in Outlook |
-
-</details>
+All 221 tools listed below.
 
 <details>
 <summary><strong>Mail -- Reading (9)</strong></summary>
@@ -487,15 +455,16 @@ All 181 tools listed below. Tools marked *(Graph API)* require `USE_GRAPH_API=1`
 </details>
 
 <details>
-<summary><strong>Notes (3)</strong> <em>(AppleScript only)</em></summary>
+<summary><strong>OneNote (6)</strong> <em>(Graph API)</em></summary>
 
 | Tool | Description |
 |------|-------------|
-| `list_notes` | List notes with pagination |
-| `get_note` | Get note details |
-| `search_notes` | Search notes by content |
-
-> Notes are only available with the AppleScript backend. Microsoft Graph API does not provide access to Outlook Notes.
+| `list_notebooks` | List OneNote notebooks for the current user |
+| `list_note_sections` | List OneNote sections, optionally scoped to a notebook |
+| `list_note_pages` | List OneNote pages, optionally scoped to a section |
+| `get_note_page` | Get a OneNote page's metadata and HTML content |
+| `search_note_pages` | Search OneNote pages by keyword |
+| `create_note_page` | Create a new OneNote page in a section |
 
 </details>
 
@@ -580,7 +549,7 @@ All 181 tools listed below. Tools marked *(Graph API)* require `USE_GRAPH_API=1`
 </details>
 
 <details>
-<summary><strong>Planner (17)</strong> <em>(Graph API)</em></summary>
+<summary><strong>Planner (18)</strong> <em>(Graph API)</em></summary>
 
 | Tool | Description |
 |------|-------------|
@@ -594,6 +563,7 @@ All 181 tools listed below. Tools marked *(Graph API)* require `USE_GRAPH_API=1`
 | `prepare_delete_bucket` | Prepare to delete a Planner bucket (two-phase) |
 | `confirm_delete_bucket` | Confirm Planner bucket deletion |
 | `list_planner_tasks` | List all tasks in a Planner plan |
+| `list_my_planner_tasks` | List all Planner tasks assigned to the signed-in user across every plan |
 | `get_planner_task` | Get details for a specific Planner task |
 | `create_planner_task` | Create a new task in a Planner plan |
 | `update_planner_task` | Update a Planner task |
@@ -606,12 +576,7 @@ All 181 tools listed below. Tools marked *(Graph API)* require `USE_GRAPH_API=1`
 
 ## Architecture
 
-### Dual Backend
-
-The server supports two backends:
-
-- **Microsoft Graph API (default)** -- connects to Microsoft 365 cloud services. Full read/write across all 181 tools. No Outlook installation required. Works on macOS, Windows, and Linux.
-- **AppleScript** (`USE_APPLESCRIPT=1`) -- communicates with classic Outlook for Mac via `osascript`. Works offline, no Microsoft account needed. Limited to reading mail, calendar, contacts, tasks, and notes, plus calendar write operations and email sending.
+The server connects to Microsoft 365 cloud services via the **Microsoft Graph API**. Full read/write access across all 221 tools. No Outlook installation required. Works on macOS, Windows, and Linux.
 
 ### Two-Phase Approval
 
@@ -619,7 +584,7 @@ Destructive operations (delete, send, move, forward, etc.) use a prepare/confirm
 
 ### ID Caching
 
-The server maintains an internal ID mapping layer. AppleScript and Graph API use different ID formats; the caching layer assigns stable numeric IDs so tool callers do not need to track backend-specific identifiers.
+The server maintains an internal ID mapping layer that assigns stable, durable identifier tokens for Graph API resources so tool callers do not need to track raw Graph object IDs.
 
 ### ETag Caching
 
@@ -629,8 +594,7 @@ Planner resources use ETag-based concurrency control. The server caches ETags fr
 
 ```
 src/
-  applescript/       AppleScript integration (legacy backend)
-  graph/             Microsoft Graph API integration (default)
+  graph/             Microsoft Graph API integration
     auth/            MSAL authentication, device code flow, token cache
     client/          Graph client wrapper with response caching
     mappers/         Graph-to-internal type mappers
@@ -641,7 +605,7 @@ src/
 
 ## Required Graph API Permissions
 
-These delegated permissions are requested when using the Graph API backend:
+These delegated permissions are requested via Microsoft Graph:
 
 | Permission | Purpose |
 |------------|---------|
@@ -666,18 +630,8 @@ These delegated permissions are requested when using the Graph API backend:
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `USE_APPLESCRIPT` | Set to `1` or `true` for legacy AppleScript backend | (unset -- uses Graph API) |
 | `OUTLOOK_MCP_CLIENT_ID` | Override the embedded Azure AD client ID | (embedded) |
 | `OUTLOOK_MCP_TENANT_ID` | Azure AD tenant ID | `common` |
-
-## Known Limitations
-
-**AppleScript backend:**
-- Google accounts in Outlook are not accessible (macOS/Outlook limitation). Use IMAP configuration or the Graph API backend instead.
-- Write operations limited to calendar events and email sending. All other writes require Graph API.
-
-**Graph API backend:**
-- Outlook Notes are not available (Graph API does not expose them). Use AppleScript backend for notes.
 
 ## Contributing
 

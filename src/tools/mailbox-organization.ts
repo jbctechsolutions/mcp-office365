@@ -28,18 +28,13 @@ import {
 } from '../utils/errors.js';
 import { appleTimestampToIso } from '../utils/dates.js';
 import { defineTool } from '../registry/define-tool.js';
-import { requireGraphToolset, requireAppleScriptToolset } from '../registry/context.js';
+import { requireGraphToolset } from '../registry/context.js';
 import type { ToolContext, ToolDefinition, ToolResult } from '../registry/types.js';
 
-// Mailbox organization is a dual-backend domain served by a single
-// MailboxOrganizationTools instance (constructed against the AppleScript
-// repository or the Graph mailbox adapter). Registered on both toolset bags so
-// a single registry handler can branch on `ctx.backend`.
+// Mailbox organization is served by a single MailboxOrganizationTools instance
+// constructed against the Graph mailbox adapter.
 declare module '../registry/types.js' {
   interface GraphToolsets {
-    mailboxOrg: MailboxOrganizationTools;
-  }
-  interface AppleScriptToolsets {
     mailboxOrg: MailboxOrganizationTools;
   }
 }
@@ -298,8 +293,8 @@ function throwValidationError(error: ValidationErrorReason): never {
 /**
  * Mailbox organization tools with two-phase approval for destructive ops.
  *
- * Works with both sync (AppleScript) and async (Graph) backends via
- * the IMailboxRepository interface and MaybePromise return types.
+ * Works against the Graph backend via the IMailboxRepository interface and
+ * MaybePromise return types.
  */
 export class MailboxOrganizationTools {
   constructor(
@@ -773,11 +768,9 @@ function jsonResult(data: unknown): ToolResult {
   return { content: [{ type: 'text', text: JSON.stringify(data, null, 2) }] };
 }
 
-/** Resolves the shared org toolset from whichever backend bag is active. */
+/** Resolves the org toolset from the Graph toolset bag. */
 function orgToolsFor(ctx: ToolContext): MailboxOrganizationTools {
-  return ctx.backend === 'graph'
-    ? requireGraphToolset(ctx, 'mailboxOrg')
-    : requireAppleScriptToolset(ctx, 'mailboxOrg');
+  return requireGraphToolset(ctx, 'mailboxOrg');
 }
 
 const PREPARE_ANNOTATIONS = { readOnlyHint: false, destructiveHint: false, openWorldHint: true };
@@ -804,7 +797,7 @@ export function mailboxOrganizationToolDefinitions(): ToolDefinition[] {
       annotations: PREPARE_ANNOTATIONS,
       destructive: true,
       presets: ['mail'],
-      backends: ['graph', 'applescript'],
+      backends: ['graph'],
       handler: async (ctx, params) => jsonResult(await orgToolsFor(ctx).prepareDeleteEmail(params)),
     }),
     defineTool({
@@ -814,7 +807,7 @@ export function mailboxOrganizationToolDefinitions(): ToolDefinition[] {
       annotations: CONFIRM_ANNOTATIONS,
       destructive: true,
       presets: ['mail'],
-      backends: ['graph', 'applescript'],
+      backends: ['graph'],
       handler: async (ctx, params) => jsonResult(await orgToolsFor(ctx).confirmDeleteEmail(params)),
     }),
     defineTool({
@@ -824,7 +817,7 @@ export function mailboxOrganizationToolDefinitions(): ToolDefinition[] {
       annotations: PREPARE_ANNOTATIONS,
       destructive: true,
       presets: ['mail'],
-      backends: ['graph', 'applescript'],
+      backends: ['graph'],
       handler: async (ctx, params) => jsonResult(await orgToolsFor(ctx).prepareMoveEmail(params)),
     }),
     defineTool({
@@ -834,7 +827,7 @@ export function mailboxOrganizationToolDefinitions(): ToolDefinition[] {
       annotations: CONFIRM_ANNOTATIONS,
       destructive: true,
       presets: ['mail'],
-      backends: ['graph', 'applescript'],
+      backends: ['graph'],
       handler: async (ctx, params) => jsonResult(await orgToolsFor(ctx).confirmMoveEmail(params)),
     }),
     defineTool({
@@ -844,7 +837,7 @@ export function mailboxOrganizationToolDefinitions(): ToolDefinition[] {
       annotations: PREPARE_ANNOTATIONS,
       destructive: true,
       presets: ['mail'],
-      backends: ['graph', 'applescript'],
+      backends: ['graph'],
       handler: async (ctx, params) => jsonResult(await orgToolsFor(ctx).prepareArchiveEmail(params)),
     }),
     defineTool({
@@ -854,7 +847,7 @@ export function mailboxOrganizationToolDefinitions(): ToolDefinition[] {
       annotations: CONFIRM_ANNOTATIONS,
       destructive: true,
       presets: ['mail'],
-      backends: ['graph', 'applescript'],
+      backends: ['graph'],
       handler: async (ctx, params) => jsonResult(await orgToolsFor(ctx).confirmArchiveEmail(params)),
     }),
     defineTool({
@@ -864,7 +857,7 @@ export function mailboxOrganizationToolDefinitions(): ToolDefinition[] {
       annotations: PREPARE_ANNOTATIONS,
       destructive: true,
       presets: ['mail'],
-      backends: ['graph', 'applescript'],
+      backends: ['graph'],
       handler: async (ctx, params) => jsonResult(await orgToolsFor(ctx).prepareJunkEmail(params)),
     }),
     defineTool({
@@ -874,7 +867,7 @@ export function mailboxOrganizationToolDefinitions(): ToolDefinition[] {
       annotations: CONFIRM_ANNOTATIONS,
       destructive: true,
       presets: ['mail'],
-      backends: ['graph', 'applescript'],
+      backends: ['graph'],
       handler: async (ctx, params) => jsonResult(await orgToolsFor(ctx).confirmJunkEmail(params)),
     }),
     defineTool({
@@ -884,7 +877,7 @@ export function mailboxOrganizationToolDefinitions(): ToolDefinition[] {
       annotations: PREPARE_ANNOTATIONS,
       destructive: true,
       presets: ['mail'],
-      backends: ['graph', 'applescript'],
+      backends: ['graph'],
       handler: async (ctx, params) => jsonResult(await orgToolsFor(ctx).prepareDeleteFolder(params)),
     }),
     defineTool({
@@ -894,7 +887,7 @@ export function mailboxOrganizationToolDefinitions(): ToolDefinition[] {
       annotations: CONFIRM_ANNOTATIONS,
       destructive: true,
       presets: ['mail'],
-      backends: ['graph', 'applescript'],
+      backends: ['graph'],
       handler: async (ctx, params) => jsonResult(await orgToolsFor(ctx).confirmDeleteFolder(params)),
     }),
     defineTool({
@@ -904,7 +897,7 @@ export function mailboxOrganizationToolDefinitions(): ToolDefinition[] {
       annotations: PREPARE_ANNOTATIONS,
       destructive: true,
       presets: ['mail'],
-      backends: ['graph', 'applescript'],
+      backends: ['graph'],
       handler: async (ctx, params) => jsonResult(await orgToolsFor(ctx).prepareEmptyFolder(params)),
     }),
     defineTool({
@@ -914,7 +907,7 @@ export function mailboxOrganizationToolDefinitions(): ToolDefinition[] {
       annotations: CONFIRM_ANNOTATIONS,
       destructive: true,
       presets: ['mail'],
-      backends: ['graph', 'applescript'],
+      backends: ['graph'],
       handler: async (ctx, params) => jsonResult(await orgToolsFor(ctx).confirmEmptyFolder(params)),
     }),
 
@@ -926,7 +919,7 @@ export function mailboxOrganizationToolDefinitions(): ToolDefinition[] {
       annotations: PREPARE_ANNOTATIONS,
       destructive: true,
       presets: ['mail'],
-      backends: ['graph', 'applescript'],
+      backends: ['graph'],
       handler: async (ctx, params) => jsonResult(await orgToolsFor(ctx).prepareBatchDeleteEmails(params)),
     }),
     defineTool({
@@ -936,7 +929,7 @@ export function mailboxOrganizationToolDefinitions(): ToolDefinition[] {
       annotations: PREPARE_ANNOTATIONS,
       destructive: true,
       presets: ['mail'],
-      backends: ['graph', 'applescript'],
+      backends: ['graph'],
       handler: async (ctx, params) => jsonResult(await orgToolsFor(ctx).prepareBatchMoveEmails(params)),
     }),
     defineTool({
@@ -946,7 +939,7 @@ export function mailboxOrganizationToolDefinitions(): ToolDefinition[] {
       annotations: CONFIRM_ANNOTATIONS,
       destructive: true,
       presets: ['mail'],
-      backends: ['graph', 'applescript'],
+      backends: ['graph'],
       handler: async (ctx, params) => jsonResult(await orgToolsFor(ctx).confirmBatchOperation(params)),
     }),
 
@@ -958,7 +951,7 @@ export function mailboxOrganizationToolDefinitions(): ToolDefinition[] {
       annotations: WRITE_ANNOTATIONS,
       destructive: false,
       presets: ['mail'],
-      backends: ['graph', 'applescript'],
+      backends: ['graph'],
       handler: async (ctx, params) => jsonResult(await orgToolsFor(ctx).markEmailRead(params)),
     }),
     defineTool({
@@ -968,7 +961,7 @@ export function mailboxOrganizationToolDefinitions(): ToolDefinition[] {
       annotations: WRITE_ANNOTATIONS,
       destructive: false,
       presets: ['mail'],
-      backends: ['graph', 'applescript'],
+      backends: ['graph'],
       handler: async (ctx, params) => jsonResult(await orgToolsFor(ctx).markEmailUnread(params)),
     }),
     defineTool({
@@ -978,7 +971,7 @@ export function mailboxOrganizationToolDefinitions(): ToolDefinition[] {
       annotations: WRITE_ANNOTATIONS,
       destructive: false,
       presets: ['mail'],
-      backends: ['graph', 'applescript'],
+      backends: ['graph'],
       handler: async (ctx, params) => jsonResult(await orgToolsFor(ctx).setEmailFlag(params)),
     }),
     defineTool({
@@ -988,7 +981,7 @@ export function mailboxOrganizationToolDefinitions(): ToolDefinition[] {
       annotations: WRITE_ANNOTATIONS,
       destructive: false,
       presets: ['mail'],
-      backends: ['graph', 'applescript'],
+      backends: ['graph'],
       handler: async (ctx, params) => jsonResult(await orgToolsFor(ctx).clearEmailFlag(params)),
     }),
     defineTool({
@@ -998,7 +991,7 @@ export function mailboxOrganizationToolDefinitions(): ToolDefinition[] {
       annotations: WRITE_ANNOTATIONS,
       destructive: false,
       presets: ['mail'],
-      backends: ['graph', 'applescript'],
+      backends: ['graph'],
       handler: async (ctx, params) => jsonResult(await orgToolsFor(ctx).setEmailCategories(params)),
     }),
     defineTool({
@@ -1008,7 +1001,7 @@ export function mailboxOrganizationToolDefinitions(): ToolDefinition[] {
       annotations: WRITE_ANNOTATIONS,
       destructive: false,
       presets: ['mail'],
-      backends: ['graph', 'applescript'],
+      backends: ['graph'],
       handler: async (ctx, params) => jsonResult(await orgToolsFor(ctx).setEmailImportance(params)),
     }),
 
@@ -1020,7 +1013,7 @@ export function mailboxOrganizationToolDefinitions(): ToolDefinition[] {
       annotations: WRITE_ANNOTATIONS,
       destructive: false,
       presets: ['mail'],
-      backends: ['graph', 'applescript'],
+      backends: ['graph'],
       handler: async (ctx, params) => jsonResult(await orgToolsFor(ctx).createFolder(params)),
     }),
     defineTool({
@@ -1030,7 +1023,7 @@ export function mailboxOrganizationToolDefinitions(): ToolDefinition[] {
       annotations: WRITE_ANNOTATIONS,
       destructive: false,
       presets: ['mail'],
-      backends: ['graph', 'applescript'],
+      backends: ['graph'],
       handler: async (ctx, params) => jsonResult(await orgToolsFor(ctx).renameFolder(params)),
     }),
     defineTool({
@@ -1040,7 +1033,7 @@ export function mailboxOrganizationToolDefinitions(): ToolDefinition[] {
       annotations: WRITE_ANNOTATIONS,
       destructive: false,
       presets: ['mail'],
-      backends: ['graph', 'applescript'],
+      backends: ['graph'],
       handler: async (ctx, params) => jsonResult(await orgToolsFor(ctx).moveFolder(params)),
     }),
   ];

@@ -7,7 +7,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { z } from 'zod';
 import { ToolRegistry, toInputSchema } from '../../../src/registry/registry.js';
 import { defineTool } from '../../../src/registry/define-tool.js';
-import { requireGraphToolset, requireAppleScriptToolset } from '../../../src/registry/context.js';
+import { requireGraphToolset } from '../../../src/registry/context.js';
 import type { ToolContext, ToolDefinition } from '../../../src/registry/types.js';
 import { mailRulesToolDefinitions } from '../../../src/tools/mail-rules.js';
 import { ApprovalTokenManager } from '../../../src/approval/index.js';
@@ -17,7 +17,6 @@ function readContext(rules: unknown): ToolContext {
     backend: 'graph',
     tokenManager: new ApprovalTokenManager(),
     graph: { rules: rules as never },
-    applescript: null,
   };
 }
 
@@ -32,35 +31,11 @@ describe('requireGraphToolset', () => {
 
   it('throws a clear error when the graph backend is unavailable', () => {
     const ctx: ToolContext = {
-      backend: 'applescript',
-      tokenManager: new ApprovalTokenManager(),
-      graph: null,
-      applescript: {} as never,
-    };
-    expect(() => requireGraphToolset(ctx, 'rules')).toThrow(/Microsoft Graph API backend/);
-  });
-});
-
-describe('requireAppleScriptToolset', () => {
-  it('returns the toolset when the applescript bag is present', () => {
-    const marker = { listNotes: () => [] };
-    const ctx: ToolContext = {
-      backend: 'applescript',
-      tokenManager: new ApprovalTokenManager(),
-      graph: null,
-      applescript: { notes: marker } as never,
-    };
-    expect(requireAppleScriptToolset(ctx, 'notes')).toBe(marker);
-  });
-
-  it('throws a clear error when the applescript backend is unavailable', () => {
-    const ctx: ToolContext = {
       backend: 'graph',
       tokenManager: new ApprovalTokenManager(),
-      graph: {} as never,
-      applescript: null,
+      graph: null,
     };
-    expect(() => requireAppleScriptToolset(ctx, 'notes')).toThrow(/AppleScript \(classic Outlook\) backend/);
+    expect(() => requireGraphToolset(ctx, 'rules')).toThrow(/Microsoft Graph API backend/);
   });
 });
 
@@ -181,13 +156,13 @@ describe('ToolRegistry', () => {
     ).rejects.toMatchObject({ code: 'READ_ONLY_MODE' });
   });
 
-  it('throws a generic not-available error when a tool is filtered out by backend (not read-only)', async () => {
+  it('throws a generic not-available error when a tool is filtered out (not read-only)', async () => {
     const registry = new ToolRegistry();
     registry.register(mailRulesToolDefinitions());
-    // Force a matches() failure that is not read-only: a graph-only tool under
-    // the applescript backend. The read-only guard must not fire here.
+    // Force a matches() failure that is not read-only: a preset filter that
+    // excludes every mail-rules tool. The read-only guard must not fire here.
     await expect(
-      registry.dispatch('list_mail_rules', {}, readContext({}), { backend: 'applescript' }),
+      registry.dispatch('list_mail_rules', {}, readContext({}), { backend: 'graph', presets: ['calendar'] }),
     ).rejects.toThrow(/not available in the current mode/);
   });
 
@@ -204,13 +179,6 @@ describe('ToolRegistry', () => {
     await expect(
       registry.dispatch('confirm_delete_mail_rule', { rule_id: 'not-a-number' }, readContext({}), graphSurface),
     ).rejects.toThrow();
-  });
-
-  it('excludes graph-only tools in AppleScript mode', () => {
-    const registry = new ToolRegistry();
-    registry.register(mailRulesToolDefinitions());
-    const tools = registry.listTools({ backend: 'applescript' });
-    expect(tools).toHaveLength(0); // all mail-rules tools are graph-only
   });
 
   it('read-only mode exposes only readOnlyHint:true tools (excludes writes, not just destructive)', () => {

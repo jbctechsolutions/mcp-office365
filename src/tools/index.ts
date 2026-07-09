@@ -11,8 +11,6 @@
 
 // Mail tools
 export {
-  MailTools,
-  createMailTools,
   ListFoldersInput,
   ListEmailsInput,
   SearchEmailsInput,
@@ -33,13 +31,10 @@ export {
   type ListAttachmentsParams,
   type DownloadAttachmentParams,
   type IContentReader,
-  nullContentReader,
 } from './mail.js';
 
 // Calendar tools
 export {
-  CalendarTools,
-  createCalendarTools,
   ListCalendarsInput,
   ListEventsInput,
   GetEventInput,
@@ -56,13 +51,10 @@ export {
   type RespondToEventParams,
   type IEventContentReader,
   type EventDetails,
-  nullEventContentReader,
 } from './calendar.js';
 
 // Contacts tools
 export {
-  ContactsTools,
-  createContactsTools,
   ListContactsInput,
   SearchContactsInput,
   GetContactInput,
@@ -71,13 +63,10 @@ export {
   type GetContactParams,
   type IContactContentReader,
   type ContactDetails,
-  nullContactContentReader,
 } from './contacts.js';
 
 // Tasks tools
 export {
-  TasksTools,
-  createTasksTools,
   ListTasksInput,
   SearchTasksInput,
   GetTaskInput,
@@ -86,23 +75,7 @@ export {
   type GetTaskParams,
   type ITaskContentReader,
   type TaskDetails,
-  nullTaskContentReader,
 } from './tasks.js';
-
-// Notes tools
-export {
-  NotesTools,
-  createNotesTools,
-  ListNotesInput,
-  GetNoteInput,
-  SearchNotesInput,
-  type ListNotesParams,
-  type GetNoteParams,
-  type SearchNotesParams,
-  type INoteContentReader,
-  type NoteDetails,
-  nullNoteContentReader,
-} from './notes.js';
 
 // Mailbox organization tools
 export {

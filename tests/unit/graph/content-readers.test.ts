@@ -17,7 +17,6 @@ import {
   GraphEventContentReader,
   GraphContactContentReader,
   GraphTaskContentReader,
-  GraphNoteContentReader,
   createGraphContentReaders,
   createGraphContentReadersWithClient,
 } from '../../../src/graph/content-readers.js';
@@ -521,28 +520,6 @@ describe('graph/content-readers', () => {
     });
   });
 
-  describe('GraphNoteContentReader', () => {
-    let reader: GraphNoteContentReader;
-
-    beforeEach(() => {
-      reader = new GraphNoteContentReader();
-    });
-
-    describe('readNoteDetails (sync)', () => {
-      it('returns null (notes not supported by Graph API)', () => {
-        const result = reader.readNoteDetails('some-path');
-        expect(result).toBeNull();
-      });
-    });
-
-    describe('readNoteDetailsAsync', () => {
-      it('returns null (notes not supported by Graph API)', async () => {
-        const result = await reader.readNoteDetailsAsync('some-path');
-        expect(result).toBeNull();
-      });
-    });
-  });
-
   describe('createGraphContentReaders', () => {
     it('creates all content readers', () => {
       const readers = createGraphContentReaders();
@@ -551,7 +528,6 @@ describe('graph/content-readers', () => {
       expect(readers.event).toBeInstanceOf(GraphEventContentReader);
       expect(readers.contact).toBeInstanceOf(GraphContactContentReader);
       expect(readers.task).toBeInstanceOf(GraphTaskContentReader);
-      expect(readers.note).toBeInstanceOf(GraphNoteContentReader);
     });
   });
 
@@ -564,7 +540,6 @@ describe('graph/content-readers', () => {
       expect(readers.event).toBeInstanceOf(GraphEventContentReader);
       expect(readers.contact).toBeInstanceOf(GraphContactContentReader);
       expect(readers.task).toBeInstanceOf(GraphTaskContentReader);
-      expect(readers.note).toBeInstanceOf(GraphNoteContentReader);
     });
   });
 });

@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Removed
+
+- **AppleScript backend removed.** The macOS/Outlook-desktop AppleScript
+  backend (frozen + deprecated since v3.0.0) is gone; the server is now
+  Graph-API-only. `USE_APPLESCRIPT` is no longer recognized. The Apple Notes
+  tools (`list_notes`/`get_note`/`search_notes`) are replaced by the OneNote
+  tools. `list_accounts` is also removed — it was backed exclusively by the
+  AppleScript account repository and had no Graph equivalent.
+
 ### Added
 
 - **`list_my_planner_tasks`** — lists every Planner task assigned to the

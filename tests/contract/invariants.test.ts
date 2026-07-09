@@ -56,7 +56,7 @@ describe('registry contract invariants', () => {
   });
 
   it('every tool declares at least one backend', () => {
-    const valid: readonly Backend[] = ['graph', 'applescript'];
+    const valid: readonly Backend[] = ['graph'];
     for (const def of defs) {
       expect(def.backends.length, `${def.name} backends`).toBeGreaterThan(0);
       for (const b of def.backends) {
@@ -119,12 +119,11 @@ describe('registry contract invariants', () => {
   });
 
   it('every tool handler returns a valid ToolResult for a supported backend', async () => {
-    // Invariant: each handler runs against a fully-proxied context (both the
-    // graph and AppleScript toolset bags auto-vivify any method to a recording
-    // stub) and returns a well-formed ToolResult without throwing. Exercises
-    // every handler — catches a handler that references a missing context key
-    // or throws on a valid call. Dual-backend handlers (e.g. notes) are run
-    // against each backend they declare.
+    // Invariant: each handler runs against a fully-proxied context (the graph
+    // toolset bag auto-vivifies any method to a recording stub) and returns a
+    // well-formed ToolResult without throwing. Exercises every handler —
+    // catches a handler that references a missing context key or throws on a
+    // valid call.
     const toolsetProxy = new Proxy(
       {},
       {
@@ -141,7 +140,6 @@ describe('registry contract invariants', () => {
           backend,
           tokenManager: new ApprovalTokenManager(),
           graph: bagProxy as never,
-          applescript: bagProxy as never,
         };
         const result = await def.handler(ctx, {} as never);
         expect(Array.isArray(result?.content), `${def.name} (${backend}) returned no content`).toBe(true);

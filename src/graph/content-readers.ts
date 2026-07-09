@@ -18,7 +18,6 @@ import type { IContentReader } from '../tools/mail.js';
 import type { IEventContentReader, EventDetails } from '../tools/calendar.js';
 import type { IContactContentReader, ContactDetails } from '../tools/contacts.js';
 import type { ITaskContentReader, TaskDetails } from '../tools/tasks.js';
-import type { INoteContentReader, NoteDetails } from '../tools/notes.js';
 import { GraphClient } from './client/index.js';
 import type { DeviceCodeCallback } from './auth/index.js';
 
@@ -344,28 +343,6 @@ export class GraphTaskContentReader implements ITaskContentReader {
 }
 
 // ===========================================================================
-// Note Content Reader (NOT SUPPORTED)
-// ===========================================================================
-
-/**
- * Graph API note content reader.
- *
- * Note: Microsoft Graph does not have an API for Outlook Notes.
- * This reader always returns null.
- */
-export class GraphNoteContentReader implements INoteContentReader {
-  readNoteDetails(_dataFilePath: string | null): NoteDetails | null {
-    // Microsoft Graph does not support Outlook Notes
-    return null;
-  }
-
-  readNoteDetailsAsync(_dataFilePath: string | null): Promise<NoteDetails | null> {
-    // Microsoft Graph does not support Outlook Notes
-    return Promise.resolve(null);
-  }
-}
-
-// ===========================================================================
 // Factory Functions
 // ===========================================================================
 
@@ -377,7 +354,6 @@ export interface GraphContentReaders {
   readonly event: GraphEventContentReader;
   readonly contact: GraphContactContentReader;
   readonly task: GraphTaskContentReader;
-  readonly note: GraphNoteContentReader;
 }
 
 /**
@@ -393,7 +369,6 @@ export function createGraphContentReaders(
     event: new GraphEventContentReader(client),
     contact: new GraphContactContentReader(client),
     task: new GraphTaskContentReader(client),
-    note: new GraphNoteContentReader(),
   };
 }
 
@@ -408,6 +383,5 @@ export function createGraphContentReadersWithClient(
     event: new GraphEventContentReader(client),
     contact: new GraphContactContentReader(client),
     task: new GraphTaskContentReader(client),
-    note: new GraphNoteContentReader(),
   };
 }

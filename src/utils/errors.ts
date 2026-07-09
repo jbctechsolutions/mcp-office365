@@ -18,10 +18,6 @@ export const ErrorCode = {
   CONTENT_PARSE_ERROR: 'CONTENT_PARSE_ERROR',
   VALIDATION_ERROR: 'VALIDATION_ERROR',
   NOT_FOUND: 'NOT_FOUND',
-  OUTLOOK_NOT_RUNNING: 'OUTLOOK_NOT_RUNNING',
-  APPLESCRIPT_PERMISSION_DENIED: 'APPLESCRIPT_PERMISSION_DENIED',
-  APPLESCRIPT_TIMEOUT: 'APPLESCRIPT_TIMEOUT',
-  APPLESCRIPT_ERROR: 'APPLESCRIPT_ERROR',
   GRAPH_RATE_LIMITED: 'GRAPH_RATE_LIMITED',
   GRAPH_PERMISSION_DENIED: 'GRAPH_PERMISSION_DENIED',
   GRAPH_ERROR: 'GRAPH_ERROR',
@@ -178,63 +174,6 @@ export function wrapError(error: unknown, defaultMessage: string): OutlookMcpErr
   }
 
   return new DatabaseError(defaultMessage);
-}
-
-// =============================================================================
-// AppleScript Errors
-// =============================================================================
-
-/**
- * Thrown when Outlook is not running and needs to be.
- */
-export class OutlookNotRunningError extends OutlookMcpError {
-  readonly code = ErrorCode.OUTLOOK_NOT_RUNNING;
-
-  constructor() {
-    super(
-      'Microsoft Outlook is not running. ' +
-        'Please start Outlook and try again.'
-    );
-  }
-}
-
-/**
- * Thrown when AppleScript automation permission is denied.
- */
-export class AppleScriptPermissionError extends OutlookMcpError {
-  readonly code = ErrorCode.APPLESCRIPT_PERMISSION_DENIED;
-
-  constructor() {
-    super(
-      'Automation permission denied for Microsoft Outlook. ' +
-        'Please grant access in System Settings > Privacy & Security > Automation.'
-    );
-  }
-}
-
-/**
- * Thrown when AppleScript execution times out.
- */
-export class AppleScriptTimeoutError extends OutlookMcpError {
-  readonly code = ErrorCode.APPLESCRIPT_TIMEOUT;
-
-  constructor(operation: string) {
-    super(
-      `AppleScript operation timed out: ${operation}. ` +
-        'This may happen with large data sets. Try reducing the limit.'
-    );
-  }
-}
-
-/**
- * Thrown for general AppleScript errors.
- */
-export class AppleScriptError extends OutlookMcpError {
-  readonly code = ErrorCode.APPLESCRIPT_ERROR;
-
-  constructor(message: string, readonly cause?: Error) {
-    super(message);
-  }
 }
 
 // =============================================================================

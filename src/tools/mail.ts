@@ -9,33 +9,17 @@
  * Provides tools for listing folders, emails, and searching.
  */
 
-import { existsSync } from 'fs';
-import { dirname } from 'path';
 import { z } from 'zod';
-import type { IRepository, EmailRow, FolderRow } from '../database/repository.js';
-import type { Folder, EmailSummary, Email, AttachmentInfo, PriorityValue, FlagStatusValue } from '../types/index.js';
-import { MAX_ATTACHMENT_DOWNLOAD_SIZE } from '../types/mail.js';
-import type { IAttachmentReader } from '../applescript/content-readers.js';
-import type { SaveAttachmentResult } from '../applescript/parser.js';
-import { appleTimestampToIso } from '../utils/dates.js';
-import { extractPlainText } from '../parsers/html-stripper.js';
-import { NotFoundError, ValidationError, AttachmentTooLargeError, AttachmentSaveError } from '../utils/errors.js';
 import { defineTool } from '../registry/define-tool.js';
-import { requireGraphToolset, requireAppleScriptToolset } from '../registry/context.js';
+import { requireGraphToolset } from '../registry/context.js';
 import type { ToolDefinition } from '../registry/types.js';
 import type { GraphMailTools } from './mail-graph.js';
-import type { AppleMailTools } from './mail-apple.js';
 
-// Mail is a dual-backend domain: the AppleScript backend serves it via
-// AppleMailTools; the Graph backend serves it via GraphMailTools. The advertised
-// (canonical) schemas are Graph-shaped — Graph is the default backend and the
-// AppleScript backend is frozen and adapts.
+// The advertised (canonical) schemas below are Graph-shaped — Graph is the
+// only backend.
 declare module '../registry/types.js' {
   interface GraphToolsets {
     mailGraph: GraphMailTools;
-  }
-  interface AppleScriptToolsets {
-    mail: AppleMailTools;
   }
 }
 
@@ -53,8 +37,7 @@ export const ListFoldersInput = z.strictObject({});
 
 /**
  * Canonical (advertised) input for the `list_folders` tool. The Graph backend
- * ignores `account_id` and returns the default mailbox's folders; the
- * AppleScript backend uses it to support multi-account grouping.
+ * ignores `account_id` and returns the default mailbox's folders.
  */
 export const ListFoldersToolInput = z.strictObject({
   account_id: z
@@ -187,102 +170,12 @@ export type GetMessageMimeParams = z.infer<typeof GetMessageMimeInput>;
 export type GetMailTipsParams = z.infer<typeof GetMailTipsInput>;
 
 // =============================================================================
-// Transformers
-// =============================================================================
-
-/**
- * Transforms a database folder row to domain Folder type.
- */
-function transformFolder(row: FolderRow): Folder {
-  return {
-    id: row.id,
-    name: row.name ?? 'Unnamed',
-    parentId: row.parentId,
-    specialType: row.specialType,
-    folderType: row.folderType,
-    accountId: row.accountId,
-    messageCount: row.messageCount,
-    unreadCount: row.unreadCount,
-  };
-}
-
-/**
- * Transforms a database email row to domain EmailSummary type.
- */
-function transformEmailSummary(row: EmailRow): EmailSummary {
-  return {
-    id: row.id,
-    folderId: row.folderId,
-    subject: row.subject,
-    sender: row.sender,
-    senderAddress: row.senderAddress,
-    preview: row.preview,
-    isRead: row.isRead === 1,
-    timeReceived: appleTimestampToIso(row.timeReceived),
-    timeSent: appleTimestampToIso(row.timeSent),
-    hasAttachment: row.hasAttachment === 1,
-    priority: row.priority as PriorityValue,
-    flagStatus: row.flagStatus as FlagStatusValue,
-    categories: parseCategories(row.categories),
-  };
-}
-
-/**
- * Parses categories from the database buffer.
- * Outlook stores categories as a null-delimited or comma-delimited buffer.
- */
-function parseCategories(buffer: Buffer | null): readonly string[] {
-  if (buffer == null || buffer.length === 0) {
-    return [];
-  }
-
-  try {
-    const text = buffer.toString('utf-8');
-    // Categories may be stored as null-delimited or comma-delimited strings
-    const categories = text.includes('\0')
-      ? text.split('\0').filter(s => s.length > 0)
-      : text.split(',').map(s => s.trim()).filter(s => s.length > 0);
-    return categories;
-  } catch {
-    return [];
-  }
-}
-
-/**
- * Transforms a database email row to domain Email type.
- */
-function transformEmail(row: EmailRow, body: string | null, stripHtml: boolean): Email {
-  const summary = transformEmailSummary(row);
-
-  // Process the body
-  let processedBody: string | null = null;
-  let htmlBody: string | null = null;
-
-  if (body != null) {
-    htmlBody = body;
-    processedBody = stripHtml ? extractPlainText(body) : body;
-  }
-
-  return {
-    ...summary,
-    recipients: row.recipients,
-    displayTo: row.displayTo,
-    toAddresses: row.toAddresses,
-    ccAddresses: row.ccAddresses,
-    size: row.size,
-    messageId: row.messageId ?? null,
-    conversationId: row.conversationId ?? null,
-    body: processedBody,
-    htmlBody: stripHtml ? null : htmlBody,
-  };
-}
-
-// =============================================================================
 // Parser Interface (for body content)
 // =============================================================================
 
 /**
- * Interface for reading email body content from data files.
+ * Interface for reading email body content from data files. Implemented by the
+ * Graph content reader.
  */
 export interface IContentReader {
   /**
@@ -292,205 +185,13 @@ export interface IContentReader {
   readEmailBody(dataFilePath: string | null): string | null;
 }
 
-/**
- * Default content reader that returns null (body reading not implemented yet).
- * Will be replaced with OLK15 parser implementation.
- */
-export const nullContentReader: IContentReader = {
-  readEmailBody: (): string | null => null,
-};
-
 // =============================================================================
-// Mail Tools Class
+// Registry Definitions (v3 registry-driven architecture)
 // =============================================================================
 
 /**
- * Mail tools implementation with dependency injection.
- */
-export class MailTools {
-  constructor(
-    private readonly repository: IRepository,
-    private readonly contentReader: IContentReader = nullContentReader,
-    private readonly attachmentReader?: IAttachmentReader
-  ) {}
-
-  /**
-   * Lists all mail folders with message and unread counts.
-   */
-  listFolders(_params: ListFoldersParams): Folder[] {
-    const rows = this.repository.listFolders();
-    return rows.map(transformFolder);
-  }
-
-  /**
-   * Lists emails in a folder with pagination.
-   */
-  listEmails(params: ListEmailsParams): EmailSummary[] {
-    const { folder_id, limit, offset, unread_only } = params;
-
-    const rows = unread_only
-      ? this.repository.listUnreadEmails(folder_id, limit, offset)
-      : this.repository.listEmails(folder_id, limit, offset);
-
-    return rows.map(transformEmailSummary);
-  }
-
-  /**
-   * Searches emails by subject, sender, or preview.
-   */
-  searchEmails(params: SearchEmailsParams): EmailSummary[] {
-    const { query, folder_id, limit } = params;
-
-    const rows =
-      folder_id != null
-        ? this.repository.searchEmailsInFolder(folder_id, query, limit)
-        : this.repository.searchEmails(query, limit);
-
-    return rows.map(transformEmailSummary);
-  }
-
-  /**
-   * Gets a single email by ID with optional body content.
-   */
-  getEmail(params: GetEmailParams): (Email & { attachments: AttachmentInfo[] }) | null {
-    const { email_id, include_body, strip_html } = params;
-
-    const row = this.repository.getEmail(email_id);
-    if (row == null) {
-      return null;
-    }
-
-    // Get body content if requested
-    let body: string | null = null;
-    if (include_body && row.dataFilePath != null) {
-      body = this.contentReader.readEmailBody(row.dataFilePath);
-    }
-
-    // Get attachment metadata if available
-    let attachments: AttachmentInfo[] = [];
-    if (this.attachmentReader != null && row.hasAttachment === 1) {
-      attachments = this.attachmentReader.listAttachments(email_id);
-    }
-
-    return {
-      ...transformEmail(row, body, strip_html),
-      attachments,
-    };
-  }
-
-  /**
-   * Gets the unread email count.
-   */
-  getUnreadCount(params: GetUnreadCountParams): { count: number } {
-    const { folder_id } = params;
-
-    const count =
-      folder_id != null
-        ? this.repository.getUnreadCountByFolder(folder_id)
-        : this.repository.getUnreadCount();
-
-    return { count };
-  }
-
-  /**
-   * Lists attachment metadata for an email.
-   */
-  listAttachments(params: ListAttachmentsParams): AttachmentInfo[] {
-    if (this.attachmentReader == null) {
-      return [];
-    }
-
-    const { email_id } = params;
-
-    const row = this.repository.getEmail(email_id);
-    if (row == null) {
-      throw new NotFoundError('Email', email_id);
-    }
-
-    return this.attachmentReader.listAttachments(email_id);
-  }
-
-  /**
-   * Downloads/saves an attachment to disk.
-   */
-  downloadAttachment(params: DownloadAttachmentParams): {
-    name: string;
-    savedTo: string;
-    size: number;
-  } {
-    if (this.attachmentReader == null) {
-      throw new ValidationError('Attachment reader not available');
-    }
-
-    const { email_id, attachment_index, save_path } = params;
-
-    const row = this.repository.getEmail(email_id);
-    if (row == null) {
-      throw new NotFoundError('Email', email_id);
-    }
-
-    // Validate save path directory exists
-    const dir = dirname(save_path);
-    if (!existsSync(dir)) {
-      throw new ValidationError(`Directory does not exist: ${dir}`);
-    }
-
-    // Get attachment list to validate index and check size
-    const attachments = this.attachmentReader.listAttachments(email_id);
-    const attachment = attachments.find(a => a.index === attachment_index);
-
-    if (attachment == null) {
-      throw new NotFoundError('Attachment', attachment_index);
-    }
-
-    if (attachment.size > MAX_ATTACHMENT_DOWNLOAD_SIZE) {
-      throw new AttachmentTooLargeError(
-        attachment.name,
-        attachment.size,
-        MAX_ATTACHMENT_DOWNLOAD_SIZE
-      );
-    }
-
-    const result: SaveAttachmentResult = this.attachmentReader.saveAttachment(
-      email_id,
-      attachment_index,
-      save_path
-    );
-
-    if (!result.success) {
-      throw new AttachmentSaveError(
-        attachment.name,
-        result.error ?? 'Unknown error'
-      );
-    }
-
-    return {
-      name: result.name ?? attachment.name,
-      savedTo: result.savedTo ?? save_path,
-      size: result.fileSize ?? attachment.size,
-    };
-  }
-}
-
-/**
- * Creates mail tools with the given repository.
- */
-export function createMailTools(
-  repository: IRepository,
-  contentReader: IContentReader = nullContentReader,
-  attachmentReader?: IAttachmentReader
-): MailTools {
-  return new MailTools(repository, contentReader, attachmentReader);
-}
-
-// =============================================================================
-// Registry Definitions (v3 registry-driven architecture, U2 — dual backend)
-// =============================================================================
-
-/**
- * Registry tool definitions for the mail READ domain. Each handler branches on
- * the active backend: Graph delegates to GraphMailTools; AppleScript delegates
- * to AppleMailTools. Both toolsets return MCP content directly.
+ * Registry tool definitions for the mail READ domain. Each handler delegates
+ * to GraphMailTools, which returns MCP content directly.
  */
 export const SendEmailInput = z.strictObject({
   to: z.array(z.string()).min(1).describe('Recipient email addresses'),
@@ -521,13 +222,10 @@ export function mailToolDefinitions(): ToolDefinition[] {
       annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
       destructive: true,
       presets: ['mail'],
-      backends: ['graph', 'applescript'],
-      // AppleScript single-shot send. On the Graph backend, direct send is not
-      // available — clients use the two-phase prepare_send_email/confirm_send_email.
-      handler: (ctx, params) =>
-        ctx.backend === 'graph'
-          ? { content: [{ type: 'text' as const, text: 'Direct send_email is not available on the Graph backend; use prepare_send_email then confirm_send_email.' }], isError: true }
-          : requireAppleScriptToolset(ctx, 'mail').sendEmail(params),
+      backends: ['graph'],
+      // Direct send is not available on the Graph backend — clients use the
+      // two-phase prepare_send_email/confirm_send_email.
+      handler: () => ({ content: [{ type: 'text' as const, text: 'Direct send_email is not available on the Graph backend; use prepare_send_email then confirm_send_email.' }], isError: true }),
     }),
     defineTool({
       name: 'list_folders',
@@ -536,11 +234,8 @@ export function mailToolDefinitions(): ToolDefinition[] {
       annotations: { readOnlyHint: true },
       destructive: false,
       presets: ['mail'],
-      backends: ['graph', 'applescript'],
-      handler: (ctx, params) =>
-        ctx.backend === 'graph'
-          ? requireGraphToolset(ctx, 'mailGraph').listFolders(params)
-          : requireAppleScriptToolset(ctx, 'mail').listFolders(params),
+      backends: ['graph'],
+      handler: (ctx, params) => requireGraphToolset(ctx, 'mailGraph').listFolders(params),
     }),
     defineTool({
       name: 'list_emails',
@@ -549,11 +244,8 @@ export function mailToolDefinitions(): ToolDefinition[] {
       annotations: { readOnlyHint: true },
       destructive: false,
       presets: ['mail'],
-      backends: ['graph', 'applescript'],
-      handler: (ctx, params) =>
-        ctx.backend === 'graph'
-          ? requireGraphToolset(ctx, 'mailGraph').listEmails(params)
-          : requireAppleScriptToolset(ctx, 'mail').listEmails(params),
+      backends: ['graph'],
+      handler: (ctx, params) => requireGraphToolset(ctx, 'mailGraph').listEmails(params),
     }),
     defineTool({
       name: 'search_emails',
@@ -562,11 +254,8 @@ export function mailToolDefinitions(): ToolDefinition[] {
       annotations: { readOnlyHint: true },
       destructive: false,
       presets: ['mail'],
-      backends: ['graph', 'applescript'],
-      handler: (ctx, params) =>
-        ctx.backend === 'graph'
-          ? requireGraphToolset(ctx, 'mailGraph').searchEmails(params)
-          : requireAppleScriptToolset(ctx, 'mail').searchEmails(params),
+      backends: ['graph'],
+      handler: (ctx, params) => requireGraphToolset(ctx, 'mailGraph').searchEmails(params),
     }),
     defineTool({
       name: 'get_email',
@@ -575,11 +264,8 @@ export function mailToolDefinitions(): ToolDefinition[] {
       annotations: { readOnlyHint: true },
       destructive: false,
       presets: ['mail'],
-      backends: ['graph', 'applescript'],
-      handler: (ctx, params) =>
-        ctx.backend === 'graph'
-          ? requireGraphToolset(ctx, 'mailGraph').getEmail(params)
-          : requireAppleScriptToolset(ctx, 'mail').getEmail(params),
+      backends: ['graph'],
+      handler: (ctx, params) => requireGraphToolset(ctx, 'mailGraph').getEmail(params),
     }),
     defineTool({
       name: 'get_emails',
@@ -588,11 +274,8 @@ export function mailToolDefinitions(): ToolDefinition[] {
       annotations: { readOnlyHint: true },
       destructive: false,
       presets: ['mail'],
-      backends: ['graph', 'applescript'],
-      handler: (ctx, params) =>
-        ctx.backend === 'graph'
-          ? requireGraphToolset(ctx, 'mailGraph').getEmails(params)
-          : requireAppleScriptToolset(ctx, 'mail').getEmails(params),
+      backends: ['graph'],
+      handler: (ctx, params) => requireGraphToolset(ctx, 'mailGraph').getEmails(params),
     }),
     defineTool({
       name: 'get_unread_count',
@@ -601,11 +284,8 @@ export function mailToolDefinitions(): ToolDefinition[] {
       annotations: { readOnlyHint: true },
       destructive: false,
       presets: ['mail'],
-      backends: ['graph', 'applescript'],
-      handler: (ctx, params) =>
-        ctx.backend === 'graph'
-          ? requireGraphToolset(ctx, 'mailGraph').getUnreadCount(params)
-          : requireAppleScriptToolset(ctx, 'mail').getUnreadCount(params),
+      backends: ['graph'],
+      handler: (ctx, params) => requireGraphToolset(ctx, 'mailGraph').getUnreadCount(params),
     }),
     defineTool({
       name: 'list_attachments',
@@ -614,11 +294,8 @@ export function mailToolDefinitions(): ToolDefinition[] {
       annotations: { readOnlyHint: true },
       destructive: false,
       presets: ['mail'],
-      backends: ['graph', 'applescript'],
-      handler: (ctx, params) =>
-        ctx.backend === 'graph'
-          ? requireGraphToolset(ctx, 'mailGraph').listAttachments(params)
-          : requireAppleScriptToolset(ctx, 'mail').listAttachments(params),
+      backends: ['graph'],
+      handler: (ctx, params) => requireGraphToolset(ctx, 'mailGraph').listAttachments(params),
     }),
     defineTool({
       name: 'download_attachment',
@@ -627,11 +304,8 @@ export function mailToolDefinitions(): ToolDefinition[] {
       annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
       destructive: false,
       presets: ['mail'],
-      backends: ['graph', 'applescript'],
-      handler: (ctx, params) =>
-        ctx.backend === 'graph'
-          ? requireGraphToolset(ctx, 'mailGraph').downloadAttachment(params)
-          : requireAppleScriptToolset(ctx, 'mail').downloadAttachment(params),
+      backends: ['graph'],
+      handler: (ctx, params) => requireGraphToolset(ctx, 'mailGraph').downloadAttachment(params),
     }),
     // ---- Graph-only reads ----
     defineTool({

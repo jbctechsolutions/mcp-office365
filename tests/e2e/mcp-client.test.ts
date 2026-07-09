@@ -43,15 +43,14 @@ describe('MCP Client E2E', () => {
       // List tools
       const result = await client.listTools();
 
-      // Verify tools were returned (225 in Graph API mode (default), 78 in AppleScript mode)
+      // Verify tools were returned (221 tools — Graph API is the only backend)
       expect(result.tools).toBeDefined();
       expect(Array.isArray(result.tools)).toBe(true);
       const count = result.tools.length;
-      expect([78, 225]).toContain(count);
+      expect(count).toBe(221);
 
       // Verify core tools exist
       const toolNames = result.tools.map((t) => t.name);
-      expect(toolNames).toContain('list_accounts');
       expect(toolNames).toContain('list_folders');
       expect(toolNames).toContain('list_emails');
       expect(toolNames).toContain('search_emails');
@@ -73,21 +72,46 @@ describe('MCP Client E2E', () => {
       expect(toolNames).toContain('list_tasks');
       expect(toolNames).toContain('search_tasks');
       expect(toolNames).toContain('get_task');
-      expect(toolNames).toContain('list_notes');
-      expect(toolNames).toContain('search_notes');
+      expect(toolNames).toContain('list_notebooks');
       expect(toolNames).toContain('send_email');
-      expect(toolNames).toContain('get_note');
-      // Graph-only tools (signature + scheduling) only when Graph API is enabled
-      if (count === 82) {
-        expect(toolNames).toContain('set_signature');
-        expect(toolNames).toContain('get_signature');
-        expect(toolNames).toContain('check_availability');
-        expect(toolNames).toContain('find_meeting_times');
+      // Signature + scheduling tools are always present (Graph-only server).
+      expect(toolNames).toContain('set_signature');
+      expect(toolNames).toContain('get_signature');
+      expect(toolNames).toContain('check_availability');
+      expect(toolNames).toContain('find_meeting_times');
+
+      // Tools removed with the AppleScript backend must NOT reappear. Notes are
+      // now served by OneNote (list_notebooks etc.); list_accounts had no Graph
+      // analog.
+      for (const removed of ['list_accounts', 'list_notes', 'get_note', 'search_notes']) {
+        expect(toolNames).not.toContain(removed);
       }
 
       // Clean up
       await client.close();
       await server.close();
+    });
+
+    it('ignores USE_APPLESCRIPT (the backend was removed) and still serves the Graph surface', async () => {
+      const prev = process.env['USE_APPLESCRIPT'];
+      process.env['USE_APPLESCRIPT'] = '1';
+      try {
+        const server = createServer();
+        const client = new Client({ name: 'test-client', version: '1.0.0' }, { capabilities: {} });
+        const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+        await Promise.all([client.connect(clientTransport), server.connect(serverTransport)]);
+
+        const result = await client.listTools();
+        // Still the full Graph surface, not a (nonexistent) AppleScript one.
+        expect(result.tools.length).toBe(221);
+        expect(result.tools.map((t) => t.name)).toContain('list_folders');
+
+        await client.close();
+        await server.close();
+      } finally {
+        if (prev === undefined) delete process.env['USE_APPLESCRIPT'];
+        else process.env['USE_APPLESCRIPT'] = prev;
+      }
     });
 
     it('serves registry-migrated tools exactly once with registry-sourced annotations', async () => {
@@ -104,11 +128,10 @@ describe('MCP Client E2E', () => {
 
       // No duplicate tool names across the registry + legacy union.
       expect(new Set(names).size).toBe(names.length);
-      // Graph-mode surface count is invariant across U2 migrations — tools move
-      // from the legacy TOOLS array into the registry, never disappear.
-      // 225 = 219 + 6 OneNote tools (list_notebooks, list_note_sections,
-      // list_note_pages, get_note_page, search_note_pages, create_note_page).
-      expect(names.length).toBe(225);
+      // Graph-only surface count (221) — the AppleScript backend and its
+      // Apple-Notes-only tools (list_notes/get_note/search_notes) and the
+      // AppleScript-backed list_accounts tool were removed with it.
+      expect(names.length).toBe(221);
 
       // The 4 migrated mail-rules tools each appear exactly once.
       for (const name of ['list_mail_rules', 'create_mail_rule', 'prepare_delete_mail_rule', 'confirm_delete_mail_rule']) {

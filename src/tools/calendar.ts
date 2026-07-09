@@ -10,25 +10,17 @@
  */
 
 import { z } from 'zod';
-import type { IRepository, EventRow, FolderRow } from '../database/repository.js';
-import type { CalendarFolder, EventSummary, Event, Attendee } from '../types/index.js';
-import { appleTimestampToIso, isoToAppleTimestamp } from '../utils/dates.js';
+import type { Attendee } from '../types/index.js';
 import { defineTool } from '../registry/define-tool.js';
-import { requireGraphToolset, requireAppleScriptToolset } from '../registry/context.js';
+import { requireGraphToolset } from '../registry/context.js';
 import type { ToolDefinition } from '../registry/types.js';
 import type { GraphCalendarTools } from './calendar-graph.js';
-import type { AppleCalendarTools } from './calendar-apple.js';
 
-// Calendar is a dual-backend domain: the AppleScript backend serves it via
-// AppleCalendarTools; the Graph backend serves it via GraphCalendarTools. The
-// advertised (canonical) write schemas are Graph-shaped — Graph is the default
-// backend and the AppleScript backend is frozen and adapts.
+// The advertised (canonical) write schemas below are Graph-shaped — Graph is
+// the only backend.
 declare module '../registry/types.js' {
   interface GraphToolsets {
     calendarGraph: GraphCalendarTools;
-  }
-  interface AppleScriptToolsets {
-    calendar: AppleCalendarTools;
   }
 }
 
@@ -174,10 +166,6 @@ export const CreateEventInput = z.strictObject({
 
 // -----------------------------------------------------------------------------
 // Canonical (advertised) write schemas — Graph-shaped.
-//
-// The two backends historically parsed different schemas for writes. The Graph
-// schema is the canonical advertised input for each tool; the AppleScript
-// backend receives the superset params and maps only the fields it supports.
 // -----------------------------------------------------------------------------
 
 const graphIsoDateString = z
@@ -221,16 +209,9 @@ export const CreateEventGraphInput = z.strictObject({
   { message: 'start_date must be before end_date', path: ['start_date'] }
 );
 
-// v3 note (deliberate, Graph-canonical): create_event/update_event advertise the
-// Graph superset schema for both backends. This is a documented breaking change
-// for the frozen AppleScript backend:
-//   - update_event fields use Graph names (subject/start/end/body), not the old
-//     AppleScript names (title/start_date/end_date/description).
-//   - recurrence uses the Graph {pattern, range} shape; AppleScript-only
-//     recurrence that Graph cannot express — monthly-by-date (day_of_month) and
-//     ordinal-monthly (week_of_month/day_of_week_monthly) — is no longer
-//     reachable via these tools. The Graph (default) backend is unaffected.
-// See CHANGELOG / PR for the full migration matrix.
+// create_event/update_event advertise the Graph schema: field names follow
+// Graph conventions (subject/start/end/body), and recurrence uses the Graph
+// {pattern, range} shape.
 export const UpdateEventInput = z.strictObject({
   event_id: EventIdSchema,
   subject: z.string().optional(),
@@ -245,16 +226,14 @@ export const UpdateEventInput = z.strictObject({
   recurrence: GraphRecurrenceInput.optional(),
   is_online_meeting: z.boolean().optional().describe('Create as online Teams meeting'),
   online_meeting_provider: z.enum(['teamsForBusiness', 'skypeForBusiness', 'skypeForConsumer']).optional().describe('Online meeting provider (default: teamsForBusiness)'),
-  apply_to: z.enum(['this_instance', 'all_in_series']).optional().describe(
-    'For recurring events (AppleScript backend): update single instance or entire series (default: this_instance). Ignored by the Graph backend.',
-  ),
 });
 
 export const DeleteEventInput = z.strictObject({
-  event_id: EventIdSchema.describe('The event ID to delete'),
-  apply_to: z.enum(['this_instance', 'all_in_series']).default('this_instance').describe(
-    'For recurring events: delete single instance or entire series (default: this_instance)'
-  ),
+  // To delete one occurrence of a recurring series, pass that occurrence's own
+  // event_id (from list_event_instances); to delete the whole series, pass the
+  // master event_id. Graph deletes exactly the id given — there is no separate
+  // instance-vs-series flag.
+  event_id: EventIdSchema.describe('The event ID to delete (an occurrence id deletes just that occurrence; the master id deletes the series)'),
 });
 
 export const ListEventInstancesInput = z.strictObject({
@@ -308,7 +287,7 @@ export type ListRoomsParams = z.infer<typeof ListRoomsInput>;
  * Result of creating a calendar event.
  */
 export interface CreateEventResult {
-  // Durable ev_ token on Graph (U5); numeric on AppleScript.
+  // Durable ev_ token on Graph (U5).
   readonly id: string | number;
   readonly title: string;
   readonly start_date: string;
@@ -345,164 +324,13 @@ export interface EventDetails {
   readonly attendees: readonly Attendee[];
 }
 
-/**
- * Default event content reader that returns null.
- */
-export const nullEventContentReader: IEventContentReader = {
-  readEventDetails: (): EventDetails | null => null,
-};
-
-// =============================================================================
-// Transformers
-// =============================================================================
-
-/**
- * Transforms a database folder row to CalendarFolder.
- */
-function transformCalendar(row: FolderRow): CalendarFolder {
-  return {
-    id: row.id,
-    name: row.name ?? 'Unnamed',
-    accountId: row.accountId,
-  };
-}
-
-/**
- * Transforms a database event row to EventSummary.
- */
-function transformEventSummary(row: EventRow, title: string | null = null): EventSummary {
-  return {
-    id: row.id,
-    folderId: row.folderId,
-    title: title,
-    startDate: appleTimestampToIso(row.startDate),
-    endDate: appleTimestampToIso(row.endDate),
-    isRecurring: row.isRecurring === 1,
-    hasReminder: row.hasReminder === 1,
-    attendeeCount: row.attendeeCount,
-    uid: row.uid,
-  };
-}
-
-/**
- * Transforms a database event row to full Event.
- */
-function transformEvent(row: EventRow, details: EventDetails | null): Event {
-  const summary = transformEventSummary(row, details?.title ?? null);
-
-  return {
-    ...summary,
-    location: details?.location ?? null,
-    description: details?.description ?? null,
-    organizer: details?.organizer ?? null,
-    attendees: details?.attendees ?? [],
-    masterRecordId: row.masterRecordId ?? null,
-    recurrenceId: row.recurrenceId ?? null,
-  };
-}
-
-// =============================================================================
-// Calendar Tools Class
-// =============================================================================
-
-/**
- * Calendar tools implementation with dependency injection.
- */
-export class CalendarTools {
-  constructor(
-    private readonly repository: IRepository,
-    private readonly contentReader: IEventContentReader = nullEventContentReader
-  ) {}
-
-  /**
-   * Lists all calendar folders.
-   */
-  listCalendars(_params: ListCalendarsParams): CalendarFolder[] {
-    const rows = this.repository.listCalendars();
-    return rows.map(transformCalendar);
-  }
-
-  /**
-   * Lists events with optional filtering.
-   */
-  listEvents(params: ListEventsParams): EventSummary[] {
-    const { calendar_id, start_date, end_date, limit } = params;
-
-    let rows: EventRow[];
-
-    if (start_date != null && end_date != null) {
-      const startTimestamp = isoToAppleTimestamp(start_date);
-      const endTimestamp = isoToAppleTimestamp(end_date);
-      if (startTimestamp != null && endTimestamp != null) {
-        rows = this.repository.listEventsByDateRange(startTimestamp, endTimestamp, limit);
-      } else {
-        rows = this.repository.listEvents(limit);
-      }
-    } else if (calendar_id != null) {
-      rows = this.repository.listEventsByFolder(calendar_id, limit);
-    } else {
-      rows = this.repository.listEvents(limit);
-    }
-
-    return rows.map((row) => {
-      const details = this.contentReader.readEventDetails(row.dataFilePath);
-      return transformEventSummary(row, details?.title ?? null);
-    });
-  }
-
-  /**
-   * Gets a single event by ID.
-   */
-  getEvent(params: GetEventParams): Event | null {
-    const { event_id } = params;
-
-    const row = this.repository.getEvent(event_id);
-    if (row == null) {
-      return null;
-    }
-
-    const details = this.contentReader.readEventDetails(row.dataFilePath);
-    return transformEvent(row, details);
-  }
-
-  /**
-   * Searches events by title and/or date range.
-   */
-  searchEvents(params: SearchEventsParams): EventSummary[] {
-    const { query, start_date, end_date, limit } = params;
-
-    const rows = this.repository.searchEvents(
-      query ?? null,
-      start_date ?? null,
-      end_date ?? null,
-      limit
-    );
-
-    return rows.map((row) => {
-      const details = this.contentReader.readEventDetails(row.dataFilePath);
-      return transformEventSummary(row, details?.title ?? null);
-    });
-  }
-}
-
-/**
- * Creates calendar tools with the given repository.
- */
-export function createCalendarTools(
-  repository: IRepository,
-  contentReader: IEventContentReader = nullEventContentReader
-): CalendarTools {
-  return new CalendarTools(repository, contentReader);
-}
-
 // =============================================================================
 // Registry Definitions (v3 registry-driven architecture, U2 — dual backend)
 // =============================================================================
 
 /**
- * Registry tool definitions for the calendar domain. Each handler branches on
- * the active backend: Graph delegates to GraphCalendarTools; AppleScript
- * delegates to AppleCalendarTools. Both toolsets return MCP content directly.
+ * Registry tool definitions for the calendar domain. Each handler delegates to
+ * GraphCalendarTools, which returns MCP content directly.
  */
 export function calendarToolDefinitions(): ToolDefinition[] {
   return [
@@ -513,11 +341,8 @@ export function calendarToolDefinitions(): ToolDefinition[] {
       annotations: { readOnlyHint: true },
       destructive: false,
       presets: ['calendar'],
-      backends: ['graph', 'applescript'],
-      handler: (ctx) =>
-        ctx.backend === 'graph'
-          ? requireGraphToolset(ctx, 'calendarGraph').listCalendars()
-          : requireAppleScriptToolset(ctx, 'calendar').listCalendars(),
+      backends: ['graph'],
+      handler: (ctx) => requireGraphToolset(ctx, 'calendarGraph').listCalendars(),
     }),
     defineTool({
       name: 'list_events',
@@ -526,11 +351,8 @@ export function calendarToolDefinitions(): ToolDefinition[] {
       annotations: { readOnlyHint: true },
       destructive: false,
       presets: ['calendar'],
-      backends: ['graph', 'applescript'],
-      handler: (ctx, params) =>
-        ctx.backend === 'graph'
-          ? requireGraphToolset(ctx, 'calendarGraph').listEvents(params)
-          : requireAppleScriptToolset(ctx, 'calendar').listEvents(params),
+      backends: ['graph'],
+      handler: (ctx, params) => requireGraphToolset(ctx, 'calendarGraph').listEvents(params),
     }),
     defineTool({
       name: 'get_event',
@@ -539,11 +361,8 @@ export function calendarToolDefinitions(): ToolDefinition[] {
       annotations: { readOnlyHint: true },
       destructive: false,
       presets: ['calendar'],
-      backends: ['graph', 'applescript'],
-      handler: (ctx, params) =>
-        ctx.backend === 'graph'
-          ? requireGraphToolset(ctx, 'calendarGraph').getEvent(params)
-          : requireAppleScriptToolset(ctx, 'calendar').getEvent(params),
+      backends: ['graph'],
+      handler: (ctx, params) => requireGraphToolset(ctx, 'calendarGraph').getEvent(params),
     }),
     defineTool({
       name: 'search_events',
@@ -552,11 +371,8 @@ export function calendarToolDefinitions(): ToolDefinition[] {
       annotations: { readOnlyHint: true },
       destructive: false,
       presets: ['calendar'],
-      backends: ['graph', 'applescript'],
-      handler: (ctx, params) =>
-        ctx.backend === 'graph'
-          ? requireGraphToolset(ctx, 'calendarGraph').searchEvents(params)
-          : requireAppleScriptToolset(ctx, 'calendar').searchEvents(params),
+      backends: ['graph'],
+      handler: (ctx, params) => requireGraphToolset(ctx, 'calendarGraph').searchEvents(params),
     }),
     defineTool({
       name: 'create_event',
@@ -565,11 +381,8 @@ export function calendarToolDefinitions(): ToolDefinition[] {
       annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
       destructive: false,
       presets: ['calendar'],
-      backends: ['graph', 'applescript'],
-      handler: (ctx, params) =>
-        ctx.backend === 'graph'
-          ? requireGraphToolset(ctx, 'calendarGraph').createEvent(params)
-          : requireAppleScriptToolset(ctx, 'calendar').createEvent(params),
+      backends: ['graph'],
+      handler: (ctx, params) => requireGraphToolset(ctx, 'calendarGraph').createEvent(params),
     }),
     defineTool({
       name: 'respond_to_event',
@@ -578,11 +391,8 @@ export function calendarToolDefinitions(): ToolDefinition[] {
       annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
       destructive: false,
       presets: ['calendar'],
-      backends: ['graph', 'applescript'],
-      handler: (ctx, params) =>
-        ctx.backend === 'graph'
-          ? requireGraphToolset(ctx, 'calendarGraph').respondToEvent(params)
-          : requireAppleScriptToolset(ctx, 'calendar').respondToEvent(params),
+      backends: ['graph'],
+      handler: (ctx, params) => requireGraphToolset(ctx, 'calendarGraph').respondToEvent(params),
     }),
     defineTool({
       name: 'delete_event',
@@ -591,11 +401,8 @@ export function calendarToolDefinitions(): ToolDefinition[] {
       annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
       destructive: true,
       presets: ['calendar'],
-      backends: ['graph', 'applescript'],
-      handler: (ctx, params) =>
-        ctx.backend === 'graph'
-          ? requireGraphToolset(ctx, 'calendarGraph').deleteEvent(params)
-          : requireAppleScriptToolset(ctx, 'calendar').deleteEvent(params),
+      backends: ['graph'],
+      handler: (ctx, params) => requireGraphToolset(ctx, 'calendarGraph').deleteEvent(params),
     }),
     defineTool({
       name: 'update_event',
@@ -604,11 +411,8 @@ export function calendarToolDefinitions(): ToolDefinition[] {
       annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
       destructive: false,
       presets: ['calendar'],
-      backends: ['graph', 'applescript'],
-      handler: (ctx, params) =>
-        ctx.backend === 'graph'
-          ? requireGraphToolset(ctx, 'calendarGraph').updateEvent(params)
-          : requireAppleScriptToolset(ctx, 'calendar').updateEvent(params),
+      backends: ['graph'],
+      handler: (ctx, params) => requireGraphToolset(ctx, 'calendarGraph').updateEvent(params),
     }),
     defineTool({
       name: 'list_event_instances',

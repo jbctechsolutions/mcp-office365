@@ -10,21 +10,15 @@
  */
 
 import { z } from 'zod';
-import type { IRepository, ContactRow } from '../database/repository.js';
-import type { ContactSummary, Contact, ContactTypeValue } from '../types/index.js';
 import { defineTool } from '../registry/define-tool.js';
-import { requireGraphToolset, requireAppleScriptToolset } from '../registry/context.js';
-import type { ToolContext, ToolDefinition, ToolResult } from '../registry/types.js';
+import { requireGraphToolset } from '../registry/context.js';
+import type { ToolDefinition } from '../registry/types.js';
 import type { GraphContactsTools } from './contacts-graph.js';
 
-// Contacts are a dual-backend domain: the AppleScript backend serves them via
-// ContactsTools; the Graph backend serves them via GraphContactsTools.
+// Contacts are served by GraphContactsTools.
 declare module '../registry/types.js' {
   interface GraphToolsets {
     contactsGraph: GraphContactsTools;
-  }
-  interface AppleScriptToolsets {
-    contacts: ContactsTools;
   }
 }
 
@@ -166,129 +160,13 @@ export interface ContactDetails {
   readonly notes: string | null;
 }
 
-/**
- * Default contact content reader that returns null.
- */
-export const nullContactContentReader: IContactContentReader = {
-  readContactDetails: (): ContactDetails | null => null,
-};
-
 // =============================================================================
-// Transformers
+// Registry Definitions (v3 registry-driven architecture)
 // =============================================================================
 
 /**
- * Transforms a database contact row to ContactSummary.
- */
-function transformContactSummary(row: ContactRow): ContactSummary {
-  return {
-    id: row.id,
-    folderId: row.folderId,
-    displayName: row.displayName,
-    sortName: row.sortName,
-    contactType: (row.contactType ?? 0) as ContactTypeValue,
-  };
-}
-
-/**
- * Transforms a database contact row to full Contact.
- */
-function transformContact(row: ContactRow, details: ContactDetails | null): Contact {
-  const summary = transformContactSummary(row);
-
-  return {
-    ...summary,
-    firstName: details?.firstName ?? null,
-    lastName: details?.lastName ?? null,
-    middleName: details?.middleName ?? null,
-    nickname: details?.nickname ?? null,
-    company: details?.company ?? null,
-    jobTitle: details?.jobTitle ?? null,
-    department: details?.department ?? null,
-    emails: details?.emails?.map((e) => ({ type: e.type as 'work' | 'home' | 'other', address: e.address })) ?? [],
-    phones: details?.phones?.map((p) => ({ type: p.type as 'work' | 'home' | 'mobile' | 'fax' | 'other', number: p.number })) ?? [],
-    addresses: details?.addresses?.map((a) => ({
-      type: a.type as 'work' | 'home' | 'other',
-      street: a.street,
-      city: a.city,
-      state: a.state,
-      postalCode: a.postalCode,
-      country: a.country,
-    })) ?? [],
-    notes: details?.notes ?? null,
-  };
-}
-
-// =============================================================================
-// Contacts Tools Class
-// =============================================================================
-
-/**
- * Contacts tools implementation with dependency injection.
- */
-export class ContactsTools {
-  constructor(
-    private readonly repository: IRepository,
-    private readonly contentReader: IContactContentReader = nullContactContentReader
-  ) {}
-
-  /**
-   * Lists contacts with pagination.
-   */
-  listContacts(params: ListContactsParams): ContactSummary[] {
-    const { limit, offset } = params;
-    const rows = this.repository.listContacts(limit, offset);
-    return rows.map(transformContactSummary);
-  }
-
-  /**
-   * Searches contacts by name.
-   */
-  searchContacts(params: SearchContactsParams): ContactSummary[] {
-    const { query, limit } = params;
-    const rows = this.repository.searchContacts(query, limit);
-    return rows.map(transformContactSummary);
-  }
-
-  /**
-   * Gets a single contact by ID.
-   */
-  getContact(params: GetContactParams): Contact | null {
-    const { contact_id } = params;
-
-    const row = this.repository.getContact(contact_id);
-    if (row == null) {
-      return null;
-    }
-
-    const details = this.contentReader.readContactDetails(row.dataFilePath);
-    return transformContact(row, details);
-  }
-}
-
-/**
- * Creates contacts tools with the given repository.
- */
-export function createContactsTools(
-  repository: IRepository,
-  contentReader: IContactContentReader = nullContactContentReader
-): ContactsTools {
-  return new ContactsTools(repository, contentReader);
-}
-
-// =============================================================================
-// Registry Definitions (v3 registry-driven architecture, U2 — dual backend)
-// =============================================================================
-
-function jsonResult(data: unknown): ToolResult {
-  return { content: [{ type: 'text', text: JSON.stringify(data, null, 2) }] };
-}
-
-/**
- * Registry tool definitions for the contacts domain. Each handler branches on
- * the active backend: Graph delegates to GraphContactsTools (which returns MCP
- * content directly); AppleScript delegates to ContactsTools (which returns raw
- * objects, wrapped here to match the pre-registry dispatch behavior exactly).
+ * Registry tool definitions for the contacts domain. Each handler delegates to
+ * GraphContactsTools, which returns MCP content directly.
  */
 export function contactsToolDefinitions(): ToolDefinition[] {
   return [
@@ -299,11 +177,8 @@ export function contactsToolDefinitions(): ToolDefinition[] {
       annotations: { readOnlyHint: true },
       destructive: false,
       presets: ['contacts'],
-      backends: ['graph', 'applescript'],
-      handler: (ctx, params) =>
-        ctx.backend === 'graph'
-          ? requireGraphToolset(ctx, 'contactsGraph').listContacts(params)
-          : jsonResult(requireAppleScriptToolset(ctx, 'contacts').listContacts(params)),
+      backends: ['graph'],
+      handler: (ctx, params) => requireGraphToolset(ctx, 'contactsGraph').listContacts(params),
     }),
     defineTool({
       name: 'search_contacts',
@@ -312,11 +187,8 @@ export function contactsToolDefinitions(): ToolDefinition[] {
       annotations: { readOnlyHint: true },
       destructive: false,
       presets: ['contacts'],
-      backends: ['graph', 'applescript'],
-      handler: (ctx, params) =>
-        ctx.backend === 'graph'
-          ? requireGraphToolset(ctx, 'contactsGraph').searchContacts(params)
-          : jsonResult(requireAppleScriptToolset(ctx, 'contacts').searchContacts(params)),
+      backends: ['graph'],
+      handler: (ctx, params) => requireGraphToolset(ctx, 'contactsGraph').searchContacts(params),
     }),
     defineTool({
       name: 'get_contact',
@@ -325,17 +197,8 @@ export function contactsToolDefinitions(): ToolDefinition[] {
       annotations: { readOnlyHint: true },
       destructive: false,
       presets: ['contacts'],
-      backends: ['graph', 'applescript'],
-      handler: (ctx: ToolContext, params): Promise<ToolResult> | ToolResult => {
-        if (ctx.backend === 'graph') {
-          return requireGraphToolset(ctx, 'contactsGraph').getContact(params);
-        }
-        const result = requireAppleScriptToolset(ctx, 'contacts').getContact(params);
-        if (result == null) {
-          return { content: [{ type: 'text', text: 'Contact not found' }], isError: true };
-        }
-        return jsonResult(result);
-      },
+      backends: ['graph'],
+      handler: (ctx, params) => requireGraphToolset(ctx, 'contactsGraph').getContact(params),
     }),
     defineTool({
       name: 'create_contact',

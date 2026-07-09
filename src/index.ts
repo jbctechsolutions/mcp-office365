@@ -7,11 +7,7 @@
  * Office 365 MCP Server
  *
  * A Model Context Protocol server that provides full read/write access to
- * Microsoft 365 via Microsoft Graph API or legacy AppleScript.
- *
- * Backend selection:
- * - Graph API is the default (full-featured, cross-platform)
- * - Set USE_APPLESCRIPT=1 to use legacy AppleScript backend (macOS + classic Outlook only)
+ * Microsoft 365 via the Microsoft Graph API.
  */
 
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
@@ -22,19 +18,6 @@ import {
   type CallToolResult,
 } from '@modelcontextprotocol/sdk/types.js';
 
-import {
-  createAppleScriptRepository,
-  createAppleScriptContentReaders,
-  createAccountRepository,
-  createCalendarWriter,
-  createCalendarManager,
-  createMailSender,
-  isOutlookRunning,
-  type IAccountRepository,
-  type ICalendarWriter,
-  type ICalendarManager,
-  type IMailSender,
-} from './applescript/index.js';
 import {
   createGraphRepository,
   createGraphContentReadersWithClient,
@@ -54,21 +37,13 @@ import { allToolDefinitions } from './registry/all-tools.js';
 import { parseCliCommand, parseServerOptions, handleAuthCommand, createAuthMutex } from './cli.js';
 
 const pkg = createRequire(import.meta.url)('../package.json') as { version: string };
-import { createMailTools } from './tools/mail.js';
 import { GraphMailTools } from './tools/mail-graph.js';
-import { AppleMailTools } from './tools/mail-apple.js';
-import { createCalendarTools } from './tools/calendar.js';
 import { GraphCalendarTools } from './tools/calendar-graph.js';
-import { AppleCalendarTools } from './tools/calendar-apple.js';
-import { createContactsTools } from './tools/contacts.js';
 import { GraphContactsTools } from './tools/contacts-graph.js';
 import { GraphContactFoldersTools } from './tools/contact-folders.js';
-import { createTasksTools } from './tools/tasks.js';
 import { GraphTasksTools } from './tools/tasks-graph.js';
 import { GraphTaskListsTools } from './tools/task-lists.js';
 import { GraphMailboxSettingsTools } from './tools/mailbox-settings.js';
-import { AccountsTools } from './tools/accounts.js';
-import { createNotesTools } from './tools/notes.js';
 import { createMailboxOrganizationTools } from './tools/mailbox-organization.js';
 import { createMailSendTools } from './tools/mail-send.js';
 import { createSchedulingTools } from './tools/scheduling.js';
@@ -95,26 +70,7 @@ import {
   ensureErrorEnvelopeText,
   ErrorCode,
   type ErrorEnvelope,
-  OutlookNotRunningError,
 } from './utils/errors.js';
-
-// =============================================================================
-// Backend Configuration
-// =============================================================================
-
-/**
- * Determines if we should use the Microsoft Graph API backend.
- * Graph API is the default. Set USE_APPLESCRIPT=1 to use the legacy AppleScript backend.
- * USE_GRAPH_API is still supported for backwards compatibility but is now the default.
- */
-function shouldUseGraphApi(): boolean {
-  const useAppleScript = process.env['USE_APPLESCRIPT'] === '1' || process.env['USE_APPLESCRIPT'] === 'true';
-  if (useAppleScript) {
-    return false;
-  }
-  return true;
-}
-
 
 // =============================================================================
 // Server Creation
@@ -162,12 +118,10 @@ export function createServer(options: ServerOptions = {}): Server {
     }
   );
 
-  // Determine which backend to use
-  const useGraphApi = shouldUseGraphApi();
-
-  // Surface options resolved once for this server instance.
+  // Surface options resolved once for this server instance. Graph is the only
+  // backend.
   const surface: SurfaceOptions = {
-    backend: useGraphApi ? 'graph' : 'applescript',
+    backend: 'graph',
     ...(options.presets != null ? { presets: options.presets } : {}),
     ...(options.readOnly != null ? { readOnly: options.readOnly } : {}),
   };
@@ -179,9 +133,9 @@ export function createServer(options: ServerOptions = {}): Server {
   const registry = new ToolRegistry();
   registry.register(allToolDefinitions());
 
-  // Shared state (used by both backends). The durable state store backs approval
-  // tokens (U9b) so a two-phase approval survives a restart / a second window; a
-  // corrupt/locked db degrades to in-memory (StateStore.open handles it).
+  // The durable state store backs approval tokens (U9b) so a two-phase
+  // approval survives a restart / a second window; a corrupt/locked db
+  // degrades to in-memory (StateStore.open handles it).
   const stateStore = StateStore.open();
   // accountId is a thunk: the signed-in account (homeAccountId) is only known
   // after auth, later than this construction. resolveAccountId() populates it in
@@ -193,12 +147,6 @@ export function createServer(options: ServerOptions = {}): Server {
 
   // Tools and backend state
   let initialized = false;
-  let accountRepository: IAccountRepository | null = null;
-  let mailTools: ReturnType<typeof createMailTools> | null = null;
-  let calendarTools: ReturnType<typeof createCalendarTools> | null = null;
-  let contactsTools: ReturnType<typeof createContactsTools> | null = null;
-  let tasksTools: ReturnType<typeof createTasksTools> | null = null;
-  let notesTools: ReturnType<typeof createNotesTools> | null = null;
   let orgTools: ReturnType<typeof createMailboxOrganizationTools> | null = null;
   let sendTools: ReturnType<typeof createMailSendTools> | null = null;
   let schedulingTools: ReturnType<typeof createSchedulingTools> | null = null;
@@ -218,9 +166,6 @@ export function createServer(options: ServerOptions = {}): Server {
   let checklistItemsTools: ChecklistItemsTools | null = null;
   let linkedResourcesTools: LinkedResourcesTools | null = null;
   let taskAttachmentsTools: TaskAttachmentsTools | null = null;
-  let calendarWriter: ICalendarWriter | null = null;
-  let calendarManager: ICalendarManager | null = null;
-  let mailSender: IMailSender | null = null;
 
   // Graph-specific state
   let graphRepository: GraphRepository | null = null;
@@ -230,42 +175,11 @@ export function createServer(options: ServerOptions = {}): Server {
   let graphTasksTools: GraphTasksTools | null = null;
   let graphTaskListsTools: GraphTaskListsTools | null = null;
   let graphCalendarTools: GraphCalendarTools | null = null;
-  let appleCalendarTools: AppleCalendarTools | null = null;
   let graphMailTools: GraphMailTools | null = null;
-  let appleMailTools: AppleMailTools | null = null;
   let graphMailboxSettingsTools: GraphMailboxSettingsTools | null = null;
-  let accountsTools: AccountsTools | null = null;
 
   /**
-   * Initializes AppleScript backend.
-   */
-  function initializeAppleScriptBackend(): void {
-    if (!isOutlookRunning()) {
-      throw new OutlookNotRunningError();
-    }
-
-    const repository = createAppleScriptRepository();
-    const contentReaders = createAppleScriptContentReaders();
-
-    accountRepository = createAccountRepository();
-    accountsTools = new AccountsTools(accountRepository);
-    mailTools = createMailTools(repository, contentReaders.email, contentReaders.attachment);
-    calendarTools = createCalendarTools(repository, contentReaders.event);
-    contactsTools = createContactsTools(repository, contentReaders.contact);
-    tasksTools = createTasksTools(repository, contentReaders.task);
-    notesTools = createNotesTools(repository, contentReaders.note);
-    orgTools = createMailboxOrganizationTools(repository, tokenManager);
-    calendarWriter = createCalendarWriter();
-    calendarManager = createCalendarManager();
-    mailSender = createMailSender();
-    appleCalendarTools = new AppleCalendarTools(calendarTools, calendarWriter, calendarManager);
-    appleMailTools = new AppleMailTools(mailTools, accountRepository, mailSender);
-
-    initialized = true;
-  }
-
-  /**
-   * Initializes Graph API backend.
+   * Initializes the Graph API backend.
    * If not authenticated, triggers the device code flow inline.
    */
   const initializeGraphBackend = createAuthMutex(async (): Promise<void> => {
@@ -289,8 +203,6 @@ export function createServer(options: ServerOptions = {}): Server {
     graphCalendarTools = new GraphCalendarTools(graphRepository, graphContentReaders, tokenManager);
     graphMailTools = new GraphMailTools(graphRepository, graphContentReaders);
     graphMailboxSettingsTools = new GraphMailboxSettingsTools(graphRepository);
-    accountRepository = createAccountRepository();
-    accountsTools = new AccountsTools(accountRepository);
 
     const adapter = new GraphMailboxAdapter(graphRepository);
     orgTools = createMailboxOrganizationTools(adapter, tokenManager);
@@ -321,12 +233,7 @@ export function createServer(options: ServerOptions = {}): Server {
    */
   async function ensureInitialized(): Promise<void> {
     if (initialized) return;
-
-    if (useGraphApi) {
-      await initializeGraphBackend();
-    } else {
-      initializeAppleScriptBackend();
-    }
+    await initializeGraphBackend();
   }
 
   // Tools that only exist when using Graph API but are still served by the
@@ -340,8 +247,7 @@ export function createServer(options: ServerOptions = {}): Server {
       backend: surface.backend,
       tokenManager,
       graph:
-        useGraphApi
-        && rulesTools != null
+        rulesTools != null
         && categoriesTools != null
         && focusedOverridesTools != null
         && calendarPermissionsTools != null
@@ -364,7 +270,6 @@ export function createServer(options: ServerOptions = {}): Server {
         && graphCalendarTools != null
         && graphMailTools != null
         && graphMailboxSettingsTools != null
-        && accountsTools != null
         && sendTools != null
         && schedulingTools != null
         && orgTools != null
@@ -395,25 +300,13 @@ export function createServer(options: ServerOptions = {}): Server {
               scheduling: schedulingTools,
               mailboxOrg: orgTools,
               mailboxSettings: graphMailboxSettingsTools,
-              accounts: accountsTools,
             }
-          : null,
-      applescript:
-        !useGraphApi
-        && notesTools != null
-        && contactsTools != null
-        && tasksTools != null
-        && appleCalendarTools != null
-        && appleMailTools != null
-        && orgTools != null
-        && accountsTools != null
-          ? { notes: notesTools, contacts: contactsTools, tasks: tasksTools, calendar: appleCalendarTools, mail: appleMailTools, mailboxOrg: orgTools, accounts: accountsTools }
           : null,
     };
   }
 
   // Register tool list handler: registry tools first, then legacy TOOLS not
-  // yet migrated (with the graph-only filter still applied in AppleScript mode).
+  // yet migrated.
   server.setRequestHandler(ListToolsRequestSchema, () => {
     return { tools: registry.listTools(surface) };
   });
@@ -433,7 +326,7 @@ export function createServer(options: ServerOptions = {}): Server {
       // minted under 'default' is then NOT_FOUND in a sibling window/restart that
       // resolves the real id. Retry until the real homeAccountId is memoized;
       // once resolved this is a cheap sync no-op.
-      if (useGraphApi && currentAccountId() === DEFAULT_ACCOUNT_ID) {
+      if (currentAccountId() === DEFAULT_ACCOUNT_ID) {
         await resolveAccountId();
       }
 

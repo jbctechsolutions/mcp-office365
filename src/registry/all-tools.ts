@@ -28,7 +28,6 @@ import { teamsToolDefinitions } from '../tools/teams.js';
 import { plannerToolDefinitions } from '../tools/planner.js';
 import { oneDriveToolDefinitions } from '../tools/onedrive.js';
 import { excelToolDefinitions } from '../tools/excel.js';
-import { notesToolDefinitions } from '../tools/notes.js';
 import { contactsToolDefinitions } from '../tools/contacts.js';
 import { contactFoldersToolDefinitions } from '../tools/contact-folders.js';
 import { calendarToolDefinitions } from '../tools/calendar.js';
@@ -39,7 +38,6 @@ import { mailToolDefinitions } from '../tools/mail.js';
 import { mailSendToolDefinitions } from '../tools/mail-send.js';
 import { schedulingToolDefinitions } from '../tools/scheduling.js';
 import { mailboxSettingsToolDefinitions } from '../tools/mailbox-settings.js';
-import { accountsToolDefinitions } from '../tools/accounts.js';
 
 export function allToolDefinitions(): ToolDefinition[] {
   return [
@@ -59,7 +57,6 @@ export function allToolDefinitions(): ToolDefinition[] {
     ...plannerToolDefinitions(),
     ...oneDriveToolDefinitions(),
     ...excelToolDefinitions(),
-    ...notesToolDefinitions(),
     ...contactsToolDefinitions(),
     ...contactFoldersToolDefinitions(),
     ...calendarToolDefinitions(),
@@ -70,7 +67,6 @@ export function allToolDefinitions(): ToolDefinition[] {
     ...mailSendToolDefinitions(),
     ...schedulingToolDefinitions(),
     ...mailboxSettingsToolDefinitions(),
-    ...accountsToolDefinitions(),
     // U2: append each migrated domain's definitions here.
   ];
 }
