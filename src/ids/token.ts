@@ -13,7 +13,7 @@
  *   `state.db` and resolves on any machine (the core cold-state fix).
  *
  * - **Alias-backed** (`pl_`, `pt_`, `ch_`, `tm_`, `at_`, `td_`, `tl_`, `mr_`,
- *   `cf_`, `cg_`, `fo_`, `cp_`, `om_`, `rc_`, `tr_`, composite tuples): the token is a short deterministic digest of the
+ *   `cf_`, `cg_`, `fo_`, `cp_`, `om_`, `rc_`, `tr_`, `si_`, `dl_`, `li_`, composite tuples): the token is a short deterministic digest of the
  *   entity's canonical key — `<prefix>_<base32(sha256(canonicalKey))[0..13]>`
  *   (70 bits) — backed by the alias table (D3). These are machine-scoped: a
  *   cold store yields `ID_UNKNOWN`.
@@ -58,7 +58,10 @@ export type EntityType =
   | 'calendarPermission'
   | 'onlineMeeting'
   | 'recording'
-  | 'transcript';
+  | 'transcript'
+  | 'site'
+  | 'documentLibrary'
+  | 'libraryDriveItem';
 
 /** How a token encodes its target. */
 export type TokenKind = 'self' | 'alias';
@@ -111,6 +114,9 @@ export const ALIAS_PREFIXES: Readonly<Record<string, EntityType>> = Object.assig
     om: 'onlineMeeting',
     rc: 'recording',
     tr: 'transcript',
+    si: 'site',
+    dl: 'documentLibrary',
+    li: 'libraryDriveItem',
   } satisfies Record<string, EntityType>,
 );
 

@@ -51,9 +51,6 @@ interface IdCache {
   plannerBuckets: Map<number, { planId: string; bucketId: string; etag: string }>;
   plannerTasks: Map<number, { taskId: string; etag: string }>;
   plannerTaskDetails: Map<number, { taskId: string; etag: string }>;
-  sites: Map<number, string>;
-  documentLibraries: Map<number, { siteId: string; driveId: string }>;
-  libraryDriveItems: Map<number, { driveId: string; itemId: string }>;
 }
 
 /**
@@ -71,9 +68,6 @@ export class GraphRepository implements IRepository {
     plannerBuckets: new Map(),
     plannerTasks: new Map(),
     plannerTaskDetails: new Map(),
-    sites: new Map(),
-    documentLibraries: new Map(),
-    libraryDriveItems: new Map(),
   };
 
   constructor(
@@ -3021,18 +3015,16 @@ export class GraphRepository implements IRepository {
   // ===========================================================================
 
   /**
-   * Lists followed SharePoint sites, caching IDs.
+   * Lists followed SharePoint sites, minting durable si_ tokens.
    */
-  async listSitesAsync(): Promise<Array<{ id: number; name: string; webUrl: string; displayName: string }>> {
+  async listSitesAsync(): Promise<Array<{ id: string; name: string; webUrl: string; displayName: string }>> {
     const sites = await this.client.listFollowedSites();
-    const result: Array<{ id: number; name: string; webUrl: string; displayName: string }> = [];
+    const result: Array<{ id: string; name: string; webUrl: string; displayName: string }> = [];
     for (const site of sites) {
       const siteId = site.id as string | undefined;
       if (siteId != null) {
-        const numericId = hashStringToNumber(siteId);
-        this.idCache.sites.set(numericId, siteId);
         result.push({
-          id: numericId,
+          id: this.mintAlias('site', siteId),
           name: (site.name as string | undefined) ?? '',
           webUrl: (site.webUrl as string | undefined) ?? '',
           displayName: (site.displayName as string | undefined) ?? '',
@@ -3043,18 +3035,16 @@ export class GraphRepository implements IRepository {
   }
 
   /**
-   * Searches SharePoint sites by keyword, caching IDs.
+   * Searches SharePoint sites by keyword, minting durable si_ tokens.
    */
-  async searchSitesAsync(query: string): Promise<Array<{ id: number; name: string; webUrl: string; displayName: string }>> {
+  async searchSitesAsync(query: string): Promise<Array<{ id: string; name: string; webUrl: string; displayName: string }>> {
     const sites = await this.client.searchSites(query);
-    const result: Array<{ id: number; name: string; webUrl: string; displayName: string }> = [];
+    const result: Array<{ id: string; name: string; webUrl: string; displayName: string }> = [];
     for (const site of sites) {
       const siteId = site.id as string | undefined;
       if (siteId != null) {
-        const numericId = hashStringToNumber(siteId);
-        this.idCache.sites.set(numericId, siteId);
         result.push({
-          id: numericId,
+          id: this.mintAlias('site', siteId),
           name: (site.name as string | undefined) ?? '',
           webUrl: (site.webUrl as string | undefined) ?? '',
           displayName: (site.displayName as string | undefined) ?? '',
@@ -3067,12 +3057,11 @@ export class GraphRepository implements IRepository {
   /**
    * Gets details for a specific SharePoint site.
    */
-  async getSiteAsync(siteId: number): Promise<{ id: number; name: string; webUrl: string; displayName: string; description: string }> {
-    const graphId = this.idCache.sites.get(siteId);
-    if (graphId == null) throw new Error(`Site ID ${siteId} not found in cache. Try listing or searching sites first.`);
+  async getSiteAsync(siteId: string | number): Promise<{ id: string; name: string; webUrl: string; displayName: string; description: string }> {
+    const graphId = this.toGraphId(siteId, 'site');
     const site = await this.client.getSite(graphId);
     return {
-      id: siteId,
+      id: String(siteId),
       name: (site.name as string | undefined) ?? '',
       webUrl: (site.webUrl as string | undefined) ?? '',
       displayName: (site.displayName as string | undefined) ?? '',
@@ -3081,20 +3070,17 @@ export class GraphRepository implements IRepository {
   }
 
   /**
-   * Lists document libraries for a SharePoint site, caching IDs.
+   * Lists document libraries for a SharePoint site, minting durable dl_ tokens.
    */
-  async listDocumentLibrariesAsync(siteId: number): Promise<Array<{ id: number; name: string; webUrl: string; driveType: string }>> {
-    const graphSiteId = this.idCache.sites.get(siteId);
-    if (graphSiteId == null) throw new Error(`Site ID ${siteId} not found in cache. Try listing or searching sites first.`);
+  async listDocumentLibrariesAsync(siteId: string | number): Promise<Array<{ id: string; name: string; webUrl: string; driveType: string }>> {
+    const graphSiteId = this.toGraphId(siteId, 'site');
     const drives = await this.client.listDocumentLibraries(graphSiteId);
-    const result: Array<{ id: number; name: string; webUrl: string; driveType: string }> = [];
+    const result: Array<{ id: string; name: string; webUrl: string; driveType: string }> = [];
     for (const drive of drives) {
       const driveId = drive.id as string | undefined;
       if (driveId != null) {
-        const numericId = hashStringToNumber(driveId);
-        this.idCache.documentLibraries.set(numericId, { siteId: graphSiteId, driveId });
         result.push({
-          id: numericId,
+          id: this.mintAliasComposite('documentLibrary', { siteId: graphSiteId, driveId }),
           name: (drive.name as string | undefined) ?? '',
           webUrl: (drive.webUrl as string | undefined) ?? '',
           driveType: (drive.driveType as string | undefined) ?? '',
@@ -3105,32 +3091,27 @@ export class GraphRepository implements IRepository {
   }
 
   /**
-   * Lists items in a document library or folder, caching IDs.
+   * Lists items in a document library or folder, minting durable li_ tokens.
    */
-  async listLibraryItemsAsync(libraryId: number, folderId?: number): Promise<Array<{
-    id: number; name: string; size: number; webUrl: string;
+  async listLibraryItemsAsync(libraryId: string | number, folderId?: string | number): Promise<Array<{
+    id: string; name: string; size: number; webUrl: string;
     lastModifiedDateTime: string; isFolder: boolean;
   }>> {
-    const libCached = this.idCache.documentLibraries.get(libraryId);
-    if (libCached == null) throw new Error(`Library ID ${libraryId} not found in cache. Try listing document libraries first.`);
+    const libCached = this.toGraphParts(libraryId, 'documentLibrary', ['siteId', 'driveId']);
     let folderItemId: string | undefined;
     if (folderId != null) {
-      const folderCached = this.idCache.libraryDriveItems.get(folderId);
-      if (folderCached == null) throw new Error(`Folder ID ${folderId} not found in cache. Try listing library items first.`);
-      folderItemId = folderCached.itemId;
+      folderItemId = this.toGraphParts(folderId, 'libraryDriveItem', ['driveId', 'itemId']).itemId;
     }
     const items = await this.client.listLibraryItems(libCached.driveId, folderItemId);
     const result: Array<{
-      id: number; name: string; size: number; webUrl: string;
+      id: string; name: string; size: number; webUrl: string;
       lastModifiedDateTime: string; isFolder: boolean;
     }> = [];
     for (const item of items) {
       const itemGraphId = item.id as string | undefined;
       if (itemGraphId != null) {
-        const numericId = hashStringToNumber(itemGraphId);
-        this.idCache.libraryDriveItems.set(numericId, { driveId: libCached.driveId, itemId: itemGraphId });
         result.push({
-          id: numericId,
+          id: this.mintAliasComposite('libraryDriveItem', { driveId: libCached.driveId, itemId: itemGraphId }),
           name: (item.name as string | undefined) ?? '',
           size: (item.size as number | undefined) ?? 0,
           webUrl: (item.webUrl as string | undefined) ?? '',
@@ -3145,9 +3126,8 @@ export class GraphRepository implements IRepository {
   /**
    * Downloads a file from a document library to the specified path.
    */
-  async downloadLibraryFileAsync(itemId: number, outputPath: string): Promise<string> {
-    const cached = this.idCache.libraryDriveItems.get(itemId);
-    if (cached == null) throw new Error(`Item ID ${itemId} not found in cache. Try listing library items first.`);
+  async downloadLibraryFileAsync(itemId: string | number, outputPath: string): Promise<string> {
+    const cached = this.toGraphParts(itemId, 'libraryDriveItem', ['driveId', 'itemId']);
     const content = await this.client.downloadLibraryFile(cached.driveId, cached.itemId);
     const resolvedPath = path.resolve(outputPath);
     const dir = path.dirname(resolvedPath);
