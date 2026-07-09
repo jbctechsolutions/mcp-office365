@@ -53,7 +53,7 @@ export interface EmailRow {
   readonly flagStatus: number;
   readonly categories: Buffer | null;
   readonly messageId: string | null;
-  readonly conversationId: number | null;
+  readonly conversationId: string | null;
   readonly dataFilePath: string | null;
 }
 

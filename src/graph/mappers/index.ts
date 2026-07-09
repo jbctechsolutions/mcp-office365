@@ -23,7 +23,6 @@ export { mapContactToContactRow } from './contact-mapper.js';
 export { mapTaskToTaskRow, type TodoTaskWithList } from './task-mapper.js';
 
 export {
-  hashStringToNumber,
   isoToTimestamp,
   dateTimeTimeZoneToTimestamp,
   unixTimestampToIso,

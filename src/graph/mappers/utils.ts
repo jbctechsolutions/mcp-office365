@@ -8,26 +8,6 @@
  */
 
 /**
- * Hashes a string ID to a numeric ID.
- *
- * Graph API uses string UUIDs while our row types use numeric IDs.
- * This creates a deterministic numeric ID from a string.
- *
- * Note: There's a small chance of collision, but it's acceptable
- * for our use case (display purposes only, not database operations).
- */
-export function hashStringToNumber(str: string): number {
-  let hash = 0;
-  for (let i = 0; i < str.length; i++) {
-    const char = str.charCodeAt(i);
-    hash = ((hash << 5) - hash) + char;
-    hash = hash & hash; // Convert to 32-bit integer
-  }
-  // Ensure positive number
-  return Math.abs(hash);
-}
-
-/**
  * Parses an ISO date string to a Unix timestamp (seconds).
  */
 export function isoToTimestamp(isoDate: string | null | undefined): number | null {

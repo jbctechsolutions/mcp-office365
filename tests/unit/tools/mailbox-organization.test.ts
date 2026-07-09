@@ -38,7 +38,7 @@ function makeEmailRow(overrides: Partial<EmailRow> = {}): EmailRow {
     flagStatus: 0,
     categories: null,
     messageId: '<msg-001@example.com>',
-    conversationId: 100,
+    conversationId: 'conv-100',
     dataFilePath: '/path/to/data.olk15',
     recipients: 'Bob Receiver',
     displayTo: 'Bob Receiver',

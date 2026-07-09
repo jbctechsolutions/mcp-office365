@@ -11,7 +11,6 @@ import type * as MicrosoftGraph from '@microsoft/microsoft-graph-types';
 import type { EmailRow } from '../../database/repository.js';
 import { mintSelfEncoded } from '../../ids/token.js';
 import {
-  hashStringToNumber,
   isoToTimestamp,
   importanceToPriority,
   flagStatusToNumber,
@@ -63,7 +62,7 @@ export function mapMessageToEmailRow(
       ? Buffer.from(message.categories.join(','), 'utf-8')
       : null,
     messageId: message.internetMessageId ?? null,
-    conversationId: message.conversationId != null ? hashStringToNumber(message.conversationId) : null,
+    conversationId: message.conversationId ?? null,
     dataFilePath: createGraphContentPath('email', messageId),
   };
 }
