@@ -53,7 +53,6 @@ export {
   mapEventToEventRow,
   mapContactToContactRow,
   mapTaskToTaskRow,
-  hashStringToNumber,
   isoToTimestamp,
   dateTimeTimeZoneToTimestamp,
   type TodoTaskWithList,

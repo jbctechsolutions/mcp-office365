@@ -146,24 +146,6 @@ export const RecurrenceInput = z.strictObject({
   }
 });
 
-const isoDateString = z
-  .string()
-  .refine((s) => !isNaN(Date.parse(s)), { message: 'Must be a valid ISO 8601 date string' });
-
-export const CreateEventInput = z.strictObject({
-  title: z.string().min(1).describe('Event title/subject'),
-  start_date: isoDateString.describe('Start date in ISO 8601 UTC format'),
-  end_date: isoDateString.describe('End date in ISO 8601 UTC format'),
-  calendar_id: z.number().int().positive().optional().describe('Optional calendar ID to create the event in'),
-  location: z.string().optional().describe('Event location'),
-  description: z.string().optional().describe('Event description/body text'),
-  is_all_day: z.boolean().optional().default(false).describe('Whether this is an all-day event'),
-  recurrence: RecurrenceInput.optional().describe('Recurrence pattern to make this a repeating event'),
-}).refine(
-  (data) => new Date(data.start_date).getTime() < new Date(data.end_date).getTime(),
-  { message: 'start_date must be before end_date', path: ['start_date'] }
-);
-
 // -----------------------------------------------------------------------------
 // Canonical (advertised) write schemas — Graph-shaped.
 // -----------------------------------------------------------------------------
@@ -271,7 +253,6 @@ export type ListCalendarsParams = z.infer<typeof ListCalendarsInput>;
 export type ListEventsParams = z.infer<typeof ListEventsInput>;
 export type GetEventParams = z.infer<typeof GetEventInput>;
 export type SearchEventsParams = z.infer<typeof SearchEventsInput>;
-export type CreateEventParams = z.infer<typeof CreateEventInput>;
 export type RecurrenceParams = z.infer<typeof RecurrenceInput>;
 export type RespondToEventParams = z.infer<typeof RespondToEventInput>;
 export type CreateEventGraphParams = z.infer<typeof CreateEventGraphInput>;

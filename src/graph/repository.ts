@@ -28,7 +28,6 @@ import {
   mapEventToEventRow,
   mapContactToContactRow,
   mapTaskToTaskRow,
-  hashStringToNumber,
 } from './mappers/index.js';
 import type { DeviceCodeCallback } from './auth/index.js';
 import { currentAccountId } from './auth/index.js';
@@ -42,6 +41,7 @@ import { downloadAttachment, getDownloadDir } from './attachments.js';
 import type { PlanVisualizationData } from '../visualization/types.js';
 import * as fs from 'fs';
 import * as path from 'path';
+import { createHash } from 'node:crypto';
 
 /**
  * Repository implementation using Microsoft Graph API.
@@ -600,7 +600,7 @@ export class GraphRepository implements IRepository {
 
     const photoData = await this.client.getContactPhoto(graphId);
     const downloadDir = getDownloadDir();
-    const filePath = path.join(downloadDir, `contact-${hashStringToNumber(graphId)}-photo.jpg`);
+    const filePath = path.join(downloadDir, `contact-${createHash('sha1').update(graphId).digest('hex').slice(0, 16)}-photo.jpg`);
     fs.writeFileSync(filePath, Buffer.from(photoData));
     return { filePath, contentType: 'image/jpeg' };
   }
@@ -1866,7 +1866,7 @@ export class GraphRepository implements IRepository {
     const graphId = this.toGraphId(emailId, 'message');
     const mime = await this.client.getMessageMime(graphId);
     const downloadDir = getDownloadDir();
-    const filePath = path.join(downloadDir, `email-${hashStringToNumber(graphId)}.eml`);
+    const filePath = path.join(downloadDir, `email-${createHash('sha1').update(graphId).digest('hex').slice(0, 16)}.eml`);
     fs.writeFileSync(filePath, mime, 'utf-8');
     return { filePath };
   }

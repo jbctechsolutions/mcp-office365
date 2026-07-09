@@ -10,7 +10,6 @@
 import { describe, it, expect } from 'vitest';
 import type * as MicrosoftGraph from '@microsoft/microsoft-graph-types';
 import { mapMessageToEmailRow } from '../../../../src/graph/mappers/email-mapper.js';
-import { hashStringToNumber } from '../../../../src/graph/mappers/utils.js';
 import { mintSelfEncoded } from '../../../../src/ids/token.js';
 
 describe('graph/mappers/email-mapper', () => {
@@ -56,7 +55,7 @@ describe('graph/mappers/email-mapper', () => {
       expect(result.priority).toBe(1); // high
       expect(result.flagStatus).toBe(1); // flagged
       expect(result.messageId).toBe('<msg123@example.com>');
-      expect(result.conversationId).toBe(hashStringToNumber('conv-456'));
+      expect(result.conversationId).toBe('conv-456');
       expect(result.dataFilePath).toBe('graph-email:msg-123');
     });
 

@@ -9,7 +9,6 @@
 
 import { describe, it, expect, beforeAll } from 'vitest';
 import {
-  hashStringToNumber,
   isoToTimestamp,
   dateTimeTimeZoneToTimestamp,
   unixTimestampToIso,
@@ -23,38 +22,6 @@ import {
 } from '../../../../src/graph/mappers/utils.js';
 
 describe('graph/mappers/utils', () => {
-  describe('hashStringToNumber', () => {
-    it('converts string to positive number', () => {
-      const result = hashStringToNumber('test-uuid-123');
-      expect(result).toBeTypeOf('number');
-      expect(result).toBeGreaterThanOrEqual(0);
-    });
-
-    it('produces consistent results for same input', () => {
-      const input = 'abc123def456';
-      const result1 = hashStringToNumber(input);
-      const result2 = hashStringToNumber(input);
-      expect(result1).toBe(result2);
-    });
-
-    it('produces different results for different inputs', () => {
-      const result1 = hashStringToNumber('input-a');
-      const result2 = hashStringToNumber('input-b');
-      expect(result1).not.toBe(result2);
-    });
-
-    it('handles empty string', () => {
-      const result = hashStringToNumber('');
-      expect(result).toBe(0);
-    });
-
-    it('handles special characters', () => {
-      const result = hashStringToNumber('test@email.com!#$%');
-      expect(result).toBeTypeOf('number');
-      expect(result).toBeGreaterThanOrEqual(0);
-    });
-  });
-
   describe('isoToTimestamp', () => {
     it('converts ISO date string to Unix timestamp', () => {
       const result = isoToTimestamp('2024-01-15T10:30:00Z');

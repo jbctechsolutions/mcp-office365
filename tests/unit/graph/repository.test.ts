@@ -9,7 +9,6 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { GraphRepository, createGraphRepository } from '../../../src/graph/repository.js';
-import { hashStringToNumber } from '../../../src/graph/mappers/utils.js';
 import { mintSelfEncoded } from '../../../src/ids/token.js';
 import { StateStore } from '../../../src/state/store.js';
 import { downloadAttachment } from '../../../src/graph/attachments.js';
@@ -3381,13 +3380,12 @@ describe('graph/repository', () => {
         // Cold: the ct_ token resolves without a prior list.
         const result = await repository.getContactPhotoAsync(mintSelfEncoded('contact', 'contact-1'));
 
-        const fileTag = hashStringToNumber('contact-1');
         expect(mockClient.getContactPhoto).toHaveBeenCalledWith('contact-1');
         expect(fs.writeFileSync).toHaveBeenCalledWith(
-          expect.stringContaining(`contact-${fileTag}-photo.jpg`),
+          expect.stringMatching(/contact-[0-9a-f]{16}-photo\.jpg$/),
           expect.any(Buffer),
         );
-        expect(result.filePath).toContain(`contact-${fileTag}-photo.jpg`);
+        expect(result.filePath).toMatch(/contact-[0-9a-f]{16}-photo\.jpg$/);
         expect(result.contentType).toBe('image/jpeg');
       });
 
@@ -3434,7 +3432,6 @@ describe('graph/repository', () => {
 
   describe('Message Headers & MIME', () => {
     const graphMsgId = 'AAMkAGTest123';
-    const numericId = hashStringToNumber(graphMsgId);
     const token = mintSelfEncoded('message', graphMsgId);
 
     describe('getMessageHeadersAsync', () => {
@@ -3465,10 +3462,10 @@ describe('graph/repository', () => {
 
         const result = await repository.getMessageMimeAsync(token);
 
-        expect(result.filePath).toBe(`/tmp/mcp-outlook-attachments/email-${numericId}.eml`);
+        expect(result.filePath).toMatch(/^\/tmp\/mcp-outlook-attachments\/email-[0-9a-f]{16}\.eml$/);
         expect(mockClient.getMessageMime).toHaveBeenCalledWith(graphMsgId);
         expect(fs.writeFileSync).toHaveBeenCalledWith(
-          `/tmp/mcp-outlook-attachments/email-${numericId}.eml`,
+          result.filePath,
           mimeContent,
           'utf-8'
         );
