@@ -102,7 +102,7 @@ export class OneNoteTools {
     const notebooks = await this.repository.getClient().listNotebooks();
     return jsonResult({
       notebooks: notebooks.map((nb) => ({
-        id: mintSelfEncoded('noteNotebook', nb.id as string),
+        id: mintSelfEncoded('noteNotebook', nb.id ?? ''),
         displayName: nb.displayName ?? null,
         createdDateTime: nb.createdDateTime ?? null,
         lastModifiedDateTime: nb.lastModifiedDateTime ?? null,
@@ -118,7 +118,7 @@ export class OneNoteTools {
     return jsonResult({
       notebook_id: params.notebook_id ?? null,
       sections: sections.map((s) => ({
-        id: mintSelfEncoded('noteSection', s.id as string),
+        id: mintSelfEncoded('noteSection', s.id ?? ''),
         displayName: s.displayName ?? null,
         createdDateTime: s.createdDateTime ?? null,
         lastModifiedDateTime: s.lastModifiedDateTime ?? null,
@@ -134,7 +134,7 @@ export class OneNoteTools {
     return jsonResult({
       section_id: params.section_id ?? null,
       pages: pages.map((p) => ({
-        id: mintSelfEncoded('notePage', p.id as string),
+        id: mintSelfEncoded('notePage', p.id ?? ''),
         title: p.title ?? null,
         createdDateTime: p.createdDateTime ?? null,
         lastModifiedDateTime: p.lastModifiedDateTime ?? null,
@@ -148,7 +148,7 @@ export class OneNoteTools {
     const page = await client.getNotePage(graphId);
     const contentHtml = await client.getNotePageContent(graphId);
     return jsonResult({
-      id: mintSelfEncoded('notePage', page.id as string),
+      id: mintSelfEncoded('notePage', page.id ?? ''),
       title: page.title ?? null,
       createdDateTime: page.createdDateTime ?? null,
       lastModifiedDateTime: page.lastModifiedDateTime ?? null,
@@ -160,7 +160,7 @@ export class OneNoteTools {
     const pages = await this.repository.getClient().searchNotePages(params.query);
     return jsonResult({
       pages: pages.map((p) => ({
-        id: mintSelfEncoded('notePage', p.id as string),
+        id: mintSelfEncoded('notePage', p.id ?? ''),
         title: p.title ?? null,
         createdDateTime: p.createdDateTime ?? null,
         lastModifiedDateTime: p.lastModifiedDateTime ?? null,
@@ -173,7 +173,7 @@ export class OneNoteTools {
     const html = `<!DOCTYPE html><html><head><title>${escapeHtml(params.title)}</title></head><body>${params.content_html}</body></html>`;
     const created = await this.repository.getClient().createNotePage(sectionGraphId, html);
     return jsonResult({
-      id: mintSelfEncoded('notePage', created.id as string),
+      id: mintSelfEncoded('notePage', created.id ?? ''),
       title: params.title,
       status: 'created',
     });

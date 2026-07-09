@@ -2319,9 +2319,12 @@ export class GraphClient {
    */
   async searchNotePages(query: string): Promise<MicrosoftGraph.OnenotePage[]> {
     const client = await this.getClient();
+    // Strip embedded double-quotes so they can't unbalance the quoted $search
+    // expression (`$search="..."`) and 400 the request.
+    const safeQuery = query.replace(/"/g, '');
     const response = await client
       .api('/me/onenote/pages')
-      .search(`"${query}"`)
+      .search(`"${safeQuery}"`)
       .get() as PageCollection;
     return response.value as MicrosoftGraph.OnenotePage[];
   }

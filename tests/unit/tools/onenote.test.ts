@@ -136,6 +136,14 @@ describe('OneNoteTools', () => {
       expect(parsed.title).toBe('Meeting Notes');
       expect(parsed.content_html).toBe('<html><body><p>Notes</p></body></html>');
     });
+
+    it('rejects a wrong-entity token (a section token as page_id) with ID_ENTITY_MISMATCH', async () => {
+      const sectionToken = mintSelfEncoded('noteSection', 'sec-graph-1');
+      await expect(tools.getNotePage({ page_id: sectionToken })).rejects.toMatchObject({
+        code: 'ID_ENTITY_MISMATCH',
+      });
+      expect(mockClient.getNotePage).not.toHaveBeenCalled();
+    });
   });
 
   // ===========================================================================
