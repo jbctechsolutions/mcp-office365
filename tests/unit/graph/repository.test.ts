@@ -167,6 +167,13 @@ vi.mock('../../../src/graph/client/index.js', () => ({
       getMeetingRecordingContent: vi.fn(),
       listMeetingTranscripts: vi.fn(),
       getMeetingTranscriptContent: vi.fn(),
+      // SharePoint sites & document library operations
+      listFollowedSites: vi.fn(),
+      searchSites: vi.fn(),
+      getSite: vi.fn(),
+      listDocumentLibraries: vi.fn(),
+      listLibraryItems: vi.fn(),
+      downloadLibraryFile: vi.fn(),
     };
   }),
 }));
@@ -191,6 +198,8 @@ vi.mock('path', () => ({
     const dot = p.lastIndexOf('.');
     return dot >= 0 ? p.substring(dot) : '';
   }),
+  resolve: vi.fn().mockImplementation((p: string) => p),
+  dirname: vi.fn().mockImplementation((p: string) => p.substring(0, p.lastIndexOf('/')) || '/'),
 }));
 
 describe('graph/repository', () => {
@@ -3898,6 +3907,208 @@ describe('graph/repository', () => {
 
       it('rejects an unknown tr_ token', async () => {
         await expect(repository.getMeetingTranscriptContentAsync('tr_bogus')).rejects.toThrow('Unknown or unresolvable');
+      });
+    });
+  });
+
+  // ===========================================================================
+  // SharePoint Sites, Document Libraries & Library Items
+  // ===========================================================================
+
+  describe('SharePoint (durable si_ / dl_ / li_ tokens)', () => {
+    describe('listSitesAsync / searchSitesAsync', () => {
+      it('mints durable si_ tokens', async () => {
+        mockClient.listFollowedSites.mockResolvedValue([
+          { id: 'site-1', name: 'team', webUrl: 'https://contoso.sharepoint.com/sites/team', displayName: 'Team Site' },
+          { id: 'site-2', name: 'hr', webUrl: 'https://contoso.sharepoint.com/sites/hr', displayName: 'HR Portal' },
+        ]);
+
+        const result = await repository.listSitesAsync();
+
+        expect(result).toHaveLength(2);
+        expect(result[0].id).toMatch(/^si_/);
+        expect(result[0].id).not.toBe(result[1].id);
+        expect(result[0].displayName).toBe('Team Site');
+      });
+
+      it('mints durable si_ tokens for search results', async () => {
+        mockClient.searchSites.mockResolvedValue([
+          { id: 'site-3', name: 'marketing', webUrl: 'https://contoso.sharepoint.com/sites/marketing', displayName: 'Marketing Hub' },
+        ]);
+
+        const result = await repository.searchSitesAsync('marketing');
+
+        expect(mockClient.searchSites).toHaveBeenCalledWith('marketing');
+        expect(result[0].id).toMatch(/^si_/);
+      });
+    });
+
+    describe('getSiteAsync', () => {
+      it('resolves the si_ token to the Graph id', async () => {
+        mockClient.listFollowedSites.mockResolvedValue([
+          { id: 'site-1', name: 'team', webUrl: 'https://contoso.sharepoint.com/sites/team', displayName: 'Team Site' },
+        ]);
+        const sites = await repository.listSitesAsync();
+        const siteTok = sites[0].id;
+
+        mockClient.getSite.mockResolvedValue({
+          name: 'team', webUrl: 'https://contoso.sharepoint.com/sites/team',
+          displayName: 'Team Site', description: 'Main collaboration site',
+        });
+
+        const result = await repository.getSiteAsync(siteTok);
+
+        expect(mockClient.getSite).toHaveBeenCalledWith('site-1');
+        expect(result.id).toBe(siteTok);
+        expect(result.description).toBe('Main collaboration site');
+      });
+
+      it('rejects a legacy numeric site id', async () => {
+        await expect(repository.getSiteAsync(999999)).rejects.toThrow('not supported');
+      });
+
+      it('rejects an unknown si_ token', async () => {
+        await expect(repository.getSiteAsync('si_bogus')).rejects.toThrow('Unknown or unresolvable');
+      });
+    });
+
+    describe('listDocumentLibrariesAsync', () => {
+      it('resolves the parent si_ token and mints dl_ tokens', async () => {
+        mockClient.listFollowedSites.mockResolvedValue([
+          { id: 'site-1', name: 'team', webUrl: '', displayName: 'Team Site' },
+        ]);
+        const sites = await repository.listSitesAsync();
+        const siteTok = sites[0].id;
+
+        mockClient.listDocumentLibraries.mockResolvedValue([
+          { id: 'drive-1', name: 'Documents', webUrl: '', driveType: 'documentLibrary' },
+        ]);
+
+        const result = await repository.listDocumentLibrariesAsync(siteTok);
+
+        expect(mockClient.listDocumentLibraries).toHaveBeenCalledWith('site-1');
+        expect(result).toHaveLength(1);
+        expect(result[0].id).toMatch(/^dl_/);
+      });
+
+      it('rejects an unknown parent si_ token', async () => {
+        await expect(repository.listDocumentLibrariesAsync('si_bogus')).rejects.toThrow('Unknown or unresolvable');
+      });
+    });
+
+    describe('listLibraryItemsAsync', () => {
+      it('resolves the parent dl_ token (driveId) and mints li_ tokens', async () => {
+        mockClient.listFollowedSites.mockResolvedValue([
+          { id: 'site-1', name: 'team', webUrl: '', displayName: 'Team Site' },
+        ]);
+        const sites = await repository.listSitesAsync();
+        const siteTok = sites[0].id;
+
+        mockClient.listDocumentLibraries.mockResolvedValue([
+          { id: 'drive-1', name: 'Documents', webUrl: '', driveType: 'documentLibrary' },
+        ]);
+        const libraries = await repository.listDocumentLibrariesAsync(siteTok);
+        const libTok = libraries[0].id;
+
+        mockClient.listLibraryItems.mockResolvedValue([
+          { id: 'item-1', name: 'Report.docx', size: 15000, webUrl: '', lastModifiedDateTime: '', folder: undefined },
+          { id: 'item-2', name: 'Projects', size: 0, webUrl: '', lastModifiedDateTime: '', folder: {} },
+        ]);
+
+        const result = await repository.listLibraryItemsAsync(libTok);
+
+        expect(mockClient.listLibraryItems).toHaveBeenCalledWith('drive-1', undefined);
+        expect(result).toHaveLength(2);
+        expect(result[0].id).toMatch(/^li_/);
+        expect(result[0].isFolder).toBe(false);
+        expect(result[1].isFolder).toBe(true);
+      });
+
+      it('resolves a folder li_ token to its itemId and browses into it', async () => {
+        mockClient.listFollowedSites.mockResolvedValue([
+          { id: 'site-1', name: 'team', webUrl: '', displayName: 'Team Site' },
+        ]);
+        const sites = await repository.listSitesAsync();
+        const siteTok = sites[0].id;
+
+        mockClient.listDocumentLibraries.mockResolvedValue([
+          { id: 'drive-1', name: 'Documents', webUrl: '', driveType: 'documentLibrary' },
+        ]);
+        const libraries = await repository.listDocumentLibrariesAsync(siteTok);
+        const libTok = libraries[0].id;
+
+        mockClient.listLibraryItems.mockResolvedValue([
+          { id: 'item-2', name: 'Projects', size: 0, webUrl: '', lastModifiedDateTime: '', folder: {} },
+        ]);
+        const items = await repository.listLibraryItemsAsync(libTok);
+        const folderTok = items[0].id;
+
+        mockClient.listLibraryItems.mockResolvedValue([
+          { id: 'item-3', name: 'Proposal.pptx', size: 50000, webUrl: '', lastModifiedDateTime: '', folder: undefined },
+        ]);
+
+        const result = await repository.listLibraryItemsAsync(libTok, folderTok);
+
+        expect(mockClient.listLibraryItems).toHaveBeenCalledWith('drive-1', 'item-2');
+        expect(result[0].name).toBe('Proposal.pptx');
+      });
+
+      it('rejects an unknown parent dl_ token', async () => {
+        await expect(repository.listLibraryItemsAsync('dl_bogus')).rejects.toThrow('Unknown or unresolvable');
+      });
+
+      it('rejects an unknown folder li_ token', async () => {
+        mockClient.listFollowedSites.mockResolvedValue([
+          { id: 'site-1', name: 'team', webUrl: '', displayName: 'Team Site' },
+        ]);
+        const sites = await repository.listSitesAsync();
+        const siteTok = sites[0].id;
+
+        mockClient.listDocumentLibraries.mockResolvedValue([
+          { id: 'drive-1', name: 'Documents', webUrl: '', driveType: 'documentLibrary' },
+        ]);
+        const libraries = await repository.listDocumentLibrariesAsync(siteTok);
+        const libTok = libraries[0].id;
+
+        await expect(repository.listLibraryItemsAsync(libTok, 'li_bogus')).rejects.toThrow('Unknown or unresolvable');
+      });
+    });
+
+    describe('downloadLibraryFileAsync', () => {
+      it('resolves the li_ token to (driveId, itemId) and downloads', async () => {
+        mockClient.listFollowedSites.mockResolvedValue([
+          { id: 'site-1', name: 'team', webUrl: '', displayName: 'Team Site' },
+        ]);
+        const sites = await repository.listSitesAsync();
+        const siteTok = sites[0].id;
+
+        mockClient.listDocumentLibraries.mockResolvedValue([
+          { id: 'drive-1', name: 'Documents', webUrl: '', driveType: 'documentLibrary' },
+        ]);
+        const libraries = await repository.listDocumentLibrariesAsync(siteTok);
+        const libTok = libraries[0].id;
+
+        mockClient.listLibraryItems.mockResolvedValue([
+          { id: 'item-1', name: 'Report.docx', size: 15000, webUrl: '', lastModifiedDateTime: '', folder: undefined },
+        ]);
+        const items = await repository.listLibraryItemsAsync(libTok);
+        const itemTok = items[0].id;
+
+        mockClient.downloadLibraryFile.mockResolvedValue(new ArrayBuffer(8));
+
+        const outputPath = await repository.downloadLibraryFileAsync(itemTok, '/tmp/Report.docx');
+
+        expect(mockClient.downloadLibraryFile).toHaveBeenCalledWith('drive-1', 'item-1');
+        expect(outputPath).toBe('/tmp/Report.docx');
+        expect(fs.writeFileSync).toHaveBeenCalledWith('/tmp/Report.docx', expect.any(Buffer));
+      });
+
+      it('rejects a legacy numeric item id', async () => {
+        await expect(repository.downloadLibraryFileAsync(999999, '/tmp/out.docx')).rejects.toThrow('not supported');
+      });
+
+      it('rejects an unknown li_ token', async () => {
+        await expect(repository.downloadLibraryFileAsync('li_bogus', '/tmp/out.docx')).rejects.toThrow('Unknown or unresolvable');
       });
     });
   });

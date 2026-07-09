@@ -32,20 +32,20 @@ export const SearchSitesInput = z.strictObject({
 });
 
 export const GetSiteInput = z.strictObject({
-  site_id: z.number().int().positive().describe('Site ID from list_sites or search_sites'),
+  site_id: z.string().min(1).describe('Site ID (si_ token from list_sites or search_sites)'),
 });
 
 export const ListDocumentLibrariesInput = z.strictObject({
-  site_id: z.number().int().positive().describe('Site ID from list_sites or search_sites'),
+  site_id: z.string().min(1).describe('Site ID (si_ token from list_sites or search_sites)'),
 });
 
 export const ListLibraryItemsInput = z.strictObject({
-  library_id: z.number().int().positive().describe('Library ID from list_document_libraries'),
-  folder_id: z.number().int().positive().optional().describe('Folder ID to browse into (from a previous list_library_items call)'),
+  library_id: z.string().min(1).describe('Library ID (dl_ token from list_document_libraries)'),
+  folder_id: z.string().min(1).optional().describe('Folder ID to browse into (li_ token from a previous list_library_items call)'),
 });
 
 export const DownloadLibraryFileInput = z.strictObject({
-  item_id: z.number().int().positive().describe('Item ID from list_library_items'),
+  item_id: z.string().min(1).describe('Item ID (li_ token from list_library_items)'),
   output_path: z.string().min(1).describe('Local file path to save the downloaded file'),
 });
 
@@ -65,15 +65,15 @@ export type DownloadLibraryFileParams = z.infer<typeof DownloadLibraryFileInput>
 // =============================================================================
 
 export interface ISharePointRepository {
-  listSitesAsync(): Promise<Array<{ id: number; name: string; webUrl: string; displayName: string }>>;
-  searchSitesAsync(query: string): Promise<Array<{ id: number; name: string; webUrl: string; displayName: string }>>;
-  getSiteAsync(siteId: number): Promise<{ id: number; name: string; webUrl: string; displayName: string; description: string }>;
-  listDocumentLibrariesAsync(siteId: number): Promise<Array<{ id: number; name: string; webUrl: string; driveType: string }>>;
-  listLibraryItemsAsync(libraryId: number, folderId?: number): Promise<Array<{
-    id: number; name: string; size: number; webUrl: string;
+  listSitesAsync(): Promise<Array<{ id: string; name: string; webUrl: string; displayName: string }>>;
+  searchSitesAsync(query: string): Promise<Array<{ id: string; name: string; webUrl: string; displayName: string }>>;
+  getSiteAsync(siteId: string | number): Promise<{ id: string; name: string; webUrl: string; displayName: string; description: string }>;
+  listDocumentLibrariesAsync(siteId: string | number): Promise<Array<{ id: string; name: string; webUrl: string; driveType: string }>>;
+  listLibraryItemsAsync(libraryId: string | number, folderId?: string | number): Promise<Array<{
+    id: string; name: string; size: number; webUrl: string;
     lastModifiedDateTime: string; isFolder: boolean;
   }>>;
-  downloadLibraryFileAsync(itemId: number, outputPath: string): Promise<string>;
+  downloadLibraryFileAsync(itemId: string | number, outputPath: string): Promise<string>;
 }
 
 // =============================================================================

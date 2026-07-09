@@ -223,6 +223,32 @@ describe('ids/token — composite / alias-backed', () => {
     expect(parsed?.entityType).toBe('transcript');
     expect(parsed?.graphId).toBeUndefined();
   });
+
+  it('mints an si_ token for site and classifies it as alias', () => {
+    const token = mintComposite('site', 'k');
+    expect(token.startsWith('si_')).toBe(true);
+    const parsed = parseToken(token);
+    expect(parsed?.kind).toBe('alias');
+    expect(parsed?.entityType).toBe('site');
+  });
+
+  it('mints a dl_ token for documentLibrary (composite {siteId, driveId}) and classifies it as alias', () => {
+    const token = mintComposite('documentLibrary', canonicalKey('documentLibrary', { siteId: 'S', driveId: 'D' }));
+    expect(token.startsWith('dl_')).toBe(true);
+    const parsed = parseToken(token);
+    expect(parsed?.kind).toBe('alias');
+    expect(parsed?.entityType).toBe('documentLibrary');
+    expect(parsed?.graphId).toBeUndefined();
+  });
+
+  it('mints a li_ token for libraryDriveItem (composite {driveId, itemId}) and classifies it as alias', () => {
+    const token = mintComposite('libraryDriveItem', canonicalKey('libraryDriveItem', { driveId: 'D', itemId: 'I' }));
+    expect(token.startsWith('li_')).toBe(true);
+    const parsed = parseToken(token);
+    expect(parsed?.kind).toBe('alias');
+    expect(parsed?.entityType).toBe('libraryDriveItem');
+    expect(parsed?.graphId).toBeUndefined();
+  });
 });
 
 describe('ids/token — parse guards', () => {
