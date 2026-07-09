@@ -12,6 +12,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`list_my_planner_tasks`** — lists every Planner task assigned to the
   signed-in user across all plans (`GET /me/planner/tasks`). Each task carries
   its own `planId`, so no plan-by-plan enumeration is needed to find "my tasks".
+- **OneNote tools** — list_notebooks / list_note_sections / list_note_pages /
+  get_note_page / search_note_pages / create_note_page (Graph `/me/onenote`).
+  Durable `nb_`/`ns_`/`np_` tokens.
 
 ### Changed
 

@@ -6,8 +6,9 @@
 /**
  * Durable-ID tokens (U5 / D1). Two shapes:
  *
- * - **Self-encoding** (`em_`, `ev_`, `ct_`, `fd_`, `dr_`, `td_`): the token
- *   carries the immutable Graph ID directly — `<prefix>_<base64url(graphId)>`.
+ * - **Self-encoding** (`em_`, `ev_`, `ct_`, `fd_`, `dr_`, `td_`, `nb_`, `ns_`,
+ *   `np_`): the token carries the immutable Graph ID directly —
+ *   `<prefix>_<base64url(graphId)>`.
  *   Resolution is a decode with zero storage, so it survives a cold/lost
  *   `state.db` and resolves on any machine (the core cold-state fix).
  *
@@ -37,7 +38,10 @@ export type EntityType =
   | 'attachment'
   | 'channel'
   | 'chatMessage'
-  | 'checklistItem';
+  | 'checklistItem'
+  | 'noteNotebook'
+  | 'noteSection'
+  | 'notePage';
 
 /** How a token encodes its target. */
 export type TokenKind = 'self' | 'alias';
@@ -60,6 +64,9 @@ export const SELF_ENCODING_PREFIXES: Readonly<Record<string, EntityType>> = Obje
     fd: 'folder',
     dr: 'driveItem',
     td: 'task',
+    nb: 'noteNotebook',
+    ns: 'noteSection',
+    np: 'notePage',
   } satisfies Record<string, EntityType>,
 );
 
