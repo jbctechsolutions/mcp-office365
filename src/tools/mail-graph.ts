@@ -15,6 +15,7 @@ import type { GraphContentReaders } from '../graph/content-readers.js';
 import type { FolderRow, EmailRow } from '../database/repository.js';
 import { unixTimestampToLocalIso } from '../graph/mappers/utils.js';
 import { compileEmailSearch } from '../search/compiler.js';
+import { nextActionFor } from '../ids/next-action.js';
 import type { ToolResult } from '../registry/types.js';
 import type {
   ListFoldersToolParams,
@@ -146,14 +147,14 @@ export class GraphMailTools {
     const emails = params.unread_only
       ? await this.repository.listUnreadEmailsAsync(params.folder_id, params.limit, params.offset)
       : await this.repository.listEmailsAsync(params.folder_id, params.limit, params.offset);
-    return jsonResult({ emails: emails.map(transformEmailRow) });
+    return jsonResult({ emails: emails.map(transformEmailRow), next: nextActionFor('message') ?? undefined });
   }
 
   async searchEmails(params: SearchEmailsParams): Promise<ToolResult> {
     const emails = params.folder_id != null
       ? await this.repository.searchEmailsInFolderAsync(params.folder_id, params.query, params.limit)
       : await this.repository.searchEmailsAsync(params.query, params.limit);
-    return jsonResult({ emails: emails.map(transformEmailRow) });
+    return jsonResult({ emails: emails.map(transformEmailRow), next: nextActionFor('message') ?? undefined });
   }
 
   async getEmail(params: GetEmailParams): Promise<ToolResult> {

@@ -16,6 +16,7 @@ import type { TaskRow } from '../database/repository.js';
 import type { ApprovalTokenManager } from '../approval/index.js';
 import { hashTaskForApproval } from '../approval/index.js';
 import { unixTimestampToLocalIso } from '../graph/mappers/utils.js';
+import { nextActionFor } from '../ids/next-action.js';
 import type { ToolResult } from '../registry/types.js';
 import type {
   ListTasksParams,
@@ -73,12 +74,12 @@ export class GraphTasksTools {
     const tasks = params.include_completed
       ? await this.repository.listTasksAsync(params.limit, params.offset)
       : await this.repository.listIncompleteTasksAsync(params.limit, params.offset);
-    return jsonResult({ tasks: tasks.map(transformTaskRow) });
+    return jsonResult({ tasks: tasks.map(transformTaskRow), next: nextActionFor('task') ?? undefined });
   }
 
   async searchTasks(params: SearchTasksParams): Promise<ToolResult> {
     const tasks = await this.repository.searchTasksAsync(params.query, params.limit);
-    return jsonResult({ tasks: tasks.map(transformTaskRow) });
+    return jsonResult({ tasks: tasks.map(transformTaskRow), next: nextActionFor('task') ?? undefined });
   }
 
   async getTask(params: GetTaskParams): Promise<ToolResult> {
@@ -108,6 +109,7 @@ export class GraphTasksTools {
       title: params.title,
       task_list_id: params.task_list_id,
       status: 'created',
+      next: nextActionFor('task') ?? undefined,
     });
   }
 

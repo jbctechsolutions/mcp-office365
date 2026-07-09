@@ -12,6 +12,7 @@
 import { z } from 'zod';
 import { defineTool } from '../registry/define-tool.js';
 import { requireGraphToolset } from '../registry/context.js';
+import { Id } from '../ids/schema.js';
 import type { ToolDefinition } from '../registry/types.js';
 import type { GraphMailTools } from './mail-graph.js';
 
@@ -28,10 +29,11 @@ declare module '../registry/types.js' {
 // =============================================================================
 
 /**
- * Shared email/message id schema: a durable `em_` token (Graph, U5) or a legacy
- * positive-integer id (AppleScript, D4).
+ * Shared email/message id schema (U6): the canonical `em_` message-id schema.
+ * A raw Graph id is also accepted; a legacy numeric id is a validation error
+ * (numeric strings still route to resolveId → NUMERIC_ID_UNSUPPORTED).
  */
-const EmailIdSchema = z.union([z.string().min(1), z.number().int().positive()]);
+const EmailIdSchema = Id.message;
 
 export const ListFoldersInput = z.strictObject({});
 
@@ -47,7 +49,7 @@ export const ListFoldersToolInput = z.strictObject({
 });
 
 export const ListEmailsInput = z.strictObject({
-  folder_id: z.string().min(1).describe('The folder ID to list emails from'),
+  folder_id: Id.folder.describe('The folder to list emails from — a `fd_` token from list_folders.'),
   limit: z
     .number()
     .int()
@@ -61,11 +63,7 @@ export const ListEmailsInput = z.strictObject({
 
 export const SearchEmailsInput = z.strictObject({
   query: z.string().min(1).describe('Search query (searches subject, sender, and preview)'),
-  folder_id: z
-    .string()
-    .min(1)
-    .optional()
-    .describe('Optional folder ID to limit search to'),
+  folder_id: Id.folder.optional().describe('Optional folder to limit search to — a `fd_` token from list_folders.'),
   limit: z
     .number()
     .int()

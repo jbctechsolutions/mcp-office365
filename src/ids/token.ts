@@ -155,6 +155,19 @@ export function isKnownPrefix(prefix: string): boolean {
 }
 
 /**
+ * The 2-char token prefix for an entity type (e.g. `task` → `td`). Lets callers
+ * (canonical id schemas, next-action hints) name the token shape without
+ * duplicating the prefix tables. Throws for an entity with no allocated prefix.
+ */
+export function prefixForEntity(entityType: EntityType): string {
+  const prefix = ENTITY_TO_PREFIX[entityType];
+  if (prefix == null) {
+    throw new Error(`Entity type "${entityType}" has no allocated token prefix.`);
+  }
+  return prefix;
+}
+
+/**
  * Mints a self-encoding token carrying the immutable Graph ID (D1). Determin­istic.
  */
 export function mintSelfEncoded(entityType: EntityType, graphId: string): string {
