@@ -47,11 +47,6 @@ import * as path from 'path';
  * Cache for mapping numeric IDs back to Graph string IDs.
  */
 interface IdCache {
-  attachments: Map<number, { messageId: string; attachmentId: string }>;
-  rules: Map<number, string>;
-  contactFolders: Map<number, string>;
-  categories: Map<number, string>;
-  focusedOverrides: Map<number, string>;
   calendarGroups: Map<number, string>;
   calendarPermissions: Map<number, { calendarId: string; permissionId: string }>;
   plans: Map<number, { planId: string; etag: string }>;
@@ -77,11 +72,6 @@ export class GraphRepository implements IRepository {
   private readonly accountId: () => string;
   private readonly deltaLinks: Map<string, string> = new Map();
   private readonly idCache: IdCache = {
-    attachments: new Map(),
-    rules: new Map(),
-    contactFolders: new Map(),
-    categories: new Map(),
-    focusedOverrides: new Map(),
     calendarGroups: new Map(),
     calendarPermissions: new Map(),
     plans: new Map(),
@@ -549,38 +539,30 @@ export class GraphRepository implements IRepository {
   // Contact Folders
   // ===========================================================================
 
-  async listContactFoldersAsync(): Promise<Array<{ id: number; name: string; parentFolderId: string | null }>> {
+  async listContactFoldersAsync(): Promise<Array<{ id: string; name: string; parentFolderId: string | null }>> {
     const folders = await this.client.listContactFolders();
     return folders.map((folder) => {
       const graphId = folder.id!;
-      const numericId = hashStringToNumber(graphId);
-      this.idCache.contactFolders.set(numericId, graphId);
       return {
-        id: numericId,
+        id: this.mintAlias('contactFolder', graphId),
         name: folder.displayName ?? '',
         parentFolderId: folder.parentFolderId ?? null,
       };
     });
   }
 
-  async createContactFolderAsync(name: string): Promise<number> {
+  async createContactFolderAsync(name: string): Promise<string> {
     const created = await this.client.createContactFolder(name);
-    const graphId = created.id!;
-    const numericId = hashStringToNumber(graphId);
-    this.idCache.contactFolders.set(numericId, graphId);
-    return numericId;
+    return this.mintAlias('contactFolder', created.id!);
   }
 
-  async deleteContactFolderAsync(folderId: number): Promise<void> {
-    const graphId = this.idCache.contactFolders.get(folderId);
-    if (graphId == null) throw new Error(`Contact folder ID ${folderId} not found in cache. Try searching for or listing the item first to refresh the cache.`);
+  async deleteContactFolderAsync(folderId: string | number): Promise<void> {
+    const graphId = this.toGraphId(folderId, 'contactFolder');
     await this.client.deleteContactFolder(graphId);
-    this.idCache.contactFolders.delete(folderId);
   }
 
-  async listContactsInFolderAsync(folderId: number, limit: number = 100): Promise<ContactRow[]> {
-    const graphId = this.idCache.contactFolders.get(folderId);
-    if (graphId == null) throw new Error(`Contact folder ID ${folderId} not found in cache. Try searching for or listing the item first to refresh the cache.`);
+  async listContactsInFolderAsync(folderId: string | number, limit: number = 100): Promise<ContactRow[]> {
+    const graphId = this.toGraphId(folderId, 'contactFolder');
     const contacts = await this.client.listContactsInFolder(graphId, limit);
     return contacts.map(mapContactToContactRow);
   }
@@ -1156,14 +1138,13 @@ export class GraphRepository implements IRepository {
   /**
    * Lists attachments for a given email.
    *
-   * Resolves the id to its Graph id, calls client.listAttachments, hashes each
-   * attachment ID to a numeric key, and caches it in idCache.attachments with
-   * { messageId, attachmentId }.
+   * Resolves the id to its Graph id, calls client.listAttachments, and mints
+   * an `at_` composite alias token ({ messageId, attachmentId }) per item.
    *
    * @returns Array of attachment metadata objects.
    */
   async listAttachmentsAsync(emailId: string | number): Promise<Array<{
-    id: number;
+    id: string;
     name: string;
     size: number;
     contentType: string;
@@ -1175,13 +1156,8 @@ export class GraphRepository implements IRepository {
 
     return attachments.map((att) => {
       const attId = att.id ?? '';
-      const numericId = hashStringToNumber(attId);
-      this.idCache.attachments.set(numericId, {
-        messageId: graphMessageId,
-        attachmentId: attId,
-      });
       return {
-        id: numericId,
+        id: this.mintAliasComposite('attachment', { messageId: graphMessageId, attachmentId: attId }),
         name: att.name ?? '',
         size: att.size ?? 0,
         contentType: att.contentType ?? 'application/octet-stream',
@@ -1193,17 +1169,16 @@ export class GraphRepository implements IRepository {
   /**
    * Downloads an attachment for a given email.
    *
-   * Looks up { messageId, attachmentId } from idCache.attachments,
-   * then delegates to the downloadAttachment helper which fetches
-   * the content and writes it to disk.
+   * Resolves the `at_` composite token to { messageId, attachmentId }, then
+   * delegates to the downloadAttachment helper which fetches the content and
+   * writes it to disk.
    *
    * @returns Metadata about the downloaded file including its local path.
    */
   async downloadAttachmentAsync(
-    attachmentId: number,
+    attachmentId: string | number,
   ): Promise<{ filePath: string; name: string; size: number; contentType: string }> {
-    const cached = this.idCache.attachments.get(attachmentId);
-    if (cached == null) throw new Error(`Attachment ID ${attachmentId} not found in cache. Call list_attachments first.`);
+    const cached = this.toGraphParts(attachmentId, 'attachment', ['messageId', 'attachmentId']);
 
     return downloadAttachment(this.client, cached.messageId, cached.attachmentId);
   }
@@ -1657,14 +1632,12 @@ export class GraphRepository implements IRepository {
   /**
    * Lists all inbox mail rules.
    */
-  async listMailRulesAsync(): Promise<Array<{ id: number; displayName: string; sequence: number; isEnabled: boolean; conditions: unknown; actions: unknown }>> {
+  async listMailRulesAsync(): Promise<Array<{ id: string; displayName: string; sequence: number; isEnabled: boolean; conditions: unknown; actions: unknown }>> {
     const rules = await this.client.listMailRules();
     return rules.map((rule) => {
       const graphId = rule.id!;
-      const numericId = hashStringToNumber(graphId);
-      this.idCache.rules.set(numericId, graphId);
       return {
-        id: numericId,
+        id: this.mintAlias('mailRule', graphId),
         displayName: rule.displayName ?? '',
         sequence: rule.sequence ?? 0,
         isEnabled: rule.isEnabled ?? true,
@@ -1677,22 +1650,17 @@ export class GraphRepository implements IRepository {
   /**
    * Creates a new inbox mail rule.
    */
-  async createMailRuleAsync(rule: Record<string, unknown>): Promise<number> {
+  async createMailRuleAsync(rule: Record<string, unknown>): Promise<string> {
     const created = await this.client.createMailRule(rule);
-    const graphId = created.id!;
-    const numericId = hashStringToNumber(graphId);
-    this.idCache.rules.set(numericId, graphId);
-    return numericId;
+    return this.mintAlias('mailRule', created.id!);
   }
 
   /**
    * Deletes an inbox mail rule.
    */
-  async deleteMailRuleAsync(ruleId: number): Promise<void> {
-    const graphId = this.idCache.rules.get(ruleId);
-    if (graphId == null) throw new Error(`Rule ID ${ruleId} not found in cache. Try searching for or listing the item first to refresh the cache.`);
+  async deleteMailRuleAsync(ruleId: string | number): Promise<void> {
+    const graphId = this.toGraphId(ruleId, 'mailRule');
     await this.client.deleteMailRule(graphId);
-    this.idCache.rules.delete(ruleId);
   }
 
   // ===========================================================================
@@ -1792,14 +1760,12 @@ export class GraphRepository implements IRepository {
   /**
    * Lists all master categories.
    */
-  async listCategoriesAsync(): Promise<Array<{ id: number; name: string; color: string }>> {
+  async listCategoriesAsync(): Promise<Array<{ id: string; name: string; color: string }>> {
     const categories = await this.client.listMasterCategories();
     return categories.map((cat) => {
       const graphId = cat.id!;
-      const numericId = hashStringToNumber(graphId);
-      this.idCache.categories.set(numericId, graphId);
       return {
-        id: numericId,
+        id: this.mintAlias('category', graphId),
         name: cat.displayName ?? '',
         color: cat.color ?? 'none',
       };
@@ -1809,22 +1775,17 @@ export class GraphRepository implements IRepository {
   /**
    * Creates a new master category.
    */
-  async createCategoryAsync(name: string, color: string): Promise<number> {
+  async createCategoryAsync(name: string, color: string): Promise<string> {
     const created = await this.client.createMasterCategory(name, color);
-    const graphId = created.id!;
-    const numericId = hashStringToNumber(graphId);
-    this.idCache.categories.set(numericId, graphId);
-    return numericId;
+    return this.mintAlias('category', created.id!);
   }
 
   /**
    * Deletes a master category.
    */
-  async deleteCategoryAsync(categoryId: number): Promise<void> {
-    const graphId = this.idCache.categories.get(categoryId);
-    if (graphId == null) throw new Error(`Category ID ${categoryId} not found in cache. Try searching for or listing the item first to refresh the cache.`);
+  async deleteCategoryAsync(categoryId: string | number): Promise<void> {
+    const graphId = this.toGraphId(categoryId, 'category');
     await this.client.deleteMasterCategory(graphId);
-    this.idCache.categories.delete(categoryId);
   }
 
   // ===========================================================================
@@ -1834,14 +1795,12 @@ export class GraphRepository implements IRepository {
   /**
    * Lists all focused inbox overrides.
    */
-  async listFocusedOverridesAsync(): Promise<Array<{ id: number; senderAddress: string; classifyAs: string }>> {
+  async listFocusedOverridesAsync(): Promise<Array<{ id: string; senderAddress: string; classifyAs: string }>> {
     const overrides = await this.client.listFocusedOverrides();
     return overrides.map((o) => {
       const graphId = o.id!;
-      const numericId = hashStringToNumber(graphId);
-      this.idCache.focusedOverrides.set(numericId, graphId);
       return {
-        id: numericId,
+        id: this.mintAlias('focusedOverride', graphId),
         senderAddress: o.senderEmailAddress?.address ?? '',
         classifyAs: o.classifyAs ?? '',
       };
@@ -1851,22 +1810,17 @@ export class GraphRepository implements IRepository {
   /**
    * Creates a focused inbox override.
    */
-  async createFocusedOverrideAsync(senderAddress: string, classifyAs: 'focused' | 'other'): Promise<number> {
+  async createFocusedOverrideAsync(senderAddress: string, classifyAs: 'focused' | 'other'): Promise<string> {
     const created = await this.client.createFocusedOverride(senderAddress, classifyAs);
-    const graphId = created.id!;
-    const numericId = hashStringToNumber(graphId);
-    this.idCache.focusedOverrides.set(numericId, graphId);
-    return numericId;
+    return this.mintAlias('focusedOverride', created.id!);
   }
 
   /**
    * Deletes a focused inbox override.
    */
-  async deleteFocusedOverrideAsync(overrideId: number): Promise<void> {
-    const graphId = this.idCache.focusedOverrides.get(overrideId);
-    if (graphId == null) throw new Error(`Focused override ID ${overrideId} not found in cache. Try searching for or listing the item first to refresh the cache.`);
+  async deleteFocusedOverrideAsync(overrideId: string | number): Promise<void> {
+    const graphId = this.toGraphId(overrideId, 'focusedOverride');
     await this.client.deleteFocusedOverride(graphId);
-    this.idCache.focusedOverrides.delete(overrideId);
   }
 
   // ===========================================================================

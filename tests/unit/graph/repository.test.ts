@@ -1875,31 +1875,26 @@ describe('graph/repository', () => {
 
   describe('Attachment Operations (Async)', () => {
     describe('listAttachmentsAsync', () => {
-      it('lists attachments and caches them', async () => {
-        // Populate message cache first
-        mockClient.searchMessages.mockResolvedValue([
-          { id: 'msg-att-1', subject: 'With attachments' },
-        ]);
-        await repository.searchEmailsAsync('attachments', 50);
-
+      it('lists attachments with durable at_ tokens', async () => {
         mockClient.listAttachments.mockResolvedValue([
           { id: 'att-1', name: 'doc.pdf', size: 1024, contentType: 'application/pdf', isInline: false },
           { id: 'att-2', name: 'image.png', size: 2048, contentType: 'image/png', isInline: true },
         ]);
 
-        const result = await repository.listAttachmentsAsync(mintSelfEncoded('message', 'msg-att-1'));
+        const result = await repository.listAttachmentsAsync('msg-att-1');
 
         expect(mockClient.listAttachments).toHaveBeenCalledWith('msg-att-1');
         expect(result).toHaveLength(2);
-        expect(result[0]).toEqual({
-          id: hashStringToNumber('att-1'),
+        expect(result[0].id).toMatch(/^at_/);
+        expect(result[0]).toMatchObject({
           name: 'doc.pdf',
           size: 1024,
           contentType: 'application/pdf',
           isInline: false,
         });
-        expect(result[1]).toEqual({
-          id: hashStringToNumber('att-2'),
+        expect(result[1].id).toMatch(/^at_/);
+        expect(result[1].id).not.toBe(result[0].id);
+        expect(result[1]).toMatchObject({
           name: 'image.png',
           size: 2048,
           contentType: 'image/png',
@@ -1908,16 +1903,11 @@ describe('graph/repository', () => {
       });
 
       it('handles missing attachment fields with defaults', async () => {
-        mockClient.searchMessages.mockResolvedValue([
-          { id: 'msg-att-2', subject: 'Minimal' },
-        ]);
-        await repository.searchEmailsAsync('Minimal', 50);
-
         mockClient.listAttachments.mockResolvedValue([
           { id: null, name: null, size: null, contentType: null },
         ]);
 
-        const result = await repository.listAttachmentsAsync(mintSelfEncoded('message', 'msg-att-2'));
+        const result = await repository.listAttachmentsAsync('msg-att-2');
 
         expect(result).toHaveLength(1);
         expect(result[0].name).toBe('');
@@ -1926,7 +1916,7 @@ describe('graph/repository', () => {
         expect(result[0].isInline).toBe(false);
       });
 
-      it('throws if message not in cache', async () => {
+      it('rejects a legacy numeric email id', async () => {
         await expect(
           repository.listAttachmentsAsync(99999)
         ).rejects.toMatchObject({ code: 'NUMERIC_ID_UNSUPPORTED' });
@@ -1934,23 +1924,17 @@ describe('graph/repository', () => {
     });
 
     describe('downloadAttachmentAsync', () => {
-      it('delegates to downloadAttachment helper with cached IDs', async () => {
-        // Populate message cache
-        mockClient.searchMessages.mockResolvedValue([
-          { id: 'msg-dl', subject: 'Download test' },
-        ]);
-        await repository.searchEmailsAsync('Download test', 50);
-
-        // Populate attachment cache via listAttachmentsAsync
+      it('resolves the at_ token and delegates to downloadAttachment helper', async () => {
         mockClient.listAttachments.mockResolvedValue([
           { id: 'att-dl-1', name: 'file.zip', size: 5000, contentType: 'application/zip' },
         ]);
-        await repository.listAttachmentsAsync(mintSelfEncoded('message', 'msg-dl'));
+        const attachments = await repository.listAttachmentsAsync('msg-dl');
+        const tok = attachments[0].id;
 
         const mockResult = { filePath: '/tmp/file.zip', name: 'file.zip', size: 5000, contentType: 'application/zip' };
         vi.mocked(downloadAttachment).mockResolvedValue(mockResult);
 
-        const result = await repository.downloadAttachmentAsync(hashStringToNumber('att-dl-1'));
+        const result = await repository.downloadAttachmentAsync(tok);
 
         expect(downloadAttachment).toHaveBeenCalledWith(
           mockClient,
@@ -1960,10 +1944,12 @@ describe('graph/repository', () => {
         expect(result).toEqual(mockResult);
       });
 
-      it('throws if attachment not in cache', async () => {
-        await expect(
-          repository.downloadAttachmentAsync(99999)
-        ).rejects.toThrow('Attachment ID 99999 not found in cache. Call list_attachments first.');
+      it('rejects an unknown at_ token', async () => {
+        await expect(repository.downloadAttachmentAsync('at_bogus')).rejects.toThrow('Unknown or unresolvable');
+      });
+
+      it('rejects a legacy numeric id', async () => {
+        await expect(repository.downloadAttachmentAsync(99999)).rejects.toThrow('not supported');
       });
     });
   });
@@ -3029,7 +3015,7 @@ describe('graph/repository', () => {
 
   describe('Mail Rules', () => {
     describe('listMailRulesAsync', () => {
-      it('returns mapped rules and caches IDs', async () => {
+      it('returns mapped rules with durable mr_ tokens', async () => {
         mockClient.listMailRules.mockResolvedValue([
           { id: 'rule-1', displayName: 'Rule 1', sequence: 1, isEnabled: true, conditions: { subjectContains: ['test'] }, actions: { markAsRead: true } },
           { id: 'rule-2', displayName: 'Rule 2', sequence: 2, isEnabled: false, conditions: {}, actions: {} },
@@ -3038,59 +3024,64 @@ describe('graph/repository', () => {
         const result = await repository.listMailRulesAsync();
 
         expect(result).toHaveLength(2);
-        expect(result[0].id).toBe(hashStringToNumber('rule-1'));
+        expect(result[0].id).toMatch(/^mr_/);
         expect(result[0].displayName).toBe('Rule 1');
         expect(result[0].sequence).toBe(1);
         expect(result[0].isEnabled).toBe(true);
         expect(result[0].conditions).toEqual({ subjectContains: ['test'] });
         expect(result[0].actions).toEqual({ markAsRead: true });
-        expect(result[1].id).toBe(hashStringToNumber('rule-2'));
+        expect(result[1].id).toMatch(/^mr_/);
+        expect(result[1].id).not.toBe(result[0].id);
         expect(result[1].isEnabled).toBe(false);
       });
 
-      it('caches rule IDs for later retrieval', async () => {
+      it('mints an mr_ token resolvable for deletion', async () => {
         mockClient.listMailRules.mockResolvedValue([
           { id: 'rule-abc', displayName: 'Test' },
         ]);
 
-        await repository.listMailRulesAsync();
+        const result = await repository.listMailRulesAsync();
+        const tok = result[0].id;
 
-        // The ID should be cached (accessible via deleteMailRuleAsync)
         mockClient.deleteMailRule.mockResolvedValue(undefined);
-        await expect(repository.deleteMailRuleAsync(hashStringToNumber('rule-abc'))).resolves.toBeUndefined();
+        await expect(repository.deleteMailRuleAsync(tok)).resolves.toBeUndefined();
         expect(mockClient.deleteMailRule).toHaveBeenCalledWith('rule-abc');
       });
     });
 
     describe('createMailRuleAsync', () => {
-      it('creates a rule and caches the ID', async () => {
+      it('creates a rule and returns a resolvable mr_ token', async () => {
         mockClient.createMailRule.mockResolvedValue({ id: 'rule-new', displayName: 'New Rule' });
 
         const result = await repository.createMailRuleAsync({ displayName: 'New Rule', isEnabled: true });
 
-        expect(result).toBe(hashStringToNumber('rule-new'));
+        expect(result).toMatch(/^mr_/);
         expect(mockClient.createMailRule).toHaveBeenCalledWith({ displayName: 'New Rule', isEnabled: true });
+
+        mockClient.deleteMailRule.mockResolvedValue(undefined);
+        await repository.deleteMailRuleAsync(result);
+        expect(mockClient.deleteMailRule).toHaveBeenCalledWith('rule-new');
       });
     });
 
     describe('deleteMailRuleAsync', () => {
-      it('deletes a rule and removes from cache', async () => {
-        // First cache the rule
+      it('resolves the mr_ token and calls client.deleteMailRule', async () => {
         mockClient.listMailRules.mockResolvedValue([{ id: 'rule-del', displayName: 'To Delete' }]);
-        await repository.listMailRulesAsync();
+        const rules = await repository.listMailRulesAsync();
+        const tok = rules[0].id;
 
         mockClient.deleteMailRule.mockResolvedValue(undefined);
-        const numericId = hashStringToNumber('rule-del');
-        await repository.deleteMailRuleAsync(numericId);
+        await repository.deleteMailRuleAsync(tok);
 
         expect(mockClient.deleteMailRule).toHaveBeenCalledWith('rule-del');
-
-        // Should throw if we try to delete again (removed from cache)
-        await expect(repository.deleteMailRuleAsync(numericId)).rejects.toThrow('not found in cache');
       });
 
-      it('throws for unknown rule ID', async () => {
-        await expect(repository.deleteMailRuleAsync(999999)).rejects.toThrow('not found in cache');
+      it('rejects an unknown mr_ token', async () => {
+        await expect(repository.deleteMailRuleAsync('mr_bogus')).rejects.toThrow('Unknown or unresolvable');
+      });
+
+      it('rejects a legacy numeric id', async () => {
+        await expect(repository.deleteMailRuleAsync(999999)).rejects.toThrow('not supported');
       });
     });
   });
@@ -3101,7 +3092,7 @@ describe('graph/repository', () => {
 
   describe('Master Categories', () => {
     describe('listCategoriesAsync', () => {
-      it('returns mapped categories and caches IDs', async () => {
+      it('returns mapped categories with durable cg_ tokens', async () => {
         mockClient.listMasterCategories.mockResolvedValue([
           { id: 'cat-1', displayName: 'Red Category', color: 'preset0' },
           { id: 'cat-2', displayName: 'Blue Category', color: 'preset1' },
@@ -3110,57 +3101,62 @@ describe('graph/repository', () => {
         const result = await repository.listCategoriesAsync();
 
         expect(result).toHaveLength(2);
-        expect(result[0].id).toBe(hashStringToNumber('cat-1'));
+        expect(result[0].id).toMatch(/^cg_/);
         expect(result[0].name).toBe('Red Category');
         expect(result[0].color).toBe('preset0');
-        expect(result[1].id).toBe(hashStringToNumber('cat-2'));
+        expect(result[1].id).toMatch(/^cg_/);
+        expect(result[1].id).not.toBe(result[0].id);
         expect(result[1].name).toBe('Blue Category');
         expect(result[1].color).toBe('preset1');
       });
 
-      it('caches category IDs for later retrieval', async () => {
+      it('mints a cg_ token resolvable for deletion', async () => {
         mockClient.listMasterCategories.mockResolvedValue([
           { id: 'cat-abc', displayName: 'Test' },
         ]);
 
-        await repository.listCategoriesAsync();
+        const result = await repository.listCategoriesAsync();
+        const tok = result[0].id;
 
-        // The ID should be cached (accessible via deleteCategoryAsync)
         mockClient.deleteMasterCategory.mockResolvedValue(undefined);
-        await expect(repository.deleteCategoryAsync(hashStringToNumber('cat-abc'))).resolves.toBeUndefined();
+        await expect(repository.deleteCategoryAsync(tok)).resolves.toBeUndefined();
         expect(mockClient.deleteMasterCategory).toHaveBeenCalledWith('cat-abc');
       });
     });
 
     describe('createCategoryAsync', () => {
-      it('creates a category and caches the ID', async () => {
+      it('creates a category and returns a resolvable cg_ token', async () => {
         mockClient.createMasterCategory.mockResolvedValue({ id: 'cat-new', displayName: 'Work', color: 'preset1' });
 
         const result = await repository.createCategoryAsync('Work', 'preset1');
 
-        expect(result).toBe(hashStringToNumber('cat-new'));
+        expect(result).toMatch(/^cg_/);
         expect(mockClient.createMasterCategory).toHaveBeenCalledWith('Work', 'preset1');
+
+        mockClient.deleteMasterCategory.mockResolvedValue(undefined);
+        await repository.deleteCategoryAsync(result);
+        expect(mockClient.deleteMasterCategory).toHaveBeenCalledWith('cat-new');
       });
     });
 
     describe('deleteCategoryAsync', () => {
-      it('deletes a category and removes from cache', async () => {
-        // First cache the category
+      it('resolves the cg_ token and calls client.deleteMasterCategory', async () => {
         mockClient.listMasterCategories.mockResolvedValue([{ id: 'cat-del', displayName: 'To Delete' }]);
-        await repository.listCategoriesAsync();
+        const categories = await repository.listCategoriesAsync();
+        const tok = categories[0].id;
 
         mockClient.deleteMasterCategory.mockResolvedValue(undefined);
-        const numericId = hashStringToNumber('cat-del');
-        await repository.deleteCategoryAsync(numericId);
+        await repository.deleteCategoryAsync(tok);
 
         expect(mockClient.deleteMasterCategory).toHaveBeenCalledWith('cat-del');
-
-        // Should throw if we try to delete again (removed from cache)
-        await expect(repository.deleteCategoryAsync(numericId)).rejects.toThrow('not found in cache');
       });
 
-      it('throws for unknown category ID', async () => {
-        await expect(repository.deleteCategoryAsync(999999)).rejects.toThrow('not found in cache');
+      it('rejects an unknown cg_ token', async () => {
+        await expect(repository.deleteCategoryAsync('cg_bogus')).rejects.toThrow('Unknown or unresolvable');
+      });
+
+      it('rejects a legacy numeric id', async () => {
+        await expect(repository.deleteCategoryAsync(999999)).rejects.toThrow('not supported');
       });
     });
   });
@@ -3171,7 +3167,7 @@ describe('graph/repository', () => {
 
   describe('Focused Inbox Overrides', () => {
     describe('listFocusedOverridesAsync', () => {
-      it('returns mapped overrides and caches IDs', async () => {
+      it('returns mapped overrides with durable fo_ tokens', async () => {
         mockClient.listFocusedOverrides.mockResolvedValue([
           { id: 'ov-1', classifyAs: 'focused', senderEmailAddress: { address: 'a@b.com' } },
           { id: 'ov-2', classifyAs: 'other', senderEmailAddress: { address: 'c@d.com' } },
@@ -3180,29 +3176,31 @@ describe('graph/repository', () => {
         const result = await repository.listFocusedOverridesAsync();
 
         expect(result).toHaveLength(2);
-        expect(result[0].id).toBe(hashStringToNumber('ov-1'));
+        expect(result[0].id).toMatch(/^fo_/);
         expect(result[0].senderAddress).toBe('a@b.com');
         expect(result[0].classifyAs).toBe('focused');
-        expect(result[1].id).toBe(hashStringToNumber('ov-2'));
+        expect(result[1].id).toMatch(/^fo_/);
+        expect(result[1].id).not.toBe(result[0].id);
         expect(result[1].senderAddress).toBe('c@d.com');
         expect(result[1].classifyAs).toBe('other');
       });
 
-      it('caches override IDs for later retrieval', async () => {
+      it('mints an fo_ token resolvable for deletion', async () => {
         mockClient.listFocusedOverrides.mockResolvedValue([
           { id: 'ov-abc', classifyAs: 'focused', senderEmailAddress: { address: 'x@y.com' } },
         ]);
 
-        await repository.listFocusedOverridesAsync();
+        const result = await repository.listFocusedOverridesAsync();
+        const tok = result[0].id;
 
         mockClient.deleteFocusedOverride.mockResolvedValue(undefined);
-        await expect(repository.deleteFocusedOverrideAsync(hashStringToNumber('ov-abc'))).resolves.toBeUndefined();
+        await expect(repository.deleteFocusedOverrideAsync(tok)).resolves.toBeUndefined();
         expect(mockClient.deleteFocusedOverride).toHaveBeenCalledWith('ov-abc');
       });
     });
 
     describe('createFocusedOverrideAsync', () => {
-      it('creates an override and caches the ID', async () => {
+      it('creates an override and returns a resolvable fo_ token', async () => {
         mockClient.createFocusedOverride.mockResolvedValue({
           id: 'ov-new',
           classifyAs: 'focused',
@@ -3211,30 +3209,35 @@ describe('graph/repository', () => {
 
         const result = await repository.createFocusedOverrideAsync('a@b.com', 'focused');
 
-        expect(result).toBe(hashStringToNumber('ov-new'));
+        expect(result).toMatch(/^fo_/);
         expect(mockClient.createFocusedOverride).toHaveBeenCalledWith('a@b.com', 'focused');
+
+        mockClient.deleteFocusedOverride.mockResolvedValue(undefined);
+        await repository.deleteFocusedOverrideAsync(result);
+        expect(mockClient.deleteFocusedOverride).toHaveBeenCalledWith('ov-new');
       });
     });
 
     describe('deleteFocusedOverrideAsync', () => {
-      it('deletes an override and removes from cache', async () => {
+      it('resolves the fo_ token and calls client.deleteFocusedOverride', async () => {
         mockClient.listFocusedOverrides.mockResolvedValue([
           { id: 'ov-del', classifyAs: 'other', senderEmailAddress: { address: 'x@y.com' } },
         ]);
-        await repository.listFocusedOverridesAsync();
+        const overrides = await repository.listFocusedOverridesAsync();
+        const tok = overrides[0].id;
 
         mockClient.deleteFocusedOverride.mockResolvedValue(undefined);
-        const numericId = hashStringToNumber('ov-del');
-        await repository.deleteFocusedOverrideAsync(numericId);
+        await repository.deleteFocusedOverrideAsync(tok);
 
         expect(mockClient.deleteFocusedOverride).toHaveBeenCalledWith('ov-del');
-
-        // Should throw if we try to delete again (removed from cache)
-        await expect(repository.deleteFocusedOverrideAsync(numericId)).rejects.toThrow('not found in cache');
       });
 
-      it('throws for unknown override ID', async () => {
-        await expect(repository.deleteFocusedOverrideAsync(999999)).rejects.toThrow('not found in cache');
+      it('rejects an unknown fo_ token', async () => {
+        await expect(repository.deleteFocusedOverrideAsync('fo_bogus')).rejects.toThrow('Unknown or unresolvable');
+      });
+
+      it('rejects a legacy numeric id', async () => {
+        await expect(repository.deleteFocusedOverrideAsync(999999)).rejects.toThrow('not supported');
       });
     });
   });
@@ -3245,7 +3248,7 @@ describe('graph/repository', () => {
 
   describe('Contact Folders', () => {
     describe('listContactFoldersAsync', () => {
-      it('returns mapped folders and caches IDs', async () => {
+      it('returns mapped folders with durable cf_ tokens', async () => {
         mockClient.listContactFolders.mockResolvedValue([
           { id: 'cf-1', displayName: 'Work', parentFolderId: 'root-1' },
           { id: 'cf-2', displayName: 'Personal', parentFolderId: null },
@@ -3254,60 +3257,64 @@ describe('graph/repository', () => {
         const result = await repository.listContactFoldersAsync();
 
         expect(result).toHaveLength(2);
-        expect(result[0].id).toBe(hashStringToNumber('cf-1'));
+        expect(result[0].id).toMatch(/^cf_/);
         expect(result[0].name).toBe('Work');
         expect(result[0].parentFolderId).toBe('root-1');
-        expect(result[1].id).toBe(hashStringToNumber('cf-2'));
+        expect(result[1].id).toMatch(/^cf_/);
+        expect(result[1].id).not.toBe(result[0].id);
         expect(result[1].name).toBe('Personal');
         expect(result[1].parentFolderId).toBeNull();
       });
     });
 
     describe('createContactFolderAsync', () => {
-      it('creates a folder and caches the ID', async () => {
+      it('creates a folder and returns a resolvable cf_ token', async () => {
         mockClient.createContactFolder.mockResolvedValue({ id: 'cf-new', displayName: 'Friends' });
 
         const result = await repository.createContactFolderAsync('Friends');
 
-        expect(result).toBe(hashStringToNumber('cf-new'));
+        expect(result).toMatch(/^cf_/);
         expect(mockClient.createContactFolder).toHaveBeenCalledWith('Friends');
+
+        mockClient.deleteContactFolder.mockResolvedValue(undefined);
+        await repository.deleteContactFolderAsync(result);
+        expect(mockClient.deleteContactFolder).toHaveBeenCalledWith('cf-new');
       });
     });
 
     describe('deleteContactFolderAsync', () => {
-      it('deletes a folder and removes from cache', async () => {
-        // First cache the folder
+      it('resolves the cf_ token and calls client.deleteContactFolder', async () => {
         mockClient.listContactFolders.mockResolvedValue([{ id: 'cf-del', displayName: 'To Delete' }]);
-        await repository.listContactFoldersAsync();
+        const folders = await repository.listContactFoldersAsync();
+        const tok = folders[0].id;
 
         mockClient.deleteContactFolder.mockResolvedValue(undefined);
-        const numericId = hashStringToNumber('cf-del');
-        await repository.deleteContactFolderAsync(numericId);
+        await repository.deleteContactFolderAsync(tok);
 
         expect(mockClient.deleteContactFolder).toHaveBeenCalledWith('cf-del');
-
-        // Should throw if we try to delete again (removed from cache)
-        await expect(repository.deleteContactFolderAsync(numericId)).rejects.toThrow('not found in cache');
       });
 
-      it('throws for unknown folder ID', async () => {
-        await expect(repository.deleteContactFolderAsync(999999)).rejects.toThrow('not found in cache');
+      it('rejects an unknown cf_ token', async () => {
+        await expect(repository.deleteContactFolderAsync('cf_bogus')).rejects.toThrow('Unknown or unresolvable');
+      });
+
+      it('rejects a legacy numeric id', async () => {
+        await expect(repository.deleteContactFolderAsync(999999)).rejects.toThrow('not supported');
       });
     });
 
     describe('listContactsInFolderAsync', () => {
-      it('returns contacts and caches contact IDs', async () => {
-        // First cache the folder
+      it('resolves the cf_ token and lists contacts in the folder', async () => {
         mockClient.listContactFolders.mockResolvedValue([{ id: 'cf-1', displayName: 'Work' }]);
-        await repository.listContactFoldersAsync();
+        const folders = await repository.listContactFoldersAsync();
+        const tok = folders[0].id;
 
         mockClient.listContactsInFolder.mockResolvedValue([
           { id: 'c-1', displayName: 'Alice', givenName: 'Alice', surname: 'Smith', emailAddresses: [], businessPhones: [] },
           { id: 'c-2', displayName: 'Bob', givenName: 'Bob', surname: 'Jones', emailAddresses: [], businessPhones: [] },
         ]);
 
-        const numericFolderId = hashStringToNumber('cf-1');
-        const result = await repository.listContactsInFolderAsync(numericFolderId, 50);
+        const result = await repository.listContactsInFolderAsync(tok, 50);
 
         expect(result).toHaveLength(2);
         expect(result[0].displayName).toBe('Alice');
@@ -3315,8 +3322,12 @@ describe('graph/repository', () => {
         expect(mockClient.listContactsInFolder).toHaveBeenCalledWith('cf-1', 50);
       });
 
-      it('throws for unknown folder ID', async () => {
-        await expect(repository.listContactsInFolderAsync(999999)).rejects.toThrow('not found in cache');
+      it('rejects an unknown cf_ token', async () => {
+        await expect(repository.listContactsInFolderAsync('cf_bogus')).rejects.toThrow('Unknown or unresolvable');
+      });
+
+      it('rejects a legacy numeric id', async () => {
+        await expect(repository.listContactsInFolderAsync(999999)).rejects.toThrow('not supported');
       });
     });
   });

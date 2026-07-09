@@ -209,7 +209,7 @@ export class GraphMailTools {
   }
 
   async downloadAttachment(params: DownloadAttachmentParams): Promise<ToolResult> {
-    const result = await this.repository.downloadAttachmentAsync(params.attachment_index);
+    const result = await this.repository.downloadAttachmentAsync(params.attachment_id);
     return jsonResult(result);
   }
 

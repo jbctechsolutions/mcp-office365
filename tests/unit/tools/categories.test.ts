@@ -29,8 +29,8 @@ describe('CategoriesTools', () => {
   describe('listCategories', () => {
     it('returns categories from the repository', async () => {
       const mockCategories = [
-        { id: 1, name: 'Red Category', color: 'preset0' },
-        { id: 2, name: 'Blue Category', color: 'preset1' },
+        { id: 'cg_1', name: 'Red Category', color: 'preset0' },
+        { id: 'cg_2', name: 'Blue Category', color: 'preset1' },
       ];
       vi.mocked(repo.listCategoriesAsync).mockResolvedValue(mockCategories);
 
@@ -44,27 +44,27 @@ describe('CategoriesTools', () => {
 
   describe('createCategory', () => {
     it('creates a category and returns the ID', async () => {
-      vi.mocked(repo.createCategoryAsync).mockResolvedValue(42);
+      vi.mocked(repo.createCategoryAsync).mockResolvedValue('cg_42');
 
       const result = await tools.createCategory({ name: 'Work', color: 'preset1' });
 
       expect(repo.createCategoryAsync).toHaveBeenCalledWith('Work', 'preset1');
       const parsed = JSON.parse(result.content[0].text);
       expect(parsed.success).toBe(true);
-      expect(parsed.category_id).toBe(42);
+      expect(parsed.category_id).toBe('cg_42');
       expect(parsed.message).toBe('Category created');
     });
   });
 
   describe('prepareDeleteCategory', () => {
     it('generates an approval token', () => {
-      const result = tools.prepareDeleteCategory({ category_id: 42 });
+      const result = tools.prepareDeleteCategory({ category_id: 'cg_42' });
 
       const parsed = JSON.parse(result.content[0].text);
       expect(parsed.approval_token).toBeDefined();
       expect(typeof parsed.approval_token).toBe('string');
       expect(parsed.expires_at).toBeDefined();
-      expect(parsed.category_id).toBe(42);
+      expect(parsed.category_id).toBe('cg_42');
       expect(parsed.action).toContain('confirm_delete_category');
     });
   });
@@ -74,7 +74,7 @@ describe('CategoriesTools', () => {
       vi.mocked(repo.deleteCategoryAsync).mockResolvedValue(undefined);
 
       // Generate a token first
-      const prepareResult = tools.prepareDeleteCategory({ category_id: 42 });
+      const prepareResult = tools.prepareDeleteCategory({ category_id: 'cg_42' });
       const { approval_token } = JSON.parse(prepareResult.content[0].text);
 
       const result = await tools.confirmDeleteCategory({ approval_token });
@@ -82,7 +82,7 @@ describe('CategoriesTools', () => {
       const parsed = JSON.parse(result.content[0].text);
       expect(parsed.success).toBe(true);
       expect(parsed.message).toBe('Category deleted');
-      expect(repo.deleteCategoryAsync).toHaveBeenCalledWith(42);
+      expect(repo.deleteCategoryAsync).toHaveBeenCalledWith('cg_42');
     });
 
     it('returns error for invalid token', async () => {
@@ -99,7 +99,7 @@ describe('CategoriesTools', () => {
     it('returns error for already consumed token', async () => {
       vi.mocked(repo.deleteCategoryAsync).mockResolvedValue(undefined);
 
-      const prepareResult = tools.prepareDeleteCategory({ category_id: 42 });
+      const prepareResult = tools.prepareDeleteCategory({ category_id: 'cg_42' });
       const { approval_token } = JSON.parse(prepareResult.content[0].text);
 
       // Consume the token
