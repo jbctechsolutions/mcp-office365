@@ -313,26 +313,36 @@ describe('graph/repository', () => {
     });
 
     describe('getEmailAsync', () => {
-      it('returns email by numeric ID', async () => {
-        // First populate the message cache
-        mockClient.searchMessages.mockResolvedValue([
-          { id: 'msg-1', subject: 'Test' },
-        ]);
-        await repository.searchEmailsAsync('test', 50);
-
+      it('resolves an em_ token to the Graph id — no prior list/cache needed (cold state)', async () => {
         mockClient.getMessage.mockResolvedValue({
           id: 'msg-1',
           subject: 'Test Email',
           body: { content: 'Body content' },
         });
 
-        const result = await repository.getEmailAsync(hashStringToNumber('msg-1'));
+        const result = await repository.getEmailAsync(mintSelfEncoded('message', 'msg-1'));
 
+        expect(mockClient.getMessage).toHaveBeenCalledWith('msg-1');
         expect(result?.subject).toBe('Test Email');
       });
 
-      it('returns undefined when message ID not in cache', async () => {
-        const result = await repository.getEmailAsync(99999);
+      it('rejects a legacy numeric id on the Graph backend (NUMERIC_ID_UNSUPPORTED, D4)', async () => {
+        await expect(repository.getEmailAsync(99999)).rejects.toMatchObject({
+          code: 'NUMERIC_ID_UNSUPPORTED',
+        });
+      });
+
+      it('rejects a token for a different entity kind (ID_ENTITY_MISMATCH)', async () => {
+        await expect(
+          repository.getEmailAsync(mintSelfEncoded('contact', 'contact-1'))
+        ).rejects.toMatchObject({ code: 'ID_ENTITY_MISMATCH' });
+        expect(mockClient.getMessage).not.toHaveBeenCalled();
+      });
+
+      it('returns undefined when the message is not found', async () => {
+        mockClient.getMessage.mockResolvedValue(null);
+
+        const result = await repository.getEmailAsync(mintSelfEncoded('message', 'msg-1'));
         expect(result).toBeUndefined();
       });
     });
@@ -519,47 +529,34 @@ describe('graph/repository', () => {
   describe('Conversation / Thread', () => {
     describe('listConversationAsync', () => {
       it('lists messages in a conversation thread', async () => {
-        // First populate cache with a message that has a conversationId
-        mockClient.searchMessages.mockResolvedValue([
-          { id: 'msg-1', subject: 'Thread start', conversationId: 'conv-abc-123' },
-        ]);
-        await repository.searchEmailsAsync('Thread', 50);
-
-        // Mock getMessage for getEmailAsync lookup
+        // Resolve the em_ token → getMessage reads the raw conversationId → query.
         mockClient.getMessage.mockResolvedValue({
           id: 'msg-1', subject: 'Thread start', conversationId: 'conv-abc-123',
         });
 
-        // Mock the conversation query
         mockClient.listConversationMessages.mockResolvedValue([
           { id: 'msg-1', subject: 'Thread start', conversationId: 'conv-abc-123' },
           { id: 'msg-2', subject: 'Re: Thread start', conversationId: 'conv-abc-123' },
         ]);
 
-        const result = await repository.listConversationAsync(hashStringToNumber('msg-1'), 25);
+        const result = await repository.listConversationAsync(mintSelfEncoded('message', 'msg-1'), 25);
+        expect(mockClient.getMessage).toHaveBeenCalledWith('msg-1');
         expect(result).toHaveLength(2);
         expect(mockClient.listConversationMessages).toHaveBeenCalledWith('conv-abc-123', 25);
       });
 
       it('throws when message not found', async () => {
         mockClient.getMessage.mockResolvedValue(null);
-        mockClient.listMailFolders.mockResolvedValue([]);
-        await expect(repository.listConversationAsync(99999, 25))
-          .rejects.toThrow();
+        await expect(repository.listConversationAsync(mintSelfEncoded('message', 'missing'), 25))
+          .rejects.toThrow('Message not found');
       });
 
       it('throws when message has no conversation ID', async () => {
-        // Populate cache with a message that has no conversationId
-        mockClient.searchMessages.mockResolvedValue([
-          { id: 'msg-no-conv', subject: 'No conv' },
-        ]);
-        await repository.searchEmailsAsync('No conv', 50);
-
         mockClient.getMessage.mockResolvedValue({
           id: 'msg-no-conv', subject: 'No conv', conversationId: undefined,
         });
 
-        await expect(repository.listConversationAsync(hashStringToNumber('msg-no-conv'), 25))
+        await expect(repository.listConversationAsync(mintSelfEncoded('message', 'msg-no-conv'), 25))
           .rejects.toThrow('no conversation ID');
       });
     });
@@ -636,7 +633,7 @@ describe('graph/repository', () => {
         expect(result.emails[0].subject).toBe('Active');
       });
 
-      it('caches message IDs and conversation IDs', async () => {
+      it('emits durable em_ tokens for returned messages (no cache)', async () => {
         mockClient.listMailFolders.mockResolvedValue([{ id: 'folder-cache', displayName: 'Inbox' }]);
         await repository.listFoldersAsync();
 
@@ -648,12 +645,9 @@ describe('graph/repository', () => {
         });
 
         const folderId = hashStringToNumber('folder-cache');
-        await repository.checkNewEmailsAsync(folderId);
+        const result = await repository.checkNewEmailsAsync(folderId);
 
-        const msgGraphId = repository.getGraphId('message', hashStringToNumber('msg-cache-1'));
-        expect(msgGraphId).toBe('msg-cache-1');
-        const convGraphId = (repository as any).idCache.conversations.get(hashStringToNumber('conv-cache-1'));
-        expect(convGraphId).toBe('conv-cache-1');
+        expect(result.emails[0].id).toBe(mintSelfEncoded('message', 'msg-cache-1'));
       });
     });
   });
@@ -1136,7 +1130,7 @@ describe('graph/repository', () => {
         mockClient.moveMessage.mockResolvedValue(undefined);
 
         await repository.moveEmailAsync(
-          hashStringToNumber('msg-1'),
+          mintSelfEncoded('message', 'msg-1'),
           hashStringToNumber('folder-dest')
         );
 
@@ -1144,9 +1138,7 @@ describe('graph/repository', () => {
       });
 
       it('throws when message ID not in cache', async () => {
-        await expect(repository.moveEmailAsync(99999, 88888)).rejects.toThrow(
-          'Message ID 99999 not found in cache. Try searching for or listing the item first to refresh the cache.'
-        );
+        await expect(repository.moveEmailAsync(99999, 88888)).rejects.toMatchObject({ code: 'NUMERIC_ID_UNSUPPORTED' });
       });
 
       it('throws when folder ID not in cache', async () => {
@@ -1157,7 +1149,7 @@ describe('graph/repository', () => {
         await repository.searchEmailsAsync('Test', 50);
 
         await expect(
-          repository.moveEmailAsync(hashStringToNumber('msg-1'), 99999)
+          repository.moveEmailAsync(mintSelfEncoded('message', 'msg-1'), 99999)
         ).rejects.toThrow('Folder ID 99999 not found in cache. Try searching for or listing the item first to refresh the cache.');
       });
     });
@@ -1171,15 +1163,13 @@ describe('graph/repository', () => {
 
         mockClient.deleteMessage.mockResolvedValue(undefined);
 
-        await repository.deleteEmailAsync(hashStringToNumber('msg-1'));
+        await repository.deleteEmailAsync(mintSelfEncoded('message', 'msg-1'));
 
         expect(mockClient.deleteMessage).toHaveBeenCalledWith('msg-1');
       });
 
       it('throws when message ID not in cache', async () => {
-        await expect(repository.deleteEmailAsync(99999)).rejects.toThrow(
-          'Message ID 99999 not found in cache. Try searching for or listing the item first to refresh the cache.'
-        );
+        await expect(repository.deleteEmailAsync(99999)).rejects.toMatchObject({ code: 'NUMERIC_ID_UNSUPPORTED' });
       });
     });
 
@@ -1229,11 +1219,7 @@ describe('graph/repository', () => {
           bccRecipients: [{ emailAddress: { address: 'charlie@example.com' } }],
         });
 
-        expect(result).toEqual({ numericId: hashStringToNumber('draft-1'), graphId: 'draft-1' });
-
-        // Verify cached
-        const graphId = repository.getGraphId('message', result.numericId);
-        expect(graphId).toBe('draft-1');
+        expect(result).toEqual({ token: mintSelfEncoded('message', 'draft-1'), graphId: 'draft-1' });
       });
 
       it('creates a draft with no optional recipients', async () => {
@@ -1257,7 +1243,7 @@ describe('graph/repository', () => {
           bccRecipients: [],
         });
 
-        expect(result).toEqual({ numericId: hashStringToNumber('draft-2'), graphId: 'draft-2' });
+        expect(result).toEqual({ token: mintSelfEncoded('message', 'draft-2'), graphId: 'draft-2' });
       });
     });
 
@@ -1274,7 +1260,7 @@ describe('graph/repository', () => {
           subject: 'New Subject',
         });
 
-        await repository.updateDraftAsync(hashStringToNumber('draft-1'), {
+        await repository.updateDraftAsync(mintSelfEncoded('message', 'draft-1'), {
           subject: 'New Subject',
         });
 
@@ -1286,7 +1272,7 @@ describe('graph/repository', () => {
       it('throws when draft ID not in cache', async () => {
         await expect(
           repository.updateDraftAsync(99999, { subject: 'New' })
-        ).rejects.toThrow('Message ID 99999 not found in cache. Try searching for or listing the item first to refresh the cache.');
+        ).rejects.toMatchObject({ code: 'NUMERIC_ID_UNSUPPORTED' });
       });
     });
 
@@ -1305,15 +1291,14 @@ describe('graph/repository', () => {
         expect(mockClient.listMessages).toHaveBeenCalledWith('drafts', 50, 0);
       });
 
-      it('caches draft message IDs', async () => {
+      it('emits durable em_ tokens for draft rows (no cache)', async () => {
         mockClient.listMessages.mockResolvedValue([
           { id: 'draft-1', subject: 'Draft 1' },
         ]);
 
-        await repository.listDraftsAsync(50, 0);
+        const result = await repository.listDraftsAsync(50, 0);
 
-        const graphId = repository.getGraphId('message', hashStringToNumber('draft-1'));
-        expect(graphId).toBe('draft-1');
+        expect(result[0].id).toBe(mintSelfEncoded('message', 'draft-1'));
       });
     });
 
@@ -1327,15 +1312,13 @@ describe('graph/repository', () => {
 
         mockClient.sendDraft.mockResolvedValue(undefined);
 
-        await repository.sendDraftAsync(hashStringToNumber('draft-1'));
+        await repository.sendDraftAsync(mintSelfEncoded('message', 'draft-1'));
 
         expect(mockClient.sendDraft).toHaveBeenCalledWith('draft-1');
       });
 
       it('throws when draft ID not in cache', async () => {
-        await expect(repository.sendDraftAsync(99999)).rejects.toThrow(
-          'Message ID 99999 not found in cache. Try searching for or listing the item first to refresh the cache.'
-        );
+        await expect(repository.sendDraftAsync(99999)).rejects.toMatchObject({ code: 'NUMERIC_ID_UNSUPPORTED' });
       });
     });
 
@@ -1395,7 +1378,7 @@ describe('graph/repository', () => {
         mockClient.replyMessage.mockResolvedValue(undefined);
 
         await repository.replyMessageAsync(
-          hashStringToNumber('msg-1'),
+          mintSelfEncoded('message', 'msg-1'),
           'Thanks for the info!',
           false
         );
@@ -1416,7 +1399,7 @@ describe('graph/repository', () => {
         mockClient.replyMessage.mockResolvedValue(undefined);
 
         await repository.replyMessageAsync(
-          hashStringToNumber('msg-1'),
+          mintSelfEncoded('message', 'msg-1'),
           'Sounds good!',
           true
         );
@@ -1431,7 +1414,7 @@ describe('graph/repository', () => {
       it('throws when message ID not in cache', async () => {
         await expect(
           repository.replyMessageAsync(99999, 'Hello', false)
-        ).rejects.toThrow('Message ID 99999 not found in cache. Try searching for or listing the item first to refresh the cache.');
+        ).rejects.toMatchObject({ code: 'NUMERIC_ID_UNSUPPORTED' });
       });
     });
 
@@ -1446,7 +1429,7 @@ describe('graph/repository', () => {
         mockClient.forwardMessage.mockResolvedValue(undefined);
 
         await repository.forwardMessageAsync(
-          hashStringToNumber('msg-1'),
+          mintSelfEncoded('message', 'msg-1'),
           ['recipient@example.com', 'other@example.com'],
           'Please review'
         );
@@ -1470,7 +1453,7 @@ describe('graph/repository', () => {
         mockClient.forwardMessage.mockResolvedValue(undefined);
 
         await repository.forwardMessageAsync(
-          hashStringToNumber('msg-1'),
+          mintSelfEncoded('message', 'msg-1'),
           ['recipient@example.com']
         );
 
@@ -1484,7 +1467,7 @@ describe('graph/repository', () => {
       it('throws when message ID not in cache', async () => {
         await expect(
           repository.forwardMessageAsync(99999, ['a@b.com'])
-        ).rejects.toThrow('Message ID 99999 not found in cache. Try searching for or listing the item first to refresh the cache.');
+        ).rejects.toMatchObject({ code: 'NUMERIC_ID_UNSUPPORTED' });
       });
     });
   });
@@ -1540,7 +1523,7 @@ describe('graph/repository', () => {
         await repository.searchEmailsAsync('Archive me', 50);
 
         mockClient.archiveMessage.mockResolvedValue(undefined);
-        await repository.archiveEmailAsync(hashStringToNumber('msg-arch'));
+        await repository.archiveEmailAsync(mintSelfEncoded('message', 'msg-arch'));
 
         expect(mockClient.archiveMessage).toHaveBeenCalledWith('msg-arch');
       });
@@ -1548,7 +1531,7 @@ describe('graph/repository', () => {
       it('throws if message not in cache', async () => {
         await expect(
           repository.archiveEmailAsync(99999)
-        ).rejects.toThrow('Message ID 99999 not found in cache. Try searching for or listing the item first to refresh the cache.');
+        ).rejects.toMatchObject({ code: 'NUMERIC_ID_UNSUPPORTED' });
       });
     });
 
@@ -1560,7 +1543,7 @@ describe('graph/repository', () => {
         await repository.searchEmailsAsync('Spam', 50);
 
         mockClient.junkMessage.mockResolvedValue(undefined);
-        await repository.junkEmailAsync(hashStringToNumber('msg-junk'));
+        await repository.junkEmailAsync(mintSelfEncoded('message', 'msg-junk'));
 
         expect(mockClient.junkMessage).toHaveBeenCalledWith('msg-junk');
       });
@@ -1568,7 +1551,7 @@ describe('graph/repository', () => {
       it('throws if message not in cache', async () => {
         await expect(
           repository.junkEmailAsync(99999)
-        ).rejects.toThrow('Message ID 99999 not found in cache. Try searching for or listing the item first to refresh the cache.');
+        ).rejects.toMatchObject({ code: 'NUMERIC_ID_UNSUPPORTED' });
       });
     });
 
@@ -1580,7 +1563,7 @@ describe('graph/repository', () => {
         await repository.searchEmailsAsync('Read me', 50);
 
         mockClient.updateMessage.mockResolvedValue(undefined);
-        await repository.markEmailReadAsync(hashStringToNumber('msg-read'), true);
+        await repository.markEmailReadAsync(mintSelfEncoded('message', 'msg-read'), true);
 
         expect(mockClient.updateMessage).toHaveBeenCalledWith('msg-read', { isRead: true });
       });
@@ -1588,7 +1571,7 @@ describe('graph/repository', () => {
       it('throws if message not in cache', async () => {
         await expect(
           repository.markEmailReadAsync(99999, false)
-        ).rejects.toThrow('Message ID 99999 not found in cache. Try searching for or listing the item first to refresh the cache.');
+        ).rejects.toMatchObject({ code: 'NUMERIC_ID_UNSUPPORTED' });
       });
     });
 
@@ -1600,7 +1583,7 @@ describe('graph/repository', () => {
         await repository.searchEmailsAsync('Flag me', 50);
 
         mockClient.updateMessage.mockResolvedValue(undefined);
-        await repository.setEmailFlagAsync(hashStringToNumber('msg-flag'), 0);
+        await repository.setEmailFlagAsync(mintSelfEncoded('message', 'msg-flag'), 0);
 
         expect(mockClient.updateMessage).toHaveBeenCalledWith('msg-flag', {
           flag: { flagStatus: 'notFlagged' },
@@ -1614,7 +1597,7 @@ describe('graph/repository', () => {
         await repository.searchEmailsAsync('Flag 1', 50);
 
         mockClient.updateMessage.mockResolvedValue(undefined);
-        await repository.setEmailFlagAsync(hashStringToNumber('msg-flag1'), 1);
+        await repository.setEmailFlagAsync(mintSelfEncoded('message', 'msg-flag1'), 1);
 
         expect(mockClient.updateMessage).toHaveBeenCalledWith('msg-flag1', {
           flag: { flagStatus: 'flagged' },
@@ -1628,7 +1611,7 @@ describe('graph/repository', () => {
         await repository.searchEmailsAsync('Flag 2', 50);
 
         mockClient.updateMessage.mockResolvedValue(undefined);
-        await repository.setEmailFlagAsync(hashStringToNumber('msg-flag2'), 2);
+        await repository.setEmailFlagAsync(mintSelfEncoded('message', 'msg-flag2'), 2);
 
         expect(mockClient.updateMessage).toHaveBeenCalledWith('msg-flag2', {
           flag: { flagStatus: 'complete' },
@@ -1638,7 +1621,7 @@ describe('graph/repository', () => {
       it('throws if message not in cache', async () => {
         await expect(
           repository.setEmailFlagAsync(99999, 0)
-        ).rejects.toThrow('Message ID 99999 not found in cache. Try searching for or listing the item first to refresh the cache.');
+        ).rejects.toMatchObject({ code: 'NUMERIC_ID_UNSUPPORTED' });
       });
     });
 
@@ -1651,7 +1634,7 @@ describe('graph/repository', () => {
 
         mockClient.updateMessage.mockResolvedValue(undefined);
         await repository.setEmailCategoriesAsync(
-          hashStringToNumber('msg-cat'),
+          mintSelfEncoded('message', 'msg-cat'),
           ['Important', 'Work']
         );
 
@@ -1663,7 +1646,7 @@ describe('graph/repository', () => {
       it('throws if message not in cache', async () => {
         await expect(
           repository.setEmailCategoriesAsync(99999, ['cat'])
-        ).rejects.toThrow('Message ID 99999 not found in cache. Try searching for or listing the item first to refresh the cache.');
+        ).rejects.toMatchObject({ code: 'NUMERIC_ID_UNSUPPORTED' });
       });
     });
 
@@ -1673,13 +1656,13 @@ describe('graph/repository', () => {
         await repository.searchEmailsAsync('Test', 50);
         mockClient.updateMessage.mockResolvedValue(undefined);
 
-        await repository.setEmailImportanceAsync(hashStringToNumber('msg-imp'), 'high');
+        await repository.setEmailImportanceAsync(mintSelfEncoded('message', 'msg-imp'), 'high');
         expect(mockClient.updateMessage).toHaveBeenCalledWith('msg-imp', { importance: 'high' });
       });
 
       it('throws when email not in cache', async () => {
         await expect(repository.setEmailImportanceAsync(99999, 'high'))
-          .rejects.toThrow('Message ID 99999 not found in cache');
+          .rejects.toMatchObject({ code: 'NUMERIC_ID_UNSUPPORTED' });
       });
     });
   });
@@ -1849,12 +1832,11 @@ describe('graph/repository', () => {
           toRecipients: [{ emailAddress: { address: 'sender@example.com' } }],
         });
 
-        const result = await repository.replyAsDraftAsync(hashStringToNumber('msg-orig'));
+        const result = await repository.replyAsDraftAsync(mintSelfEncoded('message', 'msg-orig'));
 
         expect(mockClient.createReplyDraft).toHaveBeenCalledWith('msg-orig', undefined, undefined);
-        expect(result.numericId).toBe(hashStringToNumber('draft-reply-1'));
+        expect(result.token).toBe(mintSelfEncoded('message', 'draft-reply-1'));
         expect(result.graphId).toBe('draft-reply-1');
-        expect(repository.getGraphId('message', result.numericId)).toBe('draft-reply-1');
       });
 
       it('creates a reply-all draft when replyAll is true', async () => {
@@ -1869,7 +1851,7 @@ describe('graph/repository', () => {
           toRecipients: [{ emailAddress: { address: 'all@example.com' } }],
         });
 
-        const result = await repository.replyAsDraftAsync(hashStringToNumber('msg-orig2'), true);
+        const result = await repository.replyAsDraftAsync(mintSelfEncoded('message', 'msg-orig2'), true);
 
         expect(mockClient.createReplyAllDraft).toHaveBeenCalledWith('msg-orig2', undefined, undefined);
         expect(result.graphId).toBe('draft-ra-1');
@@ -1887,7 +1869,7 @@ describe('graph/repository', () => {
           toRecipients: [],
         });
 
-        await repository.replyAsDraftAsync(hashStringToNumber('msg-comment'), false, 'Thanks for sharing!');
+        await repository.replyAsDraftAsync(mintSelfEncoded('message', 'msg-comment'), false, 'Thanks for sharing!');
 
         expect(mockClient.createReplyDraft).toHaveBeenCalledWith('msg-comment', undefined, {
           contentType: 'text', content: 'Thanks for sharing!',
@@ -1907,7 +1889,7 @@ describe('graph/repository', () => {
           toRecipients: [],
         });
 
-        await repository.replyAsDraftAsync(hashStringToNumber('msg-html'), false, '<p>HTML reply</p>', 'html');
+        await repository.replyAsDraftAsync(mintSelfEncoded('message', 'msg-html'), false, '<p>HTML reply</p>', 'html');
 
         expect(mockClient.createReplyDraft).toHaveBeenCalledWith('msg-html', undefined, {
           contentType: 'html', content: '<p>HTML reply</p>',
@@ -1918,7 +1900,7 @@ describe('graph/repository', () => {
       it('throws if message not in cache', async () => {
         await expect(
           repository.replyAsDraftAsync(99999)
-        ).rejects.toThrow('Message ID 99999 not found in cache. Try searching for or listing the item first to refresh the cache.');
+        ).rejects.toMatchObject({ code: 'NUMERIC_ID_UNSUPPORTED' });
       });
     });
 
@@ -1935,11 +1917,10 @@ describe('graph/repository', () => {
           toRecipients: [],
         });
 
-        const result = await repository.forwardAsDraftAsync(hashStringToNumber('msg-fwd'));
+        const result = await repository.forwardAsDraftAsync(mintSelfEncoded('message', 'msg-fwd'));
 
         expect(mockClient.createForwardDraft).toHaveBeenCalledWith('msg-fwd');
-        expect(result.numericId).toBe(hashStringToNumber('draft-fwd-1'));
-        expect(repository.getGraphId('message', result.numericId)).toBe('draft-fwd-1');
+        expect(result.token).toBe(mintSelfEncoded('message', 'draft-fwd-1'));
       });
 
       it('updates draft with recipients and comment when provided', async () => {
@@ -1956,7 +1937,7 @@ describe('graph/repository', () => {
         mockClient.updateDraft.mockResolvedValue(undefined);
 
         await repository.forwardAsDraftAsync(
-          hashStringToNumber('msg-fwd2'),
+          mintSelfEncoded('message', 'msg-fwd2'),
           ['alice@example.com', 'bob@example.com'],
           'Please review'
         );
@@ -1984,7 +1965,7 @@ describe('graph/repository', () => {
         mockClient.updateDraft.mockResolvedValue(undefined);
 
         await repository.forwardAsDraftAsync(
-          hashStringToNumber('msg-fwd-html'),
+          mintSelfEncoded('message', 'msg-fwd-html'),
           undefined,
           '<p>HTML comment</p>',
           'html'
@@ -1998,7 +1979,7 @@ describe('graph/repository', () => {
       it('throws if message not in cache', async () => {
         await expect(
           repository.forwardAsDraftAsync(99999)
-        ).rejects.toThrow('Message ID 99999 not found in cache. Try searching for or listing the item first to refresh the cache.');
+        ).rejects.toMatchObject({ code: 'NUMERIC_ID_UNSUPPORTED' });
       });
     });
   });
@@ -2017,7 +1998,7 @@ describe('graph/repository', () => {
           { id: 'att-2', name: 'image.png', size: 2048, contentType: 'image/png', isInline: true },
         ]);
 
-        const result = await repository.listAttachmentsAsync(hashStringToNumber('msg-att-1'));
+        const result = await repository.listAttachmentsAsync(mintSelfEncoded('message', 'msg-att-1'));
 
         expect(mockClient.listAttachments).toHaveBeenCalledWith('msg-att-1');
         expect(result).toHaveLength(2);
@@ -2047,7 +2028,7 @@ describe('graph/repository', () => {
           { id: null, name: null, size: null, contentType: null },
         ]);
 
-        const result = await repository.listAttachmentsAsync(hashStringToNumber('msg-att-2'));
+        const result = await repository.listAttachmentsAsync(mintSelfEncoded('message', 'msg-att-2'));
 
         expect(result).toHaveLength(1);
         expect(result[0].name).toBe('');
@@ -2059,7 +2040,7 @@ describe('graph/repository', () => {
       it('throws if message not in cache', async () => {
         await expect(
           repository.listAttachmentsAsync(99999)
-        ).rejects.toThrow('Message ID 99999 not found in cache. Try searching for or listing the item first to refresh the cache.');
+        ).rejects.toMatchObject({ code: 'NUMERIC_ID_UNSUPPORTED' });
       });
     });
 
@@ -2075,7 +2056,7 @@ describe('graph/repository', () => {
         mockClient.listAttachments.mockResolvedValue([
           { id: 'att-dl-1', name: 'file.zip', size: 5000, contentType: 'application/zip' },
         ]);
-        await repository.listAttachmentsAsync(hashStringToNumber('msg-dl'));
+        await repository.listAttachmentsAsync(mintSelfEncoded('message', 'msg-dl'));
 
         const mockResult = { filePath: '/tmp/file.zip', name: 'file.zip', size: 5000, contentType: 'application/zip' };
         vi.mocked(downloadAttachment).mockResolvedValue(mockResult);
@@ -3049,10 +3030,9 @@ describe('graph/repository', () => {
     describe('getGraphId', () => {
       it('returns undefined when ID not cached', () => {
         expect(repository.getGraphId('folder', 99999)).toBeUndefined();
-        expect(repository.getGraphId('message', 99999)).toBeUndefined();
-        expect(repository.getGraphId('event', 99999)).toBeUndefined();
-        // 'contact' was removed from getGraphId in U5b — contacts resolve via
-        // durable ct_ tokens (getContactGraphId), not the numeric idCache.
+        // 'message', 'event' and 'contact' were removed from getGraphId in U5b —
+        // they resolve via durable self-encoding tokens through toGraphId, not
+        // the numeric idCache.
       });
     });
 
@@ -3524,6 +3504,7 @@ describe('graph/repository', () => {
   describe('Message Headers & MIME', () => {
     const graphMsgId = 'AAMkAGTest123';
     const numericId = hashStringToNumber(graphMsgId);
+    const token = mintSelfEncoded('message', graphMsgId);
 
     // Helper to populate the message cache by listing emails in a folder
     async function populateMessageCache(): Promise<void> {
@@ -3547,16 +3528,16 @@ describe('graph/repository', () => {
         ];
         mockClient.getMessageHeaders.mockResolvedValue(mockHeaders);
 
-        const result = await repository.getMessageHeadersAsync(numericId);
+        const result = await repository.getMessageHeadersAsync(token);
 
         expect(result).toEqual(mockHeaders);
         expect(mockClient.getMessageHeaders).toHaveBeenCalledWith(graphMsgId);
       });
 
-      it('throws when email ID is not in cache', async () => {
-        await expect(repository.getMessageHeadersAsync(999999)).rejects.toThrow(
-          'Email ID 999999 not found in cache'
-        );
+      it('rejects a legacy numeric id on Graph (NUMERIC_ID_UNSUPPORTED)', async () => {
+        await expect(repository.getMessageHeadersAsync(999999)).rejects.toMatchObject({
+          code: 'NUMERIC_ID_UNSUPPORTED',
+        });
       });
     });
 
@@ -3566,7 +3547,7 @@ describe('graph/repository', () => {
         const mimeContent = 'MIME-Version: 1.0\r\nContent-Type: text/plain\r\n\r\nHello';
         mockClient.getMessageMime.mockResolvedValue(mimeContent);
 
-        const result = await repository.getMessageMimeAsync(numericId);
+        const result = await repository.getMessageMimeAsync(token);
 
         expect(result.filePath).toBe(`/tmp/mcp-outlook-attachments/email-${numericId}.eml`);
         expect(mockClient.getMessageMime).toHaveBeenCalledWith(graphMsgId);
@@ -3577,10 +3558,10 @@ describe('graph/repository', () => {
         );
       });
 
-      it('throws when email ID is not in cache', async () => {
-        await expect(repository.getMessageMimeAsync(999999)).rejects.toThrow(
-          'Email ID 999999 not found in cache'
-        );
+      it('rejects a legacy numeric id on Graph (NUMERIC_ID_UNSUPPORTED)', async () => {
+        await expect(repository.getMessageMimeAsync(999999)).rejects.toMatchObject({
+          code: 'NUMERIC_ID_UNSUPPORTED',
+        });
       });
     });
   });

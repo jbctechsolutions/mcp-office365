@@ -63,7 +63,9 @@ export interface Folder {
  * Email summary for list views.
  */
 export interface EmailSummary {
-  readonly id: number;
+  // Durable string token (`em_…`) on the Graph backend (U5); numeric on the
+  // AppleScript/SQLite backend (D4).
+  readonly id: string | number;
   readonly folderId: number;
   readonly subject: string | null;
   readonly sender: string | null;

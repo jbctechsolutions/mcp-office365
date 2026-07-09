@@ -22,9 +22,25 @@ import type { INoteContentReader, NoteDetails } from '../tools/notes.js';
 import type { AttachmentInfo } from '../types/mail.js';
 import type { SaveAttachmentResult } from './parser.js';
 import { executeAppleScript, executeAppleScriptOrThrow } from './executor.js';
-import { AppleScriptError } from '../utils/errors.js';
+import { AppleScriptError, ValidationError } from '../utils/errors.js';
 import * as scripts from './scripts.js';
 import * as parser from './parser.js';
+
+/**
+ * The AppleScript attachment reader interpolates the email id straight into
+ * osascript, so a non-numeric id (a durable Graph token, or any newline-bearing
+ * string) must be rejected here rather than reach the interpreter. Durable
+ * tokens are a Graph-only concept.
+ */
+function requireNumericEmailId(id: string | number): number {
+  const n = typeof id === 'number' ? id : Number(id);
+  if (!Number.isInteger(n) || n <= 0) {
+    throw new ValidationError(
+      `The AppleScript backend requires a numeric email id; durable tokens are Graph-only. Got: ${JSON.stringify(id)}.`,
+    );
+  }
+  return n;
+}
 
 // =============================================================================
 // Path Format Constants
@@ -354,17 +370,18 @@ export class AppleScriptNoteContentReader implements INoteContentReader {
  * Interface for reading attachment metadata and saving attachments.
  */
 export interface IAttachmentReader {
-  listAttachments(emailId: number): AttachmentInfo[];
-  saveAttachment(emailId: number, attachmentIndex: number, savePath: string): SaveAttachmentResult;
+  listAttachments(emailId: string | number): AttachmentInfo[];
+  saveAttachment(emailId: string | number, attachmentIndex: number, savePath: string): SaveAttachmentResult;
 }
 
 /**
  * AppleScript-based attachment reader.
  */
 export class AppleScriptAttachmentReader implements IAttachmentReader {
-  listAttachments(emailId: number): AttachmentInfo[] {
+  listAttachments(emailId: string | number): AttachmentInfo[] {
+    const numericId = requireNumericEmailId(emailId);
     try {
-      const script = scripts.listAttachments(emailId);
+      const script = scripts.listAttachments(numericId);
       const result = executeAppleScript(script);
       if (!result.success) {
         return [];
@@ -382,8 +399,9 @@ export class AppleScriptAttachmentReader implements IAttachmentReader {
     }
   }
 
-  saveAttachment(emailId: number, attachmentIndex: number, savePath: string): SaveAttachmentResult {
-    const script = scripts.saveAttachment(emailId, attachmentIndex, savePath);
+  saveAttachment(emailId: string | number, attachmentIndex: number, savePath: string): SaveAttachmentResult {
+    const numericId = requireNumericEmailId(emailId);
+    const script = scripts.saveAttachment(numericId, attachmentIndex, savePath);
     const output = executeAppleScriptOrThrow(script);
     const result = parser.parseSaveAttachmentResult(output);
 

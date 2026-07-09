@@ -23,6 +23,23 @@ import { executeAppleScriptOrThrow } from './executor.js';
 import * as scripts from './scripts.js';
 import * as parser from './parser.js';
 import { isoToAppleTimestamp } from '../utils/dates.js';
+import { ValidationError } from '../utils/errors.js';
+
+/**
+ * The AppleScript write path interpolates the email id straight into osascript,
+ * so a non-numeric id (a durable Graph token, or any newline-bearing string)
+ * must be rejected here rather than reach the interpreter. Durable tokens are a
+ * Graph-only concept.
+ */
+function requireNumericEmailId(id: string | number): number {
+  const n = typeof id === 'number' ? id : Number(id);
+  if (!Number.isInteger(n) || n <= 0) {
+    throw new ValidationError(
+      `The AppleScript backend requires a numeric email id; durable tokens are Graph-only. Got: ${JSON.stringify(id)}.`,
+    );
+  }
+  return n;
+}
 import {
   createEmailPath,
   createEventPath,
@@ -279,9 +296,10 @@ export class AppleScriptRepository implements IWriteableRepository {
     return parser.parseEmails(output).map(toEmailRow);
   }
 
-  getEmail(id: number): EmailRow | undefined {
+  getEmail(id: string | number): EmailRow | undefined {
+    const numericId = requireNumericEmailId(id);
     try {
-      const script = scripts.getMessage(id);
+      const script = scripts.getMessage(numericId);
       const output = executeAppleScriptOrThrow(script);
       const email = parser.parseEmail(output);
       return email != null ? toEmailRow(email) : undefined;
@@ -443,42 +461,49 @@ export class AppleScriptRepository implements IWriteableRepository {
   // Write Operations
   // ---------------------------------------------------------------------------
 
-  moveEmail(emailId: number, destinationFolderId: number): void {
-    const script = scripts.moveMessage(emailId, destinationFolderId);
+  moveEmail(emailId: string | number, destinationFolderId: number): void {
+    const numericId = requireNumericEmailId(emailId);
+    const script = scripts.moveMessage(numericId, destinationFolderId);
     executeAppleScriptOrThrow(script);
   }
 
-  deleteEmail(emailId: number): void {
-    const script = scripts.deleteMessage(emailId);
+  deleteEmail(emailId: string | number): void {
+    const numericId = requireNumericEmailId(emailId);
+    const script = scripts.deleteMessage(numericId);
     executeAppleScriptOrThrow(script);
   }
 
-  archiveEmail(emailId: number): void {
-    const script = scripts.archiveMessage(emailId);
+  archiveEmail(emailId: string | number): void {
+    const numericId = requireNumericEmailId(emailId);
+    const script = scripts.archiveMessage(numericId);
     executeAppleScriptOrThrow(script);
   }
 
-  junkEmail(emailId: number): void {
-    const script = scripts.junkMessage(emailId);
+  junkEmail(emailId: string | number): void {
+    const numericId = requireNumericEmailId(emailId);
+    const script = scripts.junkMessage(numericId);
     executeAppleScriptOrThrow(script);
   }
 
-  markEmailRead(emailId: number, isRead: boolean): void {
-    const script = scripts.setMessageReadStatus(emailId, isRead);
+  markEmailRead(emailId: string | number, isRead: boolean): void {
+    const numericId = requireNumericEmailId(emailId);
+    const script = scripts.setMessageReadStatus(numericId, isRead);
     executeAppleScriptOrThrow(script);
   }
 
-  setEmailFlag(emailId: number, flagStatus: number): void {
-    const script = scripts.setMessageFlag(emailId, flagStatus);
+  setEmailFlag(emailId: string | number, flagStatus: number): void {
+    const numericId = requireNumericEmailId(emailId);
+    const script = scripts.setMessageFlag(numericId, flagStatus);
     executeAppleScriptOrThrow(script);
   }
 
-  setEmailCategories(emailId: number, categories: string[]): void {
-    const script = scripts.setMessageCategories(emailId, categories);
+  setEmailCategories(emailId: string | number, categories: string[]): void {
+    const numericId = requireNumericEmailId(emailId);
+    const script = scripts.setMessageCategories(numericId, categories);
     executeAppleScriptOrThrow(script);
   }
 
-  setEmailImportance(_emailId: number, _importance: string): void {
+  setEmailImportance(_emailId: string | number, _importance: string): void {
     throw new Error('setEmailImportance is only supported via Graph API');
   }
 

@@ -167,9 +167,14 @@ export class AppleMailTools {
 
   getEmails(params: GetEmailsParams): ToolResult {
     const results = params.email_ids.map((id) => {
-      const email = this.mailTools.getEmail({ email_id: id, include_body: params.include_body, strip_html: params.strip_html });
-      if (email == null) return { id, error: 'Not found' };
-      return email;
+      try {
+        const email = this.mailTools.getEmail({ email_id: id, include_body: params.include_body, strip_html: params.strip_html });
+        if (email == null) return { id, error: 'Not found' };
+        return email;
+      } catch (err) {
+        // Per-id isolation — one bad id must not abort the whole batch.
+        return { id, error: err instanceof Error ? err.message : 'Unresolvable id' };
+      }
     });
     return jsonResult({ emails: results });
   }

@@ -9,6 +9,7 @@
 
 import type * as MicrosoftGraph from '@microsoft/microsoft-graph-types';
 import type { EmailRow } from '../../database/repository.js';
+import { mintSelfEncoded } from '../../ids/token.js';
 import {
   hashStringToNumber,
   isoToTimestamp,
@@ -39,7 +40,8 @@ export function mapMessageToEmailRow(
   const flag = message.flag as { flagStatus?: string } | null | undefined;
 
   return {
-    id: hashStringToNumber(messageId),
+    // Durable self-encoding em_ token carrying the immutable Graph message id (U5).
+    id: messageId.length > 0 ? mintSelfEncoded('message', messageId) : '',
     folderId: parentFolderId != null ? hashStringToNumber(parentFolderId) : 0,
     subject: message.subject ?? null,
     sender: extractDisplayName(from),

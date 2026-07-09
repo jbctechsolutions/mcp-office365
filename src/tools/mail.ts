@@ -43,6 +43,12 @@ declare module '../registry/types.js' {
 // Input Schemas
 // =============================================================================
 
+/**
+ * Shared email/message id schema: a durable `em_` token (Graph, U5) or a legacy
+ * positive-integer id (AppleScript, D4).
+ */
+const EmailIdSchema = z.union([z.string().min(1), z.number().int().positive()]);
+
 export const ListFoldersInput = z.strictObject({});
 
 /**
@@ -108,20 +114,20 @@ export const SearchEmailsAdvancedInput = z.strictObject({
 });
 
 export const GetEmailInput = z.strictObject({
-  email_id: z.number().int().positive().describe('The email ID to retrieve'),
+  email_id: EmailIdSchema.describe('The email ID to retrieve'),
   include_body: z.boolean().default(true).describe('Include the email body in the response'),
   strip_html: z.boolean().default(true).describe('Strip HTML tags from the body'),
 });
 
 export const GetEmailsInput = z.strictObject({
-  email_ids: z.array(z.number().int().positive()).min(1).max(25)
+  email_ids: z.array(EmailIdSchema).min(1).max(25)
     .describe('Array of email IDs to fetch (max 25)'),
   include_body: z.boolean().default(false).describe('Include full email body'),
   strip_html: z.boolean().default(false).describe('Strip HTML tags from body'),
 });
 
 export const ListConversationInput = z.strictObject({
-  message_id: z.number().int().positive().describe('Any message ID from the conversation thread'),
+  message_id: EmailIdSchema.describe('Any message ID from the conversation thread'),
   limit: z.number().int().min(1).max(100).default(25).describe('Maximum messages to return'),
 });
 
@@ -135,11 +141,11 @@ export const GetUnreadCountInput = z.strictObject({
 });
 
 export const ListAttachmentsInput = z.strictObject({
-  email_id: z.number().int().positive().describe('The email ID to list attachments for'),
+  email_id: EmailIdSchema.describe('The email ID to list attachments for'),
 });
 
 export const DownloadAttachmentInput = z.strictObject({
-  email_id: z.number().int().positive().describe('The email ID containing the attachment'),
+  email_id: EmailIdSchema.describe('The email ID containing the attachment'),
   attachment_index: z.number().int().positive().describe('The 1-based index of the attachment (from list_attachments)'),
   save_path: z.string().min(1).describe('Absolute file path where the attachment should be saved'),
 });
@@ -149,11 +155,11 @@ export const CheckNewEmailsInput = z.strictObject({
 });
 
 export const GetMessageHeadersInput = z.strictObject({
-  email_id: z.number().int().positive().describe('Email ID'),
+  email_id: EmailIdSchema.describe('Email ID'),
 });
 
 export const GetMessageMimeInput = z.strictObject({
-  email_id: z.number().int().positive().describe('Email ID'),
+  email_id: EmailIdSchema.describe('Email ID'),
 });
 
 export const GetMailTipsInput = z.strictObject({
