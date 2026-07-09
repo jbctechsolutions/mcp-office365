@@ -8,9 +8,10 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { Id, idSchema, optionalIdSchema, describeId } from '../../../src/ids/schema.js';
+import { Id, idSchema, optionalIdSchema, describeId, ENTITY_META } from '../../../src/ids/schema.js';
 import { nextActionFor } from '../../../src/ids/next-action.js';
 import { prefixForEntity, mintSelfEncoded, type EntityType } from '../../../src/ids/token.js';
+import { allToolDefinitions } from '../../../src/registry/all-tools.js';
 
 describe('canonical id schema', () => {
   it('trims surrounding whitespace', () => {
@@ -63,6 +64,15 @@ describe('canonical id schema', () => {
     const schema = optionalIdSchema('folder');
     expect(schema.safeParse(undefined).success).toBe(true);
     expect(idSchema('folder').description).toContain('`fd_`');
+  });
+
+  it('every ENTITY_META source tool is a registered tool name (no description drift)', () => {
+    const registered = new Set(allToolDefinitions().map((d) => d.name));
+    for (const [entity, meta] of Object.entries(ENTITY_META)) {
+      for (const tool of meta.from.split('/').map((t) => t.trim())) {
+        expect(registered.has(tool), `${entity} → "${tool}"`).toBe(true);
+      }
+    }
   });
 });
 

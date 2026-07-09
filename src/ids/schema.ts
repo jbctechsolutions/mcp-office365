@@ -35,9 +35,11 @@ interface EntityMeta {
 
 /**
  * Per-entity description metadata. Only entities actually exposed as tool id
- * params need an entry; others fall back to a generic description.
+ * params need an entry; others fall back to a generic description. Exported so a
+ * contract test can cross-check every `from` tool name against the registry,
+ * catching drift when a tool is renamed.
  */
-const ENTITY_META: Partial<Record<EntityType, EntityMeta>> = {
+export const ENTITY_META: Partial<Record<EntityType, EntityMeta>> = {
   message: { label: 'email message', from: 'list_emails / search_emails' },
   event: { label: 'calendar event', from: 'list_events / search_events' },
   contact: { label: 'contact', from: 'list_contacts / search_contacts' },
@@ -68,9 +70,9 @@ const ENTITY_META: Partial<Record<EntityType, EntityMeta>> = {
   site: { label: 'SharePoint site', from: 'list_sites / search_sites' },
   documentLibrary: { label: 'document library', from: 'list_document_libraries' },
   libraryDriveItem: { label: 'library item', from: 'list_library_items' },
-  noteNotebook: { label: 'OneNote notebook', from: 'list_notes' },
-  noteSection: { label: 'OneNote section', from: 'list_notes' },
-  notePage: { label: 'OneNote page', from: 'get_note' },
+  noteNotebook: { label: 'OneNote notebook', from: 'list_notebooks' },
+  noteSection: { label: 'OneNote section', from: 'list_note_sections' },
+  notePage: { label: 'OneNote page', from: 'list_note_pages / search_note_pages' },
 };
 
 /** Builds the canonical, prefix-named description for an entity id. */
