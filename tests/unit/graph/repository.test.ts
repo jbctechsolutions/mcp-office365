@@ -511,6 +511,25 @@ describe('graph/repository', () => {
         expect(mockClient.getMessagesDelta).toHaveBeenCalledWith('folder-delta2', deltaToken);
       });
 
+      it('shares one delta cursor for the same folder addressed by fd_ token OR raw Graph id', async () => {
+        const deltaToken = 'https://graph.microsoft.com/v1.0/delta-token-shared';
+        mockClient.getMessagesDelta = vi.fn().mockResolvedValue({
+          messages: [{ id: 'msg-s1', subject: 'First' }],
+          deltaLink: deltaToken,
+        });
+
+        // First call with the fd_ token establishes the cursor.
+        await repository.checkNewEmailsAsync(mintSelfEncoded('folder', 'folder-shared'));
+
+        // Second call with the RAW Graph id for the same folder must reuse that
+        // cursor (keyed by the resolved Graph id) — not trigger a fresh sync.
+        mockClient.getMessagesDelta.mockResolvedValue({ messages: [], deltaLink: deltaToken });
+        const result = await repository.checkNewEmailsAsync('folder-shared');
+
+        expect(result.isInitialSync).toBe(false);
+        expect(mockClient.getMessagesDelta).toHaveBeenLastCalledWith('folder-shared', deltaToken);
+      });
+
       it('rejects a legacy numeric folder id on the Graph backend (NUMERIC_ID_UNSUPPORTED, D4)', async () => {
         await expect(repository.checkNewEmailsAsync(99999 as unknown as string))
           .rejects.toMatchObject({ code: 'NUMERIC_ID_UNSUPPORTED' });

@@ -277,7 +277,11 @@ export class GraphRepository implements IRepository {
   async checkNewEmailsAsync(folderId: string): Promise<{ emails: EmailRow[]; isInitialSync: boolean }> {
     const graphFolderId = this.toGraphId(folderId, 'folder');
 
-    const existingDeltaLink = this.deltaLinks.get(folderId);
+    // Key the delta cursor by the RESOLVED Graph id, not the input string: a
+    // folder can be addressed by its fd_ token or its raw Graph id, and both
+    // must share one cursor — otherwise the second form triggers a fresh initial
+    // sync and re-reports already-seen mail as new.
+    const existingDeltaLink = this.deltaLinks.get(graphFolderId);
     const isInitialSync = existingDeltaLink == null;
 
     const { messages, deltaLink } = await this.client.getMessagesDelta(
@@ -286,7 +290,7 @@ export class GraphRepository implements IRepository {
     );
 
     if (deltaLink) {
-      this.deltaLinks.set(folderId, deltaLink);
+      this.deltaLinks.set(graphFolderId, deltaLink);
     }
 
     const activeMessages = messages.filter((m) => (m as unknown as Record<string, unknown>)['@removed'] == null);
