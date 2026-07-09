@@ -42,6 +42,8 @@ export type EntityType =
   | 'chatMessage'
   | 'channelMessage'
   | 'checklistItem'
+  | 'linkedResource'
+  | 'taskAttachment'
   | 'noteNotebook'
   | 'noteSection'
   | 'notePage';
@@ -85,6 +87,8 @@ export const ALIAS_PREFIXES: Readonly<Record<string, EntityType>> = Object.assig
     cm: 'chatMessage',
     xm: 'channelMessage',
     ci: 'checklistItem',
+    lr: 'linkedResource',
+    ta: 'taskAttachment',
     td: 'task',
     tl: 'taskList',
   } satisfies Record<string, EntityType>,

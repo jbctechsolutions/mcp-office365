@@ -37,13 +37,13 @@ export const CreateChecklistItemInput = z.strictObject({
 });
 
 export const UpdateChecklistItemInput = z.strictObject({
-  checklist_item_id: z.number().int().positive().describe('Checklist item ID'),
+  checklist_item_id: z.string().min(1).describe('Checklist item ID'),
   display_name: z.string().min(1).optional().describe('New text'),
   is_checked: z.boolean().optional().describe('Toggle checked state'),
 });
 
 export const PrepareDeleteChecklistItemInput = z.strictObject({
-  checklist_item_id: z.number().int().positive().describe('Checklist item ID to delete'),
+  checklist_item_id: z.string().min(1).describe('Checklist item ID to delete'),
 });
 
 export const ConfirmDeleteChecklistItemInput = z.strictObject({
@@ -65,10 +65,10 @@ export type ConfirmDeleteChecklistItemParams = z.infer<typeof ConfirmDeleteCheck
 // =============================================================================
 
 export interface IChecklistItemsRepository {
-  listChecklistItemsAsync(taskId: string | number): Promise<Array<{ id: number; displayName: string; isChecked: boolean; createdDateTime: string }>>;
-  createChecklistItemAsync(taskId: string | number, displayName: string, isChecked?: boolean): Promise<number>;
-  updateChecklistItemAsync(checklistItemId: number, updates: { displayName?: string; isChecked?: boolean }): Promise<void>;
-  deleteChecklistItemAsync(checklistItemId: number): Promise<void>;
+  listChecklistItemsAsync(taskId: string | number): Promise<Array<{ id: string; displayName: string; isChecked: boolean; createdDateTime: string }>>;
+  createChecklistItemAsync(taskId: string | number, displayName: string, isChecked?: boolean): Promise<string>;
+  updateChecklistItemAsync(checklistItemId: string | number, updates: { displayName?: string; isChecked?: boolean }): Promise<void>;
+  deleteChecklistItemAsync(checklistItemId: string | number): Promise<void>;
 }
 
 // =============================================================================
@@ -183,7 +183,7 @@ export class ChecklistItemsTools {
       };
     }
 
-    await this.repo.deleteChecklistItemAsync((result.token!.targetId as number));
+    await this.repo.deleteChecklistItemAsync((result.token!.targetId as string));
     return {
       content: [{
         type: 'text' as const,
