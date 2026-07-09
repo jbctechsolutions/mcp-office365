@@ -34,9 +34,9 @@ describe('LinkedResourcesTools', () => {
       ];
       vi.mocked(repo.listLinkedResourcesAsync).mockResolvedValue(mockItems);
 
-      const result = await tools.listLinkedResources({ task_id: 42 });
+      const result = await tools.listLinkedResources({ task_id: 'td_task1' });
 
-      expect(repo.listLinkedResourcesAsync).toHaveBeenCalledWith(42);
+      expect(repo.listLinkedResourcesAsync).toHaveBeenCalledWith('td_task1');
       expect(result.content).toHaveLength(1);
       const parsed = JSON.parse(result.content[0].text);
       expect(parsed.linked_resources).toEqual(mockItems);
@@ -47,9 +47,9 @@ describe('LinkedResourcesTools', () => {
     it('creates a linked resource and returns the ID', async () => {
       vi.mocked(repo.createLinkedResourceAsync).mockResolvedValue(100);
 
-      const result = await tools.createLinkedResource({ task_id: 42, web_url: 'https://example.com', application_name: 'TestApp' });
+      const result = await tools.createLinkedResource({ task_id: 'td_task1', web_url: 'https://example.com', application_name: 'TestApp' });
 
-      expect(repo.createLinkedResourceAsync).toHaveBeenCalledWith(42, 'https://example.com', 'TestApp', undefined);
+      expect(repo.createLinkedResourceAsync).toHaveBeenCalledWith('td_task1', 'https://example.com', 'TestApp', undefined);
       const parsed = JSON.parse(result.content[0].text);
       expect(parsed.success).toBe(true);
       expect(parsed.linked_resource_id).toBe(100);
@@ -59,9 +59,9 @@ describe('LinkedResourcesTools', () => {
     it('passes display_name when provided', async () => {
       vi.mocked(repo.createLinkedResourceAsync).mockResolvedValue(101);
 
-      await tools.createLinkedResource({ task_id: 42, web_url: 'https://example.com', application_name: 'TestApp', display_name: 'My Link' });
+      await tools.createLinkedResource({ task_id: 'td_task1', web_url: 'https://example.com', application_name: 'TestApp', display_name: 'My Link' });
 
-      expect(repo.createLinkedResourceAsync).toHaveBeenCalledWith(42, 'https://example.com', 'TestApp', 'My Link');
+      expect(repo.createLinkedResourceAsync).toHaveBeenCalledWith('td_task1', 'https://example.com', 'TestApp', 'My Link');
     });
   });
 

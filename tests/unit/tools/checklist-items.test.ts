@@ -8,8 +8,17 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { ChecklistItemsTools, type IChecklistItemsRepository } from '../../../src/tools/checklist-items.js';
+import { ChecklistItemsTools, type IChecklistItemsRepository, ListChecklistItemsInput } from '../../../src/tools/checklist-items.js';
 import { ApprovalTokenManager } from '../../../src/approval/index.js';
+
+describe('ChecklistItemsTools schema', () => {
+  it('accepts a td_ task token and rejects a legacy numeric task id', () => {
+    // tasks now emit td_ tokens; a numeric task_id must fail validation so the
+    // producer/consumer contract can't silently desync (regression guard).
+    expect(ListChecklistItemsInput.safeParse({ task_id: 'td_AbC' }).success).toBe(true);
+    expect(ListChecklistItemsInput.safeParse({ task_id: 42 }).success).toBe(false);
+  });
+});
 
 describe('ChecklistItemsTools', () => {
   let repo: IChecklistItemsRepository;
@@ -35,9 +44,9 @@ describe('ChecklistItemsTools', () => {
       ];
       vi.mocked(repo.listChecklistItemsAsync).mockResolvedValue(mockItems);
 
-      const result = await tools.listChecklistItems({ task_id: 42 });
+      const result = await tools.listChecklistItems({ task_id: 'td_task1' });
 
-      expect(repo.listChecklistItemsAsync).toHaveBeenCalledWith(42);
+      expect(repo.listChecklistItemsAsync).toHaveBeenCalledWith('td_task1');
       expect(result.content).toHaveLength(1);
       const parsed = JSON.parse(result.content[0].text);
       expect(parsed.checklist_items).toEqual(mockItems);
@@ -48,9 +57,9 @@ describe('ChecklistItemsTools', () => {
     it('creates a checklist item and returns the ID', async () => {
       vi.mocked(repo.createChecklistItemAsync).mockResolvedValue(100);
 
-      const result = await tools.createChecklistItem({ task_id: 42, display_name: 'Buy milk' });
+      const result = await tools.createChecklistItem({ task_id: 'td_task1', display_name: 'Buy milk' });
 
-      expect(repo.createChecklistItemAsync).toHaveBeenCalledWith(42, 'Buy milk', undefined);
+      expect(repo.createChecklistItemAsync).toHaveBeenCalledWith('td_task1', 'Buy milk', undefined);
       const parsed = JSON.parse(result.content[0].text);
       expect(parsed.success).toBe(true);
       expect(parsed.checklist_item_id).toBe(100);
@@ -60,17 +69,17 @@ describe('ChecklistItemsTools', () => {
     it('handles is_checked default (false)', async () => {
       vi.mocked(repo.createChecklistItemAsync).mockResolvedValue(101);
 
-      await tools.createChecklistItem({ task_id: 42, display_name: 'Task A' });
+      await tools.createChecklistItem({ task_id: 'td_task1', display_name: 'Task A' });
 
-      expect(repo.createChecklistItemAsync).toHaveBeenCalledWith(42, 'Task A', undefined);
+      expect(repo.createChecklistItemAsync).toHaveBeenCalledWith('td_task1', 'Task A', undefined);
     });
 
     it('passes is_checked when provided', async () => {
       vi.mocked(repo.createChecklistItemAsync).mockResolvedValue(102);
 
-      await tools.createChecklistItem({ task_id: 42, display_name: 'Task B', is_checked: true });
+      await tools.createChecklistItem({ task_id: 'td_task1', display_name: 'Task B', is_checked: true });
 
-      expect(repo.createChecklistItemAsync).toHaveBeenCalledWith(42, 'Task B', true);
+      expect(repo.createChecklistItemAsync).toHaveBeenCalledWith('td_task1', 'Task B', true);
     });
   });
 

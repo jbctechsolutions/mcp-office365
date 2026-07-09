@@ -27,11 +27,11 @@ declare module '../registry/types.js' {
 // =============================================================================
 
 export const ListTaskAttachmentsInput = z.strictObject({
-  task_id: z.number().int().positive().describe('Task ID from list_tasks or search_tasks'),
+  task_id: z.string().min(1).describe('Task ID (td_ token from list_tasks or search_tasks)'),
 });
 
 export const CreateTaskAttachmentInput = z.strictObject({
-  task_id: z.number().int().positive().describe('Task ID'),
+  task_id: z.string().min(1).describe('Task ID (td_ token)'),
   name: z.string().min(1).describe('File name of the attachment'),
   content_bytes: z.string().min(1).describe('Base64-encoded file content'),
   content_type: z.string().optional().describe('MIME type (default: application/octet-stream)'),
@@ -59,8 +59,8 @@ export type ConfirmDeleteTaskAttachmentParams = z.infer<typeof ConfirmDeleteTask
 // =============================================================================
 
 export interface ITaskAttachmentsRepository {
-  listTaskAttachmentsAsync(taskId: number): Promise<Array<{ id: number; name: string; size: number; contentType: string }>>;
-  createTaskAttachmentAsync(taskId: number, name: string, contentBytes: string, contentType?: string): Promise<number>;
+  listTaskAttachmentsAsync(taskId: string | number): Promise<Array<{ id: number; name: string; size: number; contentType: string }>>;
+  createTaskAttachmentAsync(taskId: string | number, name: string, contentBytes: string, contentType?: string): Promise<number>;
   deleteTaskAttachmentAsync(taskAttachmentId: number): Promise<void>;
 }
 

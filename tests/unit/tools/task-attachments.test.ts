@@ -34,9 +34,9 @@ describe('TaskAttachmentsTools', () => {
       ];
       vi.mocked(repo.listTaskAttachmentsAsync).mockResolvedValue(mockItems);
 
-      const result = await tools.listTaskAttachments({ task_id: 42 });
+      const result = await tools.listTaskAttachments({ task_id: 'td_task1' });
 
-      expect(repo.listTaskAttachmentsAsync).toHaveBeenCalledWith(42);
+      expect(repo.listTaskAttachmentsAsync).toHaveBeenCalledWith('td_task1');
       expect(result.content).toHaveLength(1);
       const parsed = JSON.parse(result.content[0].text);
       expect(parsed.task_attachments).toEqual(mockItems);
@@ -48,12 +48,12 @@ describe('TaskAttachmentsTools', () => {
       vi.mocked(repo.createTaskAttachmentAsync).mockResolvedValue(100);
 
       const result = await tools.createTaskAttachment({
-        task_id: 42,
+        task_id: 'td_task1',
         name: 'document.pdf',
         content_bytes: 'dGVzdA==',
       });
 
-      expect(repo.createTaskAttachmentAsync).toHaveBeenCalledWith(42, 'document.pdf', 'dGVzdA==', undefined);
+      expect(repo.createTaskAttachmentAsync).toHaveBeenCalledWith('td_task1', 'document.pdf', 'dGVzdA==', undefined);
       const parsed = JSON.parse(result.content[0].text);
       expect(parsed.success).toBe(true);
       expect(parsed.task_attachment_id).toBe(100);
@@ -64,13 +64,13 @@ describe('TaskAttachmentsTools', () => {
       vi.mocked(repo.createTaskAttachmentAsync).mockResolvedValue(101);
 
       await tools.createTaskAttachment({
-        task_id: 42,
+        task_id: 'td_task1',
         name: 'image.png',
         content_bytes: 'iVBORw0KGgo=',
         content_type: 'image/png',
       });
 
-      expect(repo.createTaskAttachmentAsync).toHaveBeenCalledWith(42, 'image.png', 'iVBORw0KGgo=', 'image/png');
+      expect(repo.createTaskAttachmentAsync).toHaveBeenCalledWith('td_task1', 'image.png', 'iVBORw0KGgo=', 'image/png');
     });
   });
 
