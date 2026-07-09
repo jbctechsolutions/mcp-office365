@@ -72,8 +72,8 @@ describe('StateStore.open', () => {
       .all()
       .map((r) => (r as { name: string }).name);
     expect(tables).toEqual(expect.arrayContaining(['aliases', 'approval_tokens', 'meta']));
-    // delta_links ships with U12, not here.
-    expect(tables).not.toContain('delta_links');
+    // delta_links / delta_items ship with U12 (the delta-sync mirror).
+    expect(tables).toEqual(expect.arrayContaining(['delta_links', 'delta_items']));
     raw.close();
   });
 
