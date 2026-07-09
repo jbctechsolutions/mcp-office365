@@ -22,7 +22,7 @@ export function mapMailFolderToRow(folder: MicrosoftGraph.MailFolder): FolderRow
     // Durable self-encoding fd_ token carrying the immutable Graph folder id (U5).
     id: graphId.length > 0 ? mintSelfEncoded('folder', graphId) : '',
     name: folder.displayName ?? null,
-    parentId: parentGraphId != null ? mintSelfEncoded('folder', parentGraphId) : null,
+    parentId: parentGraphId != null && parentGraphId.length > 0 ? mintSelfEncoded('folder', parentGraphId) : null,
     specialType: 0, // Graph doesn't expose special type directly
     folderType: 1, // Mail folder
     accountId: 1, // Default account

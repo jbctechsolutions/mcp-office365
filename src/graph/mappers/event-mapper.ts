@@ -33,7 +33,7 @@ export function mapEventToEventRow(
     // Durable self-encoding ev_ token carrying the immutable Graph event id (U5).
     id: eventId.length > 0 ? mintSelfEncoded('event', eventId) : '',
     // Durable self-encoding fd_ token carrying the immutable Graph calendar id (U5).
-    folderId: calendarId != null ? mintSelfEncoded('folder', calendarId) : '',
+    folderId: calendarId != null && calendarId.length > 0 ? mintSelfEncoded('folder', calendarId) : '',
     subject: event.subject ?? null,
     startDate: dateTimeTimeZoneToTimestamp(start),
     endDate: dateTimeTimeZoneToTimestamp(end),

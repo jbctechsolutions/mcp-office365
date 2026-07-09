@@ -43,7 +43,7 @@ export function mapMessageToEmailRow(
     // Durable self-encoding em_ token carrying the immutable Graph message id (U5).
     id: messageId.length > 0 ? mintSelfEncoded('message', messageId) : '',
     // Durable self-encoding fd_ token carrying the immutable Graph folder id (U5).
-    folderId: parentFolderId != null ? mintSelfEncoded('folder', parentFolderId) : '',
+    folderId: parentFolderId != null && parentFolderId.length > 0 ? mintSelfEncoded('folder', parentFolderId) : '',
     subject: message.subject ?? null,
     sender: extractDisplayName(from),
     senderAddress: extractEmailAddress(from),
