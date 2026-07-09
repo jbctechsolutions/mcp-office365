@@ -80,9 +80,38 @@ describe('MCP Client E2E', () => {
       expect(toolNames).toContain('check_availability');
       expect(toolNames).toContain('find_meeting_times');
 
+      // Tools removed with the AppleScript backend must NOT reappear. Notes are
+      // now served by OneNote (list_notebooks etc.); list_accounts had no Graph
+      // analog.
+      for (const removed of ['list_accounts', 'list_notes', 'get_note', 'search_notes']) {
+        expect(toolNames).not.toContain(removed);
+      }
+
       // Clean up
       await client.close();
       await server.close();
+    });
+
+    it('ignores USE_APPLESCRIPT (the backend was removed) and still serves the Graph surface', async () => {
+      const prev = process.env['USE_APPLESCRIPT'];
+      process.env['USE_APPLESCRIPT'] = '1';
+      try {
+        const server = createServer();
+        const client = new Client({ name: 'test-client', version: '1.0.0' }, { capabilities: {} });
+        const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+        await Promise.all([client.connect(clientTransport), server.connect(serverTransport)]);
+
+        const result = await client.listTools();
+        // Still the full Graph surface, not a (nonexistent) AppleScript one.
+        expect(result.tools.length).toBe(221);
+        expect(result.tools.map((t) => t.name)).toContain('list_folders');
+
+        await client.close();
+        await server.close();
+      } finally {
+        if (prev === undefined) delete process.env['USE_APPLESCRIPT'];
+        else process.env['USE_APPLESCRIPT'] = prev;
+      }
     });
 
     it('serves registry-migrated tools exactly once with registry-sourced annotations', async () => {
