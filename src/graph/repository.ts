@@ -2945,7 +2945,7 @@ export class GraphRepository implements IRepository {
     return items.map((item) => {
       const itemId = item.id as string;
       return {
-        id: mintSelfEncoded('driveItem', itemId),
+        id: itemId.length > 0 ? mintSelfEncoded('driveItem', itemId) : '',
         name: (item.name as string | undefined) ?? '',
         size: (item.size as number | undefined) ?? 0,
         lastModified: (item.lastModifiedDateTime as string | undefined) ?? '',
@@ -2966,7 +2966,7 @@ export class GraphRepository implements IRepository {
     return items.map((item) => {
       const itemId = item.id as string;
       return {
-        id: mintSelfEncoded('driveItem', itemId),
+        id: itemId.length > 0 ? mintSelfEncoded('driveItem', itemId) : '',
         name: (item.name as string | undefined) ?? '',
         size: (item.size as number | undefined) ?? 0,
         lastModified: (item.lastModifiedDateTime as string | undefined) ?? '',
@@ -3032,7 +3032,7 @@ export class GraphRepository implements IRepository {
     return items.map((item) => {
       const itemId = item.id as string;
       return {
-        id: mintSelfEncoded('driveItem', itemId),
+        id: itemId.length > 0 ? mintSelfEncoded('driveItem', itemId) : '',
         name: (item.name as string | undefined) ?? '',
         size: (item.size as number | undefined) ?? 0,
         lastModified: (item.lastModifiedDateTime as string | undefined) ?? '',
@@ -3053,7 +3053,7 @@ export class GraphRepository implements IRepository {
     return items.map((item) => {
       const itemId = item.id as string;
       return {
-        id: mintSelfEncoded('driveItem', itemId),
+        id: itemId.length > 0 ? mintSelfEncoded('driveItem', itemId) : '',
         name: (item.name as string | undefined) ?? '',
         size: (item.size as number | undefined) ?? 0,
         lastModified: (item.lastModifiedDateTime as string | undefined) ?? '',
