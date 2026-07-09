@@ -76,7 +76,7 @@ export type ConfirmDeleteMailRuleParams = z.infer<typeof ConfirmDeleteMailRuleIn
 export interface IMailRulesRepository {
   listMailRulesAsync(): Promise<Array<{ id: string; displayName: string; sequence: number; isEnabled: boolean; conditions: unknown; actions: unknown }>>;
   createMailRuleAsync(rule: Record<string, unknown>): Promise<string>;
-  deleteMailRuleAsync(ruleId: string | number): Promise<void>;
+  deleteMailRuleAsync(ruleId: string): Promise<void>;
   /** Resolve a folder ID (durable `fd_` token or raw Graph id) for move_to_folder action. */
   getFolderGraphId(folderId: string): string;
 }

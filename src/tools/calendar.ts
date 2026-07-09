@@ -30,10 +30,9 @@ declare module '../registry/types.js' {
 // Input Schemas
 // =============================================================================
 
-// An event id accepts either a durable `ev_…` token (Graph backend, U5) or a
-// numeric id (AppleScript/SQLite backend, D4). A numeric id on Graph is rejected
-// with NUMERIC_ID_UNSUPPORTED by the resolver.
-const EventIdSchema = z.union([z.string().min(1), z.number().int().positive()]);
+// An event id is the canonical durable `ev_…` token (or a raw Graph id). A
+// numeric-string id resolves to NUMERIC_ID_UNSUPPORTED via the resolver.
+const EventIdSchema = Id.event;
 
 export const ListCalendarsInput = z.strictObject({});
 
@@ -271,7 +270,7 @@ export type ListRoomsParams = z.infer<typeof ListRoomsInput>;
  */
 export interface CreateEventResult {
   // Durable ev_ token on Graph (U5).
-  readonly id: string | number;
+  readonly id: string;
   readonly title: string;
   readonly start_date: string;
   readonly end_date: string;

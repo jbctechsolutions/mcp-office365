@@ -38,7 +38,7 @@ function jsonResult(data: unknown): ToolResult {
  * backend's contact tools.
  */
 export function transformContactRow(row: ContactRow): {
-  id: string | number;
+  id: string;
   displayName: string | null;
   sortName: string | null;
 } {

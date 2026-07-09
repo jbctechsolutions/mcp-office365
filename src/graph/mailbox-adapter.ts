@@ -15,7 +15,7 @@ export class GraphMailboxAdapter implements IMailboxRepository {
   constructor(private readonly graph: GraphRepository) {}
 
   // Read
-  getEmail(id: string | number): Promise<EmailRow | undefined> {
+  getEmail(id: string): Promise<EmailRow | undefined> {
     return this.graph.getEmailAsync(id);
   }
 
@@ -24,35 +24,35 @@ export class GraphMailboxAdapter implements IMailboxRepository {
   }
 
   // Email organization
-  moveEmail(emailId: string | number, destinationFolderId: string): Promise<void> {
+  moveEmail(emailId: string, destinationFolderId: string): Promise<void> {
     return this.graph.moveEmailAsync(emailId, destinationFolderId);
   }
 
-  deleteEmail(emailId: string | number): Promise<void> {
+  deleteEmail(emailId: string): Promise<void> {
     return this.graph.deleteEmailAsync(emailId);
   }
 
-  archiveEmail(emailId: string | number): Promise<void> {
+  archiveEmail(emailId: string): Promise<void> {
     return this.graph.archiveEmailAsync(emailId);
   }
 
-  junkEmail(emailId: string | number): Promise<void> {
+  junkEmail(emailId: string): Promise<void> {
     return this.graph.junkEmailAsync(emailId);
   }
 
-  markEmailRead(emailId: string | number, isRead: boolean): Promise<void> {
+  markEmailRead(emailId: string, isRead: boolean): Promise<void> {
     return this.graph.markEmailReadAsync(emailId, isRead);
   }
 
-  setEmailFlag(emailId: string | number, flagStatus: number): Promise<void> {
+  setEmailFlag(emailId: string, flagStatus: number): Promise<void> {
     return this.graph.setEmailFlagAsync(emailId, flagStatus);
   }
 
-  setEmailCategories(emailId: string | number, categories: string[]): Promise<void> {
+  setEmailCategories(emailId: string, categories: string[]): Promise<void> {
     return this.graph.setEmailCategoriesAsync(emailId, categories);
   }
 
-  setEmailImportance(emailId: string | number, importance: string): Promise<void> {
+  setEmailImportance(emailId: string, importance: string): Promise<void> {
     return this.graph.setEmailImportanceAsync(emailId, importance);
   }
 

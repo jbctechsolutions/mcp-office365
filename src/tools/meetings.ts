@@ -73,18 +73,18 @@ export interface IMeetingsRepository {
   listOnlineMeetingsAsync(limit?: number): Promise<Array<{
     id: string; subject: string; startDateTime: string; endDateTime: string; joinUrl: string;
   }>>;
-  getOnlineMeetingAsync(meetingId: string | number): Promise<{
+  getOnlineMeetingAsync(meetingId: string): Promise<{
     id: string; subject: string; startDateTime: string; endDateTime: string; joinUrl: string;
     participants: unknown;
   } | undefined>;
-  listMeetingRecordingsAsync(meetingId: string | number): Promise<Array<{
+  listMeetingRecordingsAsync(meetingId: string): Promise<Array<{
     id: string; createdDateTime: string; recordingContentUrl: string;
   }>>;
-  downloadMeetingRecordingAsync(recordingId: string | number, outputPath: string): Promise<string>;
-  listMeetingTranscriptsAsync(meetingId: string | number): Promise<Array<{
+  downloadMeetingRecordingAsync(recordingId: string, outputPath: string): Promise<string>;
+  listMeetingTranscriptsAsync(meetingId: string): Promise<Array<{
     id: string; createdDateTime: string; contentUrl: string;
   }>>;
-  getMeetingTranscriptContentAsync(transcriptId: string | number, format?: string): Promise<string>;
+  getMeetingTranscriptContentAsync(transcriptId: string, format?: string): Promise<string>;
 }
 
 // =============================================================================

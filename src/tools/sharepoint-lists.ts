@@ -96,27 +96,27 @@ export type ConfirmDeleteListItemParams = z.infer<typeof ConfirmDeleteListItemIn
 // =============================================================================
 
 export interface ISharePointListsRepository {
-  listSharePointListsAsync(siteId: string | number): Promise<Array<{
+  listSharePointListsAsync(siteId: string): Promise<Array<{
     id: string; name: string; displayName: string; description: string; webUrl: string;
   }>>;
-  getSharePointListAsync(listId: string | number): Promise<{
+  getSharePointListAsync(listId: string): Promise<{
     id: string; name: string; displayName: string; description: string; webUrl: string;
   }>;
-  createSharePointListAsync(siteId: string | number, displayName: string, description?: string): Promise<string>;
-  listSharePointListColumnsAsync(listId: string | number): Promise<Array<{
+  createSharePointListAsync(siteId: string, displayName: string, description?: string): Promise<string>;
+  listSharePointListColumnsAsync(listId: string): Promise<Array<{
     id: string; name: string; displayName: string; columnType: string; required: boolean; readOnly: boolean;
   }>>;
-  listSharePointListItemsAsync(listId: string | number, limit?: number): Promise<Array<{
+  listSharePointListItemsAsync(listId: string, limit?: number): Promise<Array<{
     id: string; fields: Record<string, unknown>; webUrl: string;
     createdDateTime: string; lastModifiedDateTime: string;
   }>>;
-  getSharePointListItemAsync(itemId: string | number): Promise<{
+  getSharePointListItemAsync(itemId: string): Promise<{
     id: string; fields: Record<string, unknown>; webUrl: string;
     createdDateTime: string; lastModifiedDateTime: string;
   }>;
-  createSharePointListItemAsync(listId: string | number, fields: Record<string, unknown>): Promise<string>;
-  updateSharePointListItemAsync(itemId: string | number, fields: Record<string, unknown>): Promise<void>;
-  deleteSharePointListItemAsync(itemId: string | number): Promise<void>;
+  createSharePointListItemAsync(listId: string, fields: Record<string, unknown>): Promise<string>;
+  updateSharePointListItemAsync(itemId: string, fields: Record<string, unknown>): Promise<void>;
+  deleteSharePointListItemAsync(itemId: string): Promise<void>;
 }
 
 // =============================================================================

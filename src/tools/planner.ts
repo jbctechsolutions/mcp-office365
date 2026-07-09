@@ -147,14 +147,14 @@ export type UpdatePlannerTaskDetailsParams = z.infer<typeof UpdatePlannerTaskDet
 
 export interface IPlannerRepository {
   listPlansAsync(): Promise<Array<{ id: string; title: string; owner: string; createdDateTime: string }>>;
-  getPlanAsync(planId: string | number): Promise<{ id: string; title: string; owner: string; createdDateTime: string; etag: string }>;
+  getPlanAsync(planId: string): Promise<{ id: string; title: string; owner: string; createdDateTime: string; etag: string }>;
   createPlanAsync(title: string, groupId: string): Promise<string>;
-  updatePlanAsync(planId: string | number, updates: { title?: string }): Promise<void>;
-  listBucketsAsync(planId: string | number): Promise<Array<{ id: string; name: string; planId: string; orderHint: string }>>;
-  createBucketAsync(planId: string | number, name: string): Promise<string>;
-  updateBucketAsync(bucketId: string | number, updates: { name?: string }): Promise<void>;
-  deleteBucketAsync(bucketId: string | number): Promise<void>;
-  listPlannerTasksAsync(planId: string | number): Promise<Array<{
+  updatePlanAsync(planId: string, updates: { title?: string }): Promise<void>;
+  listBucketsAsync(planId: string): Promise<Array<{ id: string; name: string; planId: string; orderHint: string }>>;
+  createBucketAsync(planId: string, name: string): Promise<string>;
+  updateBucketAsync(bucketId: string, updates: { name?: string }): Promise<void>;
+  deleteBucketAsync(bucketId: string): Promise<void>;
+  listPlannerTasksAsync(planId: string): Promise<Array<{
     id: string; title: string; bucketId: string | null; assignees: string[];
     percentComplete: number; priority: number; startDateTime: string;
     dueDateTime: string; createdDateTime: string;
@@ -164,28 +164,28 @@ export interface IPlannerRepository {
     assignees: string[]; percentComplete: number; priority: number;
     startDateTime: string; dueDateTime: string; createdDateTime: string;
   }>>;
-  getPlannerTaskAsync(taskId: string | number): Promise<{
+  getPlannerTaskAsync(taskId: string): Promise<{
     id: string; title: string; bucketId: string | null; assignees: string[];
     percentComplete: number; priority: number; startDateTime: string;
     dueDateTime: string; createdDateTime: string; conversationThreadId: string;
     orderHint: string; etag: string;
   }>;
   createPlannerTaskAsync(
-    planId: string | number, title: string, bucketId?: string | number,
+    planId: string, title: string, bucketId?: string,
     assignments?: Record<string, object>, priority?: number,
     startDate?: string, dueDate?: string,
   ): Promise<string>;
-  updatePlannerTaskAsync(taskId: string | number, updates: {
-    title?: string; bucketId?: string | number; percentComplete?: number;
+  updatePlannerTaskAsync(taskId: string, updates: {
+    title?: string; bucketId?: string; percentComplete?: number;
     priority?: number; startDate?: string; dueDate?: string;
     assignments?: Record<string, object>;
   }): Promise<void>;
-  deletePlannerTaskAsync(taskId: string | number): Promise<void>;
-  getPlannerTaskDetailsAsync(taskId: string | number): Promise<{
+  deletePlannerTaskAsync(taskId: string): Promise<void>;
+  getPlannerTaskDetailsAsync(taskId: string): Promise<{
     id: string; description: string; checklist: Record<string, unknown>;
     references: Record<string, unknown>; etag: string;
   }>;
-  updatePlannerTaskDetailsAsync(taskId: string | number, updates: {
+  updatePlannerTaskDetailsAsync(taskId: string, updates: {
     description?: string; checklist?: Record<string, object>;
     references?: Record<string, object>;
   }): Promise<void>;
@@ -351,7 +351,7 @@ export class PlannerTools {
       };
     }
 
-    await this.repo.deleteBucketAsync((result.token!.targetId as string));
+    await this.repo.deleteBucketAsync((result.token!.targetId));
     return {
       content: [{
         type: 'text' as const,
@@ -503,7 +503,7 @@ export class PlannerTools {
       };
     }
 
-    await this.repo.deletePlannerTaskAsync((result.token!.targetId as string));
+    await this.repo.deletePlannerTaskAsync((result.token!.targetId));
     return {
       content: [{
         type: 'text' as const,

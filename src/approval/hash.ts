@@ -17,7 +17,7 @@ import { createHash } from 'node:crypto';
  * Used to detect if the email changed between prepare and confirm.
  */
 export function hashEmailForApproval(email: {
-  id: string | number;
+  id: string;
   subject: string | null;
   folderId: string;
   timeReceived: number | null;
@@ -48,7 +48,7 @@ export function hashFolderForApproval(folder: {
  * Used to detect if the draft changed between prepare and confirm.
  */
 export function hashDraftForSend(draft: {
-  id: string | number;
+  id: string;
   subject: string | null;
   recipientCount: number;
 }): string {
@@ -79,7 +79,7 @@ export function hashDirectSendForApproval(params: {
  * Captures the original message ID, comment length, and reply-all flag.
  */
 export function hashReplyForApproval(params: {
-  originalId: string | number;
+  originalId: string;
   commentLength: number;
   replyAll: boolean;
 }): string {
@@ -94,7 +94,7 @@ export function hashReplyForApproval(params: {
  * Captures the original message ID and the number of forward recipients.
  */
 export function hashForwardForApproval(params: {
-  originalId: string | number;
+  originalId: string;
   recipientCount: number;
 }): string {
   return createHash('sha256')
@@ -108,7 +108,7 @@ export function hashForwardForApproval(params: {
  * Used to detect if the event changed between prepare and confirm.
  */
 export function hashEventForApproval(event: {
-  id: string | number;
+  id: string;
   subject: string | null;
   startDateTime: string | null;
 }): string {
@@ -123,7 +123,7 @@ export function hashEventForApproval(event: {
  * Used to detect if the contact changed between prepare and confirm.
  */
 export function hashContactForApproval(contact: {
-  id: string | number;
+  id: string;
   displayName: string | null;
   emailAddress: string | null;
 }): string {

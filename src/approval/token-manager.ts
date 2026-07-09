@@ -25,7 +25,7 @@ const CLEANUP_THRESHOLD = 100;
 /** The target tuple persisted in the store's `target_json` column. */
 interface StoredTarget {
   targetType: TargetType;
-  targetId: string | number;
+  targetId: string;
   targetHash: string;
   metadata: Record<string, unknown>;
 }
@@ -74,7 +74,7 @@ export class ApprovalTokenManager {
   generateToken(params: {
     operation: OperationType;
     targetType: TargetType;
-    targetId: string | number;
+    targetId: string;
     targetHash: string;
     metadata?: Record<string, unknown>;
   }): ApprovalToken {
@@ -131,7 +131,7 @@ export class ApprovalTokenManager {
    * Validates a token without consuming it. Checks existence, prior redemption,
    * expiry, operation match, and target match.
    */
-  validateToken(tokenId: string, operation: OperationType, targetId: string | number): ValidationResult {
+  validateToken(tokenId: string, operation: OperationType, targetId: string): ValidationResult {
     if (this.store != null) {
       const row = this.store.getApprovalToken(tokenId, this.accountId);
       if (row == null) {
@@ -156,7 +156,7 @@ export class ApprovalTokenManager {
     return this.check(token, operation, targetId);
   }
 
-  private check(token: ApprovalToken, operation: OperationType, targetId: string | number): ValidationResult {
+  private check(token: ApprovalToken, operation: OperationType, targetId: string): ValidationResult {
     // `>=` so validate agrees with the store's consume guard (expires_at > now):
     // a token is expired at the exact expiry instant, on both paths.
     if (this.now() >= token.expiresAt) {
@@ -176,7 +176,7 @@ export class ApprovalTokenManager {
    * guarded consume so only one caller — across processes sharing the db — can
    * redeem it; a losing/repeat caller gets `ALREADY_CONSUMED` (D8).
    */
-  consumeToken(tokenId: string, operation: OperationType, targetId: string | number): ValidationResult {
+  consumeToken(tokenId: string, operation: OperationType, targetId: string): ValidationResult {
     const result = this.validateToken(tokenId, operation, targetId);
     if (!result.valid) {
       return result;
@@ -242,7 +242,10 @@ function rowToToken(row: ApprovalTokenRow): ApprovalToken | null {
     tokenId: row.token,
     operation: row.action as OperationType,
     targetType: target.targetType,
-    targetId: target.targetId,
+    // Coerce to string: a token persisted by a pre-v4 build may carry a numeric
+    // targetId (e.g. the send_email/upload_file sentinel `0`), which would else
+    // fail the strict `!==` target check against v4's string ids within the TTL.
+    targetId: String(target.targetId),
     targetHash: target.targetHash ?? row.contentHash ?? '',
     createdAt: row.createdAt,
     expiresAt: row.expiresAt,

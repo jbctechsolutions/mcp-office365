@@ -27,7 +27,7 @@ export interface TodoTaskWithList extends MicrosoftGraph.TodoTask {
  * tokens (`td_`/`tl_`) — mappers are pure and cannot mint alias tokens
  * themselves, so the repository computes them and passes them in.
  */
-export function mapTaskToTaskRow(task: TodoTaskWithList, id: string | number, folderId: string | number): TaskRow {
+export function mapTaskToTaskRow(task: TodoTaskWithList, id: string, folderId: string): TaskRow {
   const taskId = task.id ?? '';
 
   // Type assertions needed due to Graph API's NullableOption types

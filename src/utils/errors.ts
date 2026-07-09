@@ -436,7 +436,7 @@ export class IdEntityMismatchError extends OutlookMcpError {
 export class NumericIdUnsupportedError extends OutlookMcpError {
   readonly code = ErrorCode.NUMERIC_ID_UNSUPPORTED;
 
-  constructor(id: number | string) {
+  constructor(id: string) {
     super(`Numeric ID ${id} is not supported on the Graph backend (v2 hash IDs are lossy).`, {
       retriable: false,
       suggestion: 'Re-list the collection to obtain a current durable ID.',

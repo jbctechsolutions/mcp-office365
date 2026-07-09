@@ -61,9 +61,9 @@ export type ConfirmDeleteLinkedResourceParams = z.infer<typeof ConfirmDeleteLink
 // =============================================================================
 
 export interface ILinkedResourcesRepository {
-  listLinkedResourcesAsync(taskId: string | number): Promise<Array<{ id: string; webUrl: string; applicationName: string; displayName: string }>>;
-  createLinkedResourceAsync(taskId: string | number, webUrl: string, applicationName: string, displayName?: string): Promise<string>;
-  deleteLinkedResourceAsync(linkedResourceId: string | number): Promise<void>;
+  listLinkedResourcesAsync(taskId: string): Promise<Array<{ id: string; webUrl: string; applicationName: string; displayName: string }>>;
+  createLinkedResourceAsync(taskId: string, webUrl: string, applicationName: string, displayName?: string): Promise<string>;
+  deleteLinkedResourceAsync(linkedResourceId: string): Promise<void>;
 }
 
 // =============================================================================
@@ -163,7 +163,7 @@ export class LinkedResourcesTools {
       };
     }
 
-    await this.repo.deleteLinkedResourceAsync((result.token!.targetId as string));
+    await this.repo.deleteLinkedResourceAsync((result.token!.targetId));
     return {
       content: [{
         type: 'text' as const,

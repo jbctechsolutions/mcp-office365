@@ -61,9 +61,9 @@ export type ConfirmDeleteTaskAttachmentParams = z.infer<typeof ConfirmDeleteTask
 // =============================================================================
 
 export interface ITaskAttachmentsRepository {
-  listTaskAttachmentsAsync(taskId: string | number): Promise<Array<{ id: string; name: string; size: number; contentType: string }>>;
-  createTaskAttachmentAsync(taskId: string | number, name: string, contentBytes: string, contentType?: string): Promise<string>;
-  deleteTaskAttachmentAsync(taskAttachmentId: string | number): Promise<void>;
+  listTaskAttachmentsAsync(taskId: string): Promise<Array<{ id: string; name: string; size: number; contentType: string }>>;
+  createTaskAttachmentAsync(taskId: string, name: string, contentBytes: string, contentType?: string): Promise<string>;
+  deleteTaskAttachmentAsync(taskAttachmentId: string): Promise<void>;
 }
 
 // =============================================================================
@@ -163,7 +163,7 @@ export class TaskAttachmentsTools {
       };
     }
 
-    await this.repo.deleteTaskAttachmentAsync((result.token!.targetId as string));
+    await this.repo.deleteTaskAttachmentAsync((result.token!.targetId));
     return {
       content: [{
         type: 'text' as const,

@@ -21,7 +21,7 @@ export interface CalendarFolder {
  */
 export interface EventSummary {
   // string durable token on Graph (U5); numeric on AppleScript/SQLite (D4).
-  readonly id: string | number;
+  readonly id: string;
   readonly folderId: number;
   readonly title: string | null;
   readonly startDate: string | null;

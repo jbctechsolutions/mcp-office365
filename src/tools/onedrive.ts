@@ -191,7 +191,7 @@ export class OneDriveTools {
     const token = this.tokenManager.generateToken({
       operation: 'upload_file',
       targetType: 'drive_item',
-      targetId: 0,
+      targetId: '0',
       targetHash: `${params.parent_path}/${params.file_name}`,
       metadata: {
         parent_path: params.parent_path,
@@ -360,7 +360,7 @@ export class OneDriveTools {
       };
     }
 
-    await this.repo.deleteDriveItemAsync((result.token!.targetId as string));
+    await this.repo.deleteDriveItemAsync((result.token!.targetId));
     return {
       content: [{
         type: 'text' as const,

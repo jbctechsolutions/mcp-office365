@@ -33,7 +33,7 @@ export interface FolderRow {
 export interface EmailRow {
   // Durable string token (`em_…`) on the Graph backend (U5); numeric on the
   // AppleScript/SQLite backend (D4).
-  readonly id: string | number;
+  readonly id: string;
   // Durable self-encoding `fd_…` token (U5), Graph-only — string.
   readonly folderId: string;
   readonly subject: string | null;
@@ -60,7 +60,7 @@ export interface EmailRow {
 export interface EventRow {
   // Durable string token (`ev_…`) on the Graph backend (U5); numeric on the
   // AppleScript/SQLite backend (D4).
-  readonly id: string | number;
+  readonly id: string;
   // Durable self-encoding `fd_…` token (U5), Graph-only — string.
   readonly folderId: string;
   readonly subject: string | null;
@@ -79,7 +79,7 @@ export interface EventRow {
 export interface ContactRow {
   // Durable string token (`ct_…`) on the Graph backend (U5); numeric on the
   // AppleScript/SQLite backend (D4).
-  readonly id: string | number;
+  readonly id: string;
   readonly folderId: number;
   readonly displayName: string | null;
   readonly sortName: string | null;
@@ -90,10 +90,10 @@ export interface ContactRow {
 export interface TaskRow {
   // Durable composite `td_…` token on the Graph backend (U5); numeric on the
   // AppleScript/SQLite backend (D4).
-  readonly id: string | number;
+  readonly id: string;
   // Durable alias-backed `tl_…` token on the Graph backend (U5); numeric on the
   // AppleScript/SQLite backend (D4).
-  readonly folderId: string | number;
+  readonly folderId: string;
   readonly name: string | null;
   readonly isCompleted: number;
   readonly dueDate: number | null;
@@ -131,7 +131,7 @@ export interface IRepository {
   listUnreadEmails(folderId: number, limit: number, offset: number): EmailRow[];
   searchEmails(query: string, limit: number): EmailRow[];
   searchEmailsInFolder(folderId: number, query: string, limit: number): EmailRow[];
-  getEmail(id: string | number): EmailRow | undefined;
+  getEmail(id: string): EmailRow | undefined;
   getUnreadCount(): number;
   getUnreadCountByFolder(folderId: number): number;
 
@@ -141,18 +141,18 @@ export interface IRepository {
   listEventsByFolder(folderId: number, limit: number): EventRow[];
   listEventsByDateRange(startDate: number, endDate: number, limit: number): EventRow[];
   searchEvents(query: string | null, startDate: string | null, endDate: string | null, limit: number): EventRow[];
-  getEvent(id: string | number): EventRow | undefined;
+  getEvent(id: string): EventRow | undefined;
 
   // Contacts
   listContacts(limit: number, offset: number): ContactRow[];
   searchContacts(query: string, limit: number): ContactRow[];
-  getContact(id: string | number): ContactRow | undefined;
+  getContact(id: string): ContactRow | undefined;
 
   // Tasks
   listTasks(limit: number, offset: number): TaskRow[];
   listIncompleteTasks(limit: number, offset: number): TaskRow[];
   searchTasks(query: string, limit: number): TaskRow[];
-  getTask(id: string | number): TaskRow | undefined;
+  getTask(id: string): TaskRow | undefined;
 
   // Notes
   listNotes(limit: number, offset: number): NoteRow[];
@@ -169,14 +169,14 @@ export interface IRepository {
  */
 export interface IWriteableRepository extends IRepository {
   // Email organization
-  moveEmail(emailId: string | number, destinationFolderId: string): void;
-  deleteEmail(emailId: string | number): void;
-  archiveEmail(emailId: string | number): void;
-  junkEmail(emailId: string | number): void;
-  markEmailRead(emailId: string | number, isRead: boolean): void;
-  setEmailFlag(emailId: string | number, flagStatus: number): void;
-  setEmailCategories(emailId: string | number, categories: string[]): void;
-  setEmailImportance(emailId: string | number, importance: string): void;
+  moveEmail(emailId: string, destinationFolderId: string): void;
+  deleteEmail(emailId: string): void;
+  archiveEmail(emailId: string): void;
+  junkEmail(emailId: string): void;
+  markEmailRead(emailId: string, isRead: boolean): void;
+  setEmailFlag(emailId: string, flagStatus: number): void;
+  setEmailCategories(emailId: string, categories: string[]): void;
+  setEmailImportance(emailId: string, importance: string): void;
 
   // Folder management
   createFolder(name: string, parentFolderId?: string): FolderRow;
@@ -204,18 +204,18 @@ export type MaybePromise<T> = T | Promise<T>;
  */
 export interface IMailboxRepository {
   // Read
-  getEmail(id: string | number): MaybePromise<EmailRow | undefined>;
+  getEmail(id: string): MaybePromise<EmailRow | undefined>;
   getFolder(id: string): MaybePromise<FolderRow | undefined>;
 
   // Email organization
-  moveEmail(emailId: string | number, destinationFolderId: string): MaybePromise<void>;
-  deleteEmail(emailId: string | number): MaybePromise<void>;
-  archiveEmail(emailId: string | number): MaybePromise<void>;
-  junkEmail(emailId: string | number): MaybePromise<void>;
-  markEmailRead(emailId: string | number, isRead: boolean): MaybePromise<void>;
-  setEmailFlag(emailId: string | number, flagStatus: number): MaybePromise<void>;
-  setEmailCategories(emailId: string | number, categories: string[]): MaybePromise<void>;
-  setEmailImportance(emailId: string | number, importance: string): MaybePromise<void>;
+  moveEmail(emailId: string, destinationFolderId: string): MaybePromise<void>;
+  deleteEmail(emailId: string): MaybePromise<void>;
+  archiveEmail(emailId: string): MaybePromise<void>;
+  junkEmail(emailId: string): MaybePromise<void>;
+  markEmailRead(emailId: string, isRead: boolean): MaybePromise<void>;
+  setEmailFlag(emailId: string, flagStatus: number): MaybePromise<void>;
+  setEmailCategories(emailId: string, categories: string[]): MaybePromise<void>;
+  setEmailImportance(emailId: string, importance: string): MaybePromise<void>;
 
   // Folder management
   createFolder(name: string, parentFolderId?: string): MaybePromise<FolderRow>;
@@ -287,7 +287,7 @@ export class OutlookRepository implements IRepository {
     });
   }
 
-  getEmail(id: string | number): EmailRow | undefined {
+  getEmail(id: string): EmailRow | undefined {
     return this.connection.execute((db) => {
       const stmt = db.prepare(queries.GET_EMAIL);
       return stmt.get(id) as EmailRow | undefined;
@@ -355,7 +355,7 @@ export class OutlookRepository implements IRepository {
     return this.listEvents(limit);
   }
 
-  getEvent(id: string | number): EventRow | undefined {
+  getEvent(id: string): EventRow | undefined {
     return this.connection.execute((db) => {
       const stmt = db.prepare(queries.GET_EVENT);
       return stmt.get(id) as EventRow | undefined;
@@ -381,7 +381,7 @@ export class OutlookRepository implements IRepository {
     });
   }
 
-  getContact(id: string | number): ContactRow | undefined {
+  getContact(id: string): ContactRow | undefined {
     return this.connection.execute((db) => {
       const stmt = db.prepare(queries.GET_CONTACT);
       return stmt.get(id) as ContactRow | undefined;
@@ -414,7 +414,7 @@ export class OutlookRepository implements IRepository {
     });
   }
 
-  getTask(id: string | number): TaskRow | undefined {
+  getTask(id: string): TaskRow | undefined {
     return this.connection.execute((db) => {
       const stmt = db.prepare(queries.GET_TASK);
       return stmt.get(id) as TaskRow | undefined;

@@ -56,7 +56,7 @@ export type ConfirmDeleteFocusedOverrideParams = z.infer<typeof ConfirmDeleteFoc
 export interface IFocusedOverridesRepository {
   listFocusedOverridesAsync(): Promise<Array<{ id: string; senderAddress: string; classifyAs: string }>>;
   createFocusedOverrideAsync(senderAddress: string, classifyAs: 'focused' | 'other'): Promise<string>;
-  deleteFocusedOverrideAsync(overrideId: string | number): Promise<void>;
+  deleteFocusedOverrideAsync(overrideId: string): Promise<void>;
 }
 
 // =============================================================================
@@ -156,7 +156,7 @@ export class FocusedOverridesTools {
       };
     }
 
-    await this.repo.deleteFocusedOverrideAsync((result.token!.targetId as string));
+    await this.repo.deleteFocusedOverrideAsync((result.token!.targetId));
     return {
       content: [{
         type: 'text' as const,

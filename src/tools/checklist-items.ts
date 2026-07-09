@@ -67,10 +67,10 @@ export type ConfirmDeleteChecklistItemParams = z.infer<typeof ConfirmDeleteCheck
 // =============================================================================
 
 export interface IChecklistItemsRepository {
-  listChecklistItemsAsync(taskId: string | number): Promise<Array<{ id: string; displayName: string; isChecked: boolean; createdDateTime: string }>>;
-  createChecklistItemAsync(taskId: string | number, displayName: string, isChecked?: boolean): Promise<string>;
-  updateChecklistItemAsync(checklistItemId: string | number, updates: { displayName?: string; isChecked?: boolean }): Promise<void>;
-  deleteChecklistItemAsync(checklistItemId: string | number): Promise<void>;
+  listChecklistItemsAsync(taskId: string): Promise<Array<{ id: string; displayName: string; isChecked: boolean; createdDateTime: string }>>;
+  createChecklistItemAsync(taskId: string, displayName: string, isChecked?: boolean): Promise<string>;
+  updateChecklistItemAsync(checklistItemId: string, updates: { displayName?: string; isChecked?: boolean }): Promise<void>;
+  deleteChecklistItemAsync(checklistItemId: string): Promise<void>;
 }
 
 // =============================================================================
@@ -185,7 +185,7 @@ export class ChecklistItemsTools {
       };
     }
 
-    await this.repo.deleteChecklistItemAsync((result.token!.targetId as string));
+    await this.repo.deleteChecklistItemAsync((result.token!.targetId));
     return {
       content: [{
         type: 'text' as const,

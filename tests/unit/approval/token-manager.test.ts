@@ -678,7 +678,7 @@ describe('ApprovalTokenManager', () => {
     const genParams = {
       operation: 'delete_email' as const,
       targetType: 'email' as const,
-      targetId: 42,
+      targetId: '42',
       targetHash: 'seal-abc',
       metadata: { subject: 'Q3' },
     };
@@ -699,8 +699,8 @@ describe('ApprovalTokenManager', () => {
 
       // A new manager instance (simulating a server restart) resolves it.
       const b = new ApprovalTokenManager({ store });
-      expect(b.lookupToken(token.tokenId)?.targetId).toBe(42);
-      expect(b.validateToken(token.tokenId, 'delete_email', 42).valid).toBe(true);
+      expect(b.lookupToken(token.tokenId)?.targetId).toBe('42');
+      expect(b.validateToken(token.tokenId, 'delete_email', '42').valid).toBe(true);
     });
 
     it('round-trips targetType/targetHash/metadata through the store', () => {
@@ -717,9 +717,9 @@ describe('ApprovalTokenManager', () => {
       const token = a.generateToken(genParams);
 
       const b = new ApprovalTokenManager({ store }); // e.g. a second window
-      expect(a.consumeToken(token.tokenId, 'delete_email', 42).valid).toBe(true);
+      expect(a.consumeToken(token.tokenId, 'delete_email', '42').valid).toBe(true);
       // The second consume — same or different instance — is refused.
-      const second = b.consumeToken(token.tokenId, 'delete_email', 42);
+      const second = b.consumeToken(token.tokenId, 'delete_email', '42');
       expect(second.valid).toBe(false);
       expect(second.error).toBe('ALREADY_CONSUMED');
     });
@@ -727,16 +727,16 @@ describe('ApprovalTokenManager', () => {
     it('validate reports ALREADY_CONSUMED after redemption', () => {
       const m = new ApprovalTokenManager({ store });
       const token = m.generateToken(genParams);
-      m.consumeToken(token.tokenId, 'delete_email', 42);
-      const v = m.validateToken(token.tokenId, 'delete_email', 42);
+      m.consumeToken(token.tokenId, 'delete_email', '42');
+      const v = m.validateToken(token.tokenId, 'delete_email', '42');
       expect(v.error).toBe('ALREADY_CONSUMED');
     });
 
     it('enforces operation and target match against the persisted token', () => {
       const m = new ApprovalTokenManager({ store });
       const token = m.generateToken(genParams);
-      expect(m.validateToken(token.tokenId, 'delete_folder', 42).error).toBe('OPERATION_MISMATCH');
-      expect(m.validateToken(token.tokenId, 'delete_email', 999).error).toBe('TARGET_MISMATCH');
+      expect(m.validateToken(token.tokenId, 'delete_folder', '42').error).toBe('OPERATION_MISMATCH');
+      expect(m.validateToken(token.tokenId, 'delete_email', '999').error).toBe('TARGET_MISMATCH');
     });
 
     it('expires a durable token past its 24h TTL', () => {
@@ -744,9 +744,25 @@ describe('ApprovalTokenManager', () => {
       const m = new ApprovalTokenManager({ store, now: () => clock });
       const token = m.generateToken(genParams);
       clock += 24 * 60 * 60 * 1000 + 1;
-      expect(m.validateToken(token.tokenId, 'delete_email', 42).error).toBe('EXPIRED');
+      expect(m.validateToken(token.tokenId, 'delete_email', '42').error).toBe('EXPIRED');
       // And a consume of an expired token is refused.
-      expect(m.consumeToken(token.tokenId, 'delete_email', 42).valid).toBe(false);
+      expect(m.consumeToken(token.tokenId, 'delete_email', '42').valid).toBe(false);
+    });
+
+    it('coerces a legacy numeric targetId (pre-v4 token) to string so it still validates', () => {
+      // Simulate a token persisted by a pre-v4 build: the send_email/upload_file
+      // sentinel wrote `targetId` as the JS number 0. v4 consumes with '0'.
+      store.putApprovalToken({
+        token: 'ap-legacy',
+        action: 'send_email',
+        targetJson: JSON.stringify({ targetType: 'email', targetId: 0, targetHash: 'seal', metadata: {} }),
+        contentHash: null,
+        accountId: 'default',
+        expiresAt: 4_000_000_000_000,
+      });
+      const m = new ApprovalTokenManager({ store });
+      expect(m.lookupToken('ap-legacy')?.targetId).toBe('0');
+      expect(m.validateToken('ap-legacy', 'send_email', '0').valid).toBe(true);
     });
 
     it('fails closed (NOT_FOUND, no throw) on a corrupt persisted target_json', () => {
@@ -761,8 +777,8 @@ describe('ApprovalTokenManager', () => {
       });
       const m = new ApprovalTokenManager({ store });
       expect(m.lookupToken('ap-corrupt')).toBeUndefined();
-      expect(() => m.validateToken('ap-corrupt', 'delete_email', 1)).not.toThrow();
-      expect(m.validateToken('ap-corrupt', 'delete_email', 1).error).toBe('NOT_FOUND');
+      expect(() => m.validateToken('ap-corrupt', 'delete_email', '1')).not.toThrow();
+      expect(m.validateToken('ap-corrupt', 'delete_email', '1').error).toBe('NOT_FOUND');
     });
 
     it('does not resolve a token minted under a different account (D7)', () => {
@@ -770,7 +786,7 @@ describe('ApprovalTokenManager', () => {
       const token = owner.generateToken(genParams);
       const other = new ApprovalTokenManager({ store, accountId: 'acct-B' });
       expect(other.lookupToken(token.tokenId)).toBeUndefined();
-      expect(other.validateToken(token.tokenId, 'delete_email', 42).error).toBe('NOT_FOUND');
+      expect(other.validateToken(token.tokenId, 'delete_email', '42').error).toBe('NOT_FOUND');
     });
 
     it('round-trips a string targetId (durable token) through the store and matches on consume', () => {
