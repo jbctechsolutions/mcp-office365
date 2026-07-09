@@ -189,6 +189,15 @@ vi.mock('../../../src/graph/client/index.js', () => ({
       listDocumentLibraries: vi.fn(),
       listLibraryItems: vi.fn(),
       downloadLibraryFile: vi.fn(),
+      listSharePointLists: vi.fn(),
+      getSharePointList: vi.fn(),
+      createSharePointList: vi.fn(),
+      listSharePointListColumns: vi.fn(),
+      listSharePointListItems: vi.fn(),
+      getSharePointListItem: vi.fn(),
+      createSharePointListItem: vi.fn(),
+      updateSharePointListItem: vi.fn(),
+      deleteSharePointListItem: vi.fn(),
     };
   }),
 }));
@@ -4122,6 +4131,273 @@ describe('graph/repository', () => {
 
       it('rejects an unknown li_ token', async () => {
         await expect(repository.downloadLibraryFileAsync('li_bogus', '/tmp/out.docx')).rejects.toThrow('Unknown or unresolvable');
+      });
+    });
+  });
+
+  // ===========================================================================
+  // SharePoint Lists (durable sl_ / sn_ tokens)
+  // ===========================================================================
+
+  describe('SharePoint Lists (durable sl_ / sn_ tokens)', () => {
+    // Mints a site token the list chain hangs off of.
+    async function siteToken(): Promise<string> {
+      mockClient.listFollowedSites.mockResolvedValue([
+        { id: 'site-1', name: 'team', webUrl: '', displayName: 'Team Site' },
+      ]);
+      const sites = await repository.listSitesAsync();
+      return sites[0].id;
+    }
+
+    // Mints an sl_ list token under site-1 / list-1.
+    async function listToken(): Promise<string> {
+      const siteTok = await siteToken();
+      mockClient.listSharePointLists.mockResolvedValue([
+        { id: 'list-1', name: 'announcements', displayName: 'Announcements', description: '', webUrl: '' },
+      ]);
+      const lists = await repository.listSharePointListsAsync(siteTok);
+      return lists[0].id;
+    }
+
+    describe('listSharePointListsAsync', () => {
+      it('resolves the parent si_ token and mints sl_ tokens', async () => {
+        const siteTok = await siteToken();
+        mockClient.listSharePointLists.mockResolvedValue([
+          { id: 'list-1', name: 'announcements', displayName: 'Announcements', description: 'News', webUrl: 'https://x/1' },
+          { id: 'list-2', name: 'tasks', displayName: 'Tasks', description: '', webUrl: 'https://x/2' },
+        ]);
+
+        const result = await repository.listSharePointListsAsync(siteTok);
+
+        expect(mockClient.listSharePointLists).toHaveBeenCalledWith('site-1');
+        expect(result).toHaveLength(2);
+        expect(result[0].id).toMatch(/^sl_/);
+        expect(result[0].id).not.toBe(result[1].id);
+        expect(result[0].displayName).toBe('Announcements');
+      });
+
+      it('rejects an unknown parent si_ token', async () => {
+        await expect(repository.listSharePointListsAsync('si_bogus')).rejects.toThrow('Unknown or unresolvable');
+      });
+
+      it('skips lists with no id rather than minting an empty-tuple token', async () => {
+        const siteTok = await siteToken();
+        mockClient.listSharePointLists.mockResolvedValue([
+          { id: 'list-1', displayName: 'Real', name: '', description: '', webUrl: '' },
+          { displayName: 'No Id', name: '', description: '', webUrl: '' },
+        ]);
+
+        const result = await repository.listSharePointListsAsync(siteTok);
+
+        expect(result).toHaveLength(1);
+        expect(result[0].displayName).toBe('Real');
+      });
+    });
+
+    describe('getSharePointListAsync', () => {
+      it('resolves the sl_ token to (siteId, listId) and echoes the token', async () => {
+        const listTok = await listToken();
+        mockClient.getSharePointList.mockResolvedValue({
+          name: 'announcements', displayName: 'Announcements', description: 'News', webUrl: 'https://x/1',
+        });
+
+        const result = await repository.getSharePointListAsync(listTok);
+
+        expect(mockClient.getSharePointList).toHaveBeenCalledWith('site-1', 'list-1');
+        expect(result.id).toBe(listTok);
+        expect(result.displayName).toBe('Announcements');
+      });
+
+      it('rejects a legacy numeric list id', async () => {
+        await expect(repository.getSharePointListAsync(999999)).rejects.toThrow('not supported');
+      });
+
+      it('rejects an unknown sl_ token', async () => {
+        await expect(repository.getSharePointListAsync('sl_bogus')).rejects.toThrow('Unknown or unresolvable');
+      });
+    });
+
+    describe('createSharePointListAsync', () => {
+      it('resolves the parent si_ token, creates, and mints an sl_ token', async () => {
+        const siteTok = await siteToken();
+        mockClient.createSharePointList.mockResolvedValue({ id: 'list-9' });
+
+        const token = await repository.createSharePointListAsync(siteTok, 'My List', 'desc');
+
+        expect(mockClient.createSharePointList).toHaveBeenCalledWith('site-1', {
+          displayName: 'My List',
+          list: { template: 'genericList' },
+          description: 'desc',
+        });
+        expect(token).toMatch(/^sl_/);
+        // The minted token round-trips to the same (siteId, listId) tuple.
+        mockClient.getSharePointList.mockResolvedValue({ displayName: 'My List' });
+        await repository.getSharePointListAsync(token);
+        expect(mockClient.getSharePointList).toHaveBeenCalledWith('site-1', 'list-9');
+      });
+
+      it('throws rather than minting a poisoned token when Graph returns no id', async () => {
+        const siteTok = await siteToken();
+        mockClient.createSharePointList.mockResolvedValue({});
+
+        await expect(repository.createSharePointListAsync(siteTok, 'My List')).rejects.toThrow('returned no id');
+      });
+    });
+
+    describe('listSharePointListColumnsAsync', () => {
+      it('resolves the sl_ token and derives the column type from its facet', async () => {
+        const listTok = await listToken();
+        mockClient.listSharePointListColumns.mockResolvedValue([
+          { id: 'c1', name: 'Title', displayName: 'Title', text: {}, required: true, readOnly: false },
+          { id: 'c2', name: 'Count', displayName: 'Count', number: {}, required: false, readOnly: false },
+          { id: 'c3', name: 'Weird', displayName: 'Weird' },
+        ]);
+
+        const result = await repository.listSharePointListColumnsAsync(listTok);
+
+        expect(mockClient.listSharePointListColumns).toHaveBeenCalledWith('site-1', 'list-1');
+        expect(result[0].columnType).toBe('text');
+        expect(result[1].columnType).toBe('number');
+        expect(result[2].columnType).toBe('unknown');
+        // Columns carry no durable token.
+        expect(result[0].id).toBe('c1');
+      });
+
+      it('rejects an unknown sl_ token', async () => {
+        await expect(repository.listSharePointListColumnsAsync('sl_bogus')).rejects.toThrow('Unknown or unresolvable');
+      });
+
+      it('pins facet precedence when a definition carries more than one facet', async () => {
+        const listTok = await listToken();
+        // Graph normally emits one type facet; pin the first-match order so a
+        // future reorder of the facet list is caught. 'text' precedes 'number'.
+        mockClient.listSharePointListColumns.mockResolvedValue([
+          { id: 'c1', name: 'Both', displayName: 'Both', text: {}, number: {} },
+        ]);
+
+        const result = await repository.listSharePointListColumnsAsync(listTok);
+
+        expect(result[0].columnType).toBe('text');
+      });
+    });
+
+    describe('listSharePointListItemsAsync', () => {
+      it('resolves the sl_ token and mints sn_ tokens carrying the field values', async () => {
+        const listTok = await listToken();
+        mockClient.listSharePointListItems.mockResolvedValue([
+          { id: '1', fields: { Title: 'First' }, webUrl: 'https://x/i1', createdDateTime: 'c', lastModifiedDateTime: 'm' },
+          { id: '2', fields: { Title: 'Second' }, webUrl: '', createdDateTime: '', lastModifiedDateTime: '' },
+        ]);
+
+        const result = await repository.listSharePointListItemsAsync(listTok, 25);
+
+        expect(mockClient.listSharePointListItems).toHaveBeenCalledWith('site-1', 'list-1', 25);
+        expect(result).toHaveLength(2);
+        expect(result[0].id).toMatch(/^sn_/);
+        expect(result[0].fields).toEqual({ Title: 'First' });
+      });
+
+      it('rejects an unknown sl_ token', async () => {
+        await expect(repository.listSharePointListItemsAsync('sl_bogus')).rejects.toThrow('Unknown or unresolvable');
+      });
+    });
+
+    describe('getSharePointListItemAsync', () => {
+      it('resolves the sn_ token to (siteId, listId, itemId) and echoes the token', async () => {
+        const listTok = await listToken();
+        mockClient.listSharePointListItems.mockResolvedValue([
+          { id: '1', fields: { Title: 'First' }, webUrl: '', createdDateTime: '', lastModifiedDateTime: '' },
+        ]);
+        const items = await repository.listSharePointListItemsAsync(listTok);
+        const itemTok = items[0].id;
+
+        mockClient.getSharePointListItem.mockResolvedValue({ fields: { Title: 'First' }, webUrl: 'https://x/i1' });
+
+        const result = await repository.getSharePointListItemAsync(itemTok);
+
+        expect(mockClient.getSharePointListItem).toHaveBeenCalledWith('site-1', 'list-1', '1');
+        expect(result.id).toBe(itemTok);
+        expect(result.fields).toEqual({ Title: 'First' });
+      });
+
+      it('rejects an unknown sn_ token', async () => {
+        await expect(repository.getSharePointListItemAsync('sn_bogus')).rejects.toThrow('Unknown or unresolvable');
+      });
+    });
+
+    describe('createSharePointListItemAsync', () => {
+      it('resolves the parent sl_ token, creates, and mints an sn_ token', async () => {
+        const listTok = await listToken();
+        mockClient.createSharePointListItem.mockResolvedValue({ id: '99' });
+
+        const token = await repository.createSharePointListItemAsync(listTok, { Title: 'New' });
+
+        expect(mockClient.createSharePointListItem).toHaveBeenCalledWith('site-1', 'list-1', { Title: 'New' });
+        expect(token).toMatch(/^sn_/);
+        // The minted token round-trips to (site-1, list-1, 99).
+        mockClient.getSharePointListItem.mockResolvedValue({ fields: {} });
+        await repository.getSharePointListItemAsync(token);
+        expect(mockClient.getSharePointListItem).toHaveBeenCalledWith('site-1', 'list-1', '99');
+      });
+
+      it('rejects an unknown parent sl_ token', async () => {
+        await expect(repository.createSharePointListItemAsync('sl_bogus', { Title: 'x' })).rejects.toThrow('Unknown or unresolvable');
+      });
+
+      it('throws rather than minting a poisoned token when Graph returns no id', async () => {
+        const listTok = await listToken();
+        mockClient.createSharePointListItem.mockResolvedValue({});
+
+        await expect(repository.createSharePointListItemAsync(listTok, { Title: 'x' })).rejects.toThrow('returned no id');
+      });
+
+      it('mints the same sn_ token a later list call would mint for the same item (determinism)', async () => {
+        const listTok = await listToken();
+        mockClient.createSharePointListItem.mockResolvedValue({ id: '7' });
+        const createdTok = await repository.createSharePointListItemAsync(listTok, { Title: 'x' });
+
+        mockClient.listSharePointListItems.mockResolvedValue([
+          { id: '7', fields: {}, webUrl: '', createdDateTime: '', lastModifiedDateTime: '' },
+        ]);
+        const listed = await repository.listSharePointListItemsAsync(listTok);
+
+        expect(listed[0].id).toBe(createdTok);
+      });
+    });
+
+    describe('updateSharePointListItemAsync', () => {
+      it('resolves the sn_ token and patches the fields', async () => {
+        const listTok = await listToken();
+        mockClient.listSharePointListItems.mockResolvedValue([
+          { id: '1', fields: {}, webUrl: '', createdDateTime: '', lastModifiedDateTime: '' },
+        ]);
+        const items = await repository.listSharePointListItemsAsync(listTok);
+
+        await repository.updateSharePointListItemAsync(items[0].id, { Title: 'Updated' });
+
+        expect(mockClient.updateSharePointListItem).toHaveBeenCalledWith('site-1', 'list-1', '1', { Title: 'Updated' });
+      });
+
+      it('rejects an unknown sn_ token', async () => {
+        await expect(repository.updateSharePointListItemAsync('sn_bogus', {})).rejects.toThrow('Unknown or unresolvable');
+      });
+    });
+
+    describe('deleteSharePointListItemAsync', () => {
+      it('resolves the sn_ token and deletes', async () => {
+        const listTok = await listToken();
+        mockClient.listSharePointListItems.mockResolvedValue([
+          { id: '1', fields: {}, webUrl: '', createdDateTime: '', lastModifiedDateTime: '' },
+        ]);
+        const items = await repository.listSharePointListItemsAsync(listTok);
+
+        await repository.deleteSharePointListItemAsync(items[0].id);
+
+        expect(mockClient.deleteSharePointListItem).toHaveBeenCalledWith('site-1', 'list-1', '1');
+      });
+
+      it('rejects an unknown sn_ token', async () => {
+        await expect(repository.deleteSharePointListItemAsync('sn_bogus')).rejects.toThrow('Unknown or unresolvable');
       });
     });
   });

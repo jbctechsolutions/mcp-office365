@@ -65,6 +65,7 @@ import { PlannerTools } from './tools/planner.js';
 import { PlannerVisualizationTools } from './tools/planner-visualization.js';
 import { SharePointTools } from './tools/sharepoint.js';
 import { DeltaTools } from './tools/what-changed.js';
+import { SharePointListsTools } from './tools/sharepoint-lists.js';
 import { ApprovalTokenManager } from './approval/index.js';
 import { StateStore } from './state/store.js';
 import {
@@ -165,6 +166,7 @@ export function createServer(options: ServerOptions = {}): Server {
   let onenoteTools: OneNoteTools | null = null;
   let oneDriveTools: OneDriveTools | null = null;
   let sharePointTools: SharePointTools | null = null;
+  let sharePointListsTools: SharePointListsTools | null = null;
   let excelTools: ExcelTools | null = null;
   let checklistItemsTools: ChecklistItemsTools | null = null;
   let linkedResourcesTools: LinkedResourcesTools | null = null;
@@ -228,6 +230,7 @@ export function createServer(options: ServerOptions = {}): Server {
     onenoteTools = new OneNoteTools(graphRepository);
     oneDriveTools = new OneDriveTools(graphRepository, tokenManager);
     sharePointTools = new SharePointTools(graphRepository);
+    sharePointListsTools = new SharePointListsTools(graphRepository, tokenManager);
     excelTools = new ExcelTools(graphRepository, tokenManager);
     deltaTools = new DeltaTools(graphRepository.getClient(), stateStore, currentAccountId);
 
@@ -266,6 +269,7 @@ export function createServer(options: ServerOptions = {}): Server {
         && meetingsTools != null
         && onenoteTools != null
         && sharePointTools != null
+        && sharePointListsTools != null
         && teamsTools != null
         && plannerTools != null
         && oneDriveTools != null
@@ -295,6 +299,7 @@ export function createServer(options: ServerOptions = {}): Server {
               meetings: meetingsTools,
               onenote: onenoteTools,
               sharePoint: sharePointTools,
+              sharePointLists: sharePointListsTools,
               teams: teamsTools,
               planner: plannerTools,
               oneDrive: oneDriveTools,

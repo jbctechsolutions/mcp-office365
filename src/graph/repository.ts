@@ -3122,6 +3122,186 @@ export class GraphRepository implements IRepository {
   getFolderGraphId(folderId: string): string {
     return this.toGraphId(folderId, 'folder');
   }
+
+  // ===========================================================================
+  // SharePoint Lists
+  // ===========================================================================
+
+  /**
+   * Lists the SharePoint lists in a site, minting durable sl_ tokens. Each list
+   * token carries the {siteId, listId} tuple its Graph URL needs.
+   */
+  async listSharePointListsAsync(siteId: string | number): Promise<Array<{
+    id: string; name: string; displayName: string; description: string; webUrl: string;
+  }>> {
+    const graphSiteId = this.toGraphId(siteId, 'site');
+    const lists = await this.client.listSharePointLists(graphSiteId);
+    const result: Array<{ id: string; name: string; displayName: string; description: string; webUrl: string }> = [];
+    for (const list of lists) {
+      const listId = list.id as string | undefined;
+      if (listId != null) {
+        result.push({
+          id: this.mintAliasComposite('sharePointList', { siteId: graphSiteId, listId }),
+          name: (list.name as string | undefined) ?? '',
+          displayName: (list.displayName as string | undefined) ?? '',
+          description: (list.description as string | undefined) ?? '',
+          webUrl: (list.webUrl as string | undefined) ?? '',
+        });
+      }
+    }
+    return result;
+  }
+
+  /**
+   * Gets a specific SharePoint list, resolving the sl_ token to its tuple.
+   */
+  async getSharePointListAsync(listId: string | number): Promise<{
+    id: string; name: string; displayName: string; description: string; webUrl: string;
+  }> {
+    const { siteId, listId: graphListId } = this.toGraphParts(listId, 'sharePointList', ['siteId', 'listId']);
+    const list = await this.client.getSharePointList(siteId, graphListId);
+    return {
+      id: String(listId),
+      name: (list.name as string | undefined) ?? '',
+      displayName: (list.displayName as string | undefined) ?? '',
+      description: (list.description as string | undefined) ?? '',
+      webUrl: (list.webUrl as string | undefined) ?? '',
+    };
+  }
+
+  /**
+   * Creates a SharePoint list in a site, minting a durable sl_ token.
+   */
+  async createSharePointListAsync(siteId: string | number, displayName: string, description?: string): Promise<string> {
+    const graphSiteId = this.toGraphId(siteId, 'site');
+    const body: Record<string, unknown> = {
+      displayName,
+      list: { template: 'genericList' },
+    };
+    if (description != null) {
+      body.description = description;
+    }
+    const created = await this.client.createSharePointList(graphSiteId, body);
+    const newListId = created.id as string | undefined;
+    if (newListId == null || newListId.length === 0) {
+      // Mint guard (matches #46/#47): a composite token minted with an empty id
+      // would digest to a resolvable-but-wrong token and be reported as 'created'.
+      throw new Error('SharePoint list creation returned no id.');
+    }
+    return this.mintAliasComposite('sharePointList', { siteId: graphSiteId, listId: newListId });
+  }
+
+  /**
+   * Lists the column definitions for a SharePoint list. Columns are addressed by
+   * name in item field values, so they carry no durable token.
+   */
+  async listSharePointListColumnsAsync(listId: string | number): Promise<Array<{
+    id: string; name: string; displayName: string; columnType: string; required: boolean; readOnly: boolean;
+  }>> {
+    const { siteId, listId: graphListId } = this.toGraphParts(listId, 'sharePointList', ['siteId', 'listId']);
+    const columns = await this.client.listSharePointListColumns(siteId, graphListId);
+    return columns.map((col) => ({
+      id: (col.id as string | undefined) ?? '',
+      name: (col.name as string | undefined) ?? '',
+      displayName: (col.displayName as string | undefined) ?? '',
+      columnType: sharePointColumnType(col),
+      required: (col.required as boolean | undefined) ?? false,
+      readOnly: (col.readOnly as boolean | undefined) ?? false,
+    }));
+  }
+
+  /**
+   * Lists the items in a SharePoint list, minting durable sn_ tokens that carry
+   * the {siteId, listId, itemId} tuple.
+   */
+  async listSharePointListItemsAsync(listId: string | number, limit: number = 50): Promise<Array<{
+    id: string; fields: Record<string, unknown>; webUrl: string;
+    createdDateTime: string; lastModifiedDateTime: string;
+  }>> {
+    const { siteId, listId: graphListId } = this.toGraphParts(listId, 'sharePointList', ['siteId', 'listId']);
+    const items = await this.client.listSharePointListItems(siteId, graphListId, limit);
+    const result: Array<{
+      id: string; fields: Record<string, unknown>; webUrl: string;
+      createdDateTime: string; lastModifiedDateTime: string;
+    }> = [];
+    for (const item of items) {
+      const itemGraphId = item.id as string | undefined;
+      if (itemGraphId != null) {
+        result.push({
+          id: this.mintAliasComposite('sharePointListItem', { siteId, listId: graphListId, itemId: itemGraphId }),
+          fields: (item.fields as Record<string, unknown> | undefined) ?? {},
+          webUrl: (item.webUrl as string | undefined) ?? '',
+          createdDateTime: (item.createdDateTime as string | undefined) ?? '',
+          lastModifiedDateTime: (item.lastModifiedDateTime as string | undefined) ?? '',
+        });
+      }
+    }
+    return result;
+  }
+
+  /**
+   * Gets a specific SharePoint list item, resolving the sn_ token to its tuple.
+   */
+  async getSharePointListItemAsync(itemId: string | number): Promise<{
+    id: string; fields: Record<string, unknown>; webUrl: string;
+    createdDateTime: string; lastModifiedDateTime: string;
+  }> {
+    const { siteId, listId, itemId: graphItemId } = this.toGraphParts(itemId, 'sharePointListItem', ['siteId', 'listId', 'itemId']);
+    const item = await this.client.getSharePointListItem(siteId, listId, graphItemId);
+    return {
+      id: String(itemId),
+      fields: (item.fields as Record<string, unknown> | undefined) ?? {},
+      webUrl: (item.webUrl as string | undefined) ?? '',
+      createdDateTime: (item.createdDateTime as string | undefined) ?? '',
+      lastModifiedDateTime: (item.lastModifiedDateTime as string | undefined) ?? '',
+    };
+  }
+
+  /**
+   * Creates an item in a SharePoint list, minting a durable sn_ token.
+   */
+  async createSharePointListItemAsync(listId: string | number, fields: Record<string, unknown>): Promise<string> {
+    const { siteId, listId: graphListId } = this.toGraphParts(listId, 'sharePointList', ['siteId', 'listId']);
+    const created = await this.client.createSharePointListItem(siteId, graphListId, fields);
+    const newItemId = created.id as string | undefined;
+    if (newItemId == null || newItemId.length === 0) {
+      // Mint guard (matches #46/#47): see createSharePointListAsync.
+      throw new Error('SharePoint list item creation returned no id.');
+    }
+    return this.mintAliasComposite('sharePointListItem', { siteId, listId: graphListId, itemId: newItemId });
+  }
+
+  /**
+   * Updates the field values of a SharePoint list item.
+   */
+  async updateSharePointListItemAsync(itemId: string | number, fields: Record<string, unknown>): Promise<void> {
+    const { siteId, listId, itemId: graphItemId } = this.toGraphParts(itemId, 'sharePointListItem', ['siteId', 'listId', 'itemId']);
+    await this.client.updateSharePointListItem(siteId, listId, graphItemId, fields);
+  }
+
+  /**
+   * Deletes an item from a SharePoint list.
+   */
+  async deleteSharePointListItemAsync(itemId: string | number): Promise<void> {
+    const { siteId, listId, itemId: graphItemId } = this.toGraphParts(itemId, 'sharePointListItem', ['siteId', 'listId', 'itemId']);
+    await this.client.deleteSharePointListItem(siteId, listId, graphItemId);
+  }
+}
+
+/**
+ * Derives a SharePoint column's type from its definition facets. Graph encodes
+ * the type as the presence of a facet (`text`, `number`, `boolean`, …) rather
+ * than a single field, so return the first facet present or 'unknown'.
+ */
+function sharePointColumnType(col: Record<string, unknown>): string {
+  const facets = [
+    'text', 'number', 'boolean', 'dateTime', 'choice', 'currency',
+    'personOrGroup', 'lookup', 'hyperlinkOrPicture', 'calculated',
+  ];
+  for (const facet of facets) {
+    if (col[facet] != null) return facet;
+  }
+  return 'unknown';
 }
 
 /**

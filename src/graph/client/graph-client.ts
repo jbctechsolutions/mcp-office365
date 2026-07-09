@@ -2438,6 +2438,97 @@ export class GraphClient {
   }
 
   // ===========================================================================
+  // SharePoint Lists
+  // ===========================================================================
+
+  /**
+   * Lists the SharePoint lists in a site.
+   */
+  async listSharePointLists(siteId: string): Promise<GraphEntity[]> {
+    const client = await this.getClient();
+    const response = await client
+      .api(`/sites/${siteId}/lists`)
+      .select('id,name,displayName,description,webUrl,createdDateTime,lastModifiedDateTime')
+      .get() as GraphCollectionResponse<GraphEntity>;
+    return response.value;
+  }
+
+  /**
+   * Gets a specific SharePoint list.
+   */
+  async getSharePointList(siteId: string, listId: string): Promise<GraphEntity> {
+    const client = await this.getClient();
+    return await client.api(`/sites/${siteId}/lists/${listId}`).get() as GraphEntity;
+  }
+
+  /**
+   * Creates a SharePoint list in a site.
+   */
+  async createSharePointList(siteId: string, body: Record<string, unknown>): Promise<GraphEntity> {
+    const client = await this.getClient();
+    return await client.api(`/sites/${siteId}/lists`).post(body) as GraphEntity;
+  }
+
+  /**
+   * Lists the column definitions for a SharePoint list.
+   */
+  async listSharePointListColumns(siteId: string, listId: string): Promise<GraphEntity[]> {
+    const client = await this.getClient();
+    const response = await client
+      .api(`/sites/${siteId}/lists/${listId}/columns`)
+      .get() as GraphCollectionResponse<GraphEntity>;
+    return response.value;
+  }
+
+  /**
+   * Lists the items in a SharePoint list, expanding their field values.
+   */
+  async listSharePointListItems(siteId: string, listId: string, limit: number = 50): Promise<GraphEntity[]> {
+    const client = await this.getClient();
+    const response = await client
+      .api(`/sites/${siteId}/lists/${listId}/items`)
+      .expand('fields')
+      .top(limit)
+      .get() as GraphCollectionResponse<GraphEntity>;
+    return response.value;
+  }
+
+  /**
+   * Gets a specific SharePoint list item, expanding its field values.
+   */
+  async getSharePointListItem(siteId: string, listId: string, itemId: string): Promise<GraphEntity> {
+    const client = await this.getClient();
+    return await client
+      .api(`/sites/${siteId}/lists/${listId}/items/${itemId}`)
+      .expand('fields')
+      .get() as GraphEntity;
+  }
+
+  /**
+   * Creates an item in a SharePoint list from a map of column → value.
+   */
+  async createSharePointListItem(siteId: string, listId: string, fields: Record<string, unknown>): Promise<GraphEntity> {
+    const client = await this.getClient();
+    return await client.api(`/sites/${siteId}/lists/${listId}/items`).post({ fields }) as GraphEntity;
+  }
+
+  /**
+   * Updates the field values of a SharePoint list item.
+   */
+  async updateSharePointListItem(siteId: string, listId: string, itemId: string, fields: Record<string, unknown>): Promise<GraphEntity> {
+    const client = await this.getClient();
+    return await client.api(`/sites/${siteId}/lists/${listId}/items/${itemId}/fields`).patch(fields) as GraphEntity;
+  }
+
+  /**
+   * Deletes an item from a SharePoint list.
+   */
+  async deleteSharePointListItem(siteId: string, listId: string, itemId: string): Promise<void> {
+    const client = await this.getClient();
+    await client.api(`/sites/${siteId}/lists/${listId}/items/${itemId}`).delete();
+  }
+
+  // ===========================================================================
   // OneNote
   // ===========================================================================
 
