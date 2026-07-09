@@ -33,6 +33,7 @@ const byName = new Map(defs.map((d) => [d.name, d]));
 const KNOWN_PRESETS: readonly Preset[] = [
   'mail', 'calendar', 'contacts', 'tasks', 'notes', 'teams',
   'planner', 'files', 'sharepoint', 'excel', 'people', 'meetings',
+  'shared',
 ];
 
 describe('registry contract invariants', () => {

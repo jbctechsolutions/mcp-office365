@@ -33,7 +33,8 @@ export type Preset =
   | 'sharepoint'
   | 'excel'
   | 'people'
-  | 'meetings';
+  | 'meetings'
+  | 'shared';
 
 /**
  * MCP tool annotations (spec 2025-03-26+). Clients use these to auto-approve

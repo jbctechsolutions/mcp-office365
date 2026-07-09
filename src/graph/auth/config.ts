@@ -38,6 +38,12 @@ export const GRAPH_SCOPES = [
   'Tasks.ReadWrite',
   'User.Read',
   'offline_access',
+  // Shared mailboxes / delegate access (#40) — read another user's mailbox,
+  // calendar, and OneDrive via /users/{upn}/... where the signed-in user has
+  // shared/delegate access.
+  'Mail.Read.Shared',
+  'Calendars.Read.Shared',
+  'Files.Read.All',
   // Teams
   'ChannelMessage.Read.All',
   'ChannelMessage.Send',
