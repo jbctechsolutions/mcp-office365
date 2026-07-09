@@ -11,6 +11,7 @@
  */
 
 import { z } from 'zod';
+import { Id } from '../ids/schema.js';
 import type { ApprovalTokenManager } from '../approval/index.js';
 import { defineTool } from '../registry/define-tool.js';
 import { approvalTokenLink } from '../registry/elicit-links.js';
@@ -28,18 +29,18 @@ declare module '../registry/types.js' {
 // =============================================================================
 
 export const ListTaskAttachmentsInput = z.strictObject({
-  task_id: z.string().min(1).describe('Task ID (td_ token from list_tasks or search_tasks)'),
+  task_id: Id.task,
 });
 
 export const CreateTaskAttachmentInput = z.strictObject({
-  task_id: z.string().min(1).describe('Task ID (td_ token)'),
+  task_id: Id.task,
   name: z.string().min(1).describe('File name of the attachment'),
   content_bytes: z.string().min(1).describe('Base64-encoded file content'),
   content_type: z.string().optional().describe('MIME type (default: application/octet-stream)'),
 });
 
 export const PrepareDeleteTaskAttachmentInput = z.strictObject({
-  task_attachment_id: z.string().min(1).describe('Task attachment ID to delete'),
+  task_attachment_id: Id.taskAttachment,
 });
 
 export const ConfirmDeleteTaskAttachmentInput = z.strictObject({

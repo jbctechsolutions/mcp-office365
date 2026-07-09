@@ -12,6 +12,8 @@
  */
 
 import { z } from 'zod';
+import { Id } from '../ids/schema.js';
+import { nextActionFor } from '../ids/next-action.js';
 import { defineTool } from '../registry/define-tool.js';
 import { requireGraphToolset } from '../registry/context.js';
 import type { ToolContext, ToolDefinition, ToolResult } from '../registry/types.js';
@@ -32,15 +34,15 @@ declare module '../registry/types.js' {
 export const ListNotebooksInput = z.strictObject({});
 
 export const ListNoteSectionsInput = z.strictObject({
-  notebook_id: z.string().optional().describe('Notebook ID from list_notebooks (omit to list all sections)'),
+  notebook_id: Id.noteNotebook.optional().describe('Notebook ID from list_notebooks (omit to list all sections).'),
 });
 
 export const ListNotePagesInput = z.strictObject({
-  section_id: z.string().optional().describe('Section ID from list_note_sections (omit to list recent pages across all notebooks)'),
+  section_id: Id.noteSection.optional().describe('Section ID from list_note_sections (omit to list recent pages across all notebooks).'),
 });
 
 export const GetNotePageInput = z.strictObject({
-  page_id: z.string().describe('Page ID from list_note_pages or search_note_pages'),
+  page_id: Id.notePage,
 });
 
 export const SearchNotePagesInput = z.strictObject({
@@ -48,7 +50,7 @@ export const SearchNotePagesInput = z.strictObject({
 });
 
 export const CreateNotePageInput = z.strictObject({
-  section_id: z.string().describe('Section ID from list_note_sections'),
+  section_id: Id.noteSection,
   title: z.string().min(1).describe('Page title'),
   content_html: z.string().describe('Page body content as HTML'),
 });
@@ -101,6 +103,7 @@ export class OneNoteTools {
   async listNotebooks(): Promise<ToolResult> {
     const notebooks = await this.repository.getClient().listNotebooks();
     return jsonResult({
+      next: nextActionFor('noteNotebook') ?? undefined,
       notebooks: notebooks.map((nb) => ({
         id: mintSelfEncoded('noteNotebook', nb.id ?? ''),
         displayName: nb.displayName ?? null,
@@ -117,6 +120,7 @@ export class OneNoteTools {
     const sections = await this.repository.getClient().listNoteSections(notebookGraphId);
     return jsonResult({
       notebook_id: params.notebook_id ?? null,
+      next: nextActionFor('noteSection') ?? undefined,
       sections: sections.map((s) => ({
         id: mintSelfEncoded('noteSection', s.id ?? ''),
         displayName: s.displayName ?? null,
@@ -133,6 +137,7 @@ export class OneNoteTools {
     const pages = await this.repository.getClient().listNotePages(sectionGraphId);
     return jsonResult({
       section_id: params.section_id ?? null,
+      next: nextActionFor('notePage') ?? undefined,
       pages: pages.map((p) => ({
         id: mintSelfEncoded('notePage', p.id ?? ''),
         title: p.title ?? null,
@@ -159,6 +164,7 @@ export class OneNoteTools {
   async searchNotePages(params: SearchNotePagesParams): Promise<ToolResult> {
     const pages = await this.repository.getClient().searchNotePages(params.query);
     return jsonResult({
+      next: nextActionFor('notePage') ?? undefined,
       pages: pages.map((p) => ({
         id: mintSelfEncoded('notePage', p.id ?? ''),
         title: p.title ?? null,
@@ -176,6 +182,7 @@ export class OneNoteTools {
       id: mintSelfEncoded('notePage', created.id ?? ''),
       title: params.title,
       status: 'created',
+      next: nextActionFor('notePage') ?? undefined,
     });
   }
 }

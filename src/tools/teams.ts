@@ -11,6 +11,8 @@
  */
 
 import { z } from 'zod';
+import { Id } from '../ids/schema.js';
+import { nextActionFor } from '../ids/next-action.js';
 import type { ApprovalTokenManager } from '../approval/index.js';
 import { defineTool } from '../registry/define-tool.js';
 import { approvalTokenLink } from '../registry/elicit-links.js';
@@ -30,27 +32,27 @@ declare module '../registry/types.js' {
 export const NoInput = z.strictObject({});
 
 export const ListChannelsInput = z.strictObject({
-  team_id: z.string().min(1).describe('Team ID (tm_ token from list_teams, or a raw Graph id)'),
+  team_id: Id.team,
 });
 
 export const GetChannelInput = z.strictObject({
-  channel_id: z.string().min(1).describe('Channel ID (cn_ token from list_channels)'),
+  channel_id: Id.channel,
 });
 
 export const CreateChannelInput = z.strictObject({
-  team_id: z.string().min(1).describe('Team ID (tm_ token from list_teams, or a raw Graph id)'),
+  team_id: Id.team,
   name: z.string().min(1).describe('Channel name'),
   description: z.string().optional().describe('Channel description'),
 });
 
 export const UpdateChannelInput = z.strictObject({
-  channel_id: z.string().min(1).describe('Channel ID (cn_ token from list_channels)'),
+  channel_id: Id.channel,
   name: z.string().min(1).optional().describe('New name'),
   description: z.string().optional().describe('New description'),
 });
 
 export const PrepareDeleteChannelInput = z.strictObject({
-  channel_id: z.string().min(1).describe('Channel ID (cn_ token from list_channels)'),
+  channel_id: Id.channel,
 });
 
 export const ConfirmDeleteChannelInput = z.strictObject({
@@ -58,20 +60,20 @@ export const ConfirmDeleteChannelInput = z.strictObject({
 });
 
 export const ListTeamMembersInput = z.strictObject({
-  team_id: z.string().min(1).describe('Team ID (tm_ token from list_teams, or a raw Graph id)'),
+  team_id: Id.team,
 });
 
 export const ListChannelMessagesInput = z.strictObject({
-  channel_id: z.string().min(1).describe('Channel ID (cn_ token from list_channels)'),
+  channel_id: Id.channel,
   limit: z.number().int().min(1).max(50).optional().describe('Max messages to return (default 25, max 50)'),
 });
 
 export const GetChannelMessageInput = z.strictObject({
-  message_id: z.string().min(1).describe('Message ID (xm_ token from list_channel_messages)'),
+  message_id: Id.channelMessage,
 });
 
 export const PrepareSendChannelMessageInput = z.strictObject({
-  channel_id: z.string().min(1).describe('Channel ID (cn_ token) to send message to'),
+  channel_id: Id.channel.describe('Channel ID (cn_ token) to send the message to.'),
   body: z.string().min(1).describe('Message body'),
   content_type: z.enum(['text', 'html']).optional().describe('Content type (default: html)'),
 });
@@ -81,7 +83,7 @@ export const ConfirmSendChannelMessageInput = z.strictObject({
 });
 
 export const PrepareReplyChannelMessageInput = z.strictObject({
-  message_id: z.string().min(1).describe('Message ID (xm_ token) to reply to'),
+  message_id: Id.channelMessage.describe('Channel message ID (xm_ token) to reply to.'),
   body: z.string().min(1).describe('Reply body'),
   content_type: z.enum(['text', 'html']).optional().describe('Content type (default: html)'),
 });
@@ -95,16 +97,16 @@ export const ListChatsInput = z.strictObject({
 });
 
 export const GetChatInput = z.strictObject({
-  chat_id: z.string().min(1).describe('Chat ID (ch_ token from list_chats)'),
+  chat_id: Id.chat,
 });
 
 export const ListChatMessagesInput = z.strictObject({
-  chat_id: z.string().min(1).describe('Chat ID (ch_ token from list_chats)'),
+  chat_id: Id.chat,
   limit: z.number().int().min(1).max(50).optional().describe('Max messages to return (default 25, max 50)'),
 });
 
 export const PrepareSendChatMessageInput = z.strictObject({
-  chat_id: z.string().min(1).describe('Chat ID (ch_ token) to send message to'),
+  chat_id: Id.chat.describe('Chat ID (ch_ token) to send the message to.'),
   body: z.string().min(1).describe('Message body'),
   content_type: z.enum(['text', 'html']).optional().describe('Content type (default: html)'),
 });
@@ -114,16 +116,16 @@ export const ConfirmSendChatMessageInput = z.strictObject({
 });
 
 export const ListChatMembersInput = z.strictObject({
-  chat_id: z.string().min(1).describe('Chat ID (ch_ token from list_chats)'),
+  chat_id: Id.chat,
 });
 
 export const ListMessageReactionsInput = z.strictObject({
-  message_id: z.string().min(1).describe('Message ID (cm_/xm_ token)'),
+  message_id: z.string().trim().min(1).describe('Message ID — a cm_ (chat) or xm_ (channel) token'),
   message_type: z.enum(['channel', 'chat']).describe('Whether this is a channel message or chat message'),
 });
 
 export const PrepareAddMessageReactionInput = z.strictObject({
-  message_id: z.string().min(1).describe('Message ID (cm_/xm_ token)'),
+  message_id: z.string().trim().min(1).describe('Message ID — a cm_ (chat) or xm_ (channel) token'),
   message_type: z.enum(['channel', 'chat']).describe('Whether this is a channel message or chat message'),
   reaction_type: z.string().describe('Reaction emoji name (e.g., "like", "heart", "laugh", "surprised", "sad", "angry")'),
 });
@@ -133,7 +135,7 @@ export const ConfirmAddMessageReactionInput = z.strictObject({
 });
 
 export const RemoveMessageReactionInput = z.strictObject({
-  message_id: z.string().min(1).describe('Message ID (cm_/xm_ token)'),
+  message_id: z.string().trim().min(1).describe('Message ID — a cm_ (chat) or xm_ (channel) token'),
   message_type: z.enum(['channel', 'chat']).describe('Whether this is a channel message or chat message'),
   reaction_type: z.string().describe('Reaction emoji name to remove'),
 });
@@ -222,7 +224,7 @@ export class TeamsTools {
     return {
       content: [{
         type: 'text' as const,
-        text: JSON.stringify({ teams }, null, 2),
+        text: JSON.stringify({ teams, next: nextActionFor('team') ?? undefined }, null, 2),
       }],
     };
   }
@@ -234,7 +236,7 @@ export class TeamsTools {
     return {
       content: [{
         type: 'text' as const,
-        text: JSON.stringify({ channels }, null, 2),
+        text: JSON.stringify({ channels, next: nextActionFor('channel') ?? undefined }, null, 2),
       }],
     };
   }
@@ -258,7 +260,7 @@ export class TeamsTools {
     return {
       content: [{
         type: 'text' as const,
-        text: JSON.stringify({ success: true, channel_id: channelId, message: 'Channel created' }, null, 2),
+        text: JSON.stringify({ success: true, channel_id: channelId, message: 'Channel created', next: nextActionFor('channel') ?? undefined }, null, 2),
       }],
     };
   }
@@ -526,7 +528,7 @@ export class TeamsTools {
     return {
       content: [{
         type: 'text' as const,
-        text: JSON.stringify({ chats }, null, 2),
+        text: JSON.stringify({ chats, next: nextActionFor('chat') ?? undefined }, null, 2),
       }],
     };
   }

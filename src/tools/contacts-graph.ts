@@ -11,6 +11,7 @@
  */
 
 import type { GraphRepository } from '../graph/repository.js';
+import { nextActionFor } from '../ids/next-action.js';
 import type { GraphContentReaders } from '../graph/content-readers.js';
 import type { ContactRow } from '../database/repository.js';
 import type { ApprovalTokenManager } from '../approval/index.js';
@@ -63,12 +64,12 @@ export class GraphContactsTools {
     const contacts = params.folder_id != null
       ? await this.repository.listContactsInFolderAsync(params.folder_id, params.limit)
       : await this.repository.listContactsAsync(params.limit, params.offset);
-    return jsonResult({ contacts: contacts.map(transformContactRow) });
+    return jsonResult({ contacts: contacts.map(transformContactRow), next: nextActionFor('contact') ?? undefined });
   }
 
   async searchContacts(params: SearchContactsParams): Promise<ToolResult> {
     const contacts = await this.repository.searchContactsAsync(params.query, params.limit);
-    return jsonResult({ contacts: contacts.map(transformContactRow) });
+    return jsonResult({ contacts: contacts.map(transformContactRow), next: nextActionFor('contact') ?? undefined });
   }
 
   async getContact(params: GetContactParams): Promise<ToolResult> {
@@ -102,6 +103,7 @@ export class GraphContactsTools {
       surname: params.surname ?? null,
       email: params.email ?? null,
       status: 'created',
+      next: nextActionFor('contact') ?? undefined,
     });
   }
 

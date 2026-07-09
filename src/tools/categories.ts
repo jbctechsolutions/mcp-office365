@@ -11,6 +11,7 @@
  */
 
 import { z } from 'zod';
+import { Id } from '../ids/schema.js';
 import type { ApprovalTokenManager } from '../approval/index.js';
 import { defineTool } from '../registry/define-tool.js';
 import { approvalTokenLink } from '../registry/elicit-links.js';
@@ -33,7 +34,7 @@ export const CreateCategoryInput = z.strictObject({
 });
 
 export const PrepareDeleteCategoryInput = z.strictObject({
-  category_id: z.string().min(1).describe('Category ID to delete'),
+  category_id: Id.category,
 });
 
 export const ConfirmDeleteCategoryInput = z.strictObject({

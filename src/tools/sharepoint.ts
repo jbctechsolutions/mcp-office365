@@ -11,6 +11,8 @@
  */
 
 import { z } from 'zod';
+import { Id } from '../ids/schema.js';
+import { nextActionFor } from '../ids/next-action.js';
 import { defineTool } from '../registry/define-tool.js';
 import { requireGraphToolset } from '../registry/context.js';
 import type { ToolContext, ToolDefinition } from '../registry/types.js';
@@ -32,20 +34,20 @@ export const SearchSitesInput = z.strictObject({
 });
 
 export const GetSiteInput = z.strictObject({
-  site_id: z.string().min(1).describe('Site ID (si_ token from list_sites or search_sites)'),
+  site_id: Id.site,
 });
 
 export const ListDocumentLibrariesInput = z.strictObject({
-  site_id: z.string().min(1).describe('Site ID (si_ token from list_sites or search_sites)'),
+  site_id: Id.site,
 });
 
 export const ListLibraryItemsInput = z.strictObject({
-  library_id: z.string().min(1).describe('Library ID (dl_ token from list_document_libraries)'),
-  folder_id: z.string().min(1).optional().describe('Folder ID to browse into (li_ token from a previous list_library_items call)'),
+  library_id: Id.documentLibrary,
+  folder_id: Id.libraryDriveItem.optional().describe('Folder ID to browse into — a li_ token from a previous list_library_items call.'),
 });
 
 export const DownloadLibraryFileInput = z.strictObject({
-  item_id: z.string().min(1).describe('Item ID (li_ token from list_library_items)'),
+  item_id: Id.libraryDriveItem,
   output_path: z.string().min(1).describe('Local file path to save the downloaded file'),
 });
 
@@ -95,7 +97,7 @@ export class SharePointTools {
     return {
       content: [{
         type: 'text' as const,
-        text: JSON.stringify({ sites }, null, 2),
+        text: JSON.stringify({ sites, next: nextActionFor('site') ?? undefined }, null, 2),
       }],
     };
   }
@@ -107,7 +109,7 @@ export class SharePointTools {
     return {
       content: [{
         type: 'text' as const,
-        text: JSON.stringify({ sites }, null, 2),
+        text: JSON.stringify({ sites, next: nextActionFor('site') ?? undefined }, null, 2),
       }],
     };
   }
@@ -131,7 +133,7 @@ export class SharePointTools {
     return {
       content: [{
         type: 'text' as const,
-        text: JSON.stringify({ libraries }, null, 2),
+        text: JSON.stringify({ libraries, next: nextActionFor('documentLibrary') ?? undefined }, null, 2),
       }],
     };
   }
@@ -143,7 +145,7 @@ export class SharePointTools {
     return {
       content: [{
         type: 'text' as const,
-        text: JSON.stringify({ items }, null, 2),
+        text: JSON.stringify({ items, next: nextActionFor('libraryDriveItem') ?? undefined }, null, 2),
       }],
     };
   }
