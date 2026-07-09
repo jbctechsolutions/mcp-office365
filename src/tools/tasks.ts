@@ -11,6 +11,7 @@
 
 import { z } from 'zod';
 import { defineTool } from '../registry/define-tool.js';
+import { tokenIdLink } from '../registry/elicit-links.js';
 import { requireGraphToolset } from '../registry/context.js';
 import { Id } from '../ids/schema.js';
 import type { ToolDefinition } from '../registry/types.js';
@@ -220,6 +221,7 @@ export function tasksToolDefinitions(): ToolDefinition[] {
       presets: ['tasks'],
       backends: ['graph'],
       handler: (ctx, params) => requireGraphToolset(ctx, 'tasksGraph').prepareDeleteTask(params),
+      onElicit: tokenIdLink('confirm_delete_task', ['task_id']),
     }),
     defineTool({
       name: 'confirm_delete_task',

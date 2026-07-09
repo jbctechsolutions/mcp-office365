@@ -174,18 +174,19 @@ describe('createAuthMutex', () => {
 
 describe('parseServerOptions (U10)', () => {
   it('defaults to the full surface with read-only off when no flags', () => {
-    expect(parseServerOptions([])).toEqual({ readOnly: false });
+    expect(parseServerOptions([])).toEqual({ readOnly: false, confirmMode: 'token' });
   });
 
   it('treats "all" (or --preset all) as the full surface', () => {
-    expect(parseServerOptions(['--preset', 'all'])).toEqual({ readOnly: false });
+    expect(parseServerOptions(['--preset', 'all'])).toEqual({ readOnly: false, confirmMode: 'token' });
     // all wins even when combined with a specific preset
-    expect(parseServerOptions(['--preset', 'all,mail'])).toEqual({ readOnly: false });
+    expect(parseServerOptions(['--preset', 'all,mail'])).toEqual({ readOnly: false, confirmMode: 'token' });
   });
 
   it('parses a comma-separated preset list', () => {
     expect(parseServerOptions(['--preset', 'mail,calendar'])).toEqual({
       readOnly: false,
+      confirmMode: 'token',
       presets: ['mail', 'calendar'],
     });
   });
@@ -193,14 +194,16 @@ describe('parseServerOptions (U10)', () => {
   it('supports --preset=<names> and repeated --preset flags', () => {
     expect(parseServerOptions(['--preset=mail', '--preset', 'tasks'])).toEqual({
       readOnly: false,
+      confirmMode: 'token',
       presets: ['mail', 'tasks'],
     });
   });
 
   it('parses --read-only', () => {
-    expect(parseServerOptions(['--read-only'])).toEqual({ readOnly: true });
+    expect(parseServerOptions(['--read-only'])).toEqual({ readOnly: true, confirmMode: 'token' });
     expect(parseServerOptions(['--read-only', '--preset', 'mail'])).toEqual({
       readOnly: true,
+      confirmMode: 'token',
       presets: ['mail'],
     });
   });
@@ -230,7 +233,27 @@ describe('parseServerOptions (U10)', () => {
   });
 
   it('ignores unknown args (runner-injected argv)', () => {
-    expect(parseServerOptions(['--inspect', 'foo', '--read-only'])).toEqual({ readOnly: true });
+    expect(parseServerOptions(['--inspect', 'foo', '--read-only'])).toEqual({ readOnly: true, confirmMode: 'token' });
+  });
+
+  it('defaults confirmMode to "token" (U11)', () => {
+    expect(parseServerOptions([]).confirmMode).toBe('token');
+  });
+
+  it('parses --confirm elicit and --confirm=elicit (U11)', () => {
+    expect(parseServerOptions(['--confirm', 'elicit']).confirmMode).toBe('elicit');
+    expect(parseServerOptions(['--confirm=elicit']).confirmMode).toBe('elicit');
+    expect(parseServerOptions(['--confirm', 'token']).confirmMode).toBe('token');
+    expect(parseServerOptions(['--read-only', '--confirm', 'elicit'])).toEqual({
+      readOnly: true,
+      confirmMode: 'elicit',
+    });
+  });
+
+  it('throws on an invalid or missing --confirm value (U11)', () => {
+    expect(() => parseServerOptions(['--confirm', 'nope'])).toThrow(/--confirm requires one of: token, elicit/);
+    expect(() => parseServerOptions(['--confirm'])).toThrow(/--confirm requires one of: token, elicit/);
+    expect(() => parseServerOptions(['--confirm='])).toThrow(/--confirm requires one of: token, elicit/);
   });
 
   it('every valid preset name is accepted', () => {

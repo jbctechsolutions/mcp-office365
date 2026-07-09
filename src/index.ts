@@ -32,7 +32,8 @@ import {
 } from './graph/index.js';
 import { createRequire } from 'node:module';
 import { ToolRegistry } from './registry/index.js';
-import type { ToolContext, SurfaceOptions } from './registry/index.js';
+import type { ToolContext, SurfaceOptions, ConfirmMode, Elicitor } from './registry/index.js';
+import { createServerElicitor } from './registry/elicitor.js';
 import { allToolDefinitions } from './registry/all-tools.js';
 import { parseCliCommand, parseServerOptions, handleAuthCommand, createAuthMutex } from './cli.js';
 
@@ -106,6 +107,8 @@ function normalizeToolResult(result: CallToolResult): CallToolResult {
 export interface ServerOptions {
   readonly presets?: SurfaceOptions['presets'];
   readonly readOnly?: boolean;
+  /** Destructive-confirm mode (U11): 'token' (default) or 'elicit'. */
+  readonly confirmMode?: ConfirmMode;
 }
 
 export function createServer(options: ServerOptions = {}): Server {
@@ -128,6 +131,13 @@ export function createServer(options: ServerOptions = {}): Server {
     ...(options.presets != null ? { presets: options.presets } : {}),
     ...(options.readOnly != null ? { readOnly: options.readOnly } : {}),
   };
+
+  // Confirmation mode (U11). In 'elicit' mode a destructive prepare asks the
+  // user inline (capability-gated, 60s) and degrades to the token flow; 'token'
+  // (default) is the plain two-phase behavior and needs no elicitor.
+  const confirmMode: ConfirmMode = options.confirmMode ?? 'token';
+  const elicit: Elicitor | undefined =
+    confirmMode === 'elicit' ? createServerElicitor(server) : undefined;
 
   // Registry-driven tool surface (v3). The registry is the single source of
   // truth for every tool: static metadata registers eagerly so ListTools works
@@ -255,6 +265,8 @@ export function createServer(options: ServerOptions = {}): Server {
     return {
       backend: surface.backend,
       tokenManager,
+      confirmMode,
+      ...(elicit != null ? { elicit } : {}),
       graph:
         rulesTools != null
         && categoriesTools != null
@@ -408,6 +420,7 @@ async function main(): Promise<void> {
     const parsed = parseServerOptions(argv);
     options = {
       readOnly: parsed.readOnly,
+      confirmMode: parsed.confirmMode,
       ...(parsed.presets != null ? { presets: parsed.presets } : {}),
     };
   } catch (error) {

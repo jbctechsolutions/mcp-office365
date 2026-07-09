@@ -68,6 +68,7 @@ tool surface:
 | --- | --- |
 | `--preset <names>` | Expose only the listed domains (comma-separated). Repeatable. Default (or `all`) exposes the full surface. |
 | `--read-only` | Expose only read tools (`readOnlyHint: true`). All writes, `prepare_*`/`confirm_*`, and destructive tools are hidden; calling one returns a `READ_ONLY_MODE` error. Note: `download_*` and `get_*_photo` tools are excluded too — they write fetched bytes to local disk and so are not read-only. |
+| `--confirm <mode>` | How a destructive `prepare_*` seeks confirmation. `token` (default) returns an approval token to pass to the matching `confirm_*` tool. `elicit` asks the user inline (MCP elicitation, ~60s) and, on approval, executes immediately; if the client can't elicit, the user cancels, or it times out, it falls back to the token flow. An explicit decline cancels and invalidates the token. |
 
 Valid presets: `mail`, `calendar`, `contacts`, `tasks`, `notes`, `teams`,
 `planner`, `files`, `sharepoint`, `excel`, `people`, `meetings`, `shared` (plus `all`).

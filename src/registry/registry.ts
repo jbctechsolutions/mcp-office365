@@ -20,6 +20,8 @@ import type {
   ToolContext,
   ToolDefinition,
   ToolResult,
+  ElicitLink,
+  Elicitor,
 } from './types.js';
 
 /** Options controlling which tools are exposed to a client. */
@@ -137,7 +139,74 @@ export class ToolRegistry {
     // (e.g. list_mail_rules) parse cleanly, matching the codebase-wide
     // `parse(args ?? {})` convention.
     const params = def.input.parse(args ?? {});
+
+    // Inline-elicitation interceptor (U11): only for a prepare tool that opted in
+    // (onElicit), when the server is in elicit mode and the client can elicit.
+    // Everything else runs the handler directly — an unchanged fast path.
+    if (def.onElicit != null && ctx.confirmMode === 'elicit' && ctx.elicit != null) {
+      return this.dispatchWithElicitation(def, params, ctx, def.onElicit, ctx.elicit);
+    }
     return def.handler(ctx, params);
+  }
+
+  /**
+   * Runs a prepare tool, asks the user inline, and resolves the outcome (U11):
+   * - accept  → execute now via the linked confirm tool (its exact validation +
+   *             execution is reused; the just-minted token is consumed there).
+   * - decline → invalidate the token (consume-without-execute) and report abort.
+   * - degrade → return the prepare token response unchanged (cancel / timeout /
+   *             no capability / unparseable token) — the normal two-phase flow.
+   *
+   * Fail-closed: the destructive action runs only on an explicit accept.
+   */
+  private async dispatchWithElicitation(
+    def: ToolDefinition,
+    prepareParams: unknown,
+    ctx: ToolContext,
+    link: ElicitLink,
+    elicit: Elicitor,
+  ): Promise<ToolResult> {
+    const prepareResult = await def.handler(ctx, prepareParams);
+    const tokenIds = link.collectTokenIds(prepareResult);
+    // No token in the prepare output → nothing to gate/execute; degrade.
+    if (tokenIds.length === 0) {
+      return prepareResult;
+    }
+
+    const message = link.message?.(prepareParams) ?? defaultConfirmMessage(ctx, tokenIds[0]);
+    const outcome = await elicit({ message });
+
+    if (outcome === 'accept') {
+      const confirmDef = this.definitions.get(link.confirmTool);
+      // A misconfigured link must not silently execute nor lose the approval —
+      // degrade to the token response so the two-phase path still works.
+      if (confirmDef == null) {
+        return prepareResult;
+      }
+      // Only the param mapping/validation is guarded: a bad buildParams must
+      // degrade (return the still-live token) rather than error out an accepted
+      // action. The confirm handler runs OUTSIDE the guard so a genuine
+      // execution error (e.g. a Graph failure) surfaces normally, not masked.
+      let confirmParams: unknown;
+      try {
+        confirmParams = confirmDef.input.parse(link.buildParams(prepareParams, prepareResult));
+      } catch {
+        return prepareResult;
+      }
+      return confirmDef.handler(ctx, confirmParams);
+    }
+
+    if (outcome === 'decline') {
+      // Burn every token this prepare minted (batch mints one per item), so a
+      // declined action can't be redeemed via the confirm flow afterward.
+      for (const tokenId of tokenIds) {
+        invalidateToken(ctx, tokenId);
+      }
+      return declinedResult(def.name);
+    }
+
+    // 'degrade' — hand back the durable token exactly as the token flow would.
+    return prepareResult;
   }
 
   private filtered(options: SurfaceOptions): ToolDefinition[] {
@@ -166,4 +235,38 @@ export class ToolRegistry {
  */
 function isReadOnly(def: ToolDefinition): boolean {
   return def.annotations.readOnlyHint === true;
+}
+
+/**
+ * Burns a token without executing its action, so a declined destructive request
+ * can't be redeemed via the confirm flow afterward. Uses the token's own
+ * operation/targetId (it was just minted, so this always validates), reusing the
+ * store's atomic single-use consume — no new persistence machinery.
+ */
+function invalidateToken(ctx: ToolContext, tokenId: string): void {
+  const token = ctx.tokenManager.lookupToken(tokenId);
+  if (token != null) {
+    ctx.tokenManager.consumeToken(tokenId, token.operation, token.targetId);
+  }
+}
+
+/** A generic confirmation prompt derived from the token's operation. */
+function defaultConfirmMessage(ctx: ToolContext, tokenId: string | undefined): string {
+  const op = tokenId != null ? ctx.tokenManager.lookupToken(tokenId)?.operation : undefined;
+  const action = op != null ? op.replace(/_/g, ' ') : 'this action';
+  return `Confirm: ${action}? This cannot be undone.`;
+}
+
+/** The result returned when a user declines an inline confirmation. */
+function declinedResult(toolName: string): ToolResult {
+  return {
+    content: [{
+      type: 'text',
+      text: JSON.stringify({
+        success: false,
+        declined: true,
+        message: `Action cancelled: you declined the confirmation for ${toolName}. The approval token has been invalidated.`,
+      }, null, 2),
+    }],
+  };
 }

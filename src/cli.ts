@@ -43,12 +43,17 @@ export const VALID_PRESETS: readonly Preset[] = [
   'meetings',
 ];
 
+/** How a destructive prepare confirms (U11): two-phase token, or inline elicit. */
+export type ConfirmMode = 'token' | 'elicit';
+
 /** Server-mode CLI options parsed from argv (U10). */
 export interface ServerCliOptions {
   /** Presets to include; omitted means the full surface (`all`). */
   readonly presets?: readonly Preset[];
   /** When true, only non-destructive tools are exposed. */
   readonly readOnly: boolean;
+  /** Confirmation mode for destructive prepares (default 'token'). */
+  readonly confirmMode: ConfirmMode;
 }
 
 /**
@@ -60,12 +65,18 @@ export interface ServerCliOptions {
 export function parseServerOptions(args: string[]): ServerCliOptions {
   const presetNames: string[] = [];
   let readOnly = false;
+  let confirmMode: ConfirmMode = 'token';
 
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
     if (arg == null) continue;
     if (arg === '--read-only') {
       readOnly = true;
+    } else if (arg === '--confirm') {
+      confirmMode = requireConfirmMode(args[i + 1]);
+      i++;
+    } else if (arg.startsWith('--confirm=')) {
+      confirmMode = requireConfirmMode(arg.slice('--confirm='.length));
     } else if (arg === '--preset') {
       const value = args[i + 1];
       if (value == null || value.startsWith('--')) {
@@ -81,7 +92,7 @@ export function parseServerOptions(args: string[]): ServerCliOptions {
 
   // No --preset flag at all → full surface.
   if (presetNames.length === 0) {
-    return { readOnly };
+    return { readOnly, confirmMode };
   }
 
   // Validate every name (the `all` keyword excepted) BEFORE honoring `all`, so a
@@ -99,14 +110,24 @@ export function parseServerOptions(args: string[]): ServerCliOptions {
 
   // `all` (alone or mixed with valid names) exposes the full surface.
   if (presetNames.includes('all')) {
-    return { readOnly };
+    return { readOnly, confirmMode };
   }
 
-  return { readOnly, presets: presetNames as Preset[] };
+  return { readOnly, confirmMode, presets: presetNames as Preset[] };
 }
 
 function missingPresetValue(): Error {
   return new Error('--preset requires a comma-separated list of preset names.');
+}
+
+/** Validates the `--confirm` value, failing loudly on anything but token|elicit. */
+function requireConfirmMode(value: string | undefined): ConfirmMode {
+  if (value === 'token' || value === 'elicit') {
+    return value;
+  }
+  throw new Error(
+    `--confirm requires one of: token, elicit. Got: ${value ?? '(missing)'}.`,
+  );
 }
 
 /** Splits a preset value and rejects an empty/whitespace-only list. */

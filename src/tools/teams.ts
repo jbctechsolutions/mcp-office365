@@ -13,6 +13,7 @@
 import { z } from 'zod';
 import type { ApprovalTokenManager } from '../approval/index.js';
 import { defineTool } from '../registry/define-tool.js';
+import { approvalTokenLink } from '../registry/elicit-links.js';
 import { requireGraphToolset } from '../registry/context.js';
 import type { ToolContext, ToolDefinition } from '../registry/types.js';
 
@@ -792,6 +793,7 @@ export function teamsToolDefinitions(): ToolDefinition[] {
       presets: ['teams'],
       backends: ['graph'],
       handler: (ctx, params) => tools(ctx).prepareDeleteChannel(params),
+      onElicit: approvalTokenLink('confirm_delete_channel'),
     }),
     defineTool({
       name: 'confirm_delete_channel',
@@ -842,6 +844,7 @@ export function teamsToolDefinitions(): ToolDefinition[] {
       presets: ['teams'],
       backends: ['graph'],
       handler: (ctx, params) => tools(ctx).prepareSendChannelMessage(params),
+      onElicit: approvalTokenLink('confirm_send_channel_message'),
     }),
     defineTool({
       name: 'confirm_send_channel_message',
@@ -862,6 +865,7 @@ export function teamsToolDefinitions(): ToolDefinition[] {
       presets: ['teams'],
       backends: ['graph'],
       handler: (ctx, params) => tools(ctx).prepareReplyChannelMessage(params),
+      onElicit: approvalTokenLink('confirm_reply_channel_message'),
     }),
     defineTool({
       name: 'confirm_reply_channel_message',
@@ -912,6 +916,7 @@ export function teamsToolDefinitions(): ToolDefinition[] {
       presets: ['teams'],
       backends: ['graph'],
       handler: (ctx, params) => tools(ctx).prepareSendChatMessage(params),
+      onElicit: approvalTokenLink('confirm_send_chat_message'),
     }),
     defineTool({
       name: 'confirm_send_chat_message',
@@ -952,6 +957,7 @@ export function teamsToolDefinitions(): ToolDefinition[] {
       presets: ['teams'],
       backends: ['graph'],
       handler: (ctx, params) => tools(ctx).prepareAddMessageReaction(params),
+      onElicit: approvalTokenLink('confirm_add_message_reaction'),
     }),
     defineTool({
       name: 'confirm_add_message_reaction',

@@ -12,6 +12,7 @@
 import { z } from 'zod';
 import type { Attendee } from '../types/index.js';
 import { defineTool } from '../registry/define-tool.js';
+import { tokenIdLink } from '../registry/elicit-links.js';
 import { requireGraphToolset } from '../registry/context.js';
 import type { ToolDefinition } from '../registry/types.js';
 import type { GraphCalendarTools } from './calendar-graph.js';
@@ -415,6 +416,7 @@ export function calendarToolDefinitions(): ToolDefinition[] {
       presets: ['calendar'],
       backends: ['graph'],
       handler: (ctx, params) => requireGraphToolset(ctx, 'calendarGraph').prepareDeleteEvent(params),
+      onElicit: tokenIdLink('confirm_delete_event', ['event_id']),
     }),
     defineTool({
       name: 'confirm_delete_event',

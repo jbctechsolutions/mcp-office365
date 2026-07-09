@@ -14,6 +14,7 @@
 import { z } from 'zod';
 import type { ApprovalTokenManager } from '../approval/index.js';
 import { defineTool } from '../registry/define-tool.js';
+import { approvalTokenLink } from '../registry/elicit-links.js';
 import { requireGraphToolset } from '../registry/context.js';
 import { Id } from '../ids/schema.js';
 import { nextActionFor } from '../ids/next-action.js';
@@ -638,6 +639,7 @@ export function plannerToolDefinitions(): ToolDefinition[] {
       presets: ['planner'],
       backends: ['graph'],
       handler: (ctx, params) => tools(ctx).prepareDeleteBucket(params),
+      onElicit: approvalTokenLink('confirm_delete_bucket'),
     }),
     defineTool({
       name: 'confirm_delete_bucket',
@@ -708,6 +710,7 @@ export function plannerToolDefinitions(): ToolDefinition[] {
       presets: ['planner'],
       backends: ['graph'],
       handler: (ctx, params) => tools(ctx).prepareDeletePlannerTask(params),
+      onElicit: approvalTokenLink('confirm_delete_planner_task'),
     }),
     defineTool({
       name: 'confirm_delete_planner_task',
