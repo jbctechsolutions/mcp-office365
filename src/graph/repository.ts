@@ -47,8 +47,6 @@ import * as path from 'path';
  * Cache for mapping numeric IDs back to Graph string IDs.
  */
 interface IdCache {
-  tasks: Map<number, { taskListId: string; taskId: string }>;
-  taskLists: Map<number, string>;
   attachments: Map<number, { messageId: string; attachmentId: string }>;
   rules: Map<number, string>;
   contactFolders: Map<number, string>;
@@ -82,8 +80,6 @@ export class GraphRepository implements IRepository {
   private readonly accountId: () => string;
   private readonly deltaLinks: Map<string, string> = new Map();
   private readonly idCache: IdCache = {
-    tasks: new Map(),
-    taskLists: new Map(),
     attachments: new Map(),
     rules: new Map(),
     contactFolders: new Map(),
@@ -629,16 +625,13 @@ export class GraphRepository implements IRepository {
   async listTasksAsync(limit: number, offset: number): Promise<TaskRow[]> {
     const tasks = await this.client.listAllTasks(limit, offset, true);
 
-    for (const task of tasks) {
-      if (task.id != null && task.taskListId != null) {
-        const numericId = hashStringToNumber(task.id);
-        this.idCache.tasks.set(numericId, { taskListId: task.taskListId, taskId: task.id });
-        const listNumericId = hashStringToNumber(task.taskListId);
-        this.idCache.taskLists.set(listNumericId, task.taskListId);
-      }
-    }
-
-    return tasks.map(mapTaskToTaskRow);
+    return tasks
+      .filter((task) => task.id != null && task.taskListId != null)
+      .map((task) => {
+        const listTok = this.mintAlias('taskList', task.taskListId);
+        const taskTok = this.mintAliasComposite('task', { taskListId: task.taskListId, taskId: task.id! });
+        return mapTaskToTaskRow({ ...task }, taskTok, listTok);
+      });
   }
 
   listIncompleteTasks(_limit: number, _offset: number): TaskRow[] {
@@ -648,16 +641,13 @@ export class GraphRepository implements IRepository {
   async listIncompleteTasksAsync(limit: number, offset: number): Promise<TaskRow[]> {
     const tasks = await this.client.listAllTasks(limit, offset, false);
 
-    for (const task of tasks) {
-      if (task.id != null && task.taskListId != null) {
-        const numericId = hashStringToNumber(task.id);
-        this.idCache.tasks.set(numericId, { taskListId: task.taskListId, taskId: task.id });
-        const listNumericId = hashStringToNumber(task.taskListId);
-        this.idCache.taskLists.set(listNumericId, task.taskListId);
-      }
-    }
-
-    return tasks.map(mapTaskToTaskRow);
+    return tasks
+      .filter((task) => task.id != null && task.taskListId != null)
+      .map((task) => {
+        const listTok = this.mintAlias('taskList', task.taskListId);
+        const taskTok = this.mintAliasComposite('task', { taskListId: task.taskListId, taskId: task.id! });
+        return mapTaskToTaskRow({ ...task }, taskTok, listTok);
+      });
   }
 
   searchTasks(_query: string, _limit: number): TaskRow[] {
@@ -667,23 +657,26 @@ export class GraphRepository implements IRepository {
   async searchTasksAsync(query: string, limit: number): Promise<TaskRow[]> {
     const tasks = await this.client.searchTasks(query, limit);
 
-    for (const task of tasks) {
-      if (task.id != null && task.taskListId != null) {
-        const numericId = hashStringToNumber(task.id);
-        this.idCache.tasks.set(numericId, { taskListId: task.taskListId, taskId: task.id });
-      }
-    }
-
-    return tasks.map(mapTaskToTaskRow);
+    // Tasks without a taskListId can't form a {taskListId, taskId} composite
+    // token — skip them, matching the current cache-miss guard.
+    return tasks
+      .filter((task) => task.id != null && task.taskListId != null)
+      .map((task) => {
+        const listTok = this.mintAlias('taskList', task.taskListId);
+        const taskTok = this.mintAliasComposite('task', { taskListId: task.taskListId, taskId: task.id! });
+        return mapTaskToTaskRow({ ...task }, taskTok, listTok);
+      });
   }
 
   getTask(_id: number): TaskRow | undefined {
     throw new Error('Use getTaskAsync() for Graph repository');
   }
 
-  async getTaskAsync(id: number): Promise<TaskRow | undefined> {
-    const taskInfo = this.idCache.tasks.get(id);
-    if (taskInfo == null) {
+  async getTaskAsync(id: string | number): Promise<TaskRow | undefined> {
+    let taskInfo: { taskListId: string; taskId: string };
+    try {
+      taskInfo = this.toGraphParts(id, 'task', ['taskListId', 'taskId']);
+    } catch {
       return undefined;
     }
 
@@ -692,17 +685,19 @@ export class GraphRepository implements IRepository {
       return undefined;
     }
 
-    return mapTaskToTaskRow({ ...task, taskListId: taskInfo.taskListId });
+    return mapTaskToTaskRow(
+      { ...task, taskListId: taskInfo.taskListId },
+      String(id),
+      this.mintAlias('taskList', taskInfo.taskListId),
+    );
   }
 
-  async listTaskListsAsync(): Promise<Array<{ id: number; name: string; isDefault: boolean }>> {
+  async listTaskListsAsync(): Promise<Array<{ id: string; name: string; isDefault: boolean }>> {
     const lists = await this.client.listTaskLists();
     return lists.map((list) => {
       const graphId = list.id!;
-      const numericId = hashStringToNumber(graphId);
-      this.idCache.taskLists.set(numericId, graphId);
       return {
-        id: numericId,
+        id: this.mintAlias('taskList', graphId),
         name: list.displayName ?? '',
         isDefault: list.wellknownListName === 'defaultList',
       };
@@ -760,17 +755,25 @@ export class GraphRepository implements IRepository {
   }
 
   /**
-   * Gets task info from a numeric ID.
+   * Gets task info (Graph taskListId/taskId) from a durable `td_` token.
    */
-  getTaskInfo(numericId: number): { taskListId: string; taskId: string } | undefined {
-    return this.idCache.tasks.get(numericId);
+  getTaskInfo(id: string | number): { taskListId: string; taskId: string } | undefined {
+    try {
+      return this.toGraphParts(id, 'task', ['taskListId', 'taskId']);
+    } catch {
+      return undefined;
+    }
   }
 
   /**
-   * Gets the Graph string ID for a task list from a numeric ID.
+   * Gets the Graph string ID for a task list from a durable `tl_` token.
    */
-  getTaskListGraphId(numericId: number): string | undefined {
-    return this.idCache.taskLists.get(numericId);
+  getTaskListGraphId(id: string | number): string | undefined {
+    try {
+      return this.toGraphId(id, 'taskList');
+    } catch {
+      return undefined;
+    }
   }
 
   // ===========================================================================
@@ -1415,13 +1418,13 @@ export class GraphRepository implements IRepository {
   /**
    * Creates a new task in a task list.
    *
-   * Looks up the Graph task list ID from idCache.taskLists, builds a
-   * Graph API task object from the given params, calls client.createTask(),
-   * caches the resulting ID, and returns a numeric ID.
+   * Resolves the `tl_` task list token to a Graph ID, builds a Graph API task
+   * object from the given params, calls client.createTask(), and returns a
+   * durable `td_` token for the created task.
    */
   async createTaskAsync(params: {
     title: string;
-    task_list_id: number;
+    task_list_id: string | number;
     body?: string;
     body_type?: 'text' | 'html';
     due_date?: string;
@@ -1438,9 +1441,8 @@ export class GraphRepository implements IRepository {
       occurrences?: number | undefined;
     } | undefined;
     categories?: string[];
-  }): Promise<number> {
-    const graphListId = this.idCache.taskLists.get(params.task_list_id);
-    if (graphListId == null) throw new Error(`Task list ID ${params.task_list_id} not found in cache. Try searching for or listing the item first to refresh the cache.`);
+  }): Promise<string> {
+    const graphListId = this.toGraphId(params.task_list_id, 'taskList');
 
     const graphTask: Record<string, unknown> = {
       title: params.title,
@@ -1494,22 +1496,15 @@ export class GraphRepository implements IRepository {
     }
 
     const created = await this.client.createTask(graphListId, graphTask);
-    const graphId = created.id!;
-    const numericId = hashStringToNumber(graphId);
-    this.idCache.tasks.set(numericId, { taskListId: graphListId, taskId: graphId });
-    return numericId;
+    return this.mintAliasComposite('task', { taskListId: graphListId, taskId: created.id! });
   }
 
   /**
    * Updates an existing task.
-   *
-   * Looks up the Graph task info from idCache.tasks, then calls
-   * client.updateTask(). Throws if the task is not cached.
    */
-  async updateTaskAsync(taskId: number, updates: Record<string, unknown>): Promise<void> {
-    const taskInfo = this.idCache.tasks.get(taskId);
-    if (taskInfo == null) throw new Error(`Task ID ${taskId} not found in cache. Try searching for or listing the item first to refresh the cache.`);
-    await this.client.updateTask(taskInfo.taskListId, taskInfo.taskId, updates);
+  async updateTaskAsync(taskId: string | number, updates: Record<string, unknown>): Promise<void> {
+    const { taskListId, taskId: gTaskId } = this.toGraphParts(taskId, 'task', ['taskListId', 'taskId']);
+    await this.client.updateTask(taskListId, gTaskId, updates);
   }
 
   /**
@@ -1518,7 +1513,7 @@ export class GraphRepository implements IRepository {
    * Convenience method that calls updateTaskAsync with status: 'completed'
    * and the current time as completedDateTime.
    */
-  async completeTaskAsync(taskId: number): Promise<void> {
+  async completeTaskAsync(taskId: string | number): Promise<void> {
     await this.updateTaskAsync(taskId, {
       status: 'completed',
       completedDateTime: {
@@ -1530,60 +1525,44 @@ export class GraphRepository implements IRepository {
 
   /**
    * Deletes a task.
-   *
-   * Looks up the Graph task info from idCache.tasks, calls
-   * client.deleteTask(), and removes the entry from idCache.
-   * Throws if the task is not cached.
    */
-  async deleteTaskAsync(taskId: number): Promise<void> {
-    const taskInfo = this.idCache.tasks.get(taskId);
-    if (taskInfo == null) throw new Error(`Task ID ${taskId} not found in cache. Try searching for or listing the item first to refresh the cache.`);
-    await this.client.deleteTask(taskInfo.taskListId, taskInfo.taskId);
-    this.idCache.tasks.delete(taskId);
+  async deleteTaskAsync(taskId: string | number): Promise<void> {
+    const { taskListId, taskId: gTaskId } = this.toGraphParts(taskId, 'task', ['taskListId', 'taskId']);
+    await this.client.deleteTask(taskListId, gTaskId);
   }
 
   /**
    * Creates a new task list.
-   *
-   * Calls client.createTaskList(), caches the resulting ID in
-   * idCache.taskLists, and returns a numeric ID.
    */
-  async createTaskListAsync(displayName: string): Promise<number> {
+  async createTaskListAsync(displayName: string): Promise<string> {
     const created = await this.client.createTaskList(displayName);
-    const graphId = created.id!;
-    const numericId = hashStringToNumber(graphId);
-    this.idCache.taskLists.set(numericId, graphId);
-    return numericId;
+    return this.mintAlias('taskList', created.id!);
   }
 
   /**
    * Renames a task list.
    */
-  async renameTaskListAsync(listId: number, name: string): Promise<void> {
-    const graphId = this.idCache.taskLists.get(listId);
-    if (graphId == null) throw new Error(`Task list ID ${listId} not found in cache. Try searching for or listing the item first to refresh the cache.`);
+  async renameTaskListAsync(listId: string | number, name: string): Promise<void> {
+    const graphId = this.toGraphId(listId, 'taskList');
     await this.client.updateTaskList(graphId, { displayName: name });
   }
 
   /**
    * Deletes a task list.
    */
-  async deleteTaskListAsync(listId: number): Promise<void> {
-    const graphId = this.idCache.taskLists.get(listId);
-    if (graphId == null) throw new Error(`Task list ID ${listId} not found in cache. Try searching for or listing the item first to refresh the cache.`);
+  async deleteTaskListAsync(listId: string | number): Promise<void> {
+    const graphId = this.toGraphId(listId, 'taskList');
     await this.client.deleteTaskList(graphId);
-    this.idCache.taskLists.delete(listId);
   }
 
   // ===========================================================================
   // Checklist Items
   // ===========================================================================
 
-  async listChecklistItemsAsync(taskId: number): Promise<Array<{
+  async listChecklistItemsAsync(taskId: string | number): Promise<Array<{
     id: number; displayName: string; isChecked: boolean; createdDateTime: string;
   }>> {
-    const taskInfo = this.idCache.tasks.get(taskId);
-    if (taskInfo == null) throw new Error(`Task ID ${taskId} not found in cache. Try listing tasks first.`);
+    const taskInfo = this.toGraphParts(taskId, 'task', ['taskListId', 'taskId']);
     const items = await this.client.listChecklistItems(taskInfo.taskListId, taskInfo.taskId);
     return items.map((item) => {
       const graphId = item.id!;
@@ -1598,9 +1577,8 @@ export class GraphRepository implements IRepository {
     });
   }
 
-  async createChecklistItemAsync(taskId: number, displayName: string, isChecked: boolean = false): Promise<number> {
-    const taskInfo = this.idCache.tasks.get(taskId);
-    if (taskInfo == null) throw new Error(`Task ID ${taskId} not found in cache. Try listing tasks first.`);
+  async createChecklistItemAsync(taskId: string | number, displayName: string, isChecked: boolean = false): Promise<number> {
+    const taskInfo = this.toGraphParts(taskId, 'task', ['taskListId', 'taskId']);
     const item = await this.client.createChecklistItem(taskInfo.taskListId, taskInfo.taskId, displayName, isChecked);
     const graphId = item.id!;
     const numericId = hashStringToNumber(graphId);
@@ -1628,11 +1606,10 @@ export class GraphRepository implements IRepository {
   // Linked Resources
   // ===========================================================================
 
-  async listLinkedResourcesAsync(taskId: number): Promise<Array<{
+  async listLinkedResourcesAsync(taskId: string | number): Promise<Array<{
     id: number; webUrl: string; applicationName: string; displayName: string;
   }>> {
-    const taskInfo = this.idCache.tasks.get(taskId);
-    if (taskInfo == null) throw new Error(`Task ID ${taskId} not found in cache. Try listing tasks first.`);
+    const taskInfo = this.toGraphParts(taskId, 'task', ['taskListId', 'taskId']);
     const items = await this.client.listLinkedResources(taskInfo.taskListId, taskInfo.taskId);
     return items.map((item) => {
       const graphId = item.id!;
@@ -1647,9 +1624,8 @@ export class GraphRepository implements IRepository {
     });
   }
 
-  async createLinkedResourceAsync(taskId: number, webUrl: string, applicationName: string, displayName?: string): Promise<number> {
-    const taskInfo = this.idCache.tasks.get(taskId);
-    if (taskInfo == null) throw new Error(`Task ID ${taskId} not found in cache. Try listing tasks first.`);
+  async createLinkedResourceAsync(taskId: string | number, webUrl: string, applicationName: string, displayName?: string): Promise<number> {
+    const taskInfo = this.toGraphParts(taskId, 'task', ['taskListId', 'taskId']);
     const item = await this.client.createLinkedResource(taskInfo.taskListId, taskInfo.taskId, webUrl, applicationName, displayName);
     const graphId = item.id!;
     const numericId = hashStringToNumber(graphId);
@@ -1668,11 +1644,10 @@ export class GraphRepository implements IRepository {
   // Task Attachments
   // ===========================================================================
 
-  async listTaskAttachmentsAsync(taskId: number): Promise<Array<{
+  async listTaskAttachmentsAsync(taskId: string | number): Promise<Array<{
     id: number; name: string; size: number; contentType: string;
   }>> {
-    const taskInfo = this.idCache.tasks.get(taskId);
-    if (taskInfo == null) throw new Error(`Task ID ${taskId} not found in cache. Try listing tasks first.`);
+    const taskInfo = this.toGraphParts(taskId, 'task', ['taskListId', 'taskId']);
     const items = await this.client.listTaskAttachments(taskInfo.taskListId, taskInfo.taskId);
     return items.map((item) => {
       const graphId = item.id!;
@@ -1687,9 +1662,8 @@ export class GraphRepository implements IRepository {
     });
   }
 
-  async createTaskAttachmentAsync(taskId: number, name: string, contentBytes: string, contentType?: string): Promise<number> {
-    const taskInfo = this.idCache.tasks.get(taskId);
-    if (taskInfo == null) throw new Error(`Task ID ${taskId} not found in cache. Try listing tasks first.`);
+  async createTaskAttachmentAsync(taskId: string | number, name: string, contentBytes: string, contentType?: string): Promise<number> {
+    const taskInfo = this.toGraphParts(taskId, 'task', ['taskListId', 'taskId']);
     const item = await this.client.createTaskAttachment(taskInfo.taskListId, taskInfo.taskId, name, contentBytes, contentType);
     const graphId = item.id!;
     const numericId = hashStringToNumber(graphId);

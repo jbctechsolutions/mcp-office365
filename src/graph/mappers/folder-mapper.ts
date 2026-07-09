@@ -9,7 +9,6 @@
 
 import type * as MicrosoftGraph from '@microsoft/microsoft-graph-types';
 import type { FolderRow } from '../../database/repository.js';
-import { hashStringToNumber } from './utils.js';
 import { mintSelfEncoded } from '../../ids/token.js';
 
 /**
@@ -43,25 +42,6 @@ export function mapCalendarToFolderRow(calendar: MicrosoftGraph.Calendar): Folde
     parentId: null,
     specialType: 0,
     folderType: 2, // Calendar folder
-    accountId: 1,
-    messageCount: 0,
-    unreadCount: 0,
-  };
-}
-
-/**
- * Maps a Graph TodoTaskList to a FolderRow.
- */
-export function mapTaskListToFolderRow(taskList: MicrosoftGraph.TodoTaskList): FolderRow {
-  return {
-    // Task lists are a separate, not-yet-migrated entity (idCache.taskLists) —
-    // still hash-based, not a durable token. Stringified only to satisfy the
-    // now-string-only shared FolderRow.id (folders/calendars migrated, U5).
-    id: String(hashStringToNumber(taskList.id ?? '')),
-    name: taskList.displayName ?? null,
-    parentId: null,
-    specialType: 0,
-    folderType: 3, // Task folder
     accountId: 1,
     messageCount: 0,
     unreadCount: 0,

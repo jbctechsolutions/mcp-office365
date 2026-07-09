@@ -37,8 +37,8 @@ function jsonResult(data: unknown): ToolResult {
  * backend's task tools.
  */
 export function transformTaskRow(row: TaskRow): {
-  id: number;
-  folderId: number | null;
+  id: string | number;
+  folderId: string | number;
   name: string | null;
   isCompleted: boolean;
   dueDate: string | null;
@@ -92,7 +92,7 @@ export class GraphTasksTools {
   }
 
   async createTask(params: CreateTaskParams): Promise<ToolResult> {
-    const numericId = await this.repository.createTaskAsync({
+    const taskId = await this.repository.createTaskAsync({
       title: params.title,
       task_list_id: params.task_list_id,
       ...(params.body != null ? { body: params.body } : {}),
@@ -104,7 +104,7 @@ export class GraphTasksTools {
       ...(params.categories != null ? { categories: params.categories } : {}),
     });
     return jsonResult({
-      id: numericId,
+      id: taskId,
       title: params.title,
       task_list_id: params.task_list_id,
       status: 'created',

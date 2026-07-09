@@ -10,7 +10,6 @@
 import { describe, it, expect } from 'vitest';
 import type * as MicrosoftGraph from '@microsoft/microsoft-graph-types';
 import { mapTaskToTaskRow, type TodoTaskWithList } from '../../../../src/graph/mappers/task-mapper.js';
-import { hashStringToNumber } from '../../../../src/graph/mappers/utils.js';
 
 describe('graph/mappers/task-mapper', () => {
   describe('mapTaskToTaskRow', () => {
@@ -26,10 +25,12 @@ describe('graph/mappers/task-mapper', () => {
         isReminderOn: true,
       };
 
-      const result = mapTaskToTaskRow(task);
+      const result = mapTaskToTaskRow(task, 'td_abc123', 'tl_def456');
 
-      expect(result.id).toBe(hashStringToNumber('task-123'));
-      expect(result.folderId).toBe(hashStringToNumber('list-456'));
+      // id/folderId are pre-minted tokens passed in by the repository — the
+      // mapper just threads them through (it can't mint alias tokens itself).
+      expect(result.id).toBe('td_abc123');
+      expect(result.folderId).toBe('tl_def456');
       expect(result.name).toBe('Test Task');
       expect(result.isCompleted).toBe(1);
       expect(result.priority).toBe(1); // high
@@ -43,9 +44,9 @@ describe('graph/mappers/task-mapper', () => {
         title: 'Test',
       };
 
-      const result = mapTaskToTaskRow(task);
+      const result = mapTaskToTaskRow(task, 'td_abc123', 'tl_def456');
 
-      expect(result.id).toBe(hashStringToNumber(''));
+      expect(result.id).toBe('td_abc123');
     });
 
     it('handles task without taskListId', () => {
@@ -54,9 +55,9 @@ describe('graph/mappers/task-mapper', () => {
         taskListId: undefined,
       };
 
-      const result = mapTaskToTaskRow(task);
+      const result = mapTaskToTaskRow(task, 'td_abc123', '');
 
-      expect(result.folderId).toBe(0);
+      expect(result.folderId).toBe('');
       expect(result.dataFilePath).toBe('graph-task:default:task-123');
     });
 
@@ -66,7 +67,7 @@ describe('graph/mappers/task-mapper', () => {
         title: undefined,
       };
 
-      const result = mapTaskToTaskRow(task);
+      const result = mapTaskToTaskRow(task, 'td_abc123', 'tl_def456');
 
       expect(result.name).toBeNull();
     });
@@ -77,7 +78,7 @@ describe('graph/mappers/task-mapper', () => {
         status: 'notStarted',
       };
 
-      const result = mapTaskToTaskRow(task);
+      const result = mapTaskToTaskRow(task, 'td_abc123', 'tl_def456');
 
       expect(result.isCompleted).toBe(0);
     });
@@ -88,7 +89,7 @@ describe('graph/mappers/task-mapper', () => {
         status: 'inProgress',
       };
 
-      const result = mapTaskToTaskRow(task);
+      const result = mapTaskToTaskRow(task, 'td_abc123', 'tl_def456');
 
       expect(result.isCompleted).toBe(0);
     });
@@ -99,7 +100,7 @@ describe('graph/mappers/task-mapper', () => {
         status: undefined,
       };
 
-      const result = mapTaskToTaskRow(task);
+      const result = mapTaskToTaskRow(task, 'td_abc123', 'tl_def456');
 
       expect(result.isCompleted).toBe(0);
     });
@@ -110,7 +111,7 @@ describe('graph/mappers/task-mapper', () => {
         dueDateTime: undefined,
       };
 
-      const result = mapTaskToTaskRow(task);
+      const result = mapTaskToTaskRow(task, 'td_abc123', 'tl_def456');
 
       expect(result.dueDate).toBeNull();
     });
@@ -121,7 +122,7 @@ describe('graph/mappers/task-mapper', () => {
         startDateTime: undefined,
       };
 
-      const result = mapTaskToTaskRow(task);
+      const result = mapTaskToTaskRow(task, 'td_abc123', 'tl_def456');
 
       expect(result.startDate).toBeNull();
     });
@@ -132,7 +133,7 @@ describe('graph/mappers/task-mapper', () => {
         importance: 'low',
       };
 
-      const result = mapTaskToTaskRow(task);
+      const result = mapTaskToTaskRow(task, 'td_abc123', 'tl_def456');
 
       expect(result.priority).toBe(-1);
     });
@@ -143,7 +144,7 @@ describe('graph/mappers/task-mapper', () => {
         importance: 'normal',
       };
 
-      const result = mapTaskToTaskRow(task);
+      const result = mapTaskToTaskRow(task, 'td_abc123', 'tl_def456');
 
       expect(result.priority).toBe(0);
     });
@@ -154,7 +155,7 @@ describe('graph/mappers/task-mapper', () => {
         importance: undefined,
       };
 
-      const result = mapTaskToTaskRow(task);
+      const result = mapTaskToTaskRow(task, 'td_abc123', 'tl_def456');
 
       expect(result.priority).toBe(0);
     });
@@ -165,7 +166,7 @@ describe('graph/mappers/task-mapper', () => {
         isReminderOn: false,
       };
 
-      const result = mapTaskToTaskRow(task);
+      const result = mapTaskToTaskRow(task, 'td_abc123', 'tl_def456');
 
       expect(result.hasReminder).toBe(0);
     });
@@ -176,7 +177,7 @@ describe('graph/mappers/task-mapper', () => {
         isReminderOn: undefined,
       };
 
-      const result = mapTaskToTaskRow(task);
+      const result = mapTaskToTaskRow(task, 'td_abc123', 'tl_def456');
 
       expect(result.hasReminder).toBe(0);
     });
@@ -187,7 +188,7 @@ describe('graph/mappers/task-mapper', () => {
         dueDateTime: { dateTime: '2024-01-15T17:00:00Z', timeZone: 'UTC' },
       };
 
-      const result = mapTaskToTaskRow(task);
+      const result = mapTaskToTaskRow(task, 'td_abc123', 'tl_def456');
 
       expect(result.dueDate).toBeTypeOf('number');
       expect(result.dueDate).toBeGreaterThan(0);
@@ -199,7 +200,7 @@ describe('graph/mappers/task-mapper', () => {
         startDateTime: { dateTime: '2024-01-10T09:00:00Z', timeZone: 'UTC' },
       };
 
-      const result = mapTaskToTaskRow(task);
+      const result = mapTaskToTaskRow(task, 'td_abc123', 'tl_def456');
 
       expect(result.startDate).toBeTypeOf('number');
       expect(result.startDate).toBeGreaterThan(0);
