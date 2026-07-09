@@ -2212,6 +2212,12 @@ export class GraphRepository implements IRepository {
     ]);
     const replies = repliesRaw.map((r) => {
       const rGraphId = r.id!;
+      // Reply ids are display-only: a reply is a child entity addressed at
+      // /messages/{parentId}/replies/{replyId}, but this xm_ token (like the
+      // pre-migration numeric id before it) carries only {teamId, channelId,
+      // messageId}, so feeding it back to a message op resolves then 404s. No
+      // tool consumes a reply id — react/reply take the parent message id.
+      // Reply-level operations are tracked in issue #50.
       return {
         id: this.mintAliasComposite('channelMessage', { teamId, channelId, messageId: rGraphId }),
         senderName: r.from?.user?.displayName ?? r.from?.application?.displayName ?? '',

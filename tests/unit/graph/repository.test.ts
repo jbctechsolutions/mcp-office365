@@ -4168,6 +4168,22 @@ describe('graph/repository', () => {
         await expect(repository.listMessageReactionsAsync('xm_bogus', 'channel')).rejects.toThrow('Unknown or unresolvable');
         await expect(repository.listMessageReactionsAsync('cm_bogus', 'chat')).rejects.toThrow('Unknown or unresolvable');
       });
+
+      it('fails closed when message_type disagrees with the token kind', async () => {
+        // A cm_ (chat) token asked to resolve as a channel message — and the
+        // reverse — must ID_ENTITY_MISMATCH, never silently mis-resolve to the
+        // wrong Graph collection. The token kind is authoritative.
+        const chatTok = await chatToken('chat-abc');
+        mockClient.sendChatMessage.mockResolvedValue({ id: 'msg-1' });
+        const cmTok = await repository.sendChatMessageAsync(chatTok, 'Hi', 'text');
+        await expect(repository.addMessageReactionAsync(cmTok, 'channel', 'like')).rejects.toThrow(/but a channelMessage ID was expected/);
+
+        const teamTok = await teamToken('team-abc');
+        const chTok = await channelToken(teamTok, { id: 'ch-1', displayName: 'General', description: '', membershipType: 'standard' });
+        mockClient.sendChannelMessage.mockResolvedValue({ id: 'cmsg-1' });
+        const xmTok = await repository.sendChannelMessageAsync(chTok, 'Yo', 'text');
+        await expect(repository.addMessageReactionAsync(xmTok, 'chat', 'like')).rejects.toThrow(/but a chatMessage ID was expected/);
+      });
     });
   });
 
