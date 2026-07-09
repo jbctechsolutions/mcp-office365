@@ -45,7 +45,7 @@ describe('TaskAttachmentsTools', () => {
 
   describe('createTaskAttachment', () => {
     it('creates a task attachment and returns the ID', async () => {
-      vi.mocked(repo.createTaskAttachmentAsync).mockResolvedValue(100);
+      vi.mocked(repo.createTaskAttachmentAsync).mockResolvedValue('ta_100');
 
       const result = await tools.createTaskAttachment({
         task_id: 'td_task1',
@@ -56,12 +56,12 @@ describe('TaskAttachmentsTools', () => {
       expect(repo.createTaskAttachmentAsync).toHaveBeenCalledWith('td_task1', 'document.pdf', 'dGVzdA==', undefined);
       const parsed = JSON.parse(result.content[0].text);
       expect(parsed.success).toBe(true);
-      expect(parsed.task_attachment_id).toBe(100);
+      expect(parsed.task_attachment_id).toBe('ta_100');
       expect(parsed.message).toBe('Task attachment created');
     });
 
     it('passes content_type when provided', async () => {
-      vi.mocked(repo.createTaskAttachmentAsync).mockResolvedValue(101);
+      vi.mocked(repo.createTaskAttachmentAsync).mockResolvedValue('ta_101');
 
       await tools.createTaskAttachment({
         task_id: 'td_task1',
@@ -76,13 +76,13 @@ describe('TaskAttachmentsTools', () => {
 
   describe('prepareDeleteTaskAttachment', () => {
     it('generates an approval token', () => {
-      const result = tools.prepareDeleteTaskAttachment({ task_attachment_id: 100 });
+      const result = tools.prepareDeleteTaskAttachment({ task_attachment_id: 'ta_100' });
 
       const parsed = JSON.parse(result.content[0].text);
       expect(parsed.approval_token).toBeDefined();
       expect(typeof parsed.approval_token).toBe('string');
       expect(parsed.expires_at).toBeDefined();
-      expect(parsed.task_attachment_id).toBe(100);
+      expect(parsed.task_attachment_id).toBe('ta_100');
       expect(parsed.action).toContain('confirm_delete_task_attachment');
     });
   });
@@ -92,7 +92,7 @@ describe('TaskAttachmentsTools', () => {
       vi.mocked(repo.deleteTaskAttachmentAsync).mockResolvedValue(undefined);
 
       // Generate a token first
-      const prepareResult = tools.prepareDeleteTaskAttachment({ task_attachment_id: 100 });
+      const prepareResult = tools.prepareDeleteTaskAttachment({ task_attachment_id: 'ta_100' });
       const { approval_token } = JSON.parse(prepareResult.content[0].text);
 
       const result = await tools.confirmDeleteTaskAttachment({ approval_token });
@@ -100,7 +100,7 @@ describe('TaskAttachmentsTools', () => {
       const parsed = JSON.parse(result.content[0].text);
       expect(parsed.success).toBe(true);
       expect(parsed.message).toBe('Task attachment deleted');
-      expect(repo.deleteTaskAttachmentAsync).toHaveBeenCalledWith(100);
+      expect(repo.deleteTaskAttachmentAsync).toHaveBeenCalledWith('ta_100');
     });
 
     it('returns error for invalid token', async () => {
@@ -114,7 +114,7 @@ describe('TaskAttachmentsTools', () => {
     it('returns error for already consumed token', async () => {
       vi.mocked(repo.deleteTaskAttachmentAsync).mockResolvedValue(undefined);
 
-      const prepareResult = tools.prepareDeleteTaskAttachment({ task_attachment_id: 100 });
+      const prepareResult = tools.prepareDeleteTaskAttachment({ task_attachment_id: 'ta_100' });
       const { approval_token } = JSON.parse(prepareResult.content[0].text);
 
       // Consume the token

@@ -55,19 +55,19 @@ describe('ChecklistItemsTools', () => {
 
   describe('createChecklistItem', () => {
     it('creates a checklist item and returns the ID', async () => {
-      vi.mocked(repo.createChecklistItemAsync).mockResolvedValue(100);
+      vi.mocked(repo.createChecklistItemAsync).mockResolvedValue('ci_100');
 
       const result = await tools.createChecklistItem({ task_id: 'td_task1', display_name: 'Buy milk' });
 
       expect(repo.createChecklistItemAsync).toHaveBeenCalledWith('td_task1', 'Buy milk', undefined);
       const parsed = JSON.parse(result.content[0].text);
       expect(parsed.success).toBe(true);
-      expect(parsed.checklist_item_id).toBe(100);
+      expect(parsed.checklist_item_id).toBe('ci_100');
       expect(parsed.message).toBe('Checklist item created');
     });
 
     it('handles is_checked default (false)', async () => {
-      vi.mocked(repo.createChecklistItemAsync).mockResolvedValue(101);
+      vi.mocked(repo.createChecklistItemAsync).mockResolvedValue('ci_101');
 
       await tools.createChecklistItem({ task_id: 'td_task1', display_name: 'Task A' });
 
@@ -75,7 +75,7 @@ describe('ChecklistItemsTools', () => {
     });
 
     it('passes is_checked when provided', async () => {
-      vi.mocked(repo.createChecklistItemAsync).mockResolvedValue(102);
+      vi.mocked(repo.createChecklistItemAsync).mockResolvedValue('ci_102');
 
       await tools.createChecklistItem({ task_id: 'td_task1', display_name: 'Task B', is_checked: true });
 
@@ -87,9 +87,9 @@ describe('ChecklistItemsTools', () => {
     it('updates a checklist item with display_name', async () => {
       vi.mocked(repo.updateChecklistItemAsync).mockResolvedValue(undefined);
 
-      const result = await tools.updateChecklistItem({ checklist_item_id: 100, display_name: 'Updated text' });
+      const result = await tools.updateChecklistItem({ checklist_item_id: 'ci_100', display_name: 'Updated text' });
 
-      expect(repo.updateChecklistItemAsync).toHaveBeenCalledWith(100, { displayName: 'Updated text' });
+      expect(repo.updateChecklistItemAsync).toHaveBeenCalledWith('ci_100', { displayName: 'Updated text' });
       const parsed = JSON.parse(result.content[0].text);
       expect(parsed.success).toBe(true);
       expect(parsed.message).toBe('Checklist item updated');
@@ -98,29 +98,29 @@ describe('ChecklistItemsTools', () => {
     it('updates a checklist item with is_checked', async () => {
       vi.mocked(repo.updateChecklistItemAsync).mockResolvedValue(undefined);
 
-      await tools.updateChecklistItem({ checklist_item_id: 100, is_checked: true });
+      await tools.updateChecklistItem({ checklist_item_id: 'ci_100', is_checked: true });
 
-      expect(repo.updateChecklistItemAsync).toHaveBeenCalledWith(100, { isChecked: true });
+      expect(repo.updateChecklistItemAsync).toHaveBeenCalledWith('ci_100', { isChecked: true });
     });
 
     it('passes both fields when provided', async () => {
       vi.mocked(repo.updateChecklistItemAsync).mockResolvedValue(undefined);
 
-      await tools.updateChecklistItem({ checklist_item_id: 100, display_name: 'New name', is_checked: false });
+      await tools.updateChecklistItem({ checklist_item_id: 'ci_100', display_name: 'New name', is_checked: false });
 
-      expect(repo.updateChecklistItemAsync).toHaveBeenCalledWith(100, { displayName: 'New name', isChecked: false });
+      expect(repo.updateChecklistItemAsync).toHaveBeenCalledWith('ci_100', { displayName: 'New name', isChecked: false });
     });
   });
 
   describe('prepareDeleteChecklistItem', () => {
     it('generates an approval token', () => {
-      const result = tools.prepareDeleteChecklistItem({ checklist_item_id: 100 });
+      const result = tools.prepareDeleteChecklistItem({ checklist_item_id: 'ci_100' });
 
       const parsed = JSON.parse(result.content[0].text);
       expect(parsed.approval_token).toBeDefined();
       expect(typeof parsed.approval_token).toBe('string');
       expect(parsed.expires_at).toBeDefined();
-      expect(parsed.checklist_item_id).toBe(100);
+      expect(parsed.checklist_item_id).toBe('ci_100');
       expect(parsed.action).toContain('confirm_delete_checklist_item');
     });
   });
@@ -130,7 +130,7 @@ describe('ChecklistItemsTools', () => {
       vi.mocked(repo.deleteChecklistItemAsync).mockResolvedValue(undefined);
 
       // Generate a token first
-      const prepareResult = tools.prepareDeleteChecklistItem({ checklist_item_id: 100 });
+      const prepareResult = tools.prepareDeleteChecklistItem({ checklist_item_id: 'ci_100' });
       const { approval_token } = JSON.parse(prepareResult.content[0].text);
 
       const result = await tools.confirmDeleteChecklistItem({ approval_token });
@@ -138,7 +138,7 @@ describe('ChecklistItemsTools', () => {
       const parsed = JSON.parse(result.content[0].text);
       expect(parsed.success).toBe(true);
       expect(parsed.message).toBe('Checklist item deleted');
-      expect(repo.deleteChecklistItemAsync).toHaveBeenCalledWith(100);
+      expect(repo.deleteChecklistItemAsync).toHaveBeenCalledWith('ci_100');
     });
 
     it('returns error for invalid token', async () => {
@@ -152,7 +152,7 @@ describe('ChecklistItemsTools', () => {
     it('returns error for already consumed token', async () => {
       vi.mocked(repo.deleteChecklistItemAsync).mockResolvedValue(undefined);
 
-      const prepareResult = tools.prepareDeleteChecklistItem({ checklist_item_id: 100 });
+      const prepareResult = tools.prepareDeleteChecklistItem({ checklist_item_id: 'ci_100' });
       const { approval_token } = JSON.parse(prepareResult.content[0].text);
 
       // Consume the token

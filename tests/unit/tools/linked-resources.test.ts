@@ -45,19 +45,19 @@ describe('LinkedResourcesTools', () => {
 
   describe('createLinkedResource', () => {
     it('creates a linked resource and returns the ID', async () => {
-      vi.mocked(repo.createLinkedResourceAsync).mockResolvedValue(100);
+      vi.mocked(repo.createLinkedResourceAsync).mockResolvedValue('lr_100');
 
       const result = await tools.createLinkedResource({ task_id: 'td_task1', web_url: 'https://example.com', application_name: 'TestApp' });
 
       expect(repo.createLinkedResourceAsync).toHaveBeenCalledWith('td_task1', 'https://example.com', 'TestApp', undefined);
       const parsed = JSON.parse(result.content[0].text);
       expect(parsed.success).toBe(true);
-      expect(parsed.linked_resource_id).toBe(100);
+      expect(parsed.linked_resource_id).toBe('lr_100');
       expect(parsed.message).toBe('Linked resource created');
     });
 
     it('passes display_name when provided', async () => {
-      vi.mocked(repo.createLinkedResourceAsync).mockResolvedValue(101);
+      vi.mocked(repo.createLinkedResourceAsync).mockResolvedValue('lr_101');
 
       await tools.createLinkedResource({ task_id: 'td_task1', web_url: 'https://example.com', application_name: 'TestApp', display_name: 'My Link' });
 
@@ -67,13 +67,13 @@ describe('LinkedResourcesTools', () => {
 
   describe('prepareDeleteLinkedResource', () => {
     it('generates an approval token', () => {
-      const result = tools.prepareDeleteLinkedResource({ linked_resource_id: 100 });
+      const result = tools.prepareDeleteLinkedResource({ linked_resource_id: 'lr_100' });
 
       const parsed = JSON.parse(result.content[0].text);
       expect(parsed.approval_token).toBeDefined();
       expect(typeof parsed.approval_token).toBe('string');
       expect(parsed.expires_at).toBeDefined();
-      expect(parsed.linked_resource_id).toBe(100);
+      expect(parsed.linked_resource_id).toBe('lr_100');
       expect(parsed.action).toContain('confirm_delete_linked_resource');
     });
   });
@@ -83,7 +83,7 @@ describe('LinkedResourcesTools', () => {
       vi.mocked(repo.deleteLinkedResourceAsync).mockResolvedValue(undefined);
 
       // Generate a token first
-      const prepareResult = tools.prepareDeleteLinkedResource({ linked_resource_id: 100 });
+      const prepareResult = tools.prepareDeleteLinkedResource({ linked_resource_id: 'lr_100' });
       const { approval_token } = JSON.parse(prepareResult.content[0].text);
 
       const result = await tools.confirmDeleteLinkedResource({ approval_token });
@@ -91,7 +91,7 @@ describe('LinkedResourcesTools', () => {
       const parsed = JSON.parse(result.content[0].text);
       expect(parsed.success).toBe(true);
       expect(parsed.message).toBe('Linked resource deleted');
-      expect(repo.deleteLinkedResourceAsync).toHaveBeenCalledWith(100);
+      expect(repo.deleteLinkedResourceAsync).toHaveBeenCalledWith('lr_100');
     });
 
     it('returns error for invalid token', async () => {
@@ -105,7 +105,7 @@ describe('LinkedResourcesTools', () => {
     it('returns error for already consumed token', async () => {
       vi.mocked(repo.deleteLinkedResourceAsync).mockResolvedValue(undefined);
 
-      const prepareResult = tools.prepareDeleteLinkedResource({ linked_resource_id: 100 });
+      const prepareResult = tools.prepareDeleteLinkedResource({ linked_resource_id: 'lr_100' });
       const { approval_token } = JSON.parse(prepareResult.content[0].text);
 
       // Consume the token

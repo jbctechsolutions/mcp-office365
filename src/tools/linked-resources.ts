@@ -38,7 +38,7 @@ export const CreateLinkedResourceInput = z.strictObject({
 });
 
 export const PrepareDeleteLinkedResourceInput = z.strictObject({
-  linked_resource_id: z.number().int().positive().describe('Linked resource ID to delete'),
+  linked_resource_id: z.string().min(1).describe('Linked resource ID to delete'),
 });
 
 export const ConfirmDeleteLinkedResourceInput = z.strictObject({
@@ -59,9 +59,9 @@ export type ConfirmDeleteLinkedResourceParams = z.infer<typeof ConfirmDeleteLink
 // =============================================================================
 
 export interface ILinkedResourcesRepository {
-  listLinkedResourcesAsync(taskId: string | number): Promise<Array<{ id: number; webUrl: string; applicationName: string; displayName: string }>>;
-  createLinkedResourceAsync(taskId: string | number, webUrl: string, applicationName: string, displayName?: string): Promise<number>;
-  deleteLinkedResourceAsync(linkedResourceId: number): Promise<void>;
+  listLinkedResourcesAsync(taskId: string | number): Promise<Array<{ id: string; webUrl: string; applicationName: string; displayName: string }>>;
+  createLinkedResourceAsync(taskId: string | number, webUrl: string, applicationName: string, displayName?: string): Promise<string>;
+  deleteLinkedResourceAsync(linkedResourceId: string | number): Promise<void>;
 }
 
 // =============================================================================
@@ -161,7 +161,7 @@ export class LinkedResourcesTools {
       };
     }
 
-    await this.repo.deleteLinkedResourceAsync((result.token!.targetId as number));
+    await this.repo.deleteLinkedResourceAsync((result.token!.targetId as string));
     return {
       content: [{
         type: 'text' as const,

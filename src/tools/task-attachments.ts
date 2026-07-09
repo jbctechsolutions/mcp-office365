@@ -38,7 +38,7 @@ export const CreateTaskAttachmentInput = z.strictObject({
 });
 
 export const PrepareDeleteTaskAttachmentInput = z.strictObject({
-  task_attachment_id: z.number().int().positive().describe('Task attachment ID to delete'),
+  task_attachment_id: z.string().min(1).describe('Task attachment ID to delete'),
 });
 
 export const ConfirmDeleteTaskAttachmentInput = z.strictObject({
@@ -59,9 +59,9 @@ export type ConfirmDeleteTaskAttachmentParams = z.infer<typeof ConfirmDeleteTask
 // =============================================================================
 
 export interface ITaskAttachmentsRepository {
-  listTaskAttachmentsAsync(taskId: string | number): Promise<Array<{ id: number; name: string; size: number; contentType: string }>>;
-  createTaskAttachmentAsync(taskId: string | number, name: string, contentBytes: string, contentType?: string): Promise<number>;
-  deleteTaskAttachmentAsync(taskAttachmentId: number): Promise<void>;
+  listTaskAttachmentsAsync(taskId: string | number): Promise<Array<{ id: string; name: string; size: number; contentType: string }>>;
+  createTaskAttachmentAsync(taskId: string | number, name: string, contentBytes: string, contentType?: string): Promise<string>;
+  deleteTaskAttachmentAsync(taskAttachmentId: string | number): Promise<void>;
 }
 
 // =============================================================================
@@ -161,7 +161,7 @@ export class TaskAttachmentsTools {
       };
     }
 
-    await this.repo.deleteTaskAttachmentAsync((result.token!.targetId as number));
+    await this.repo.deleteTaskAttachmentAsync((result.token!.targetId as string));
     return {
       content: [{
         type: 'text' as const,

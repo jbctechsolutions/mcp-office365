@@ -54,9 +54,6 @@ interface IdCache {
   focusedOverrides: Map<number, string>;
   calendarGroups: Map<number, string>;
   calendarPermissions: Map<number, { calendarId: string; permissionId: string }>;
-  checklistItems: Map<number, { taskListId: string; taskId: string; checklistItemId: string }>;
-  linkedResources: Map<number, { taskListId: string; taskId: string; linkedResourceId: string }>;
-  taskAttachments: Map<number, { taskListId: string; taskId: string; attachmentId: string }>;
   plans: Map<number, { planId: string; etag: string }>;
   plannerBuckets: Map<number, { planId: string; bucketId: string; etag: string }>;
   plannerTasks: Map<number, { taskId: string; etag: string }>;
@@ -87,9 +84,6 @@ export class GraphRepository implements IRepository {
     focusedOverrides: new Map(),
     calendarGroups: new Map(),
     calendarPermissions: new Map(),
-    checklistItems: new Map(),
-    linkedResources: new Map(),
-    taskAttachments: new Map(),
     plans: new Map(),
     plannerBuckets: new Map(),
     plannerTasks: new Map(),
@@ -1560,16 +1554,14 @@ export class GraphRepository implements IRepository {
   // ===========================================================================
 
   async listChecklistItemsAsync(taskId: string | number): Promise<Array<{
-    id: number; displayName: string; isChecked: boolean; createdDateTime: string;
+    id: string; displayName: string; isChecked: boolean; createdDateTime: string;
   }>> {
     const taskInfo = this.toGraphParts(taskId, 'task', ['taskListId', 'taskId']);
     const items = await this.client.listChecklistItems(taskInfo.taskListId, taskInfo.taskId);
     return items.map((item) => {
       const graphId = item.id!;
-      const numericId = hashStringToNumber(graphId);
-      this.idCache.checklistItems.set(numericId, { taskListId: taskInfo.taskListId, taskId: taskInfo.taskId, checklistItemId: graphId });
       return {
-        id: numericId,
+        id: this.mintAliasComposite('checklistItem', { taskListId: taskInfo.taskListId, taskId: taskInfo.taskId, checklistItemId: graphId }),
         displayName: item.displayName ?? '',
         isChecked: item.isChecked ?? false,
         createdDateTime: item.createdDateTime ?? '',
@@ -1577,29 +1569,23 @@ export class GraphRepository implements IRepository {
     });
   }
 
-  async createChecklistItemAsync(taskId: string | number, displayName: string, isChecked: boolean = false): Promise<number> {
+  async createChecklistItemAsync(taskId: string | number, displayName: string, isChecked: boolean = false): Promise<string> {
     const taskInfo = this.toGraphParts(taskId, 'task', ['taskListId', 'taskId']);
     const item = await this.client.createChecklistItem(taskInfo.taskListId, taskInfo.taskId, displayName, isChecked);
-    const graphId = item.id!;
-    const numericId = hashStringToNumber(graphId);
-    this.idCache.checklistItems.set(numericId, { taskListId: taskInfo.taskListId, taskId: taskInfo.taskId, checklistItemId: graphId });
-    return numericId;
+    return this.mintAliasComposite('checklistItem', { taskListId: taskInfo.taskListId, taskId: taskInfo.taskId, checklistItemId: item.id! });
   }
 
-  async updateChecklistItemAsync(checklistItemId: number, updates: { displayName?: string; isChecked?: boolean }): Promise<void> {
-    const cached = this.idCache.checklistItems.get(checklistItemId);
-    if (cached == null) throw new Error(`Checklist item ID ${checklistItemId} not found in cache. Try listing checklist items first.`);
+  async updateChecklistItemAsync(checklistItemId: string | number, updates: { displayName?: string; isChecked?: boolean }): Promise<void> {
+    const cached = this.toGraphParts(checklistItemId, 'checklistItem', ['taskListId', 'taskId', 'checklistItemId']);
     const graphUpdates: Record<string, unknown> = {};
     if (updates.displayName != null) graphUpdates['displayName'] = updates.displayName;
     if (updates.isChecked != null) graphUpdates['isChecked'] = updates.isChecked;
     await this.client.updateChecklistItem(cached.taskListId, cached.taskId, cached.checklistItemId, graphUpdates);
   }
 
-  async deleteChecklistItemAsync(checklistItemId: number): Promise<void> {
-    const cached = this.idCache.checklistItems.get(checklistItemId);
-    if (cached == null) throw new Error(`Checklist item ID ${checklistItemId} not found in cache. Try listing checklist items first.`);
+  async deleteChecklistItemAsync(checklistItemId: string | number): Promise<void> {
+    const cached = this.toGraphParts(checklistItemId, 'checklistItem', ['taskListId', 'taskId', 'checklistItemId']);
     await this.client.deleteChecklistItem(cached.taskListId, cached.taskId, cached.checklistItemId);
-    this.idCache.checklistItems.delete(checklistItemId);
   }
 
   // ===========================================================================
@@ -1607,16 +1593,14 @@ export class GraphRepository implements IRepository {
   // ===========================================================================
 
   async listLinkedResourcesAsync(taskId: string | number): Promise<Array<{
-    id: number; webUrl: string; applicationName: string; displayName: string;
+    id: string; webUrl: string; applicationName: string; displayName: string;
   }>> {
     const taskInfo = this.toGraphParts(taskId, 'task', ['taskListId', 'taskId']);
     const items = await this.client.listLinkedResources(taskInfo.taskListId, taskInfo.taskId);
     return items.map((item) => {
       const graphId = item.id!;
-      const numericId = hashStringToNumber(graphId);
-      this.idCache.linkedResources.set(numericId, { taskListId: taskInfo.taskListId, taskId: taskInfo.taskId, linkedResourceId: graphId });
       return {
-        id: numericId,
+        id: this.mintAliasComposite('linkedResource', { taskListId: taskInfo.taskListId, taskId: taskInfo.taskId, linkedResourceId: graphId }),
         webUrl: item.webUrl ?? '',
         applicationName: item.applicationName ?? '',
         displayName: item.displayName ?? '',
@@ -1624,20 +1608,15 @@ export class GraphRepository implements IRepository {
     });
   }
 
-  async createLinkedResourceAsync(taskId: string | number, webUrl: string, applicationName: string, displayName?: string): Promise<number> {
+  async createLinkedResourceAsync(taskId: string | number, webUrl: string, applicationName: string, displayName?: string): Promise<string> {
     const taskInfo = this.toGraphParts(taskId, 'task', ['taskListId', 'taskId']);
     const item = await this.client.createLinkedResource(taskInfo.taskListId, taskInfo.taskId, webUrl, applicationName, displayName);
-    const graphId = item.id!;
-    const numericId = hashStringToNumber(graphId);
-    this.idCache.linkedResources.set(numericId, { taskListId: taskInfo.taskListId, taskId: taskInfo.taskId, linkedResourceId: graphId });
-    return numericId;
+    return this.mintAliasComposite('linkedResource', { taskListId: taskInfo.taskListId, taskId: taskInfo.taskId, linkedResourceId: item.id! });
   }
 
-  async deleteLinkedResourceAsync(linkedResourceId: number): Promise<void> {
-    const cached = this.idCache.linkedResources.get(linkedResourceId);
-    if (cached == null) throw new Error(`Linked resource ID ${linkedResourceId} not found in cache. Try listing linked resources first.`);
+  async deleteLinkedResourceAsync(linkedResourceId: string | number): Promise<void> {
+    const cached = this.toGraphParts(linkedResourceId, 'linkedResource', ['taskListId', 'taskId', 'linkedResourceId']);
     await this.client.deleteLinkedResource(cached.taskListId, cached.taskId, cached.linkedResourceId);
-    this.idCache.linkedResources.delete(linkedResourceId);
   }
 
   // ===========================================================================
@@ -1645,16 +1624,14 @@ export class GraphRepository implements IRepository {
   // ===========================================================================
 
   async listTaskAttachmentsAsync(taskId: string | number): Promise<Array<{
-    id: number; name: string; size: number; contentType: string;
+    id: string; name: string; size: number; contentType: string;
   }>> {
     const taskInfo = this.toGraphParts(taskId, 'task', ['taskListId', 'taskId']);
     const items = await this.client.listTaskAttachments(taskInfo.taskListId, taskInfo.taskId);
     return items.map((item) => {
       const graphId = item.id!;
-      const numericId = hashStringToNumber(graphId);
-      this.idCache.taskAttachments.set(numericId, { taskListId: taskInfo.taskListId, taskId: taskInfo.taskId, attachmentId: graphId });
       return {
-        id: numericId,
+        id: this.mintAliasComposite('taskAttachment', { taskListId: taskInfo.taskListId, taskId: taskInfo.taskId, attachmentId: graphId }),
         name: (item as Record<string, unknown>)['name'] as string ?? '',
         size: item.size ?? 0,
         contentType: item.contentType ?? '',
@@ -1662,20 +1639,15 @@ export class GraphRepository implements IRepository {
     });
   }
 
-  async createTaskAttachmentAsync(taskId: string | number, name: string, contentBytes: string, contentType?: string): Promise<number> {
+  async createTaskAttachmentAsync(taskId: string | number, name: string, contentBytes: string, contentType?: string): Promise<string> {
     const taskInfo = this.toGraphParts(taskId, 'task', ['taskListId', 'taskId']);
     const item = await this.client.createTaskAttachment(taskInfo.taskListId, taskInfo.taskId, name, contentBytes, contentType);
-    const graphId = item.id!;
-    const numericId = hashStringToNumber(graphId);
-    this.idCache.taskAttachments.set(numericId, { taskListId: taskInfo.taskListId, taskId: taskInfo.taskId, attachmentId: graphId });
-    return numericId;
+    return this.mintAliasComposite('taskAttachment', { taskListId: taskInfo.taskListId, taskId: taskInfo.taskId, attachmentId: item.id! });
   }
 
-  async deleteTaskAttachmentAsync(taskAttachmentId: number): Promise<void> {
-    const cached = this.idCache.taskAttachments.get(taskAttachmentId);
-    if (cached == null) throw new Error(`Task attachment ID ${taskAttachmentId} not found in cache. Try listing task attachments first.`);
+  async deleteTaskAttachmentAsync(taskAttachmentId: string | number): Promise<void> {
+    const cached = this.toGraphParts(taskAttachmentId, 'taskAttachment', ['taskListId', 'taskId', 'attachmentId']);
     await this.client.deleteTaskAttachment(cached.taskListId, cached.taskId, cached.attachmentId);
-    this.idCache.taskAttachments.delete(taskAttachmentId);
   }
 
   // ===========================================================================
