@@ -2,13 +2,24 @@
 
 _Last updated: 2026-07-09. Working branch: `mcp-server-fixes` worktree. `main` is the release target._
 
-**Session progress (this run):** #47 driveItems (dr_), #48 teams+channels pilot (tm_/cn_),
-#49 chats/chatMessages/channelMessages (ch_/cm_/xm_), #51 tasks+taskLists (td_/tl_),
-#52 task sub-resources (ci_/lr_/ta_). **Teams + To-Do domains fully durable.** Adversarial
-review caught 2 real bugs pre-merge (driveItem empty-id guard #47; sub-entity schema break #51).
-Follow-up issue #50 (channel reply operability). Remaining alias wave: mail/contact sub-resources,
-calendar, meetings, SharePoint chain, Planner. Then U5b-3, union cleanup, U6/U11/U12, coverage
-tools, release.
+**Session progress:** 8 PRs merged — #47 driveItems (dr_), #48 teams+channels **alias pilot**
+(tm_/cn_), #49 chats/chatMessages/channelMessages (ch_/cm_/xm_), #51 tasks+taskLists (td_/tl_),
+#52 task sub-resources (ci_/lr_/ta_), #53 mail/contact sub-resources (at_/mr_/cf_/cg_/fo_),
+#54 calendar+meetings (cp_/om_/rc_/tr_), #55 SharePoint chain (si_/dl_/li_). **19 entities durable;
+the alias-composite wave is ~90% done.** Adversarial review caught 3 real bugs pre-merge (driveItem
+empty-id guard #47; sub-entity task_id schema break #51; contacts folder_id cross-consumer #53).
+Follow-up issue #50 (channel reply operability). **The ONLY remaining hashStringToNumber entity sites
+are Planner (plan/bucket).** CodeRabbit + Copilot hit fair-usage/quota limits mid-session → the opus
+adversarial reviews are the primary external gate.
+
+**NEXT (in order):** (1) **Planner + U5b-5** — the last & most delicate alias PR: plans (pl_), buckets
+(pb_ NEW), plannerTasks (pt_), plannerTaskDetails (piggyback pt_). Etags are mutable & per-sub-resource
+so they CANNOT ride in the token — drop the cached etag and **fetch-before-update**: fetch fresh
+`@odata.etag`, PATCH with `If-Match`, ONE 412 retry (re-fetch etag). `resolvePlanId` is actively
+called; graph-client If-Match methods at graph-client.ts:1912/1928/1933/1965/1970/1980. (2) U5b-3
+immutable-ID pref. (3) **Union cleanup + delete hashStringToNumber** (the payoff — after Planner only
+2 filename hashes + the email-mapper conversationId hash remain, all non-entity). (4) #38/#40 coverage
+tools. (5) U6/U11/U12. (6) tag v4.0.0.
 
 ## Release strategy (decided)
 
