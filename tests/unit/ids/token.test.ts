@@ -131,6 +131,14 @@ describe('ids/token — composite / alias-backed', () => {
   it('rejects minting a composite token for a self-encoding entity', () => {
     expect(() => mintComposite('message', 'X')).toThrow(/not alias-backed/);
   });
+
+  it('mints an xm_ token for channelMessage and classifies it as alias', () => {
+    const token = mintComposite('channelMessage', 'k');
+    expect(token.startsWith('xm_')).toBe(true);
+    const parsed = parseToken(token);
+    expect(parsed?.kind).toBe('alias');
+    expect(parsed?.entityType).toBe('channelMessage');
+  });
 });
 
 describe('ids/token — parse guards', () => {

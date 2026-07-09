@@ -131,6 +131,24 @@ vi.mock('../../../src/graph/client/index.js', () => ({
       updateChannel: vi.fn(),
       deleteChannel: vi.fn(),
       listTeamMembers: vi.fn(),
+      // Teams channel message operations
+      listChannelMessages: vi.fn(),
+      getChannelMessage: vi.fn(),
+      listChannelMessageReplies: vi.fn(),
+      sendChannelMessage: vi.fn(),
+      replyToChannelMessage: vi.fn(),
+      // Teams chat operations
+      listChats: vi.fn(),
+      getChat: vi.fn(),
+      listChatMessages: vi.fn(),
+      sendChatMessage: vi.fn(),
+      listChatMembers: vi.fn(),
+      getChatMessage: vi.fn(),
+      // Teams message reaction operations
+      setChannelMessageReaction: vi.fn(),
+      unsetChannelMessageReaction: vi.fn(),
+      setChatMessageReaction: vi.fn(),
+      unsetChatMessageReaction: vi.fn(),
       // Planner operations
       listMyPlannerTasks: vi.fn(),
       // OneDrive operations
@@ -3899,6 +3917,272 @@ describe('graph/repository', () => {
           email: '',
           roles: [],
         });
+      });
+    });
+  });
+
+  describe('Chats & Messages (durable ch_ / cm_ / xm_ tokens)', () => {
+    // Helper: list teams and return the durable tm_ token for the given Graph id.
+    async function teamToken(graphId: string, displayName = 'Eng', description = ''): Promise<string> {
+      mockClient.listJoinedTeams.mockResolvedValue([{ id: graphId, displayName, description }]);
+      const teams = await repository.listTeamsAsync();
+      return teams[0].id;
+    }
+    // Helper: list channels under a team token and return the first cn_ token.
+    async function channelToken(teamTok: string, channel: Record<string, unknown>): Promise<string> {
+      mockClient.listChannels.mockResolvedValue([channel]);
+      const channels = await repository.listChannelsAsync(teamTok);
+      return channels[0].id;
+    }
+    // Helper: list chats and return the durable ch_ token for the given Graph id.
+    async function chatToken(graphId: string, topic = 'Chat'): Promise<string> {
+      mockClient.listChats.mockResolvedValue([{ id: graphId, topic, chatType: 'oneOnOne', createdDateTime: '' }]);
+      const chats = await repository.listChatsAsync();
+      return chats[0].id;
+    }
+
+    describe('listChatsAsync', () => {
+      it('mints durable ch_ tokens', async () => {
+        mockClient.listChats.mockResolvedValue([
+          { id: 'chat-abc', topic: 'Project Chat', chatType: 'group', createdDateTime: '2026-01-01T00:00:00Z' },
+          { id: 'chat-def', topic: '', chatType: 'oneOnOne', createdDateTime: '2026-01-02T00:00:00Z' },
+        ]);
+
+        const result = await repository.listChatsAsync();
+
+        expect(result).toHaveLength(2);
+        expect(result[0].id).toMatch(/^ch_/);
+        expect(result[0].id).not.toBe(result[1].id);
+        expect(result[0].topic).toBe('Project Chat');
+        expect(result[1].chatType).toBe('oneOnOne');
+      });
+    });
+
+    describe('getChatAsync', () => {
+      it('the ch_ token resolves for follow-up calls', async () => {
+        const tok = await chatToken('chat-abc');
+
+        mockClient.getChat.mockResolvedValue({
+          id: 'chat-abc', topic: 'Project Chat', chatType: 'group', createdDateTime: '2026-01-01T00:00:00Z', webUrl: 'https://teams.microsoft.com/...',
+        });
+
+        const result = await repository.getChatAsync(tok);
+
+        expect(result.id).toBe(tok);
+        expect(result.topic).toBe('Project Chat');
+        expect(mockClient.getChat).toHaveBeenCalledWith('chat-abc');
+      });
+
+      it('rejects a legacy numeric chat id', async () => {
+        await expect(repository.getChatAsync(999999)).rejects.toThrow('not supported');
+      });
+
+      it('rejects an unknown chat token once re-list finds no match', async () => {
+        mockClient.listChats.mockResolvedValue([]);
+        await expect(repository.getChatAsync('ch_bogus')).rejects.toThrow('Unknown or unresolvable');
+      });
+    });
+
+    describe('listChatMessagesAsync', () => {
+      it('mints durable cm_ tokens', async () => {
+        const tok = await chatToken('chat-abc');
+
+        mockClient.listChatMessages.mockResolvedValue([
+          {
+            id: 'msg-1', from: { user: { displayName: 'Alice' } },
+            body: { content: 'Hello', contentType: 'text' }, createdDateTime: '2026-01-01T00:00:00Z',
+          },
+        ]);
+
+        const result = await repository.listChatMessagesAsync(tok);
+
+        expect(result[0].id).toMatch(/^cm_/);
+        expect(result[0].senderName).toBe('Alice');
+        expect(mockClient.listChatMessages).toHaveBeenCalledWith('chat-abc', 25);
+      });
+
+      it('rejects a legacy numeric chat id', async () => {
+        await expect(repository.listChatMessagesAsync(999999)).rejects.toThrow('not supported');
+      });
+    });
+
+    describe('sendChatMessageAsync', () => {
+      it('sends and returns a resolvable cm_ token', async () => {
+        const tok = await chatToken('chat-abc');
+        mockClient.sendChatMessage.mockResolvedValue({ id: 'msg-new' });
+
+        const msgTok = await repository.sendChatMessageAsync(tok, 'Hello!', 'text');
+
+        expect(msgTok).toMatch(/^cm_/);
+        expect(mockClient.sendChatMessage).toHaveBeenCalledWith('chat-abc', 'Hello!', 'text');
+      });
+    });
+
+    describe('listChatMembersAsync', () => {
+      it('resolves the ch_ token and lists members', async () => {
+        const tok = await chatToken('chat-abc');
+        mockClient.listChatMembers.mockResolvedValue([
+          { displayName: 'Alice', email: 'alice@example.com', roles: ['owner'] },
+        ]);
+
+        const result = await repository.listChatMembersAsync(tok);
+
+        expect(result[0].displayName).toBe('Alice');
+        expect(mockClient.listChatMembers).toHaveBeenCalledWith('chat-abc');
+      });
+    });
+
+    describe('listChannelMessagesAsync', () => {
+      it('mints durable xm_ tokens', async () => {
+        const teamTok = await teamToken('team-abc');
+        const chanTok = await channelToken(teamTok, { id: 'ch-1', displayName: 'General', description: '', membershipType: 'standard' });
+
+        mockClient.listChannelMessages.mockResolvedValue([
+          {
+            id: 'cmsg-1', from: { user: { displayName: 'Alice' } },
+            body: { content: 'Hello', contentType: 'text' }, createdDateTime: '2026-01-01T00:00:00Z',
+          },
+        ]);
+
+        const result = await repository.listChannelMessagesAsync(chanTok);
+
+        expect(result[0].id).toMatch(/^xm_/);
+        expect(mockClient.listChannelMessages).toHaveBeenCalledWith('team-abc', 'ch-1', 25);
+      });
+    });
+
+    describe('getChannelMessageAsync', () => {
+      it('resolves the xm_ token to (teamId, channelId, messageId) and mints reply tokens', async () => {
+        const teamTok = await teamToken('team-abc');
+        const chanTok = await channelToken(teamTok, { id: 'ch-1', displayName: 'General', description: '', membershipType: 'standard' });
+
+        mockClient.listChannelMessages.mockResolvedValue([
+          {
+            id: 'cmsg-1', from: { user: { displayName: 'Alice' } },
+            body: { content: 'Hello', contentType: 'text' }, createdDateTime: '2026-01-01T00:00:00Z',
+          },
+        ]);
+        const msgTok = (await repository.listChannelMessagesAsync(chanTok))[0].id;
+
+        mockClient.getChannelMessage.mockResolvedValue({
+          id: 'cmsg-1', from: { user: { displayName: 'Alice' } },
+          body: { content: 'Hello', contentType: 'text' }, createdDateTime: '2026-01-01T00:00:00Z',
+        });
+        mockClient.listChannelMessageReplies.mockResolvedValue([
+          {
+            id: 'reply-1', from: { user: { displayName: 'Bob' } },
+            body: { content: 'Hi back', contentType: 'text' }, createdDateTime: '2026-01-01T01:00:00Z',
+          },
+        ]);
+
+        const result = await repository.getChannelMessageAsync(msgTok);
+
+        expect(result.id).toBe(msgTok);
+        expect(result.replies[0].id).toMatch(/^xm_/);
+        expect(mockClient.getChannelMessage).toHaveBeenCalledWith('team-abc', 'ch-1', 'cmsg-1');
+        expect(mockClient.listChannelMessageReplies).toHaveBeenCalledWith('team-abc', 'ch-1', 'cmsg-1');
+      });
+
+      it('rejects an unknown message token (no self-heal for composites)', async () => {
+        await expect(repository.getChannelMessageAsync('xm_bogus')).rejects.toThrow('Unknown or unresolvable');
+      });
+    });
+
+    describe('sendChannelMessageAsync', () => {
+      it('sends and returns a resolvable xm_ token', async () => {
+        const teamTok = await teamToken('team-abc');
+        const chanTok = await channelToken(teamTok, { id: 'ch-1', displayName: 'General', description: '', membershipType: 'standard' });
+        mockClient.sendChannelMessage.mockResolvedValue({ id: 'cmsg-new' });
+
+        const msgTok = await repository.sendChannelMessageAsync(chanTok, 'Hello channel!', 'text');
+
+        expect(msgTok).toMatch(/^xm_/);
+        expect(mockClient.sendChannelMessage).toHaveBeenCalledWith('team-abc', 'ch-1', 'Hello channel!', 'text');
+      });
+    });
+
+    describe('replyToChannelMessageAsync', () => {
+      it('resolves the xm_ token and returns a new resolvable xm_ token', async () => {
+        const teamTok = await teamToken('team-abc');
+        const chanTok = await channelToken(teamTok, { id: 'ch-1', displayName: 'General', description: '', membershipType: 'standard' });
+        mockClient.sendChannelMessage.mockResolvedValue({ id: 'cmsg-1' });
+        const msgTok = await repository.sendChannelMessageAsync(chanTok, 'Hello!', 'text');
+
+        mockClient.replyToChannelMessage.mockResolvedValue({ id: 'reply-1' });
+        const replyTok = await repository.replyToChannelMessageAsync(msgTok, 'Great idea!', 'text');
+
+        expect(replyTok).toMatch(/^xm_/);
+        expect(mockClient.replyToChannelMessage).toHaveBeenCalledWith('team-abc', 'ch-1', 'cmsg-1', 'Great idea!', 'text');
+      });
+
+      it('rejects an unknown message token', async () => {
+        await expect(repository.replyToChannelMessageAsync('xm_bogus', 'Reply')).rejects.toThrow('Unknown or unresolvable');
+      });
+    });
+
+    describe('Message Reactions', () => {
+      it('lists / adds / removes reactions for a channel message by xm_ token', async () => {
+        const teamTok = await teamToken('team-abc');
+        const chanTok = await channelToken(teamTok, { id: 'ch-1', displayName: 'General', description: '', membershipType: 'standard' });
+        mockClient.sendChannelMessage.mockResolvedValue({ id: 'cmsg-1' });
+        const msgTok = await repository.sendChannelMessageAsync(chanTok, 'Hello!', 'text');
+
+        mockClient.getChannelMessage.mockResolvedValue({
+          reactions: [{ reactionType: 'like', user: { user: { displayName: 'Alice' } }, createdDateTime: '2026-01-01T00:00:00Z' }],
+        });
+        const reactions = await repository.listMessageReactionsAsync(msgTok, 'channel');
+        expect(reactions[0].reactionType).toBe('like');
+        expect(mockClient.getChannelMessage).toHaveBeenCalledWith('team-abc', 'ch-1', 'cmsg-1');
+
+        mockClient.setChannelMessageReaction.mockResolvedValue(undefined);
+        await repository.addMessageReactionAsync(msgTok, 'channel', 'heart');
+        expect(mockClient.setChannelMessageReaction).toHaveBeenCalledWith('team-abc', 'ch-1', 'cmsg-1', 'heart');
+
+        mockClient.unsetChannelMessageReaction.mockResolvedValue(undefined);
+        await repository.removeMessageReactionAsync(msgTok, 'channel', 'heart');
+        expect(mockClient.unsetChannelMessageReaction).toHaveBeenCalledWith('team-abc', 'ch-1', 'cmsg-1', 'heart');
+      });
+
+      it('lists / adds / removes reactions for a chat message by cm_ token', async () => {
+        const chatTok = await chatToken('chat-abc');
+        mockClient.sendChatMessage.mockResolvedValue({ id: 'msg-1' });
+        const msgTok = await repository.sendChatMessageAsync(chatTok, 'Hello!', 'text');
+
+        mockClient.getChatMessage.mockResolvedValue({
+          reactions: [{ reactionType: 'laugh', user: { user: { displayName: 'Charlie' } }, createdDateTime: '2026-01-02T00:00:00Z' }],
+        });
+        const reactions = await repository.listMessageReactionsAsync(msgTok, 'chat');
+        expect(reactions[0].reactionType).toBe('laugh');
+        expect(mockClient.getChatMessage).toHaveBeenCalledWith('chat-abc', 'msg-1');
+
+        mockClient.setChatMessageReaction.mockResolvedValue(undefined);
+        await repository.addMessageReactionAsync(msgTok, 'chat', 'like');
+        expect(mockClient.setChatMessageReaction).toHaveBeenCalledWith('chat-abc', 'msg-1', 'like');
+
+        mockClient.unsetChatMessageReaction.mockResolvedValue(undefined);
+        await repository.removeMessageReactionAsync(msgTok, 'chat', 'like');
+        expect(mockClient.unsetChatMessageReaction).toHaveBeenCalledWith('chat-abc', 'msg-1', 'like');
+      });
+
+      it('rejects an unknown message token', async () => {
+        await expect(repository.listMessageReactionsAsync('xm_bogus', 'channel')).rejects.toThrow('Unknown or unresolvable');
+        await expect(repository.listMessageReactionsAsync('cm_bogus', 'chat')).rejects.toThrow('Unknown or unresolvable');
+      });
+
+      it('fails closed when message_type disagrees with the token kind', async () => {
+        // A cm_ (chat) token asked to resolve as a channel message — and the
+        // reverse — must ID_ENTITY_MISMATCH, never silently mis-resolve to the
+        // wrong Graph collection. The token kind is authoritative.
+        const chatTok = await chatToken('chat-abc');
+        mockClient.sendChatMessage.mockResolvedValue({ id: 'msg-1' });
+        const cmTok = await repository.sendChatMessageAsync(chatTok, 'Hi', 'text');
+        await expect(repository.addMessageReactionAsync(cmTok, 'channel', 'like')).rejects.toThrow(/but a channelMessage ID was expected/);
+
+        const teamTok = await teamToken('team-abc');
+        const chTok = await channelToken(teamTok, { id: 'ch-1', displayName: 'General', description: '', membershipType: 'standard' });
+        mockClient.sendChannelMessage.mockResolvedValue({ id: 'cmsg-1' });
+        const xmTok = await repository.sendChannelMessageAsync(chTok, 'Yo', 'text');
+        await expect(repository.addMessageReactionAsync(xmTok, 'chat', 'like')).rejects.toThrow(/but a chatMessage ID was expected/);
       });
     });
   });
