@@ -30,7 +30,7 @@ declare module '../registry/types.js' {
 export const ListPlansInput = z.strictObject({});
 
 export const GetPlanInput = z.strictObject({
-  plan_id: z.number().int().positive().describe('Plan ID from list_plans'),
+  plan_id: z.string().min(1).describe('Plan ID from list_plans'),
 });
 
 export const CreatePlanInput = z.strictObject({
@@ -39,26 +39,26 @@ export const CreatePlanInput = z.strictObject({
 });
 
 export const UpdatePlanInput = z.strictObject({
-  plan_id: z.number().int().positive().describe('Plan ID from list_plans'),
+  plan_id: z.string().min(1).describe('Plan ID from list_plans'),
   title: z.string().min(1).optional().describe('New plan title'),
 });
 
 export const ListBucketsInput = z.strictObject({
-  plan_id: z.number().int().positive().describe('Plan ID from list_plans'),
+  plan_id: z.string().min(1).describe('Plan ID from list_plans'),
 });
 
 export const CreateBucketInput = z.strictObject({
-  plan_id: z.number().int().positive().describe('Plan ID from list_plans'),
+  plan_id: z.string().min(1).describe('Plan ID from list_plans'),
   name: z.string().min(1).describe('Bucket name'),
 });
 
 export const UpdateBucketInput = z.strictObject({
-  bucket_id: z.number().int().positive().describe('Bucket ID from list_buckets'),
+  bucket_id: z.string().min(1).describe('Bucket ID from list_buckets'),
   name: z.string().min(1).optional().describe('New bucket name'),
 });
 
 export const PrepareDeleteBucketInput = z.strictObject({
-  bucket_id: z.number().int().positive().describe('Bucket ID from list_buckets'),
+  bucket_id: z.string().min(1).describe('Bucket ID from list_buckets'),
 });
 
 export const ConfirmDeleteBucketInput = z.strictObject({
@@ -66,19 +66,19 @@ export const ConfirmDeleteBucketInput = z.strictObject({
 });
 
 export const ListPlannerTasksInput = z.strictObject({
-  plan_id: z.number().int().positive().describe('Plan ID from list_plans'),
+  plan_id: z.string().min(1).describe('Plan ID from list_plans'),
 });
 
 export const ListMyPlannerTasksInput = z.strictObject({});
 
 export const GetPlannerTaskInput = z.strictObject({
-  task_id: z.number().int().positive().describe('Task ID from list_planner_tasks'),
+  task_id: z.string().min(1).describe('Task ID from list_planner_tasks'),
 });
 
 export const CreatePlannerTaskInput = z.strictObject({
-  plan_id: z.number().int().positive().describe('Plan ID from list_plans'),
+  plan_id: z.string().min(1).describe('Plan ID from list_plans'),
   title: z.string().min(1).describe('Task title'),
-  bucket_id: z.number().int().positive().optional().describe('Bucket ID from list_buckets'),
+  bucket_id: z.string().min(1).optional().describe('Bucket ID from list_buckets'),
   assignments: z.record(z.string(), z.object({}).passthrough()).optional().describe('User assignments. Keys are user IDs, values should be { "@odata.type": "#microsoft.graph.plannerAssignment", "orderHint": " !" }'),
   priority: z.number().int().min(0).max(10).optional().describe('Priority (0-10)'),
   start_date: z.string().optional().describe('Start date in ISO format'),
@@ -86,9 +86,9 @@ export const CreatePlannerTaskInput = z.strictObject({
 });
 
 export const UpdatePlannerTaskInput = z.strictObject({
-  task_id: z.number().int().positive().describe('Task ID from list_planner_tasks'),
+  task_id: z.string().min(1).describe('Task ID from list_planner_tasks'),
   title: z.string().min(1).optional().describe('New task title'),
-  bucket_id: z.number().int().positive().optional().describe('New bucket ID from list_buckets'),
+  bucket_id: z.string().min(1).optional().describe('New bucket ID from list_buckets'),
   percent_complete: z.number().int().min(0).max(100).optional().describe('Percent complete (0-100)'),
   priority: z.number().int().min(0).max(10).optional().describe('Priority (0-10)'),
   start_date: z.string().optional().describe('Start date in ISO format'),
@@ -97,7 +97,7 @@ export const UpdatePlannerTaskInput = z.strictObject({
 });
 
 export const PrepareDeletePlannerTaskInput = z.strictObject({
-  task_id: z.number().int().positive().describe('Task ID from list_planner_tasks'),
+  task_id: z.string().min(1).describe('Task ID from list_planner_tasks'),
 });
 
 export const ConfirmDeletePlannerTaskInput = z.strictObject({
@@ -105,11 +105,11 @@ export const ConfirmDeletePlannerTaskInput = z.strictObject({
 });
 
 export const GetPlannerTaskDetailsInput = z.strictObject({
-  task_id: z.number().int().positive().describe('Planner task ID'),
+  task_id: z.string().min(1).describe('Planner task ID'),
 });
 
 export const UpdatePlannerTaskDetailsInput = z.strictObject({
-  task_id: z.number().int().positive().describe('Planner task ID'),
+  task_id: z.string().min(1).describe('Planner task ID'),
   description: z.string().optional().describe('Task description/notes'),
   checklist: z.record(z.string(), z.object({}).passthrough()).optional().describe('Checklist items. Keys are GUIDs, values have title (string) and isChecked (boolean)'),
   references: z.record(z.string(), z.object({}).passthrough()).optional().describe('Reference links. Keys are encoded URLs, values have alias (string) and type (string)'),
@@ -143,46 +143,46 @@ export type UpdatePlannerTaskDetailsParams = z.infer<typeof UpdatePlannerTaskDet
 // =============================================================================
 
 export interface IPlannerRepository {
-  listPlansAsync(): Promise<Array<{ id: number; title: string; owner: string; createdDateTime: string }>>;
-  getPlanAsync(planId: number): Promise<{ id: number; title: string; owner: string; createdDateTime: string; etag: string }>;
-  createPlanAsync(title: string, groupId: string): Promise<number>;
-  updatePlanAsync(planId: number, updates: { title?: string }): Promise<void>;
-  listBucketsAsync(planId: number): Promise<Array<{ id: number; name: string; planId: number; orderHint: string }>>;
-  createBucketAsync(planId: number, name: string): Promise<number>;
-  updateBucketAsync(bucketId: number, updates: { name?: string }): Promise<void>;
-  deleteBucketAsync(bucketId: number): Promise<void>;
-  listPlannerTasksAsync(planId: number): Promise<Array<{
-    id: number; title: string; bucketId: number | null; assignees: string[];
+  listPlansAsync(): Promise<Array<{ id: string; title: string; owner: string; createdDateTime: string }>>;
+  getPlanAsync(planId: string | number): Promise<{ id: string; title: string; owner: string; createdDateTime: string; etag: string }>;
+  createPlanAsync(title: string, groupId: string): Promise<string>;
+  updatePlanAsync(planId: string | number, updates: { title?: string }): Promise<void>;
+  listBucketsAsync(planId: string | number): Promise<Array<{ id: string; name: string; planId: string; orderHint: string }>>;
+  createBucketAsync(planId: string | number, name: string): Promise<string>;
+  updateBucketAsync(bucketId: string | number, updates: { name?: string }): Promise<void>;
+  deleteBucketAsync(bucketId: string | number): Promise<void>;
+  listPlannerTasksAsync(planId: string | number): Promise<Array<{
+    id: string; title: string; bucketId: string | null; assignees: string[];
     percentComplete: number; priority: number; startDateTime: string;
     dueDateTime: string; createdDateTime: string;
   }>>;
   listMyPlannerTasksAsync(): Promise<Array<{
-    id: number; title: string; planId: number; bucketId: number | null;
+    id: string; title: string; planId: string; bucketId: string | null;
     assignees: string[]; percentComplete: number; priority: number;
     startDateTime: string; dueDateTime: string; createdDateTime: string;
   }>>;
-  getPlannerTaskAsync(taskId: number): Promise<{
-    id: number; title: string; bucketId: number | null; assignees: string[];
+  getPlannerTaskAsync(taskId: string | number): Promise<{
+    id: string; title: string; bucketId: string | null; assignees: string[];
     percentComplete: number; priority: number; startDateTime: string;
     dueDateTime: string; createdDateTime: string; conversationThreadId: string;
     orderHint: string; etag: string;
   }>;
   createPlannerTaskAsync(
-    planId: number, title: string, bucketId?: number,
+    planId: string | number, title: string, bucketId?: string | number,
     assignments?: Record<string, object>, priority?: number,
     startDate?: string, dueDate?: string,
-  ): Promise<number>;
-  updatePlannerTaskAsync(taskId: number, updates: {
-    title?: string; bucketId?: number; percentComplete?: number;
+  ): Promise<string>;
+  updatePlannerTaskAsync(taskId: string | number, updates: {
+    title?: string; bucketId?: string | number; percentComplete?: number;
     priority?: number; startDate?: string; dueDate?: string;
     assignments?: Record<string, object>;
   }): Promise<void>;
-  deletePlannerTaskAsync(taskId: number): Promise<void>;
-  getPlannerTaskDetailsAsync(taskId: number): Promise<{
-    id: number; description: string; checklist: Record<string, unknown>;
+  deletePlannerTaskAsync(taskId: string | number): Promise<void>;
+  getPlannerTaskDetailsAsync(taskId: string | number): Promise<{
+    id: string; description: string; checklist: Record<string, unknown>;
     references: Record<string, unknown>; etag: string;
   }>;
-  updatePlannerTaskDetailsAsync(taskId: number, updates: {
+  updatePlannerTaskDetailsAsync(taskId: string | number, updates: {
     description?: string; checklist?: Record<string, object>;
     references?: Record<string, object>;
   }): Promise<void>;
@@ -348,7 +348,7 @@ export class PlannerTools {
       };
     }
 
-    await this.repo.deleteBucketAsync((result.token!.targetId as number));
+    await this.repo.deleteBucketAsync((result.token!.targetId as string));
     return {
       content: [{
         type: 'text' as const,
@@ -421,7 +421,7 @@ export class PlannerTools {
     content: Array<{ type: 'text'; text: string }>;
   }> {
     const updates: {
-      title?: string; bucketId?: number; percentComplete?: number;
+      title?: string; bucketId?: string; percentComplete?: number;
       priority?: number; startDate?: string; dueDate?: string;
       assignments?: Record<string, object>;
     } = {};
@@ -500,7 +500,7 @@ export class PlannerTools {
       };
     }
 
-    await this.repo.deletePlannerTaskAsync((result.token!.targetId as number));
+    await this.repo.deletePlannerTaskAsync((result.token!.targetId as string));
     return {
       content: [{
         type: 'text' as const,

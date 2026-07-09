@@ -17,25 +17,25 @@ import type { PlanVisualizationData } from '../../../src/visualization/types.js'
 
 const MOCK_DATA: PlanVisualizationData = {
   plan: {
-    id: 1,
+    id: 'pl_test1',
     title: 'Sprint 42',
   },
   buckets: [
-    { id: 10, name: 'To Do', orderHint: '1' },
-    { id: 20, name: 'In Progress', orderHint: '2' },
-    { id: 30, name: 'Done', orderHint: '3' },
+    { id: 'pb_bucket10', name: 'To Do', orderHint: '1' },
+    { id: 'pb_bucket20', name: 'In Progress', orderHint: '2' },
+    { id: 'pb_bucket30', name: 'Done', orderHint: '3' },
   ],
   tasks: [
     {
-      id: 100, title: 'Design UI', bucketId: 10, assignments: ['user1'],
+      id: 'pt_task100', title: 'Design UI', bucketId: 'pb_bucket10', assignments: ['user1'],
       percentComplete: 0, priority: 5, startDateTime: '2026-03-01', dueDateTime: '2026-03-05',
     },
     {
-      id: 101, title: 'Build API', bucketId: 20, assignments: ['user2'],
+      id: 'pt_task101', title: 'Build API', bucketId: 'pb_bucket20', assignments: ['user2'],
       percentComplete: 50, priority: 3, startDateTime: '2026-03-01', dueDateTime: '2026-03-10',
     },
     {
-      id: 102, title: 'Write docs', bucketId: 30, assignments: ['user1'],
+      id: 'pt_task102', title: 'Write docs', bucketId: 'pb_bucket30', assignments: ['user1'],
       percentComplete: 100, priority: 5, startDateTime: '2026-02-20', dueDateTime: '2026-02-25', completedDateTime: '2026-02-25T00:00:00Z',
     },
   ],
@@ -76,30 +76,30 @@ describe('PlannerVisualizationTools', () => {
 
   describe('generateKanbanBoard', () => {
     it('returns html format by default', async () => {
-      const result = await tools.generateKanbanBoard({ plan_id: 1, format: 'html' });
+      const result = await tools.generateKanbanBoard({ plan_id: 'pl_test1', format: 'html' });
       const parsed = parseResult(result);
       expect(parsed.format).toBe('html');
       expect(parsed.file_path).toMatch(/kanban.*\.html$/);
       expect(parsed.preview).toBeTruthy();
-      expect(repo.getPlanVisualizationDataAsync).toHaveBeenCalledWith(1);
+      expect(repo.getPlanVisualizationDataAsync).toHaveBeenCalledWith('pl_test1');
     });
 
     it('returns markdown format when requested', async () => {
-      const result = await tools.generateKanbanBoard({ plan_id: 1, format: 'markdown' });
+      const result = await tools.generateKanbanBoard({ plan_id: 'pl_test1', format: 'markdown' });
       const parsed = parseResult(result);
       expect(parsed.format).toBe('markdown');
       expect(parsed.file_path).toMatch(/kanban.*\.md$/);
     });
 
     it('returns svg format when requested', async () => {
-      const result = await tools.generateKanbanBoard({ plan_id: 1, format: 'svg' });
+      const result = await tools.generateKanbanBoard({ plan_id: 'pl_test1', format: 'svg' });
       const parsed = parseResult(result);
       expect(parsed.format).toBe('svg');
       expect(parsed.file_path).toMatch(/kanban.*\.svg$/);
     });
 
     it('returns mermaid format when requested', async () => {
-      const result = await tools.generateKanbanBoard({ plan_id: 1, format: 'mermaid' });
+      const result = await tools.generateKanbanBoard({ plan_id: 'pl_test1', format: 'mermaid' });
       const parsed = parseResult(result);
       expect(parsed.format).toBe('mermaid');
       expect(parsed.file_path).toMatch(/kanban.*\.md$/);
@@ -112,30 +112,30 @@ describe('PlannerVisualizationTools', () => {
 
   describe('generateGanttChart', () => {
     it('returns html format by default', async () => {
-      const result = await tools.generateGanttChart({ plan_id: 1, format: 'html' });
+      const result = await tools.generateGanttChart({ plan_id: 'pl_test1', format: 'html' });
       const parsed = parseResult(result);
       expect(parsed.format).toBe('html');
       expect(parsed.file_path).toMatch(/gantt.*\.html$/);
       expect(parsed.preview).toBeTruthy();
-      expect(repo.getPlanVisualizationDataAsync).toHaveBeenCalledWith(1);
+      expect(repo.getPlanVisualizationDataAsync).toHaveBeenCalledWith('pl_test1');
     });
 
     it('returns markdown format when requested', async () => {
-      const result = await tools.generateGanttChart({ plan_id: 1, format: 'markdown' });
+      const result = await tools.generateGanttChart({ plan_id: 'pl_test1', format: 'markdown' });
       const parsed = parseResult(result);
       expect(parsed.format).toBe('markdown');
       expect(parsed.file_path).toMatch(/gantt.*\.md$/);
     });
 
     it('returns svg format when requested', async () => {
-      const result = await tools.generateGanttChart({ plan_id: 1, format: 'svg' });
+      const result = await tools.generateGanttChart({ plan_id: 'pl_test1', format: 'svg' });
       const parsed = parseResult(result);
       expect(parsed.format).toBe('svg');
       expect(parsed.file_path).toMatch(/gantt.*\.svg$/);
     });
 
     it('returns mermaid format when requested', async () => {
-      const result = await tools.generateGanttChart({ plan_id: 1, format: 'mermaid' });
+      const result = await tools.generateGanttChart({ plan_id: 'pl_test1', format: 'mermaid' });
       const parsed = parseResult(result);
       expect(parsed.format).toBe('mermaid');
     });
@@ -147,30 +147,30 @@ describe('PlannerVisualizationTools', () => {
 
   describe('generatePlanSummary', () => {
     it('returns html format by default', async () => {
-      const result = await tools.generatePlanSummary({ plan_id: 1, format: 'html' });
+      const result = await tools.generatePlanSummary({ plan_id: 'pl_test1', format: 'html' });
       const parsed = parseResult(result);
       expect(parsed.format).toBe('html');
       expect(parsed.file_path).toMatch(/summary.*\.html$/);
       expect(parsed.preview).toBeTruthy();
-      expect(repo.getPlanVisualizationDataAsync).toHaveBeenCalledWith(1);
+      expect(repo.getPlanVisualizationDataAsync).toHaveBeenCalledWith('pl_test1');
     });
 
     it('returns markdown format when requested', async () => {
-      const result = await tools.generatePlanSummary({ plan_id: 1, format: 'markdown' });
+      const result = await tools.generatePlanSummary({ plan_id: 'pl_test1', format: 'markdown' });
       const parsed = parseResult(result);
       expect(parsed.format).toBe('markdown');
       expect(parsed.file_path).toMatch(/summary.*\.md$/);
     });
 
     it('returns svg format when requested', async () => {
-      const result = await tools.generatePlanSummary({ plan_id: 1, format: 'svg' });
+      const result = await tools.generatePlanSummary({ plan_id: 'pl_test1', format: 'svg' });
       const parsed = parseResult(result);
       expect(parsed.format).toBe('svg');
       expect(parsed.file_path).toMatch(/summary.*\.svg$/);
     });
 
     it('returns mermaid format when requested', async () => {
-      const result = await tools.generatePlanSummary({ plan_id: 1, format: 'mermaid' });
+      const result = await tools.generatePlanSummary({ plan_id: 'pl_test1', format: 'mermaid' });
       const parsed = parseResult(result);
       expect(parsed.format).toBe('mermaid');
     });
@@ -182,30 +182,30 @@ describe('PlannerVisualizationTools', () => {
 
   describe('generateBurndownChart', () => {
     it('returns html format by default', async () => {
-      const result = await tools.generateBurndownChart({ plan_id: 1, format: 'html' });
+      const result = await tools.generateBurndownChart({ plan_id: 'pl_test1', format: 'html' });
       const parsed = parseResult(result);
       expect(parsed.format).toBe('html');
       expect(parsed.file_path).toMatch(/burndown.*\.html$/);
       expect(parsed.preview).toBeTruthy();
-      expect(repo.getPlanVisualizationDataAsync).toHaveBeenCalledWith(1);
+      expect(repo.getPlanVisualizationDataAsync).toHaveBeenCalledWith('pl_test1');
     });
 
     it('returns markdown format when requested', async () => {
-      const result = await tools.generateBurndownChart({ plan_id: 1, format: 'markdown' });
+      const result = await tools.generateBurndownChart({ plan_id: 'pl_test1', format: 'markdown' });
       const parsed = parseResult(result);
       expect(parsed.format).toBe('markdown');
       expect(parsed.file_path).toMatch(/burndown.*\.md$/);
     });
 
     it('returns svg format when requested', async () => {
-      const result = await tools.generateBurndownChart({ plan_id: 1, format: 'svg' });
+      const result = await tools.generateBurndownChart({ plan_id: 'pl_test1', format: 'svg' });
       const parsed = parseResult(result);
       expect(parsed.format).toBe('svg');
       expect(parsed.file_path).toMatch(/burndown.*\.svg$/);
     });
 
     it('returns mermaid format when requested', async () => {
-      const result = await tools.generateBurndownChart({ plan_id: 1, format: 'mermaid' });
+      const result = await tools.generateBurndownChart({ plan_id: 'pl_test1', format: 'mermaid' });
       const parsed = parseResult(result);
       expect(parsed.format).toBe('mermaid');
     });

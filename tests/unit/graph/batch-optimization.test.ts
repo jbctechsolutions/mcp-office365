@@ -9,7 +9,7 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { GraphRepository, createGraphRepository } from '../../../src/graph/repository.js';
-import { hashStringToNumber } from '../../../src/graph/mappers/utils.js';
+import { StateStore } from '../../../src/state/store.js';
 import type { BatchResponseItem } from '../../../src/graph/client/batch.js';
 
 // Mock the GraphClient with planner + batch methods
@@ -66,19 +66,23 @@ describe('batch-optimized repository methods', () => {
   let repository: GraphRepository;
   let mockClient: any;
   const planGraphId = 'plan-graph-id-123';
-  let planNumericId: number;
+  let planTok: string;
 
   beforeEach(async () => {
     vi.clearAllMocks();
-    repository = createGraphRepository();
+    // Alias-backed entities (plans, planner tasks, …) need a store to resolve
+    // their tokens. fs is mocked in this suite, so StateStore.open degrades to
+    // an in-memory sqlite db — still a fully-functional alias table for the run.
+    const store = StateStore.open({ dir: '/tmp/mcp-o365-batch-opt-test', warn: () => {} });
+    repository = createGraphRepository(undefined, store);
     mockClient = (repository as any).client;
 
-    // Seed the plan ID in the cache so planner methods work
-    planNumericId = hashStringToNumber(planGraphId);
-    (repository as any).idCache.plans.set(planNumericId, {
-      planId: planGraphId,
-      etag: '"plan-etag"',
-    });
+    // Mint a durable pl_ token for the plan so plan-scoped Planner methods resolve.
+    mockClient.listPlans.mockResolvedValue([
+      { id: planGraphId, title: 'Plan', owner: 'group-1', createdDateTime: '' },
+    ]);
+    const plans = await repository.listPlansAsync();
+    planTok = plans[0].id;
   });
 
   describe('listPlannerTasksWithDetailsAsync', () => {
@@ -87,12 +91,15 @@ describe('batch-optimized repository methods', () => {
       const task2 = makePlannerTask('task-id-2', 'Task Two');
       mockClient.listPlannerTasks.mockResolvedValue([task1, task2]);
 
-      const task1NumericId = hashStringToNumber('task-id-1');
-      const task2NumericId = hashStringToNumber('task-id-2');
+      // Learn the durable pt_ tokens the repository mints for these Graph ids
+      // (mintAlias is idempotent — minting twice for the same id + account
+      // returns the same token, so this matches what the call under test mints).
+      const listed = await repository.listPlannerTasksAsync(planTok);
+      const [task1Tok, task2Tok] = listed.map((t) => t.id);
 
       const batchResults = new Map<string, BatchResponseItem>();
-      batchResults.set(String(task1NumericId), {
-        id: String(task1NumericId),
+      batchResults.set(task1Tok, {
+        id: task1Tok,
         status: 200,
         headers: { ETag: '"detail-etag-1"' },
         body: {
@@ -101,8 +108,8 @@ describe('batch-optimized repository methods', () => {
           references: {},
         },
       });
-      batchResults.set(String(task2NumericId), {
-        id: String(task2NumericId),
+      batchResults.set(task2Tok, {
+        id: task2Tok,
         status: 200,
         headers: { ETag: '"detail-etag-2"' },
         body: {
@@ -113,7 +120,7 @@ describe('batch-optimized repository methods', () => {
       });
       mockClient.batchRequests.mockResolvedValue(batchResults);
 
-      const result = await repository.listPlannerTasksWithDetailsAsync(planNumericId);
+      const result = await repository.listPlannerTasksWithDetailsAsync(planTok);
 
       expect(result).toHaveLength(2);
       expect(result[0].title).toBe('Task One');
@@ -140,12 +147,12 @@ describe('batch-optimized repository methods', () => {
       const task2 = makePlannerTask('task-id-2', 'Task Two');
       mockClient.listPlannerTasks.mockResolvedValue([task1, task2]);
 
-      const task1NumericId = hashStringToNumber('task-id-1');
-      const task2NumericId = hashStringToNumber('task-id-2');
+      const listed = await repository.listPlannerTasksAsync(planTok);
+      const [task1Tok, task2Tok] = listed.map((t) => t.id);
 
       const batchResults = new Map<string, BatchResponseItem>();
-      batchResults.set(String(task1NumericId), {
-        id: String(task1NumericId),
+      batchResults.set(task1Tok, {
+        id: task1Tok,
         status: 200,
         headers: { ETag: '"detail-etag-1"' },
         body: {
@@ -155,14 +162,14 @@ describe('batch-optimized repository methods', () => {
         },
       });
       // Task 2 fails with 404
-      batchResults.set(String(task2NumericId), {
-        id: String(task2NumericId),
+      batchResults.set(task2Tok, {
+        id: task2Tok,
         status: 404,
         body: { error: { code: 'NotFound', message: 'Not found' } },
       });
       mockClient.batchRequests.mockResolvedValue(batchResults);
 
-      const result = await repository.listPlannerTasksWithDetailsAsync(planNumericId);
+      const result = await repository.listPlannerTasksWithDetailsAsync(planTok);
 
       expect(result).toHaveLength(2);
       expect(result[0].details).toBeDefined();
@@ -175,7 +182,7 @@ describe('batch-optimized repository methods', () => {
     it('returns empty array when plan has no tasks', async () => {
       mockClient.listPlannerTasks.mockResolvedValue([]);
 
-      const result = await repository.listPlannerTasksWithDetailsAsync(planNumericId);
+      const result = await repository.listPlannerTasksWithDetailsAsync(planTok);
 
       expect(result).toHaveLength(0);
       // batchRequests should not be called when there are no tasks
@@ -189,7 +196,7 @@ describe('batch-optimized repository methods', () => {
       // Return an empty batch result map (no results for any task)
       mockClient.batchRequests.mockResolvedValue(new Map());
 
-      const result = await repository.listPlannerTasksWithDetailsAsync(planNumericId);
+      const result = await repository.listPlannerTasksWithDetailsAsync(planTok);
 
       expect(result).toHaveLength(1);
       expect(result[0].title).toBe('Task One');
@@ -204,11 +211,13 @@ describe('batch-optimized repository methods', () => {
       );
       mockClient.listPlannerTasks.mockResolvedValue(tasks);
 
+      const listed = await repository.listPlannerTasksAsync(planTok);
+
       const batchResults = new Map<string, BatchResponseItem>();
       for (let i = 0; i < 25; i++) {
-        const numericId = hashStringToNumber(`task-id-${i}`);
-        batchResults.set(String(numericId), {
-          id: String(numericId),
+        const tok = listed[i].id;
+        batchResults.set(tok, {
+          id: tok,
           status: 200,
           headers: { ETag: `"detail-etag-${i}"` },
           body: {
@@ -220,7 +229,7 @@ describe('batch-optimized repository methods', () => {
       }
       mockClient.batchRequests.mockResolvedValue(batchResults);
 
-      const result = await repository.listPlannerTasksWithDetailsAsync(planNumericId);
+      const result = await repository.listPlannerTasksWithDetailsAsync(planTok);
 
       expect(result).toHaveLength(25);
       // Verify all tasks have details
@@ -234,39 +243,36 @@ describe('batch-optimized repository methods', () => {
       expect(batchCallArgs).toHaveLength(25);
     });
 
-    it('caches task detail ETags for later updates', async () => {
+    it('returns the freshly-fetched detail etag (U5b-5 — no cross-call etag cache)', async () => {
       const task1 = makePlannerTask('task-id-1', 'Task One');
       mockClient.listPlannerTasks.mockResolvedValue([task1]);
 
-      const task1NumericId = hashStringToNumber('task-id-1');
+      const listed = await repository.listPlannerTasksAsync(planTok);
+      const task1Tok = listed[0].id;
 
       const batchResults = new Map<string, BatchResponseItem>();
-      batchResults.set(String(task1NumericId), {
-        id: String(task1NumericId),
+      batchResults.set(task1Tok, {
+        id: task1Tok,
         status: 200,
-        headers: { ETag: '"detail-etag-cached"' },
+        headers: { ETag: '"detail-etag-fresh"' },
         body: {
-          description: 'Cached description',
+          description: 'Fresh description',
           checklist: {},
           references: {},
         },
       });
       mockClient.batchRequests.mockResolvedValue(batchResults);
 
-      await repository.listPlannerTasksWithDetailsAsync(planNumericId);
+      const result = await repository.listPlannerTasksWithDetailsAsync(planTok);
 
-      // Verify the detail ETag was cached
-      const cachedDetail = (repository as any).idCache.plannerTaskDetails.get(task1NumericId);
-      expect(cachedDetail).toBeDefined();
-      expect(cachedDetail.etag).toBe('"detail-etag-cached"');
-      expect(cachedDetail.taskId).toBe('task-id-1');
+      expect(result[0].details!.etag).toBe('"detail-etag-fresh"');
     });
 
-    it('throws when plan ID is not in cache', async () => {
+    it('rejects an unresolvable plan token', async () => {
       mockClient.listPlans.mockResolvedValue([]);
       await expect(
-        repository.listPlannerTasksWithDetailsAsync(999999),
-      ).rejects.toThrow('not found');
+        repository.listPlannerTasksWithDetailsAsync('pl_totallybogus000'),
+      ).rejects.toThrow('Unknown or unresolvable');
     });
   });
 });

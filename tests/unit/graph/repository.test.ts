@@ -154,7 +154,23 @@ vi.mock('../../../src/graph/client/index.js', () => ({
       setChatMessageReaction: vi.fn(),
       unsetChatMessageReaction: vi.fn(),
       // Planner operations
+      listPlans: vi.fn(),
+      getPlan: vi.fn(),
+      createPlan: vi.fn(),
+      updatePlan: vi.fn(),
+      listBuckets: vi.fn(),
+      createBucket: vi.fn(),
+      updateBucket: vi.fn(),
+      deleteBucket: vi.fn(),
+      getBucket: vi.fn(),
+      listPlannerTasks: vi.fn(),
       listMyPlannerTasks: vi.fn(),
+      getPlannerTask: vi.fn(),
+      createPlannerTask: vi.fn(),
+      updatePlannerTask: vi.fn(),
+      deletePlannerTask: vi.fn(),
+      getPlannerTaskDetails: vi.fn(),
+      updatePlannerTaskDetails: vi.fn(),
       // OneDrive operations
       listDriveItems: vi.fn(),
       searchDriveItems: vi.fn(),
@@ -4723,9 +4739,365 @@ describe('graph/repository', () => {
     });
   });
 
-  describe('Planner', () => {
+  describe('Planner (durable pl_ / pb_ / pt_ tokens, U5b-5 fetch-before-update)', () => {
+    // Helper: list plans and return the durable pl_ token for the given Graph id.
+    async function planToken(graphId: string, title = 'Plan'): Promise<string> {
+      mockClient.listPlans.mockResolvedValue([{ id: graphId, title, owner: 'group-1', createdDateTime: '' }]);
+      const plans = await repository.listPlansAsync();
+      return plans[0].id;
+    }
+    // Helper: list buckets under a plan token and return the durable pb_ token.
+    async function bucketToken(planTok: string, bucketGraphId: string, name = 'Bucket'): Promise<string> {
+      mockClient.listBuckets.mockResolvedValue([{ id: bucketGraphId, name, orderHint: '1' }]);
+      const buckets = await repository.listBucketsAsync(planTok);
+      return buckets[0].id;
+    }
+    // Helper: list tasks under a plan token and return the durable pt_ token.
+    async function taskToken(planTok: string, taskGraphId: string, title = 'Task'): Promise<string> {
+      mockClient.listPlannerTasks.mockResolvedValue([{
+        id: taskGraphId, title, bucketId: null, assignments: null,
+        percentComplete: 0, priority: 5, startDateTime: '', dueDateTime: '', createdDateTime: '',
+      }]);
+      const tasks = await repository.listPlannerTasksAsync(planTok);
+      return tasks[0].id;
+    }
+
+    describe('Plans', () => {
+      it('listPlansAsync mints durable pl_ tokens', async () => {
+        mockClient.listPlans.mockResolvedValue([
+          { id: 'graph-plan-1', title: 'Sprint Plan', owner: 'group-abc', createdDateTime: '2026-01-01T00:00:00Z' },
+        ]);
+
+        const plans = await repository.listPlansAsync();
+
+        expect(plans[0].id).toMatch(/^pl_/);
+        expect(plans[0].title).toBe('Sprint Plan');
+      });
+
+      it('getPlanAsync resolves the pl_ token and returns a freshly-fetched etag', async () => {
+        const planTok = await planToken('graph-plan-1', 'Sprint Plan');
+        mockClient.getPlan.mockResolvedValue({ title: 'Sprint Plan', owner: 'group-abc', createdDateTime: '', '@odata.etag': 'W/"plan-etag"' });
+
+        const plan = await repository.getPlanAsync(planTok);
+
+        expect(mockClient.getPlan).toHaveBeenCalledWith('graph-plan-1');
+        expect(plan.etag).toBe('W/"plan-etag"');
+      });
+
+      it('createPlanAsync mints a resolvable pl_ token', async () => {
+        mockClient.createPlan.mockResolvedValue({ id: 'graph-plan-new', '@odata.etag': 'W/"etag"' });
+
+        const planTok = await repository.createPlanAsync('New Plan', 'group-xyz');
+
+        expect(planTok).toMatch(/^pl_/);
+        expect(mockClient.createPlan).toHaveBeenCalledWith('New Plan', 'group-xyz');
+        // The minted token resolves cold — no separate list needed.
+        mockClient.getPlan.mockResolvedValue({ title: 'New Plan', '@odata.etag': 'W/"etag"' });
+        await repository.getPlanAsync(planTok);
+        expect(mockClient.getPlan).toHaveBeenCalledWith('graph-plan-new');
+      });
+
+      it('updatePlanAsync fetches a fresh etag immediately before the write (U5b-5)', async () => {
+        const planTok = await planToken('graph-plan-1');
+        const callOrder: string[] = [];
+        mockClient.getPlan.mockImplementation(async () => {
+          callOrder.push('get');
+          return { title: 'Sprint Plan', '@odata.etag': 'W/"etag-fresh"' };
+        });
+        mockClient.updatePlan.mockImplementation(async () => {
+          callOrder.push('update');
+          return { '@odata.etag': 'W/"etag-fresh"' };
+        });
+
+        await repository.updatePlanAsync(planTok, { title: 'Renamed' });
+
+        expect(callOrder).toEqual(['get', 'update']);
+        expect(mockClient.updatePlan).toHaveBeenCalledWith('graph-plan-1', { title: 'Renamed' }, 'W/"etag-fresh"');
+      });
+
+      it('updatePlanAsync retries once on a 412 with a re-fetched etag', async () => {
+        const planTok = await planToken('graph-plan-1');
+        mockClient.getPlan
+          .mockResolvedValueOnce({ title: 'Sprint Plan', '@odata.etag': 'W/"etag-stale"' })
+          .mockResolvedValueOnce({ title: 'Sprint Plan', '@odata.etag': 'W/"etag-refreshed"' });
+        mockClient.updatePlan
+          .mockRejectedValueOnce({ statusCode: 412 })
+          .mockResolvedValueOnce({ title: 'Renamed', '@odata.etag': 'W/"etag-refreshed"' });
+
+        await repository.updatePlanAsync(planTok, { title: 'Renamed' });
+
+        expect(mockClient.getPlan).toHaveBeenCalledTimes(2);
+        expect(mockClient.updatePlan).toHaveBeenCalledTimes(2);
+        expect(mockClient.updatePlan).toHaveBeenNthCalledWith(1, 'graph-plan-1', { title: 'Renamed' }, 'W/"etag-stale"');
+        expect(mockClient.updatePlan).toHaveBeenNthCalledWith(2, 'graph-plan-1', { title: 'Renamed' }, 'W/"etag-refreshed"');
+      });
+
+      it('resolvePlanId re-lists on a cold-miss pl_ token then resolves', async () => {
+        const planTok = await planToken('graph-plan-1');
+        // Simulate a cold store: a fresh repository sharing no prior list.
+        const freshStore = StateStore.open({ dir: '/tmp/mcp-o365-repo-test-planner-cold', warn: () => {} });
+        const repo2 = createGraphRepository(undefined, freshStore);
+        const client2 = (repo2 as any).client;
+        client2.listPlans.mockResolvedValue([{ id: 'graph-plan-1', title: 'Sprint Plan', owner: '', createdDateTime: '' }]);
+        client2.getPlan.mockResolvedValue({ title: 'Sprint Plan', '@odata.etag': 'W/"etag"' });
+
+        const plan = await repo2.getPlanAsync(planTok);
+        expect(client2.getPlan).toHaveBeenCalledWith('graph-plan-1');
+        expect(plan.title).toBe('Sprint Plan');
+      });
+
+      it('rejects a legacy numeric plan id', async () => {
+        await expect(repository.getPlanAsync(123456)).rejects.toThrow('not supported');
+      });
+
+      it('rejects an unknown pl_ token', async () => {
+        mockClient.listPlans.mockResolvedValue([]);
+        await expect(repository.getPlanAsync('pl_bogus00000000')).rejects.toThrow('Unknown or unresolvable');
+      });
+    });
+
+    describe('Buckets', () => {
+      it('listBucketsAsync mints durable pb_ tokens', async () => {
+        const planTok = await planToken('graph-plan-1');
+        mockClient.listBuckets.mockResolvedValue([
+          { id: 'graph-bucket-1', name: 'To Do', orderHint: '1' },
+        ]);
+
+        const buckets = await repository.listBucketsAsync(planTok);
+
+        expect(buckets[0].id).toMatch(/^pb_/);
+        expect(buckets[0].planId).toBe(planTok);
+      });
+
+      it('createBucketAsync mints a resolvable pb_ token', async () => {
+        const planTok = await planToken('graph-plan-1');
+        mockClient.createBucket.mockResolvedValue({ id: 'graph-bucket-new', '@odata.etag': 'W/"etag"' });
+
+        const bucketTok = await repository.createBucketAsync(planTok, 'Done');
+
+        expect(bucketTok).toMatch(/^pb_/);
+        expect(mockClient.createBucket).toHaveBeenCalledWith('graph-plan-1', 'Done');
+      });
+
+      it('updateBucketAsync fetches a fresh etag immediately before the write (U5b-5)', async () => {
+        const planTok = await planToken('graph-plan-1');
+        const bucketTok = await bucketToken(planTok, 'graph-bucket-1');
+        const callOrder: string[] = [];
+        mockClient.getBucket.mockImplementation(async () => {
+          callOrder.push('get');
+          return { name: 'To Do', '@odata.etag': 'W/"bucket-etag-fresh"' };
+        });
+        mockClient.updateBucket.mockImplementation(async () => {
+          callOrder.push('update');
+          return { '@odata.etag': 'W/"bucket-etag-fresh"' };
+        });
+
+        await repository.updateBucketAsync(bucketTok, { name: 'Renamed' });
+
+        expect(callOrder).toEqual(['get', 'update']);
+        expect(mockClient.getBucket).toHaveBeenCalledWith('graph-bucket-1');
+        expect(mockClient.updateBucket).toHaveBeenCalledWith('graph-bucket-1', { name: 'Renamed' }, 'W/"bucket-etag-fresh"');
+      });
+
+      it('updateBucketAsync retries once on a 412 with a re-fetched etag', async () => {
+        const planTok = await planToken('graph-plan-1');
+        const bucketTok = await bucketToken(planTok, 'graph-bucket-1');
+        mockClient.getBucket
+          .mockResolvedValueOnce({ name: 'To Do', '@odata.etag': 'W/"bucket-etag-stale"' })
+          .mockResolvedValueOnce({ name: 'To Do', '@odata.etag': 'W/"bucket-etag-refreshed"' });
+        mockClient.updateBucket
+          .mockRejectedValueOnce({ statusCode: 412 })
+          .mockResolvedValueOnce({ name: 'Renamed', '@odata.etag': 'W/"bucket-etag-refreshed"' });
+
+        await repository.updateBucketAsync(bucketTok, { name: 'Renamed' });
+
+        expect(mockClient.getBucket).toHaveBeenCalledTimes(2);
+        expect(mockClient.updateBucket).toHaveBeenCalledTimes(2);
+        expect(mockClient.updateBucket).toHaveBeenNthCalledWith(1, 'graph-bucket-1', { name: 'Renamed' }, 'W/"bucket-etag-stale"');
+        expect(mockClient.updateBucket).toHaveBeenNthCalledWith(2, 'graph-bucket-1', { name: 'Renamed' }, 'W/"bucket-etag-refreshed"');
+      });
+
+      it('deleteBucketAsync fetches a fresh etag immediately before the write', async () => {
+        const planTok = await planToken('graph-plan-1');
+        const bucketTok = await bucketToken(planTok, 'graph-bucket-1');
+        mockClient.getBucket.mockResolvedValue({ name: 'To Do', '@odata.etag': 'W/"bucket-etag"' });
+        mockClient.deleteBucket.mockResolvedValue(undefined);
+
+        await repository.deleteBucketAsync(bucketTok);
+
+        expect(mockClient.getBucket).toHaveBeenCalledWith('graph-bucket-1');
+        expect(mockClient.deleteBucket).toHaveBeenCalledWith('graph-bucket-1', 'W/"bucket-etag"');
+      });
+
+      it('rejects an unknown pb_ token', async () => {
+        await expect(repository.updateBucketAsync('pb_bogus00000000', { name: 'x' })).rejects.toThrow('Unknown or unresolvable');
+      });
+    });
+
+    describe('Tasks', () => {
+      it('listPlannerTasksAsync mints durable pt_ tokens and pb_ bucket tokens', async () => {
+        const planTok = await planToken('graph-plan-1');
+        mockClient.listPlannerTasks.mockResolvedValue([
+          {
+            id: 'graph-task-1', title: 'Ship v3.1', bucketId: 'graph-bucket-1',
+            assignments: { 'user-1': {} }, percentComplete: 40, priority: 3,
+            startDateTime: '2026-07-01T00:00:00Z', dueDateTime: '2026-07-15T00:00:00Z',
+            createdDateTime: '2026-06-01T00:00:00Z',
+          },
+          {
+            id: 'graph-task-2', title: 'Review', bucketId: null,
+            assignments: null, percentComplete: 0, priority: 5,
+            startDateTime: '', dueDateTime: '', createdDateTime: '2026-06-02T00:00:00Z',
+          },
+        ]);
+
+        const tasks = await repository.listPlannerTasksAsync(planTok);
+
+        expect(tasks[0].id).toMatch(/^pt_/);
+        expect(tasks[0].bucketId).toMatch(/^pb_/);
+        expect(tasks[1].bucketId).toBeNull();
+      });
+
+      it('getPlannerTaskAsync resolves the pt_ token', async () => {
+        const planTok = await planToken('graph-plan-1');
+        const taskTok = await taskToken(planTok, 'graph-task-1', 'Ship v3.1');
+        mockClient.getPlannerTask.mockResolvedValue({
+          title: 'Ship v3.1', bucketId: null, assignments: null, percentComplete: 40, priority: 3,
+          startDateTime: '', dueDateTime: '', createdDateTime: '', conversationThreadId: 'thread-1',
+          orderHint: '1', '@odata.etag': 'W/"task-etag"',
+        });
+
+        const task = await repository.getPlannerTaskAsync(taskTok);
+
+        expect(mockClient.getPlannerTask).toHaveBeenCalledWith('graph-task-1');
+        expect(task.etag).toBe('W/"task-etag"');
+      });
+
+      it('createPlannerTaskAsync resolves an optional bucket token to its Graph id', async () => {
+        const planTok = await planToken('graph-plan-1');
+        const bucketTok = await bucketToken(planTok, 'graph-bucket-1');
+        mockClient.createPlannerTask.mockResolvedValue({ id: 'graph-task-new', '@odata.etag': 'W/"etag"' });
+
+        const taskTok = await repository.createPlannerTaskAsync(planTok, 'New Task', bucketTok);
+
+        expect(taskTok).toMatch(/^pt_/);
+        expect(mockClient.createPlannerTask).toHaveBeenCalledWith({
+          planId: 'graph-plan-1', title: 'New Task', bucketId: 'graph-bucket-1',
+        });
+      });
+
+      it('updatePlannerTaskAsync fetches a fresh etag immediately before the write (U5b-5)', async () => {
+        const planTok = await planToken('graph-plan-1');
+        const taskTok = await taskToken(planTok, 'graph-task-1');
+        const callOrder: string[] = [];
+        mockClient.getPlannerTask.mockImplementation(async () => {
+          callOrder.push('get');
+          return { title: 'Task', '@odata.etag': 'W/"task-etag-fresh"' };
+        });
+        mockClient.updatePlannerTask.mockImplementation(async () => {
+          callOrder.push('update');
+          return { '@odata.etag': 'W/"task-etag-fresh"' };
+        });
+
+        await repository.updatePlannerTaskAsync(taskTok, { title: 'Renamed Task' });
+
+        expect(callOrder).toEqual(['get', 'update']);
+        expect(mockClient.updatePlannerTask).toHaveBeenCalledWith('graph-task-1', { title: 'Renamed Task' }, 'W/"task-etag-fresh"');
+      });
+
+      it('updatePlannerTaskAsync retries once on a 412 with a re-fetched etag', async () => {
+        const planTok = await planToken('graph-plan-1');
+        const taskTok = await taskToken(planTok, 'graph-task-1');
+        mockClient.getPlannerTask
+          .mockResolvedValueOnce({ title: 'Task', '@odata.etag': 'W/"task-etag-stale"' })
+          .mockResolvedValueOnce({ title: 'Task', '@odata.etag': 'W/"task-etag-refreshed"' });
+        mockClient.updatePlannerTask
+          .mockRejectedValueOnce({ statusCode: 412 })
+          .mockResolvedValueOnce({ title: 'Renamed Task', '@odata.etag': 'W/"task-etag-refreshed"' });
+
+        await repository.updatePlannerTaskAsync(taskTok, { title: 'Renamed Task' });
+
+        expect(mockClient.getPlannerTask).toHaveBeenCalledTimes(2);
+        expect(mockClient.updatePlannerTask).toHaveBeenCalledTimes(2);
+        expect(mockClient.updatePlannerTask).toHaveBeenNthCalledWith(1, 'graph-task-1', { title: 'Renamed Task' }, 'W/"task-etag-stale"');
+        expect(mockClient.updatePlannerTask).toHaveBeenNthCalledWith(2, 'graph-task-1', { title: 'Renamed Task' }, 'W/"task-etag-refreshed"');
+      });
+
+      it('deletePlannerTaskAsync fetches a fresh etag immediately before the write', async () => {
+        const planTok = await planToken('graph-plan-1');
+        const taskTok = await taskToken(planTok, 'graph-task-1');
+        mockClient.getPlannerTask.mockResolvedValue({ title: 'Task', '@odata.etag': 'W/"task-etag"' });
+        mockClient.deletePlannerTask.mockResolvedValue(undefined);
+
+        await repository.deletePlannerTaskAsync(taskTok);
+
+        expect(mockClient.getPlannerTask).toHaveBeenCalledWith('graph-task-1');
+        expect(mockClient.deletePlannerTask).toHaveBeenCalledWith('graph-task-1', 'W/"task-etag"');
+      });
+
+      it('rejects an unknown pt_ token', async () => {
+        await expect(repository.getPlannerTaskAsync('pt_bogus00000000')).rejects.toThrow('Unknown or unresolvable');
+      });
+
+      it('rejects a legacy numeric task id', async () => {
+        await expect(repository.getPlannerTaskAsync(654321)).rejects.toThrow('not supported');
+      });
+    });
+
+    describe('Task details (piggyback pt_)', () => {
+      it('getPlannerTaskDetailsAsync resolves the pt_ token', async () => {
+        const planTok = await planToken('graph-plan-1');
+        const taskTok = await taskToken(planTok, 'graph-task-1');
+        mockClient.getPlannerTaskDetails.mockResolvedValue({
+          description: 'Notes', checklist: {}, references: {}, '@odata.etag': 'W/"details-etag"',
+        });
+
+        const details = await repository.getPlannerTaskDetailsAsync(taskTok);
+
+        expect(mockClient.getPlannerTaskDetails).toHaveBeenCalledWith('graph-task-1');
+        expect(details.etag).toBe('W/"details-etag"');
+      });
+
+      it('updatePlannerTaskDetailsAsync fetches a fresh etag immediately before the write (U5b-5)', async () => {
+        const planTok = await planToken('graph-plan-1');
+        const taskTok = await taskToken(planTok, 'graph-task-1');
+        const callOrder: string[] = [];
+        mockClient.getPlannerTaskDetails.mockImplementation(async () => {
+          callOrder.push('get');
+          return { description: 'Notes', checklist: {}, references: {}, '@odata.etag': 'W/"details-etag-fresh"' };
+        });
+        mockClient.updatePlannerTaskDetails.mockImplementation(async () => {
+          callOrder.push('update');
+          return { '@odata.etag': 'W/"details-etag-fresh"' };
+        });
+
+        await repository.updatePlannerTaskDetailsAsync(taskTok, { description: 'Updated' });
+
+        expect(callOrder).toEqual(['get', 'update']);
+        expect(mockClient.updatePlannerTaskDetails).toHaveBeenCalledWith('graph-task-1', { description: 'Updated' }, 'W/"details-etag-fresh"');
+      });
+
+      it('updatePlannerTaskDetailsAsync retries once on a 412 with a re-fetched etag', async () => {
+        const planTok = await planToken('graph-plan-1');
+        const taskTok = await taskToken(planTok, 'graph-task-1');
+        mockClient.getPlannerTaskDetails
+          .mockResolvedValueOnce({ description: 'Notes', checklist: {}, references: {}, '@odata.etag': 'W/"details-etag-stale"' })
+          .mockResolvedValueOnce({ description: 'Notes', checklist: {}, references: {}, '@odata.etag': 'W/"details-etag-refreshed"' });
+        mockClient.updatePlannerTaskDetails
+          .mockRejectedValueOnce({ statusCode: 412 })
+          .mockResolvedValueOnce({ description: 'Updated', checklist: {}, references: {}, '@odata.etag': 'W/"details-etag-refreshed"' });
+
+        await repository.updatePlannerTaskDetailsAsync(taskTok, { description: 'Updated' });
+
+        expect(mockClient.getPlannerTaskDetails).toHaveBeenCalledTimes(2);
+        expect(mockClient.updatePlannerTaskDetails).toHaveBeenCalledTimes(2);
+        expect(mockClient.updatePlannerTaskDetails).toHaveBeenNthCalledWith(1, 'graph-task-1', { description: 'Updated' }, 'W/"details-etag-stale"');
+        expect(mockClient.updatePlannerTaskDetails).toHaveBeenNthCalledWith(2, 'graph-task-1', { description: 'Updated' }, 'W/"details-etag-refreshed"');
+      });
+    });
+
     describe('listMyPlannerTasksAsync', () => {
-      it('maps cross-plan tasks, carrying a deterministic planId per task', async () => {
+      it('maps cross-plan tasks, minting a durable pl_/pb_ token per task', async () => {
         mockClient.listMyPlannerTasks.mockResolvedValue([
           {
             id: 'graph-task-1', title: 'Ship v3.1', planId: 'graph-plan-A', bucketId: 'graph-bucket-1',
@@ -4742,35 +5114,25 @@ describe('graph/repository', () => {
 
         const tasks = await repository.listMyPlannerTasksAsync();
 
-        expect(tasks).toEqual([
-          {
-            id: hashStringToNumber('graph-task-1'), title: 'Ship v3.1',
-            planId: hashStringToNumber('graph-plan-A'), bucketId: hashStringToNumber('graph-bucket-1'),
-            assignees: ['user-1'], percentComplete: 40, priority: 3,
-            startDateTime: '2026-07-01T00:00:00Z', dueDateTime: '2026-07-15T00:00:00Z',
-            createdDateTime: '2026-06-01T00:00:00Z',
-          },
-          {
-            id: hashStringToNumber('graph-task-2'), title: 'Review',
-            planId: hashStringToNumber('graph-plan-B'), bucketId: null,
-            assignees: [], percentComplete: 0, priority: 5,
-            startDateTime: '', dueDateTime: '', createdDateTime: '2026-06-02T00:00:00Z',
-          },
-        ]);
+        expect(tasks[0].id).toMatch(/^pt_/);
+        expect(tasks[0].planId).toMatch(/^pl_/);
+        expect(tasks[0].bucketId).toMatch(/^pb_/);
+        expect(tasks[0].assignees).toEqual(['user-1']);
+        expect(tasks[1].planId).toMatch(/^pl_/);
+        expect(tasks[1].bucketId).toBeNull();
       });
 
-      it('caches the plan mapping so the numeric planId resolves for follow-up calls', async () => {
+      it('mints a resolvable pl_ token per task so a follow-up get_plan resolves without a re-list', async () => {
         mockClient.listMyPlannerTasks.mockResolvedValue([
           { id: 'graph-task-1', title: 'T', planId: 'graph-plan-A', bucketId: null, assignments: null,
             percentComplete: 0, priority: 5, startDateTime: '', dueDateTime: '', createdDateTime: '' },
         ]);
 
-        await repository.listMyPlannerTasksAsync();
+        const tasks = await repository.listMyPlannerTasksAsync();
 
-        // The plan mapping lands in the same idCache the plan-scoped resolvers
-        // (resolvePlanId) read, so a follow-up list/update on that plan resolves.
-        const cached = (repository as any).idCache.plans.get(hashStringToNumber('graph-plan-A'));
-        expect(cached).toEqual({ planId: 'graph-plan-A', etag: '' });
+        mockClient.getPlan.mockResolvedValue({ title: 'Plan A', '@odata.etag': 'W/"etag"' });
+        await repository.getPlanAsync(tasks[0].planId);
+        expect(mockClient.getPlan).toHaveBeenCalledWith('graph-plan-A');
       });
     });
   });

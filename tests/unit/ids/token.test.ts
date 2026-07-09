@@ -249,6 +249,15 @@ describe('ids/token — composite / alias-backed', () => {
     expect(parsed?.entityType).toBe('libraryDriveItem');
     expect(parsed?.graphId).toBeUndefined();
   });
+
+  it('mints a pb_ token for plannerBucket (single-id) and classifies it as alias', () => {
+    const token = mintComposite('plannerBucket', 'k');
+    expect(token.startsWith('pb_')).toBe(true);
+    const parsed = parseToken(token);
+    expect(parsed?.kind).toBe('alias');
+    expect(parsed?.entityType).toBe('plannerBucket');
+    expect(parsed?.graphId).toBeUndefined();
+  });
 });
 
 describe('ids/token — parse guards', () => {
