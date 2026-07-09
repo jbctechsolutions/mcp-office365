@@ -29,6 +29,7 @@ import {
 import { appleTimestampToIso } from '../utils/dates.js';
 import { defineTool } from '../registry/define-tool.js';
 import { requireGraphToolset } from '../registry/context.js';
+import { Id } from '../ids/schema.js';
 import type { ToolContext, ToolDefinition, ToolResult } from '../registry/types.js';
 
 // Mailbox organization is served by a single MailboxOrganizationTools instance
@@ -44,10 +45,10 @@ declare module '../registry/types.js' {
 // =============================================================================
 
 /**
- * Shared email id schema: a durable `em_` token (Graph, U5) or a legacy
- * positive-integer id (AppleScript, D4).
+ * Shared email id schema (U6): the canonical `em_` message-id schema. A legacy
+ * numeric id resolves to NUMERIC_ID_UNSUPPORTED.
  */
-const EmailIdSchema = z.union([z.string().min(1), z.number().int().positive()]);
+const EmailIdSchema = Id.message;
 
 export const PrepareDeleteEmailInput = z.strictObject({
   email_id: EmailIdSchema.describe('The email ID to delete'),

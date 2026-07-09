@@ -12,6 +12,7 @@
 import { z } from 'zod';
 import { defineTool } from '../registry/define-tool.js';
 import { requireGraphToolset } from '../registry/context.js';
+import { Id } from '../ids/schema.js';
 import type { ToolDefinition } from '../registry/types.js';
 import type { GraphTasksTools } from './tasks-graph.js';
 
@@ -50,7 +51,7 @@ export const SearchTasksInput = z.strictObject({
 });
 
 export const GetTaskInput = z.strictObject({
-  task_id: z.string().min(1).describe('The task ID (td_ token) to retrieve'),
+  task_id: Id.task.describe('The task ID to retrieve — a `td_` token from list_tasks / search_tasks.'),
 });
 
 // Task write schemas (Graph API)
@@ -67,7 +68,7 @@ const RecurrenceSchema = z.strictObject({
 
 export const CreateTaskInput = z.strictObject({
   title: z.string().min(1),
-  task_list_id: z.string().min(1).describe('The task list ID (tl_ token)'),
+  task_list_id: Id.taskList,
   body: z.string().optional(),
   body_type: z.enum(['text', 'html']).optional(),
   due_date: z.string().optional(),
@@ -78,7 +79,7 @@ export const CreateTaskInput = z.strictObject({
 });
 
 export const UpdateTaskInput = z.strictObject({
-  task_id: z.string().min(1).describe('The task ID (td_ token)'),
+  task_id: Id.task,
   title: z.string().optional(),
   body: z.string().optional(),
   body_type: z.enum(['text', 'html']).optional(),
@@ -91,16 +92,16 @@ export const UpdateTaskInput = z.strictObject({
 });
 
 export const CompleteTaskInput = z.strictObject({
-  task_id: z.string().min(1).describe('The task ID (td_ token)'),
+  task_id: Id.task,
 });
 
 export const PrepareDeleteTaskInput = z.strictObject({
-  task_id: z.string().min(1).describe('The task ID (td_ token)'),
+  task_id: Id.task,
 });
 
 export const ConfirmDeleteTaskInput = z.strictObject({
   token_id: z.uuid(),
-  task_id: z.string().min(1).describe('The task ID (td_ token)'),
+  task_id: Id.task,
 });
 
 // =============================================================================

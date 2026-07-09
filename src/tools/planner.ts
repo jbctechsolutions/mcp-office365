@@ -15,6 +15,8 @@ import { z } from 'zod';
 import type { ApprovalTokenManager } from '../approval/index.js';
 import { defineTool } from '../registry/define-tool.js';
 import { requireGraphToolset } from '../registry/context.js';
+import { Id } from '../ids/schema.js';
+import { nextActionFor } from '../ids/next-action.js';
 import type { ToolContext, ToolDefinition } from '../registry/types.js';
 
 declare module '../registry/types.js' {
@@ -30,7 +32,7 @@ declare module '../registry/types.js' {
 export const ListPlansInput = z.strictObject({});
 
 export const GetPlanInput = z.strictObject({
-  plan_id: z.string().min(1).describe('Plan ID from list_plans'),
+  plan_id: Id.plan,
 });
 
 export const CreatePlanInput = z.strictObject({
@@ -39,26 +41,26 @@ export const CreatePlanInput = z.strictObject({
 });
 
 export const UpdatePlanInput = z.strictObject({
-  plan_id: z.string().min(1).describe('Plan ID from list_plans'),
+  plan_id: Id.plan,
   title: z.string().min(1).optional().describe('New plan title'),
 });
 
 export const ListBucketsInput = z.strictObject({
-  plan_id: z.string().min(1).describe('Plan ID from list_plans'),
+  plan_id: Id.plan,
 });
 
 export const CreateBucketInput = z.strictObject({
-  plan_id: z.string().min(1).describe('Plan ID from list_plans'),
+  plan_id: Id.plan,
   name: z.string().min(1).describe('Bucket name'),
 });
 
 export const UpdateBucketInput = z.strictObject({
-  bucket_id: z.string().min(1).describe('Bucket ID from list_buckets'),
+  bucket_id: Id.plannerBucket,
   name: z.string().min(1).optional().describe('New bucket name'),
 });
 
 export const PrepareDeleteBucketInput = z.strictObject({
-  bucket_id: z.string().min(1).describe('Bucket ID from list_buckets'),
+  bucket_id: Id.plannerBucket,
 });
 
 export const ConfirmDeleteBucketInput = z.strictObject({
@@ -66,19 +68,19 @@ export const ConfirmDeleteBucketInput = z.strictObject({
 });
 
 export const ListPlannerTasksInput = z.strictObject({
-  plan_id: z.string().min(1).describe('Plan ID from list_plans'),
+  plan_id: Id.plan,
 });
 
 export const ListMyPlannerTasksInput = z.strictObject({});
 
 export const GetPlannerTaskInput = z.strictObject({
-  task_id: z.string().min(1).describe('Task ID from list_planner_tasks'),
+  task_id: Id.plannerTask,
 });
 
 export const CreatePlannerTaskInput = z.strictObject({
-  plan_id: z.string().min(1).describe('Plan ID from list_plans'),
+  plan_id: Id.plan,
   title: z.string().min(1).describe('Task title'),
-  bucket_id: z.string().min(1).optional().describe('Bucket ID from list_buckets'),
+  bucket_id: Id.plannerBucket.optional(),
   assignments: z.record(z.string(), z.object({}).passthrough()).optional().describe('User assignments. Keys are user IDs, values should be { "@odata.type": "#microsoft.graph.plannerAssignment", "orderHint": " !" }'),
   priority: z.number().int().min(0).max(10).optional().describe('Priority (0-10)'),
   start_date: z.string().optional().describe('Start date in ISO format'),
@@ -86,9 +88,9 @@ export const CreatePlannerTaskInput = z.strictObject({
 });
 
 export const UpdatePlannerTaskInput = z.strictObject({
-  task_id: z.string().min(1).describe('Task ID from list_planner_tasks'),
+  task_id: Id.plannerTask,
   title: z.string().min(1).optional().describe('New task title'),
-  bucket_id: z.string().min(1).optional().describe('New bucket ID from list_buckets'),
+  bucket_id: Id.plannerBucket.optional().describe('New bucket ID — a `pb_` token from list_buckets.'),
   percent_complete: z.number().int().min(0).max(100).optional().describe('Percent complete (0-100)'),
   priority: z.number().int().min(0).max(10).optional().describe('Priority (0-10)'),
   start_date: z.string().optional().describe('Start date in ISO format'),
@@ -97,7 +99,7 @@ export const UpdatePlannerTaskInput = z.strictObject({
 });
 
 export const PrepareDeletePlannerTaskInput = z.strictObject({
-  task_id: z.string().min(1).describe('Task ID from list_planner_tasks'),
+  task_id: Id.plannerTask,
 });
 
 export const ConfirmDeletePlannerTaskInput = z.strictObject({
@@ -105,11 +107,11 @@ export const ConfirmDeletePlannerTaskInput = z.strictObject({
 });
 
 export const GetPlannerTaskDetailsInput = z.strictObject({
-  task_id: z.string().min(1).describe('Planner task ID'),
+  task_id: Id.plannerTask,
 });
 
 export const UpdatePlannerTaskDetailsInput = z.strictObject({
-  task_id: z.string().min(1).describe('Planner task ID'),
+  task_id: Id.plannerTask,
   description: z.string().optional().describe('Task description/notes'),
   checklist: z.record(z.string(), z.object({}).passthrough()).optional().describe('Checklist items. Keys are GUIDs, values have title (string) and isChecked (boolean)'),
   references: z.record(z.string(), z.object({}).passthrough()).optional().describe('Reference links. Keys are encoded URLs, values have alias (string) and type (string)'),
@@ -208,7 +210,7 @@ export class PlannerTools {
     return {
       content: [{
         type: 'text' as const,
-        text: JSON.stringify({ plans }, null, 2),
+        text: JSON.stringify({ plans, next: nextActionFor('plan') ?? undefined }, null, 2),
       }],
     };
   }
@@ -232,7 +234,7 @@ export class PlannerTools {
     return {
       content: [{
         type: 'text' as const,
-        text: JSON.stringify({ success: true, plan_id: planId, message: 'Plan created' }, null, 2),
+        text: JSON.stringify({ success: true, plan_id: planId, message: 'Plan created', next: nextActionFor('plan') ?? undefined }, null, 2),
       }],
     };
   }
@@ -258,7 +260,7 @@ export class PlannerTools {
     return {
       content: [{
         type: 'text' as const,
-        text: JSON.stringify({ buckets }, null, 2),
+        text: JSON.stringify({ buckets, next: nextActionFor('plannerBucket') ?? undefined }, null, 2),
       }],
     };
   }
@@ -270,7 +272,7 @@ export class PlannerTools {
     return {
       content: [{
         type: 'text' as const,
-        text: JSON.stringify({ success: true, bucket_id: bucketId, message: 'Bucket created' }, null, 2),
+        text: JSON.stringify({ success: true, bucket_id: bucketId, message: 'Bucket created', next: nextActionFor('plannerBucket') ?? undefined }, null, 2),
       }],
     };
   }
@@ -368,7 +370,7 @@ export class PlannerTools {
     return {
       content: [{
         type: 'text' as const,
-        text: JSON.stringify({ tasks }, null, 2),
+        text: JSON.stringify({ tasks, next: nextActionFor('plannerTask') ?? undefined }, null, 2),
       }],
     };
   }
@@ -380,7 +382,7 @@ export class PlannerTools {
     return {
       content: [{
         type: 'text' as const,
-        text: JSON.stringify({ tasks }, null, 2),
+        text: JSON.stringify({ tasks, next: nextActionFor('plannerTask') ?? undefined }, null, 2),
       }],
     };
   }
@@ -412,7 +414,7 @@ export class PlannerTools {
     return {
       content: [{
         type: 'text' as const,
-        text: JSON.stringify({ success: true, task_id: taskId, message: 'Planner task created' }, null, 2),
+        text: JSON.stringify({ success: true, task_id: taskId, message: 'Planner task created', next: nextActionFor('plannerTask') ?? undefined }, null, 2),
       }],
     };
   }

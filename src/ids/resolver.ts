@@ -47,6 +47,14 @@ export function resolveId(
     throw new NumericIdUnsupportedError(id);
   }
 
+  // A bare all-digits string is a legacy v2 hash id (Graph ids and durable
+  // tokens are never purely numeric), so surface the same actionable
+  // NUMERIC_ID_UNSUPPORTED rather than passing it through to Graph as an opaque
+  // id that only 404s. Covers callers whose schema is string-only (U6).
+  if (/^\d+$/.test(id)) {
+    throw new NumericIdUnsupportedError(id);
+  }
+
   const parsed = parseToken(id);
   if (parsed === null) {
     // Not a known token — treat as an opaque Graph ID the caller supplied.

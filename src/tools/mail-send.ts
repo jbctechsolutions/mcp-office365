@@ -14,6 +14,7 @@ import * as fs from 'fs';
 import { z } from 'zod';
 import { defineTool } from '../registry/define-tool.js';
 import { requireGraphToolset } from '../registry/context.js';
+import { Id } from '../ids/schema.js';
 import type { ToolContext, ToolDefinition, ToolResult } from '../registry/types.js';
 import type { EmailRow } from '../database/repository.js';
 import {
@@ -95,10 +96,10 @@ export interface IMailSendRepository {
 // =============================================================================
 
 /**
- * Shared draft/message id schema: a durable `em_` token (Graph, U5) or a legacy
- * positive-integer id.
+ * Shared draft/message id schema (U6): the canonical `em_` message-id schema
+ * (drafts are messages). A legacy numeric id resolves to NUMERIC_ID_UNSUPPORTED.
  */
-const EmailIdSchema = z.union([z.string().min(1), z.number().int().positive()]);
+const EmailIdSchema = Id.message;
 
 const AttachmentInput = z.strictObject({
   file_path: z.string().describe('Absolute path to the file to attach'),

@@ -107,6 +107,15 @@ describe('resolveId — legacy numeric + raw pass-through', () => {
     }
   });
 
+  it('rejects a bare all-digits STRING with NUMERIC_ID_UNSUPPORTED (U6: string-only schemas)', () => {
+    try {
+      resolveId('123456', ACCOUNT, store);
+      expect.unreachable('should throw');
+    } catch (e) {
+      expect((e as { code?: string }).code).toBe(ErrorCode.NUMERIC_ID_UNSUPPORTED);
+    }
+  });
+
   it('passes a raw non-token string through as an opaque Graph ID', () => {
     expect(resolveId('AAMkAGI2rawgraphid', ACCOUNT, store)).toEqual({
       graphId: 'AAMkAGI2rawgraphid',
