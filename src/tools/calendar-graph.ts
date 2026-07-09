@@ -253,8 +253,7 @@ export class GraphCalendarTools {
   }
 
   async deleteEvent(params: DeleteEventParams): Promise<ToolResult> {
-    // For Graph API, direct delete_event is also supported (for AppleScript
-    // compatibility). The Graph backend deletes by id and ignores apply_to.
+    // The Graph backend deletes by id and ignores apply_to.
     await this.repository.deleteEventAsync(params.event_id);
     return { content: [{ type: 'text', text: `Successfully deleted event ${params.event_id}` }] };
   }

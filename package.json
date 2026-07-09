@@ -1,7 +1,7 @@
 {
   "name": "@jbctechsolutions/mcp-office365",
   "version": "3.0.0",
-  "description": "MCP server for Microsoft 365 with dual backend support (AppleScript for classic Outlook, Graph API for new Outlook/M365). Read/write access to mail, calendar, contacts, tasks, teams, planner, and more.",
+  "description": "MCP server for Microsoft 365 via the Microsoft Graph API. Read/write access to mail, calendar, contacts, tasks, teams, planner, and more.",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -45,7 +45,6 @@
     "planner",
     "model-context-protocol",
     "microsoft-graph",
-    "applescript",
     "claude",
     "anthropic"
   ],

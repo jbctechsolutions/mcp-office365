@@ -6,9 +6,8 @@
 /**
  * Microsoft Graph API module.
  *
- * Provides an alternative backend for the Outlook MCP server that uses
- * Microsoft Graph API instead of AppleScript. This is required for
- * "new Outlook" for Mac which doesn't expose data via AppleScript.
+ * Provides the backend for the Outlook MCP server, using the Microsoft Graph
+ * API for all data access.
  */
 
 // Auth exports
@@ -71,7 +70,6 @@ export {
   GraphEventContentReader,
   GraphContactContentReader,
   GraphTaskContentReader,
-  GraphNoteContentReader,
   createGraphContentReaders,
   createGraphContentReadersWithClient,
   type GraphContentReaders,

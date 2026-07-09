@@ -17,8 +17,8 @@
 import type { z } from 'zod';
 import type { ApprovalTokenManager } from '../approval/index.js';
 
-/** Which backend(s) expose a tool. */
-export type Backend = 'graph' | 'applescript';
+/** Which backend(s) expose a tool. Graph is the only backend (AppleScript was removed). */
+export type Backend = 'graph';
 
 /** Preset groups a client can select with --preset to shrink the surface. */
 export type Preset =
@@ -66,17 +66,6 @@ export interface ToolResult {
 export interface GraphToolsets {}
 
 /**
- * Bag of initialized AppleScript-backend tool instances. The AppleScript
- * backend is frozen (v3), but dual-backend tools (mail, calendar, contacts,
- * tasks, notes, mailbox organization) still register their AppleScript toolset
- * here so a single registry handler can branch on `ctx.backend`. Like
- * GraphToolsets, this is a per-file augmentation target — read instances via
- * `requireAppleScriptToolset(ctx, key)`.
- */
-// eslint-disable-next-line @typescript-eslint/no-empty-interface
-export interface AppleScriptToolsets {}
-
-/**
  * Runtime context passed to a tool handler. Built once per call after the
  * backend is initialized; carries the live toolset instances so handlers no
  * longer need the 23-positional-parameter dispatch signature.
@@ -85,7 +74,6 @@ export interface ToolContext {
   readonly backend: Backend;
   readonly tokenManager: ApprovalTokenManager;
   readonly graph: GraphToolsets | null;
-  readonly applescript: AppleScriptToolsets | null;
 }
 
 /**

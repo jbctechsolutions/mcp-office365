@@ -15,9 +15,8 @@ export type {
   ToolContext,
   ToolDefinition,
   GraphToolsets,
-  AppleScriptToolsets,
 } from './types.js';
 export { ToolRegistry, toInputSchema } from './registry.js';
 export type { SurfaceOptions } from './registry.js';
 export { defineTool } from './define-tool.js';
-export { requireGraphToolset, requireAppleScriptToolset } from './context.js';
+export { requireGraphToolset } from './context.js';

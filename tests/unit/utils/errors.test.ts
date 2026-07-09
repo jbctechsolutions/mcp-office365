@@ -14,10 +14,6 @@ import {
   ContentParseError,
   ValidationError,
   NotFoundError,
-  OutlookNotRunningError,
-  AppleScriptPermissionError,
-  AppleScriptTimeoutError,
-  AppleScriptError,
   GraphAuthRequiredError,
   GraphRateLimitedError,
   GraphPermissionDeniedError,
@@ -45,10 +41,6 @@ describe('errors', () => {
       expect(ErrorCode.CONTENT_PARSE_ERROR).toBe('CONTENT_PARSE_ERROR');
       expect(ErrorCode.VALIDATION_ERROR).toBe('VALIDATION_ERROR');
       expect(ErrorCode.NOT_FOUND).toBe('NOT_FOUND');
-      expect(ErrorCode.OUTLOOK_NOT_RUNNING).toBe('OUTLOOK_NOT_RUNNING');
-      expect(ErrorCode.APPLESCRIPT_PERMISSION_DENIED).toBe('APPLESCRIPT_PERMISSION_DENIED');
-      expect(ErrorCode.APPLESCRIPT_TIMEOUT).toBe('APPLESCRIPT_TIMEOUT');
-      expect(ErrorCode.APPLESCRIPT_ERROR).toBe('APPLESCRIPT_ERROR');
       expect(ErrorCode.AUTH_EXPIRED).toBe('AUTH_EXPIRED');
       expect(ErrorCode.GRAPH_RATE_LIMITED).toBe('GRAPH_RATE_LIMITED');
       expect(ErrorCode.GRAPH_PERMISSION_DENIED).toBe('GRAPH_PERMISSION_DENIED');
@@ -192,61 +184,6 @@ describe('errors', () => {
   });
 
   // =========================================================================
-  // AppleScript Errors
-  // =========================================================================
-
-  describe('OutlookNotRunningError', () => {
-    it('creates error with correct message', () => {
-      const error = new OutlookNotRunningError();
-      expect(error.message).toContain('not running');
-      expect(error.message).toContain('start Outlook');
-      expect(error.code).toBe(ErrorCode.OUTLOOK_NOT_RUNNING);
-      expect(error.name).toBe('OutlookNotRunningError');
-    });
-
-    it('extends OutlookMcpError', () => {
-      const error = new OutlookNotRunningError();
-      expect(error).toBeInstanceOf(OutlookMcpError);
-      expect(error).toBeInstanceOf(Error);
-    });
-  });
-
-  describe('AppleScriptPermissionError', () => {
-    it('creates error with correct message', () => {
-      const error = new AppleScriptPermissionError();
-      expect(error.message).toContain('Automation permission denied');
-      expect(error.message).toContain('System Settings');
-      expect(error.code).toBe(ErrorCode.APPLESCRIPT_PERMISSION_DENIED);
-      expect(error.name).toBe('AppleScriptPermissionError');
-    });
-  });
-
-  describe('AppleScriptTimeoutError', () => {
-    it('creates error with operation name', () => {
-      const error = new AppleScriptTimeoutError('listEmails');
-      expect(error.message).toContain('timed out');
-      expect(error.message).toContain('listEmails');
-      expect(error.code).toBe(ErrorCode.APPLESCRIPT_TIMEOUT);
-      expect(error.name).toBe('AppleScriptTimeoutError');
-    });
-  });
-
-  describe('AppleScriptError', () => {
-    it('creates error with message', () => {
-      const error = new AppleScriptError('Script failed');
-      expect(error.message).toBe('Script failed');
-      expect(error.code).toBe(ErrorCode.APPLESCRIPT_ERROR);
-      expect(error.cause).toBeUndefined();
-    });
-
-    it('captures cause', () => {
-      const cause = new Error('Original error');
-      const error = new AppleScriptError('Wrapped error', cause);
-      expect(error.cause).toBe(cause);
-    });
-  });
-
-  // =========================================================================
   // Microsoft Graph API Errors
   // =========================================================================
 
@@ -327,13 +264,6 @@ describe('errors', () => {
       expect(isOutlookMcpError(new GraphRateLimitedError(30))).toBe(true);
       expect(isOutlookMcpError(new GraphPermissionDeniedError('scope'))).toBe(true);
       expect(isOutlookMcpError(new GraphError('msg'))).toBe(true);
-    });
-
-    it('returns true for AppleScript error instances', () => {
-      expect(isOutlookMcpError(new OutlookNotRunningError())).toBe(true);
-      expect(isOutlookMcpError(new AppleScriptPermissionError())).toBe(true);
-      expect(isOutlookMcpError(new AppleScriptTimeoutError('op'))).toBe(true);
-      expect(isOutlookMcpError(new AppleScriptError('msg'))).toBe(true);
     });
   });
 

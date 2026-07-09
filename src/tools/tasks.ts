@@ -10,22 +10,15 @@
  */
 
 import { z } from 'zod';
-import type { IRepository, TaskRow } from '../database/repository.js';
-import type { TaskSummary, Task, PriorityValue } from '../types/index.js';
-import { appleTimestampToIso } from '../utils/dates.js';
 import { defineTool } from '../registry/define-tool.js';
-import { requireGraphToolset, requireAppleScriptToolset } from '../registry/context.js';
-import type { ToolContext, ToolDefinition, ToolResult } from '../registry/types.js';
+import { requireGraphToolset } from '../registry/context.js';
+import type { ToolDefinition } from '../registry/types.js';
 import type { GraphTasksTools } from './tasks-graph.js';
 
-// Tasks are a dual-backend domain: the AppleScript backend serves them via
-// TasksTools; the Graph backend serves them via GraphTasksTools.
+// Tasks are served by GraphTasksTools.
 declare module '../registry/types.js' {
   interface GraphToolsets {
     tasksGraph: GraphTasksTools;
-  }
-  interface AppleScriptToolsets {
-    tasks: TasksTools;
   }
 }
 
@@ -147,122 +140,13 @@ export interface TaskDetails {
   readonly categories: readonly string[];
 }
 
-/**
- * Default task content reader that returns null.
- */
-export const nullTaskContentReader: ITaskContentReader = {
-  readTaskDetails: (): TaskDetails | null => null,
-};
-
 // =============================================================================
-// Transformers
+// Registry Definitions (v3 registry-driven architecture)
 // =============================================================================
 
 /**
- * Transforms a database task row to TaskSummary.
- */
-function transformTaskSummary(row: TaskRow): TaskSummary {
-  return {
-    id: row.id,
-    folderId: row.folderId,
-    name: row.name,
-    isCompleted: row.isCompleted === 1,
-    dueDate: appleTimestampToIso(row.dueDate),
-    priority: row.priority as PriorityValue,
-  };
-}
-
-/**
- * Transforms a database task row to full Task.
- */
-function transformTask(row: TaskRow, details: TaskDetails | null): Task {
-  const summary = transformTaskSummary(row);
-
-  return {
-    ...summary,
-    startDate: appleTimestampToIso(row.startDate),
-    completedDate: details?.completedDate ?? null,
-    hasReminder: row.hasReminder === 1,
-    reminderDate: details?.reminderDate ?? null,
-    body: details?.body ?? null,
-    categories: details?.categories ?? [],
-  };
-}
-
-// =============================================================================
-// Tasks Tools Class
-// =============================================================================
-
-/**
- * Tasks tools implementation with dependency injection.
- */
-export class TasksTools {
-  constructor(
-    private readonly repository: IRepository,
-    private readonly contentReader: ITaskContentReader = nullTaskContentReader
-  ) {}
-
-  /**
-   * Lists tasks with pagination and filtering.
-   */
-  listTasks(params: ListTasksParams): TaskSummary[] {
-    const { limit, offset, include_completed } = params;
-
-    const rows = include_completed
-      ? this.repository.listTasks(limit, offset)
-      : this.repository.listIncompleteTasks(limit, offset);
-
-    return rows.map(transformTaskSummary);
-  }
-
-  /**
-   * Searches tasks by name.
-   */
-  searchTasks(params: SearchTasksParams): TaskSummary[] {
-    const { query, limit } = params;
-    const rows = this.repository.searchTasks(query, limit);
-    return rows.map(transformTaskSummary);
-  }
-
-  /**
-   * Gets a single task by ID.
-   */
-  getTask(params: GetTaskParams): Task | null {
-    const { task_id } = params;
-
-    const row = this.repository.getTask(task_id);
-    if (row == null) {
-      return null;
-    }
-
-    const details = this.contentReader.readTaskDetails(row.dataFilePath);
-    return transformTask(row, details);
-  }
-}
-
-/**
- * Creates tasks tools with the given repository.
- */
-export function createTasksTools(
-  repository: IRepository,
-  contentReader: ITaskContentReader = nullTaskContentReader
-): TasksTools {
-  return new TasksTools(repository, contentReader);
-}
-
-// =============================================================================
-// Registry Definitions (v3 registry-driven architecture, U2 — dual backend)
-// =============================================================================
-
-function jsonResult(data: unknown): ToolResult {
-  return { content: [{ type: 'text', text: JSON.stringify(data, null, 2) }] };
-}
-
-/**
- * Registry tool definitions for the tasks domain. Each handler branches on the
- * active backend: Graph delegates to GraphTasksTools (which returns MCP content
- * directly); AppleScript delegates to TasksTools (which returns raw objects,
- * wrapped here to match the pre-registry dispatch behavior exactly).
+ * Registry tool definitions for the tasks domain. Each handler delegates to
+ * GraphTasksTools, which returns MCP content directly.
  */
 export function tasksToolDefinitions(): ToolDefinition[] {
   return [
@@ -273,11 +157,8 @@ export function tasksToolDefinitions(): ToolDefinition[] {
       annotations: { readOnlyHint: true },
       destructive: false,
       presets: ['tasks'],
-      backends: ['graph', 'applescript'],
-      handler: (ctx, params) =>
-        ctx.backend === 'graph'
-          ? requireGraphToolset(ctx, 'tasksGraph').listTasks(params)
-          : jsonResult(requireAppleScriptToolset(ctx, 'tasks').listTasks(params)),
+      backends: ['graph'],
+      handler: (ctx, params) => requireGraphToolset(ctx, 'tasksGraph').listTasks(params),
     }),
     defineTool({
       name: 'search_tasks',
@@ -286,11 +167,8 @@ export function tasksToolDefinitions(): ToolDefinition[] {
       annotations: { readOnlyHint: true },
       destructive: false,
       presets: ['tasks'],
-      backends: ['graph', 'applescript'],
-      handler: (ctx, params) =>
-        ctx.backend === 'graph'
-          ? requireGraphToolset(ctx, 'tasksGraph').searchTasks(params)
-          : jsonResult(requireAppleScriptToolset(ctx, 'tasks').searchTasks(params)),
+      backends: ['graph'],
+      handler: (ctx, params) => requireGraphToolset(ctx, 'tasksGraph').searchTasks(params),
     }),
     defineTool({
       name: 'get_task',
@@ -299,17 +177,8 @@ export function tasksToolDefinitions(): ToolDefinition[] {
       annotations: { readOnlyHint: true },
       destructive: false,
       presets: ['tasks'],
-      backends: ['graph', 'applescript'],
-      handler: (ctx: ToolContext, params): Promise<ToolResult> | ToolResult => {
-        if (ctx.backend === 'graph') {
-          return requireGraphToolset(ctx, 'tasksGraph').getTask(params);
-        }
-        const result = requireAppleScriptToolset(ctx, 'tasks').getTask(params);
-        if (result == null) {
-          return { content: [{ type: 'text', text: 'Task not found' }], isError: true };
-        }
-        return jsonResult(result);
-      },
+      backends: ['graph'],
+      handler: (ctx, params) => requireGraphToolset(ctx, 'tasksGraph').getTask(params),
     }),
     defineTool({
       name: 'create_task',

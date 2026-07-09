@@ -60,14 +60,11 @@ describe('Server Tool Registration', () => {
     'list_tasks',
     'search_tasks',
     'get_task',
-    'list_notes',
-    'search_notes',
-    'get_note',
   ];
 
   it('defines all expected tool names', () => {
-    // This verifies that all 18 tools are expected
-    expect(expectedTools).toHaveLength(19);
+    // This verifies that all 16 tools are expected
+    expect(expectedTools).toHaveLength(16);
   });
 
   it('includes mail tools', () => {
@@ -95,11 +92,5 @@ describe('Server Tool Registration', () => {
     expect(expectedTools).toContain('list_tasks');
     expect(expectedTools).toContain('search_tasks');
     expect(expectedTools).toContain('get_task');
-  });
-
-  it('includes note tools', () => {
-    expect(expectedTools).toContain('list_notes');
-    expect(expectedTools).toContain('search_notes');
-    expect(expectedTools).toContain('get_note');
   });
 });
