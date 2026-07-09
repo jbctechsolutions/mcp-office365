@@ -5,8 +5,9 @@
 
 /**
  * Behavioral tests for the immutable-ID preference middleware (U5b-3 / D2):
- * which requests get `Prefer: IdType="ImmutableId"`, how the header merges with
- * an existing Prefer value, and that the chain is always forwarded.
+ * which requests get `Prefer: IdType="ImmutableId"` (anchored on the Outlook user
+ * context so Teams/chat/To Do are excluded), how the header merges with an
+ * existing Prefer value, the skip-marker opt-out, and chain forwarding.
  */
 
 import { describe, it, expect, vi } from 'vitest';
@@ -32,15 +33,20 @@ function recordingNext(): { middleware: Middleware; last: () => Context | undefi
   };
 }
 
-/** Reads the Prefer header out of whatever HeadersInit shape options carries. */
-function readPrefer(context: Context): string | undefined {
+/** Reads a header (case-insensitive) out of whatever HeadersInit shape options carries. */
+function readHeader(context: Context, name: string): string | undefined {
   const headers = context.options?.headers;
+  const lower = name.toLowerCase();
   if (headers == null) return undefined;
-  if (headers instanceof Headers) return headers.get('Prefer') ?? undefined;
-  if (Array.isArray(headers)) return headers.find(([k]) => k.toLowerCase() === 'prefer')?.[1];
+  if (headers instanceof Headers) return headers.get(name) ?? undefined;
+  if (Array.isArray(headers)) return headers.find(([k]) => k.toLowerCase() === lower)?.[1];
   const rec = headers as Record<string, string>;
-  const key = Object.keys(rec).find((k) => k.toLowerCase() === 'prefer');
+  const key = Object.keys(rec).find((k) => k.toLowerCase() === lower);
   return key != null ? rec[key] : undefined;
+}
+
+function readPrefer(context: Context): string | undefined {
+  return readHeader(context, 'Prefer');
 }
 
 async function run(request: string, options?: Context['options']): Promise<Context> {
@@ -54,26 +60,45 @@ async function run(request: string, options?: Context['options']): Promise<Conte
 }
 
 describe('isOutlookImmutableIdResource', () => {
-  it('matches Outlook resources and their nested collections', () => {
+  it('matches Outlook item resources anchored on /me or /users', () => {
     for (const url of [
       `${BASE}/me/messages`,
       `${BASE}/me/messages/AAA`,
-      `${BASE}/me/mailFolders/inbox/messages`,
+      `${BASE}/me/mailFolders/inbox/messages`, // nested — anchors on mailFolders
+      `${BASE}/me/mailFolders/inbox`, // bare container — header harmlessly ignored
       `${BASE}/me/events`,
+      `${BASE}/me/events/evt-1/instances`,
+      `${BASE}/me/messages/AAA/attachments`,
       `${BASE}/me/calendars/cal-1/events`,
       `${BASE}/me/calendarView?startDateTime=x&endDateTime=y`,
       `${BASE}/me/calendarGroups`,
       `${BASE}/me/contacts`,
       `${BASE}/me/contactFolders/cf-1/contacts`,
+      `${BASE}/users/bob@contoso.com/messages`, // shared mailbox (#40)
+      `${BASE}/users/bob@contoso.com/mailFolders/inbox/messages`,
     ]) {
       expect(isOutlookImmutableIdResource(url)).toBe(true);
     }
   });
 
-  it('does not match non-Outlook resources', () => {
+  it('excludes Teams and chat message endpoints (no Outlook user anchor)', () => {
     for (const url of [
+      `${BASE}/teams/t-1/channels/c-1/messages`,
+      `${BASE}/teams/t-1/channels/c-1/messages/m-1`,
+      `${BASE}/teams/t-1/channels/c-1/messages/m-1/replies`,
+      `${BASE}/chats/c-1/messages`,
+      `${BASE}/chats/c-1/messages/m-1/setReaction`,
+      `${BASE}/me/chats/c-1/messages`, // under /me/ but anchors on `chats`
+      `${BASE}/me/chats/c-1/messages/m-1`,
+    ]) {
+      expect(isOutlookImmutableIdResource(url)).toBe(false);
+    }
+  });
+
+  it('excludes To Do and other non-Outlook resources', () => {
+    for (const url of [
+      `${BASE}/me/todo/lists/l-1/tasks/t-1/attachments`, // anchors on `todo`, not attachments
       `${BASE}/me/todo/lists/l-1/tasks`,
-      `${BASE}/teams/t-1/channels`,
       `${BASE}/me/drive/items/i-1`,
       `${BASE}/search/query`,
       `${BASE}/me/translateExchangeIds`,
@@ -83,14 +108,21 @@ describe('isOutlookImmutableIdResource', () => {
     }
   });
 
-  it('excludes $search requests (immutable IDs are unsupported for $search)', () => {
+  it('excludes $search requests, raw and percent-encoded', () => {
     expect(isOutlookImmutableIdResource(`${BASE}/me/messages?$search="report"`)).toBe(false);
+    expect(isOutlookImmutableIdResource(`${BASE}/me/messages?%24search=%22report%22`)).toBe(false);
     expect(isOutlookImmutableIdResource(`${BASE}/me/mailFolders/inbox/messages?$search="x"&$top=50`)).toBe(false);
+  });
+
+  it('does NOT treat a $filter value containing "search" text as a $search request', () => {
+    // The `$` in the filter value is percent-encoded (%24) but is not a param —
+    // no trailing `=`, not at a param boundary — so the header still applies.
+    expect(isOutlookImmutableIdResource(`${BASE}/me/messages?$filter=contains(subject,'%24search')`)).toBe(true);
   });
 });
 
 describe('ImmutableIdMiddleware.execute', () => {
-  it('adds the Prefer header on an Outlook request with no options', async () => {
+  it('adds the Prefer header on an Outlook item request with no options', async () => {
     const context = await run(`${BASE}/me/messages/AAA`);
     expect(readPrefer(context)).toBe('IdType="ImmutableId"');
   });
@@ -102,6 +134,16 @@ describe('ImmutableIdMiddleware.execute', () => {
 
   it('does not add the header on a $search request', async () => {
     const context = await run(`${BASE}/me/messages?$search="q"`);
+    expect(readPrefer(context)).toBeUndefined();
+  });
+
+  it('does not add the header on a Teams channel messages request', async () => {
+    const context = await run(`${BASE}/teams/t-1/channels/c-1/messages`);
+    expect(readPrefer(context)).toBeUndefined();
+  });
+
+  it('does not add the header on a chat messages request', async () => {
+    const context = await run(`${BASE}/me/chats/c-1/messages`);
     expect(readPrefer(context)).toBeUndefined();
   });
 

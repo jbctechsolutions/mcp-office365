@@ -6,17 +6,29 @@
 /**
  * Immutable-ID preference middleware (U5b-3 / D2).
  *
- * Adds `Prefer: IdType="ImmutableId"` to Outlook/Exchange requests so Graph
- * returns immutable item IDs — IDs that survive a move between folders. The
- * self-encoding tokens (`em_ ev_ ct_ fd_`) carry the returned Graph ID directly,
- * so minting them from immutable IDs is what makes those tokens durable across a
- * move rather than breaking the moment an item is filed elsewhere.
+ * Adds `Prefer: IdType="ImmutableId"` to Outlook item requests so Graph returns
+ * immutable item IDs — IDs that survive a move between folders. The self-encoding
+ * tokens (`em_ ev_ ct_`) carry the returned Graph ID verbatim, so minting them
+ * from immutable IDs is what makes those tokens durable across a move rather than
+ * breaking the moment an item is filed elsewhere.
  *
- * Scope: the header is applied only to Outlook resource paths (messages, mail
- * folders, events, calendars, contacts, contact folders). It is deliberately NOT
- * applied to `$search` requests: Graph does not return immutable IDs for
- * `$search`, so search-minted IDs are upgraded separately via
+ * Scope is decided by ANCHORING on the Outlook user context: the collection
+ * immediately after `/me/` (or after the id in `/users/{id}/`) must be an Outlook
+ * collection. This is what keeps Teams and chat out — `/teams/{id}/channels/{id}/
+ * messages` has no user anchor, and `/me/chats/{id}/messages` anchors on `chats`,
+ * not an Outlook collection — even though both carry a `messages` segment. It also
+ * keeps To Do (`/me/todo/.../attachments`) and Planner out for the same reason,
+ * while covering nested item reads (`/me/mailFolders/{id}/messages`) and shared
+ * mailboxes (`/users/{upn}/messages`, #40).
+ *
+ * The header is NOT applied to `$search` requests: Graph does not return immutable
+ * IDs for `$search`, so search-minted IDs are upgraded separately via
  * `translateExchangeIds` (see graph-client.ts).
+ *
+ * Note: the header only shapes the RESPONSE id format — Graph accepts either the
+ * default or immutable id form in the request URL regardless of the header
+ * (verified live), so applying it unconditionally to Outlook item requests never
+ * breaks resolution of an already-minted token.
  */
 
 import type { Context, FetchOptions, Middleware } from '@microsoft/microsoft-graph-client';
@@ -25,12 +37,14 @@ const PREFER_HEADER = 'Prefer';
 const IMMUTABLE_ID_PREFERENCE = 'IdType="ImmutableId"';
 
 /**
- * Outlook resource path segments that support immutable IDs. Matching any of
- * these as a whole path segment (not a substring) opts the request in — this
- * covers nested collections too (e.g. `/me/mailFolders/{id}/messages`,
- * `/me/calendars/{id}/events`, `/me/contactFolders/{id}/contacts`).
+ * Outlook collections that hang off a user root (`/me` or `/users/{id}`) and lead
+ * to immutable-ID-bearing items. Container collections (mailFolders, calendars,
+ * calendarGroups, contactFolders) are included so a nested item read like
+ * `/me/mailFolders/{id}/messages` — which anchors on `mailfolders` — opts in; the
+ * header is harmlessly ignored on a bare container GET (their IDs are already
+ * constant).
  */
-const OUTLOOK_SEGMENTS: ReadonlySet<string> = new Set([
+const OUTLOOK_ROOT_COLLECTIONS: ReadonlySet<string> = new Set([
   'messages',
   'mailfolders',
   'events',
@@ -43,23 +57,40 @@ const OUTLOOK_SEGMENTS: ReadonlySet<string> = new Set([
 ]);
 
 /**
- * True when the request targets an Outlook resource that supports immutable IDs
- * AND is not a `$search` request (immutable IDs are unsupported for `$search`,
- * and pairing the two is avoided rather than relied upon).
+ * Matches the `$search` system query parameter in raw (`$search=`) or
+ * percent-encoded (`%24search=`) form, anchored to a param boundary (`^` or `&`)
+ * so it does not false-positive on a `$filter` VALUE that merely contains the
+ * text "search" (that appears as `…%24search%27`, without the trailing `=`).
+ */
+const SEARCH_PARAM = /(^|&)(\$|%24)search=/;
+
+/**
+ * True when the request targets an Outlook item resource that supports immutable
+ * IDs — anchored to the `/me` or `/users/{id}` user context, and excluding
+ * `$search` requests (immutable IDs are unsupported for `$search`, and pairing the
+ * two is avoided rather than relied upon).
  */
 export function isOutlookImmutableIdResource(url: string): boolean {
   const queryIndex = url.indexOf('?');
   const path = (queryIndex === -1 ? url : url.slice(0, queryIndex)).toLowerCase();
   const query = queryIndex === -1 ? '' : url.slice(queryIndex + 1).toLowerCase();
-  if (query.includes('$search')) {
+  if (SEARCH_PARAM.test(query)) {
     return false;
   }
-  for (const segment of path.split('/')) {
-    if (OUTLOOK_SEGMENTS.has(segment)) {
-      return true;
+  const segments = path.split('/').filter((segment) => segment.length > 0);
+  // Anchor on the Outlook user context: the collection right after `me`
+  // (`/me/{collection}`) or after the id in `/users/{id}/{collection}`.
+  let collection: string | undefined;
+  const meIndex = segments.indexOf('me');
+  if (meIndex !== -1) {
+    collection = segments[meIndex + 1];
+  } else {
+    const usersIndex = segments.indexOf('users');
+    if (usersIndex !== -1) {
+      collection = segments[usersIndex + 2];
     }
   }
-  return false;
+  return collection != null && OUTLOOK_ROOT_COLLECTIONS.has(collection);
 }
 
 /** True when a Prefer value already carries an IdType preference. */
@@ -117,9 +148,9 @@ function addImmutableIdPreference(options: FetchOptions): void {
 }
 
 /**
- * Graph SDK middleware that opts Outlook reads into immutable IDs. Sits directly
- * after the auth handler and before the retry handler, so the header is set once
- * and rides every retry attempt without being re-appended.
+ * Graph SDK middleware that opts Outlook item reads into immutable IDs. Sits
+ * directly after the auth handler and before the retry handler, so the header is
+ * set once and rides every retry attempt without being re-appended.
  */
 export class ImmutableIdMiddleware implements Middleware {
   private nextMiddleware: Middleware | undefined;
