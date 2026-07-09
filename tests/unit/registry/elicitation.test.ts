@@ -194,6 +194,39 @@ describe('dispatch elicitation interceptor', () => {
     expect(tm.lookupToken(body.approval_token as string)).toBeDefined(); // token still live
   });
 
+  it('degrades without eliciting when the prepare result carries no token', async () => {
+    const reg = new ToolRegistry();
+    reg.register([
+      defineTool({
+        name: 'prepare_notoken', description: '', input: z.strictObject({ id: z.string() }),
+        annotations: {}, destructive: true, presets: [], backends: ['graph'],
+        handler: () => json({ note: 'nothing minted' }),
+        onElicit: approvalTokenLink('confirm_a'),
+      }),
+    ]);
+    const elicit = elicitReturning('accept');
+    const res = await reg.dispatch('prepare_notoken', { id: 'x' }, ctxWith(elicit), SURFACE);
+    expect(elicit).not.toHaveBeenCalled(); // returned before eliciting
+    expect(parse(res)).toEqual({ note: 'nothing minted' });
+  });
+
+  it('accept with an unregistered confirmTool degrades to the token response', async () => {
+    const reg = new ToolRegistry();
+    reg.register([
+      defineTool({
+        name: 'prepare_orphan', description: '', input: z.strictObject({ id: z.string() }),
+        annotations: {}, destructive: true, presets: [], backends: ['graph'],
+        handler: (_ctx, p) => {
+          const t = tm.generateToken({ operation: 'delete_category', targetType: 'category', targetId: p.id, targetHash: p.id });
+          return json({ approval_token: t.tokenId });
+        },
+        onElicit: approvalTokenLink('confirm_missing'), // never registered
+      }),
+    ]);
+    const res = await reg.dispatch('prepare_orphan', { id: 'x' }, ctxWith(elicitReturning('accept')), SURFACE);
+    expect(parse(res)).toHaveProperty('approval_token'); // degraded, token still live
+  });
+
   it('token mode bypasses elicitation entirely', async () => {
     const reg = buildRegistry();
     const elicit = elicitReturning('accept');
@@ -209,6 +242,70 @@ describe('dispatch elicitation interceptor', () => {
     const res = await reg.dispatch('prepare_a', { override_id: 'ov1' }, ctxWith(undefined, 'elicit'), SURFACE);
     expect(confirmCalls).toEqual([]);
     expect(parse(res)).toHaveProperty('approval_token');
+  });
+});
+
+describe('elicit-link factories — edge branches', () => {
+  const r = (obj: unknown): ToolResult => json(obj);
+  const noText: ToolResult = { content: [] };
+  const badJson: ToolResult = { content: [{ type: 'text', text: '{not json' }] };
+
+  it('approvalTokenLink: no token / empty content / bad JSON → [] and null token', () => {
+    const link = approvalTokenLink('confirm_x');
+    expect(link.collectTokenIds(r({ nope: 1 }))).toEqual([]);
+    expect(link.collectTokenIds(noText)).toEqual([]);
+    expect(link.collectTokenIds(badJson)).toEqual([]);
+    expect(link.buildParams({}, r({ nope: 1 }))).toEqual({ approval_token: null });
+    // empty-string token is treated as absent
+    expect(link.collectTokenIds(r({ approval_token: '' }))).toEqual([]);
+  });
+
+  it('approvalTokenLink: reads token_id when approval_token is absent', () => {
+    expect(approvalTokenLink('confirm_x').collectTokenIds(r({ token_id: 'abc' }))).toEqual(['abc']);
+  });
+
+  it('tokenIdLink: copies present fields, omits missing ones, tolerates missing params', () => {
+    const link = tokenIdLink('confirm_x', ['folder_id']);
+    expect(link.buildParams({ folder_id: 'f1' }, r({ token_id: 't1' }))).toEqual({ token_id: 't1', folder_id: 'f1' });
+    // missing copy field → omitted (not undefined)
+    expect(link.buildParams({}, r({ token_id: 't1' }))).toEqual({ token_id: 't1' });
+    // params null → pick's `?? {}` branch
+    expect(link.buildParams(undefined as never, r({ token_id: 't1' }))).toEqual({ token_id: 't1' });
+  });
+
+  it('batchLink: maps email.id, falls back to email_id, drops malformed but keeps all token_ids', () => {
+    const link = batchLink('confirm_batch_operation');
+    const result = r({ tokens: [
+      { token_id: 'a', email: { id: 'e1' } },   // email.id path
+      { token_id: 'b', email_id: 'e2' },         // email_id fallback path
+      { token_id: 'c', email: { subject: 'no id' } }, // malformed id → pair dropped
+      { email: { id: 'e4' } },                   // no token_id → ignored entirely
+    ] });
+    expect(link.buildParams({}, result)).toEqual({ tokens: [
+      { token_id: 'a', email_id: 'e1' },
+      { token_id: 'b', email_id: 'e2' },
+    ] });
+    // collectTokenIds is authoritative: every entry WITH a token_id, even the malformed-id one.
+    expect(link.collectTokenIds(result)).toEqual(['a', 'b', 'c']);
+    // non-array / missing tokens → []
+    expect(link.collectTokenIds(r({ tokens: 'oops' }))).toEqual([]);
+    expect(link.buildParams({}, r({}))).toEqual({ tokens: [] });
+  });
+});
+
+describe('surface backend filtering', () => {
+  it('a tool advertising no matching backend is not exposed and is not available', async () => {
+    const reg = new ToolRegistry();
+    reg.register([
+      defineTool({
+        name: 'no_backend', description: '', input: z.strictObject({}),
+        annotations: {}, destructive: false, presets: [], backends: [],
+        handler: () => json({ ok: true }),
+      }),
+    ]);
+    expect(reg.isExposed('no_backend', SURFACE)).toBe(false);
+    await expect(reg.dispatch('no_backend', {}, ctxWith(undefined, 'token'), SURFACE))
+      .rejects.toThrow(/not available/);
   });
 });
 

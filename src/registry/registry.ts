@@ -20,6 +20,8 @@ import type {
   ToolContext,
   ToolDefinition,
   ToolResult,
+  ElicitLink,
+  Elicitor,
 } from './types.js';
 
 /** Options controlling which tools are exposed to a client. */
@@ -142,7 +144,7 @@ export class ToolRegistry {
     // (onElicit), when the server is in elicit mode and the client can elicit.
     // Everything else runs the handler directly — an unchanged fast path.
     if (def.onElicit != null && ctx.confirmMode === 'elicit' && ctx.elicit != null) {
-      return this.dispatchWithElicitation(def, params, ctx);
+      return this.dispatchWithElicitation(def, params, ctx, def.onElicit, ctx.elicit);
     }
     return def.handler(ctx, params);
   }
@@ -161,14 +163,9 @@ export class ToolRegistry {
     def: ToolDefinition,
     prepareParams: unknown,
     ctx: ToolContext,
+    link: ElicitLink,
+    elicit: Elicitor,
   ): Promise<ToolResult> {
-    const link = def.onElicit;
-    const elicit = ctx.elicit;
-    // Narrowing for the type checker; the caller already verified both.
-    if (link == null || elicit == null) {
-      return def.handler(ctx, prepareParams);
-    }
-
     const prepareResult = await def.handler(ctx, prepareParams);
     const tokenIds = link.collectTokenIds(prepareResult);
     // No token in the prepare output → nothing to gate/execute; degrade.
