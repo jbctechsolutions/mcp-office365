@@ -22,6 +22,7 @@ import { taskAttachmentsToolDefinitions } from '../tools/task-attachments.js';
 import { peopleToolDefinitions } from '../tools/people.js';
 import { plannerVisualizationToolDefinitions } from '../tools/planner-visualization.js';
 import { meetingsToolDefinitions } from '../tools/meetings.js';
+import { onenoteToolDefinitions } from '../tools/onenote.js';
 import { sharePointToolDefinitions } from '../tools/sharepoint.js';
 import { teamsToolDefinitions } from '../tools/teams.js';
 import { plannerToolDefinitions } from '../tools/planner.js';
@@ -52,6 +53,7 @@ export function allToolDefinitions(): ToolDefinition[] {
     ...peopleToolDefinitions(),
     ...plannerVisualizationToolDefinitions(),
     ...meetingsToolDefinitions(),
+    ...onenoteToolDefinitions(),
     ...sharePointToolDefinitions(),
     ...teamsToolDefinitions(),
     ...plannerToolDefinitions(),

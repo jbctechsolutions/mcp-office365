@@ -2252,6 +2252,90 @@ export class GraphClient {
     const client = await this.getClient();
     return await client.api(`/drives/${driveId}/items/${itemId}/content`).responseType(ResponseType.ARRAYBUFFER).get() as ArrayBuffer;
   }
+
+  // ===========================================================================
+  // OneNote
+  // ===========================================================================
+
+  /**
+   * Lists all OneNote notebooks for the current user.
+   */
+  async listNotebooks(): Promise<MicrosoftGraph.Notebook[]> {
+    const client = await this.getClient();
+    const response = await client.api('/me/onenote/notebooks').get() as PageCollection;
+    return response.value as MicrosoftGraph.Notebook[];
+  }
+
+  /**
+   * Lists OneNote sections, optionally scoped to a notebook.
+   */
+  async listNoteSections(notebookGraphId?: string): Promise<MicrosoftGraph.OnenoteSection[]> {
+    const client = await this.getClient();
+    const apiPath = notebookGraphId != null
+      ? `/me/onenote/notebooks/${notebookGraphId}/sections`
+      : '/me/onenote/sections';
+    const response = await client.api(apiPath).get() as PageCollection;
+    return response.value as MicrosoftGraph.OnenoteSection[];
+  }
+
+  /**
+   * Lists OneNote pages, optionally scoped to a section.
+   */
+  async listNotePages(sectionGraphId?: string): Promise<MicrosoftGraph.OnenotePage[]> {
+    const client = await this.getClient();
+    if (sectionGraphId != null) {
+      const response = await client.api(`/me/onenote/sections/${sectionGraphId}/pages`).get() as PageCollection;
+      return response.value as MicrosoftGraph.OnenotePage[];
+    }
+    const response = await client
+      .api('/me/onenote/pages')
+      .top(50)
+      .orderby('lastModifiedDateTime desc')
+      .get() as PageCollection;
+    return response.value as MicrosoftGraph.OnenotePage[];
+  }
+
+  /**
+   * Gets a OneNote page's metadata.
+   */
+  async getNotePage(pageGraphId: string): Promise<MicrosoftGraph.OnenotePage> {
+    const client = await this.getClient();
+    return await client.api(`/me/onenote/pages/${pageGraphId}`).get() as MicrosoftGraph.OnenotePage;
+  }
+
+  /**
+   * Gets a OneNote page's HTML content.
+   */
+  async getNotePageContent(pageGraphId: string): Promise<string> {
+    const client = await this.getClient();
+    return await client
+      .api(`/me/onenote/pages/${pageGraphId}/content`)
+      .responseType(ResponseType.TEXT)
+      .get() as string;
+  }
+
+  /**
+   * Searches OneNote pages by keyword.
+   */
+  async searchNotePages(query: string): Promise<MicrosoftGraph.OnenotePage[]> {
+    const client = await this.getClient();
+    const response = await client
+      .api('/me/onenote/pages')
+      .search(`"${query}"`)
+      .get() as PageCollection;
+    return response.value as MicrosoftGraph.OnenotePage[];
+  }
+
+  /**
+   * Creates a new OneNote page in a section from raw HTML.
+   */
+  async createNotePage(sectionGraphId: string, html: string): Promise<MicrosoftGraph.OnenotePage> {
+    const client = await this.getClient();
+    return await client
+      .api(`/me/onenote/sections/${sectionGraphId}/pages`)
+      .header('Content-Type', 'text/html')
+      .post(html) as MicrosoftGraph.OnenotePage;
+  }
 }
 
 /**

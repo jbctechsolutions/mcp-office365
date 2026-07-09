@@ -82,6 +82,7 @@ import { TaskAttachmentsTools } from './tools/task-attachments.js';
 import { TeamsTools } from './tools/teams.js';
 import { PeopleTools } from './tools/people.js';
 import { MeetingsTools } from './tools/meetings.js';
+import { OneNoteTools } from './tools/onenote.js';
 import { ExcelTools } from './tools/excel.js';
 import { OneDriveTools } from './tools/onedrive.js';
 import { PlannerTools } from './tools/planner.js';
@@ -210,6 +211,7 @@ export function createServer(options: ServerOptions = {}): Server {
   let plannerTools: PlannerTools | null = null;
   let plannerVisualizationTools: PlannerVisualizationTools | null = null;
   let meetingsTools: MeetingsTools | null = null;
+  let onenoteTools: OneNoteTools | null = null;
   let oneDriveTools: OneDriveTools | null = null;
   let sharePointTools: SharePointTools | null = null;
   let excelTools: ExcelTools | null = null;
@@ -306,6 +308,7 @@ export function createServer(options: ServerOptions = {}): Server {
     plannerTools = new PlannerTools(graphRepository, tokenManager);
     plannerVisualizationTools = new PlannerVisualizationTools(graphRepository);
     meetingsTools = new MeetingsTools(graphRepository);
+    onenoteTools = new OneNoteTools(graphRepository);
     oneDriveTools = new OneDriveTools(graphRepository, tokenManager);
     sharePointTools = new SharePointTools(graphRepository);
     excelTools = new ExcelTools(graphRepository, tokenManager);
@@ -348,6 +351,7 @@ export function createServer(options: ServerOptions = {}): Server {
         && peopleTools != null
         && plannerVisualizationTools != null
         && meetingsTools != null
+        && onenoteTools != null
         && sharePointTools != null
         && teamsTools != null
         && plannerTools != null
@@ -375,6 +379,7 @@ export function createServer(options: ServerOptions = {}): Server {
               people: peopleTools,
               plannerVisualization: plannerVisualizationTools,
               meetings: meetingsTools,
+              onenote: onenoteTools,
               sharePoint: sharePointTools,
               teams: teamsTools,
               planner: plannerTools,

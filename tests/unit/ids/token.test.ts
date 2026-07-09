@@ -37,6 +37,23 @@ describe('ids/token — self-encoding', () => {
     expect(mintSelfEncoded('driveItem', 'AAA').startsWith('dr_')).toBe(true);
   });
 
+  it('round-trips OneNote entities (notebook/section/page) with their nb_/ns_/np_ prefixes', () => {
+    const graphId = '0-ABC123!456';
+    const cases: Array<[EntityType, string]> = [
+      ['noteNotebook', 'nb_'],
+      ['noteSection', 'ns_'],
+      ['notePage', 'np_'],
+    ];
+    for (const [entity, prefix] of cases) {
+      const token = mintSelfEncoded(entity, graphId);
+      expect(token.startsWith(prefix)).toBe(true);
+      const parsed = parseToken(token);
+      expect(parsed?.kind).toBe('self');
+      expect(parsed?.entityType).toBe(entity);
+      expect(parsed?.graphId).toBe(graphId);
+    }
+  });
+
   it('preserves Graph IDs containing base64url special chars (_ and -)', () => {
     // base64url payloads themselves contain _ / -, so a first-underscore split
     // must not corrupt the payload.
