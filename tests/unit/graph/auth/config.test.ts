@@ -51,8 +51,12 @@ describe('graph/auth/config', () => {
       expect(GRAPH_SCOPES).toContain('Group.Read.All');
     });
 
-    it('has exactly 18 scopes', () => {
-      expect(GRAPH_SCOPES).toHaveLength(18);
+    it('includes the OneNote scope (list/get/search + create pages)', () => {
+      expect(GRAPH_SCOPES).toContain('Notes.ReadWrite');
+    });
+
+    it('has exactly 19 scopes', () => {
+      expect(GRAPH_SCOPES).toHaveLength(19);
     });
   });
 
