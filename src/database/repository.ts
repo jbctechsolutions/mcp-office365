@@ -29,7 +29,9 @@ export interface FolderRow {
 }
 
 export interface EmailRow {
-  readonly id: number;
+  // Durable string token (`em_…`) on the Graph backend (U5); numeric on the
+  // AppleScript/SQLite backend (D4).
+  readonly id: string | number;
   readonly folderId: number;
   readonly subject: string | null;
   readonly sender: string | null;
@@ -121,7 +123,7 @@ export interface IRepository {
   listUnreadEmails(folderId: number, limit: number, offset: number): EmailRow[];
   searchEmails(query: string, limit: number): EmailRow[];
   searchEmailsInFolder(folderId: number, query: string, limit: number): EmailRow[];
-  getEmail(id: number): EmailRow | undefined;
+  getEmail(id: string | number): EmailRow | undefined;
   getUnreadCount(): number;
   getUnreadCountByFolder(folderId: number): number;
 
@@ -159,14 +161,14 @@ export interface IRepository {
  */
 export interface IWriteableRepository extends IRepository {
   // Email organization
-  moveEmail(emailId: number, destinationFolderId: number): void;
-  deleteEmail(emailId: number): void;
-  archiveEmail(emailId: number): void;
-  junkEmail(emailId: number): void;
-  markEmailRead(emailId: number, isRead: boolean): void;
-  setEmailFlag(emailId: number, flagStatus: number): void;
-  setEmailCategories(emailId: number, categories: string[]): void;
-  setEmailImportance(emailId: number, importance: string): void;
+  moveEmail(emailId: string | number, destinationFolderId: number): void;
+  deleteEmail(emailId: string | number): void;
+  archiveEmail(emailId: string | number): void;
+  junkEmail(emailId: string | number): void;
+  markEmailRead(emailId: string | number, isRead: boolean): void;
+  setEmailFlag(emailId: string | number, flagStatus: number): void;
+  setEmailCategories(emailId: string | number, categories: string[]): void;
+  setEmailImportance(emailId: string | number, importance: string): void;
 
   // Folder management
   createFolder(name: string, parentFolderId?: number): FolderRow;
@@ -194,18 +196,18 @@ export type MaybePromise<T> = T | Promise<T>;
  */
 export interface IMailboxRepository {
   // Read
-  getEmail(id: number): MaybePromise<EmailRow | undefined>;
+  getEmail(id: string | number): MaybePromise<EmailRow | undefined>;
   getFolder(id: number): MaybePromise<FolderRow | undefined>;
 
   // Email organization
-  moveEmail(emailId: number, destinationFolderId: number): MaybePromise<void>;
-  deleteEmail(emailId: number): MaybePromise<void>;
-  archiveEmail(emailId: number): MaybePromise<void>;
-  junkEmail(emailId: number): MaybePromise<void>;
-  markEmailRead(emailId: number, isRead: boolean): MaybePromise<void>;
-  setEmailFlag(emailId: number, flagStatus: number): MaybePromise<void>;
-  setEmailCategories(emailId: number, categories: string[]): MaybePromise<void>;
-  setEmailImportance(emailId: number, importance: string): MaybePromise<void>;
+  moveEmail(emailId: string | number, destinationFolderId: number): MaybePromise<void>;
+  deleteEmail(emailId: string | number): MaybePromise<void>;
+  archiveEmail(emailId: string | number): MaybePromise<void>;
+  junkEmail(emailId: string | number): MaybePromise<void>;
+  markEmailRead(emailId: string | number, isRead: boolean): MaybePromise<void>;
+  setEmailFlag(emailId: string | number, flagStatus: number): MaybePromise<void>;
+  setEmailCategories(emailId: string | number, categories: string[]): MaybePromise<void>;
+  setEmailImportance(emailId: string | number, importance: string): MaybePromise<void>;
 
   // Folder management
   createFolder(name: string, parentFolderId?: number): MaybePromise<FolderRow>;
@@ -277,7 +279,7 @@ export class OutlookRepository implements IRepository {
     });
   }
 
-  getEmail(id: number): EmailRow | undefined {
+  getEmail(id: string | number): EmailRow | undefined {
     return this.connection.execute((db) => {
       const stmt = db.prepare(queries.GET_EMAIL);
       return stmt.get(id) as EmailRow | undefined;

@@ -11,6 +11,7 @@ import { describe, it, expect } from 'vitest';
 import type * as MicrosoftGraph from '@microsoft/microsoft-graph-types';
 import { mapMessageToEmailRow } from '../../../../src/graph/mappers/email-mapper.js';
 import { hashStringToNumber } from '../../../../src/graph/mappers/utils.js';
+import { mintSelfEncoded } from '../../../../src/ids/token.js';
 
 describe('graph/mappers/email-mapper', () => {
   describe('mapMessageToEmailRow', () => {
@@ -41,7 +42,7 @@ describe('graph/mappers/email-mapper', () => {
 
       const result = mapMessageToEmailRow(message);
 
-      expect(result.id).toBe(hashStringToNumber('msg-123'));
+      expect(result.id).toBe(mintSelfEncoded('message', 'msg-123'));
       expect(result.subject).toBe('Test Email');
       expect(result.sender).toBe('Sender Name');
       expect(result.senderAddress).toBe('sender@example.com');
@@ -89,7 +90,7 @@ describe('graph/mappers/email-mapper', () => {
 
       const result = mapMessageToEmailRow(message);
 
-      expect(result.id).toBe(hashStringToNumber(''));
+      expect(result.id).toBe('');
       expect(result.dataFilePath).toBe('graph-email:');
     });
 

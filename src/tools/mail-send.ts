@@ -52,15 +52,15 @@ declare module '../registry/types.js' {
  * Matches the async methods on GraphRepository.
  */
 /**
- * Result of creating a draft, containing both the numeric and Graph IDs.
+ * Result of creating a draft: a durable `em_` token plus the raw Graph ID.
  */
 export interface CreateDraftResult {
-  numericId: number;
+  token: string;
   graphId: string;
 }
 
 export interface IMailSendRepository {
-  getEmailAsync(id: number): Promise<EmailRow | undefined>;
+  getEmailAsync(id: string | number): Promise<EmailRow | undefined>;
   createDraftAsync(params: {
     subject: string;
     body: string;
@@ -69,9 +69,9 @@ export interface IMailSendRepository {
     cc?: string[];
     bcc?: string[];
   }): Promise<CreateDraftResult>;
-  updateDraftAsync(draftId: number, updates: Record<string, unknown>): Promise<void>;
+  updateDraftAsync(draftId: string | number, updates: Record<string, unknown>): Promise<void>;
   listDraftsAsync(limit: number, offset: number): Promise<EmailRow[]>;
-  sendDraftAsync(draftId: number): Promise<void>;
+  sendDraftAsync(draftId: string | number): Promise<void>;
   sendMailAsync(params: {
     subject: string;
     body: string;
@@ -80,19 +80,25 @@ export interface IMailSendRepository {
     cc?: string[];
     bcc?: string[];
   }): Promise<void>;
-  replyMessageAsync(messageId: number, comment: string, replyAll: boolean): Promise<void>;
-  forwardMessageAsync(messageId: number, toRecipients: string[], comment?: string): Promise<void>;
-  replyAsDraftAsync(messageId: number, replyAll?: boolean, comment?: string, bodyType?: string): Promise<CreateDraftResult>;
-  forwardAsDraftAsync(messageId: number, toRecipients?: string[], comment?: string, bodyType?: string): Promise<CreateDraftResult>;
+  replyMessageAsync(messageId: string | number, comment: string, replyAll: boolean): Promise<void>;
+  forwardMessageAsync(messageId: string | number, toRecipients: string[], comment?: string): Promise<void>;
+  replyAsDraftAsync(messageId: string | number, replyAll?: boolean, comment?: string, bodyType?: string): Promise<CreateDraftResult>;
+  forwardAsDraftAsync(messageId: string | number, toRecipients?: string[], comment?: string, bodyType?: string): Promise<CreateDraftResult>;
   /** Returns the Graph client for direct API operations (e.g., attachment uploads). */
   getGraphClient(): GraphClient;
-  /** Returns the Graph string ID for a cached draft numeric ID. */
-  getGraphIdForDraft(draftId: number): string | undefined;
+  /** Resolves a draft id (durable `em_` token or raw Graph id) to its Graph id. */
+  getGraphIdForDraft(draftId: string | number): string;
 }
 
 // =============================================================================
 // Input Schemas -- Non-Destructive Operations
 // =============================================================================
+
+/**
+ * Shared draft/message id schema: a durable `em_` token (Graph, U5) or a legacy
+ * positive-integer id.
+ */
+const EmailIdSchema = z.union([z.string().min(1), z.number().int().positive()]);
 
 const AttachmentInput = z.strictObject({
   file_path: z.string().describe('Absolute path to the file to attach'),
@@ -125,7 +131,7 @@ export const CreateDraftInput = z
 
 export const UpdateDraftInput = z
   .strictObject({
-    draft_id: z.number().int().positive().describe('The draft ID to update'),
+    draft_id: EmailIdSchema.describe('The draft ID to update'),
     to: z.array(z.string().email()).optional().describe('To recipients'),
     cc: z.array(z.string().email()).optional().describe('CC recipients'),
     bcc: z.array(z.string().email()).optional().describe('BCC recipients'),
@@ -140,14 +146,14 @@ export const UpdateDraftInput = z
   });
 
 export const AddDraftAttachmentInput = z.strictObject({
-  draft_id: z.number().int().positive().describe('The draft ID to add attachment to'),
+  draft_id: EmailIdSchema.describe('The draft ID to add attachment to'),
   file_path: z.string().describe('Absolute path to the file to attach'),
   name: z.string().optional().describe('Override filename'),
   content_type: z.string().optional().describe('Override MIME type'),
 });
 
 export const AddDraftInlineImageInput = z.strictObject({
-  draft_id: z.number().int().positive().describe('The draft ID to add inline image to'),
+  draft_id: EmailIdSchema.describe('The draft ID to add inline image to'),
   file_path: z.string().describe('Absolute path to the image file'),
   content_id: z.string().describe('Content-ID for referencing in HTML (use in <img src="cid:content_id">)'),
 });
@@ -163,12 +169,12 @@ export const ListDraftsInput = z.strictObject({
 
 // Send Draft
 export const PrepareSendDraftInput = z.strictObject({
-  draft_id: z.number().int().positive().describe('The draft ID to send'),
+  draft_id: EmailIdSchema.describe('The draft ID to send'),
 });
 
 export const ConfirmSendDraftInput = z.strictObject({
   token_id: z.uuid().describe('Approval token from prepare_send_draft'),
-  draft_id: z.number().int().positive().describe('The draft ID to send'),
+  draft_id: EmailIdSchema.describe('The draft ID to send'),
 });
 
 // Send Email (direct)
@@ -195,26 +201,26 @@ export const ConfirmSendEmailInput = z.strictObject({
 
 // Reply Email
 export const PrepareReplyEmailInput = z.strictObject({
-  message_id: z.number().int().positive().describe('The message ID to reply to'),
+  message_id: EmailIdSchema.describe('The message ID to reply to'),
   comment: z.string().describe('Reply body'),
   reply_all: z.boolean().default(true).describe('Reply to all recipients (default true)'),
 });
 
 export const ConfirmReplyEmailInput = z.strictObject({
   token_id: z.uuid().describe('Approval token from prepare_reply_email'),
-  message_id: z.number().int().positive().describe('The message ID being replied to'),
+  message_id: EmailIdSchema.describe('The message ID being replied to'),
 });
 
 // Forward Email
 export const PrepareForwardEmailInput = z.strictObject({
-  message_id: z.number().int().positive().describe('The message ID to forward'),
+  message_id: EmailIdSchema.describe('The message ID to forward'),
   to_recipients: z.array(z.string().email()).min(1).describe('Forward to recipients'),
   comment: z.string().optional().describe('Optional comment to include'),
 });
 
 export const ConfirmForwardEmailInput = z.strictObject({
   token_id: z.uuid().describe('Approval token from prepare_forward_email'),
-  message_id: z.number().int().positive().describe('The message ID being forwarded'),
+  message_id: EmailIdSchema.describe('The message ID being forwarded'),
 });
 
 // =============================================================================
@@ -222,7 +228,7 @@ export const ConfirmForwardEmailInput = z.strictObject({
 // =============================================================================
 
 export const ReplyAsDraftInput = z.strictObject({
-  message_id: z.number().int().positive().describe('The message ID to reply to'),
+  message_id: EmailIdSchema.describe('The message ID to reply to'),
   comment: z.string().optional().describe('Initial reply body text'),
   reply_all: z.boolean().default(false).describe('Reply to all recipients (default: false)'),
   body_type: z.enum(['text', 'html']).default('html').describe('Body content type (default: text)'),
@@ -230,7 +236,7 @@ export const ReplyAsDraftInput = z.strictObject({
 });
 
 export const ForwardAsDraftInput = z.strictObject({
-  message_id: z.number().int().positive().describe('The message ID to forward'),
+  message_id: EmailIdSchema.describe('The message ID to forward'),
   to_recipients: z.array(z.string().email()).optional().describe('Forward recipients'),
   comment: z.string().optional().describe('Initial forward body text'),
   body_type: z.enum(['text', 'html']).default('html').describe('Body content type (default: text)'),
@@ -267,7 +273,7 @@ export type ForwardAsDraftParams = z.infer<typeof ForwardAsDraftInput>;
 // =============================================================================
 
 function draftPreview(row: EmailRow): {
-  id: number;
+  id: string | number;
   subject: string | null;
   to: string | null;
   cc: string | null;
@@ -281,7 +287,7 @@ function draftPreview(row: EmailRow): {
 }
 
 function messagePreview(row: EmailRow): {
-  id: number;
+  id: string | number;
   subject: string | null;
   sender: string | null;
   senderAddress: string | null;
@@ -343,13 +349,13 @@ export class MailSendTools {
   // Non-Destructive Operations
   // ---------------------------------------------------------------------------
 
-  async createDraft(params: CreateDraftParams): Promise<{ success: boolean; draft_id: number }> {
+  async createDraft(params: CreateDraftParams): Promise<{ success: boolean; draft_id: string }> {
     const rawBody =
       params.body_file != null
         ? fs.readFileSync(params.body_file, 'utf-8')
         : params.body!;
     const body = appendSignature(rawBody, params.body_type, params.include_signature);
-    const { numericId, graphId } = await this.repository.createDraftAsync({
+    const { token, graphId } = await this.repository.createDraftAsync({
       subject: params.subject,
       body,
       bodyType: params.body_type,
@@ -372,7 +378,7 @@ export class MailSendTools {
       }
     }
 
-    return { success: true, draft_id: numericId };
+    return { success: true, draft_id: token };
   }
 
   async updateDraft(params: UpdateDraftParams): Promise<{ success: boolean; message: string }> {
@@ -684,13 +690,13 @@ export class MailSendTools {
 
   async replyAsDraft(params: z.infer<typeof ReplyAsDraftInput>): Promise<{
     success: boolean;
-    draft_id: number;
+    draft_id: string;
     message: string;
   }> {
     const baseComment = params.comment ?? (params.include_signature ? '' : undefined);
     const comment =
       baseComment != null ? appendSignature(baseComment, params.body_type, params.include_signature) : baseComment;
-    const { numericId } = await this.repository.replyAsDraftAsync(
+    const { token } = await this.repository.replyAsDraftAsync(
       params.message_id,
       params.reply_all,
       comment,
@@ -698,20 +704,20 @@ export class MailSendTools {
     );
     return {
       success: true,
-      draft_id: numericId,
+      draft_id: token,
       message: 'Reply draft created. Use update_draft to edit, then prepare_send_draft or prepare_send_email to send.',
     };
   }
 
   async forwardAsDraft(params: z.infer<typeof ForwardAsDraftInput>): Promise<{
     success: boolean;
-    draft_id: number;
+    draft_id: string;
     message: string;
   }> {
     const baseComment = params.comment ?? (params.include_signature ? '' : undefined);
     const comment =
       baseComment != null ? appendSignature(baseComment, params.body_type, params.include_signature) : baseComment;
-    const { numericId } = await this.repository.forwardAsDraftAsync(
+    const { token } = await this.repository.forwardAsDraftAsync(
       params.message_id,
       params.to_recipients,
       comment,
@@ -719,7 +725,7 @@ export class MailSendTools {
     );
     return {
       success: true,
-      draft_id: numericId,
+      draft_id: token,
       message: 'Forward draft created. Use update_draft to edit, then prepare_send_draft or prepare_send_email to send.',
     };
   }
@@ -750,7 +756,7 @@ export class MailSendTools {
   // Private Helpers
   // ---------------------------------------------------------------------------
 
-  private async requireEmail(emailId: number): Promise<EmailRow> {
+  private async requireEmail(emailId: string | number): Promise<EmailRow> {
     const email = await this.repository.getEmailAsync(emailId);
     if (email == null) {
       throw new NotFoundError('Email', emailId);
@@ -765,7 +771,7 @@ export class MailSendTools {
   private async consumeAndVerifyDraft(
     tokenId: string,
     operation: OperationType,
-    draftId: number
+    draftId: string | number
   ): Promise<ApprovalToken> {
     const result = this.tokenManager.consumeToken(tokenId, operation, draftId);
     if (!result.valid) {
@@ -812,7 +818,7 @@ export class MailSendTools {
   private consumeTokenForMessage(
     tokenId: string,
     operation: OperationType,
-    messageId: number
+    messageId: string | number
   ): ApprovalToken {
     const result = this.tokenManager.consumeToken(tokenId, operation, messageId);
     if (!result.valid) {

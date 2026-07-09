@@ -156,7 +156,7 @@ describe('MailSendTools', () => {
 
   describe('createDraft', () => {
     it('creates a draft and returns the draft_id', async () => {
-      (repo.createDraftAsync as ReturnType<typeof vi.fn>).mockResolvedValue({ numericId: 42, graphId: 'AAA-graph-42' });
+      (repo.createDraftAsync as ReturnType<typeof vi.fn>).mockResolvedValue({ token: 'tok-42', graphId: 'AAA-graph-42' });
 
       const result = await tools.createDraft({
         subject: 'Hello',
@@ -165,7 +165,7 @@ describe('MailSendTools', () => {
         to: ['bob@example.com'],
       });
 
-      expect(result).toEqual({ success: true, draft_id: 42 });
+      expect(result).toEqual({ success: true, draft_id: 'tok-42' });
       expect(repo.createDraftAsync).toHaveBeenCalledWith({
         subject: 'Hello',
         body: 'World',
@@ -177,7 +177,7 @@ describe('MailSendTools', () => {
     });
 
     it('passes cc and bcc when provided', async () => {
-      (repo.createDraftAsync as ReturnType<typeof vi.fn>).mockResolvedValue({ numericId: 43, graphId: 'AAA-graph-43' });
+      (repo.createDraftAsync as ReturnType<typeof vi.fn>).mockResolvedValue({ token: 'tok-43', graphId: 'AAA-graph-43' });
 
       await tools.createDraft({
         subject: 'Hello',
@@ -199,7 +199,7 @@ describe('MailSendTools', () => {
     });
 
     it('uploads attachments after creating draft when provided', async () => {
-      (repo.createDraftAsync as ReturnType<typeof vi.fn>).mockResolvedValue({ numericId: 44, graphId: 'AAA-graph-44' });
+      (repo.createDraftAsync as ReturnType<typeof vi.fn>).mockResolvedValue({ token: 'tok-44', graphId: 'AAA-graph-44' });
       vi.mocked(uploadAttachment).mockResolvedValue(undefined);
 
       const result = await tools.createDraft({
@@ -213,7 +213,7 @@ describe('MailSendTools', () => {
         ],
       });
 
-      expect(result).toEqual({ success: true, draft_id: 44 });
+      expect(result).toEqual({ success: true, draft_id: 'tok-44' });
       expect(uploadAttachment).toHaveBeenCalledTimes(2);
       expect(uploadAttachment).toHaveBeenCalledWith(
         mockGraphClient, 'AAA-graph-44', '/tmp/report.pdf', undefined, undefined
@@ -224,7 +224,7 @@ describe('MailSendTools', () => {
     });
 
     it('does not call uploadAttachment when no attachments provided', async () => {
-      (repo.createDraftAsync as ReturnType<typeof vi.fn>).mockResolvedValue({ numericId: 45, graphId: 'AAA-graph-45' });
+      (repo.createDraftAsync as ReturnType<typeof vi.fn>).mockResolvedValue({ token: 'tok-45', graphId: 'AAA-graph-45' });
       vi.mocked(uploadAttachment).mockClear();
 
       await tools.createDraft({
@@ -238,7 +238,7 @@ describe('MailSendTools', () => {
 
     it('reads body from body_file when provided and uses it for the draft', async () => {
       vi.mocked(mockAppendSignature).mockImplementation((b) => b);
-      (repo.createDraftAsync as ReturnType<typeof vi.fn>).mockResolvedValue({ numericId: 46, graphId: 'AAA-graph-46' });
+      (repo.createDraftAsync as ReturnType<typeof vi.fn>).mockResolvedValue({ token: 'tok-46', graphId: 'AAA-graph-46' });
       mockReadFileSync.mockReturnValue('<p>HTML from file</p>');
 
       await tools.createDraft({
@@ -254,7 +254,7 @@ describe('MailSendTools', () => {
     });
 
     it('uploads inline_images after creating draft when provided', async () => {
-      (repo.createDraftAsync as ReturnType<typeof vi.fn>).mockResolvedValue({ numericId: 47, graphId: 'AAA-graph-47' });
+      (repo.createDraftAsync as ReturnType<typeof vi.fn>).mockResolvedValue({ token: 'tok-47', graphId: 'AAA-graph-47' });
       vi.mocked(uploadInlineAttachment).mockResolvedValue(undefined);
 
       await tools.createDraft({
@@ -559,7 +559,7 @@ describe('MailSendTools', () => {
     });
 
     it('confirmSendEmail with attachments creates draft, uploads, and sends draft', async () => {
-      (repo.createDraftAsync as ReturnType<typeof vi.fn>).mockResolvedValue({ numericId: 50, graphId: 'AAA-graph-50' });
+      (repo.createDraftAsync as ReturnType<typeof vi.fn>).mockResolvedValue({ token: 'tok-50', graphId: 'AAA-graph-50' });
       vi.mocked(uploadAttachment).mockResolvedValue(undefined);
 
       const prepared = await tools.prepareSendEmail({
@@ -739,7 +739,7 @@ describe('MailSendTools', () => {
   describe('replyAsDraft', () => {
     it('creates a reply draft and returns draft info', async () => {
       (repo.replyAsDraftAsync as ReturnType<typeof vi.fn>).mockResolvedValue({
-        numericId: 101,
+        token: 'tok-101',
         graphId: 'draft-reply-graph-101',
       });
 
@@ -752,14 +752,14 @@ describe('MailSendTools', () => {
       expect(repo.replyAsDraftAsync).toHaveBeenCalledWith(42, false, undefined, 'text');
       expect(result).toEqual({
         success: true,
-        draft_id: 101,
+        draft_id: 'tok-101',
         message: 'Reply draft created. Use update_draft to edit, then prepare_send_draft or prepare_send_email to send.',
       });
     });
 
     it('passes comment, reply_all, and body_type to repository', async () => {
       (repo.replyAsDraftAsync as ReturnType<typeof vi.fn>).mockResolvedValue({
-        numericId: 102,
+        token: 'tok-102',
         graphId: 'draft-ra-graph-102',
       });
 
@@ -775,7 +775,7 @@ describe('MailSendTools', () => {
 
     it('passes html body_type through to repository', async () => {
       (repo.replyAsDraftAsync as ReturnType<typeof vi.fn>).mockResolvedValue({
-        numericId: 103,
+        token: 'tok-103',
         graphId: 'draft-ra-graph-103',
       });
 
@@ -795,7 +795,7 @@ describe('MailSendTools', () => {
   describe('forwardAsDraft', () => {
     it('creates a forward draft and returns draft info', async () => {
       (repo.forwardAsDraftAsync as ReturnType<typeof vi.fn>).mockResolvedValue({
-        numericId: 201,
+        token: 'tok-201',
         graphId: 'draft-fwd-graph-201',
       });
 
@@ -807,14 +807,14 @@ describe('MailSendTools', () => {
       expect(repo.forwardAsDraftAsync).toHaveBeenCalledWith(42, undefined, undefined, 'text');
       expect(result).toEqual({
         success: true,
-        draft_id: 201,
+        draft_id: 'tok-201',
         message: 'Forward draft created. Use update_draft to edit, then prepare_send_draft or prepare_send_email to send.',
       });
     });
 
     it('passes recipients, comment, and body_type to repository', async () => {
       (repo.forwardAsDraftAsync as ReturnType<typeof vi.fn>).mockResolvedValue({
-        numericId: 202,
+        token: 'tok-202',
         graphId: 'draft-fwd-graph-202',
       });
 
@@ -835,7 +835,7 @@ describe('MailSendTools', () => {
 
     it('passes html body_type through to repository', async () => {
       (repo.forwardAsDraftAsync as ReturnType<typeof vi.fn>).mockResolvedValue({
-        numericId: 203,
+        token: 'tok-203',
         graphId: 'draft-fwd-graph-203',
       });
 
@@ -1001,7 +1001,7 @@ describe('MailSendTools', () => {
   describe('signature auto-append', () => {
     it('appends signature to body in createDraft when include_signature is true', async () => {
       vi.mocked(appendSignature).mockReturnValue('Hello<br><br><p>-- Joel</p>');
-      (repo.createDraftAsync as ReturnType<typeof vi.fn>).mockResolvedValue({ numericId: 42, graphId: 'AAA' });
+      (repo.createDraftAsync as ReturnType<typeof vi.fn>).mockResolvedValue({ token: 'tok-42', graphId: 'AAA' });
 
       await tools.createDraft({
         subject: 'Test', body: 'Hello', body_type: 'html',
@@ -1016,7 +1016,7 @@ describe('MailSendTools', () => {
 
     it('does not append signature when include_signature is false', async () => {
       vi.mocked(appendSignature).mockReturnValue('Hello');
-      (repo.createDraftAsync as ReturnType<typeof vi.fn>).mockResolvedValue({ numericId: 42, graphId: 'AAA' });
+      (repo.createDraftAsync as ReturnType<typeof vi.fn>).mockResolvedValue({ token: 'tok-42', graphId: 'AAA' });
 
       await tools.createDraft({
         subject: 'Test', body: 'Hello', body_type: 'text',
@@ -1028,7 +1028,7 @@ describe('MailSendTools', () => {
 
     it('defaults include_signature to true in createDraft', async () => {
       vi.mocked(appendSignature).mockReturnValue('Hello');
-      (repo.createDraftAsync as ReturnType<typeof vi.fn>).mockResolvedValue({ numericId: 42, graphId: 'AAA' });
+      (repo.createDraftAsync as ReturnType<typeof vi.fn>).mockResolvedValue({ token: 'tok-42', graphId: 'AAA' });
 
       // Test input simulates Zod parsing which applies the default
       await tools.createDraft({ subject: 'Test', body: 'Hello', body_type: 'text', include_signature: true });
@@ -1049,7 +1049,7 @@ describe('MailSendTools', () => {
 
     it('appends signature in replyAsDraft with body_type', async () => {
       vi.mocked(appendSignature).mockReturnValue('reply text with sig');
-      (repo.replyAsDraftAsync as ReturnType<typeof vi.fn>).mockResolvedValue({ numericId: 10, graphId: 'BBB' });
+      (repo.replyAsDraftAsync as ReturnType<typeof vi.fn>).mockResolvedValue({ token: 'tok-10', graphId: 'BBB' });
 
       await tools.replyAsDraft({ message_id: 1, comment: 'reply text', body_type: 'html', include_signature: true });
 
@@ -1058,7 +1058,7 @@ describe('MailSendTools', () => {
 
     it('appends signature in forwardAsDraft with body_type', async () => {
       vi.mocked(appendSignature).mockReturnValue('fwd comment with sig');
-      (repo.forwardAsDraftAsync as ReturnType<typeof vi.fn>).mockResolvedValue({ numericId: 11, graphId: 'CCC' });
+      (repo.forwardAsDraftAsync as ReturnType<typeof vi.fn>).mockResolvedValue({ token: 'tok-11', graphId: 'CCC' });
 
       await tools.forwardAsDraft({ message_id: 1, comment: 'fwd comment', body_type: 'html', include_signature: true });
 

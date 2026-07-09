@@ -48,41 +48,47 @@ declare module '../registry/types.js' {
 // Input Schemas — Destructive Operations (Two-Phase)
 // =============================================================================
 
+/**
+ * Shared email id schema: a durable `em_` token (Graph, U5) or a legacy
+ * positive-integer id (AppleScript, D4).
+ */
+const EmailIdSchema = z.union([z.string().min(1), z.number().int().positive()]);
+
 export const PrepareDeleteEmailInput = z.strictObject({
-  email_id: z.number().int().positive().describe('The email ID to delete'),
+  email_id: EmailIdSchema.describe('The email ID to delete'),
 });
 
 export const ConfirmDeleteEmailInput = z.strictObject({
   token_id: z.uuid().describe('The approval token from prepare_delete_email'),
-  email_id: z.number().int().positive().describe('The email ID to delete'),
+  email_id: EmailIdSchema.describe('The email ID to delete'),
 });
 
 export const PrepareMoveEmailInput = z.strictObject({
-  email_id: z.number().int().positive().describe('The email ID to move'),
+  email_id: EmailIdSchema.describe('The email ID to move'),
   destination_folder_id: z.number().int().positive().describe('The destination folder ID'),
 });
 
 export const ConfirmMoveEmailInput = z.strictObject({
   token_id: z.uuid().describe('The approval token from prepare_move_email'),
-  email_id: z.number().int().positive().describe('The email ID to move'),
+  email_id: EmailIdSchema.describe('The email ID to move'),
 });
 
 export const PrepareArchiveEmailInput = z.strictObject({
-  email_id: z.number().int().positive().describe('The email ID to archive'),
+  email_id: EmailIdSchema.describe('The email ID to archive'),
 });
 
 export const ConfirmArchiveEmailInput = z.strictObject({
   token_id: z.uuid().describe('The approval token from prepare_archive_email'),
-  email_id: z.number().int().positive().describe('The email ID to archive'),
+  email_id: EmailIdSchema.describe('The email ID to archive'),
 });
 
 export const PrepareJunkEmailInput = z.strictObject({
-  email_id: z.number().int().positive().describe('The email ID to mark as junk'),
+  email_id: EmailIdSchema.describe('The email ID to mark as junk'),
 });
 
 export const ConfirmJunkEmailInput = z.strictObject({
   token_id: z.uuid().describe('The approval token from prepare_junk_email'),
-  email_id: z.number().int().positive().describe('The email ID to mark as junk'),
+  email_id: EmailIdSchema.describe('The email ID to mark as junk'),
 });
 
 export const PrepareDeleteFolderInput = z.strictObject({
@@ -105,7 +111,7 @@ export const ConfirmEmptyFolderInput = z.strictObject({
 
 export const PrepareBatchDeleteEmailsInput = z.strictObject({
   email_ids: z
-    .array(z.number().int().positive())
+    .array(EmailIdSchema)
     .min(1)
     .max(50)
     .describe('The email IDs to delete (max 50)'),
@@ -113,7 +119,7 @@ export const PrepareBatchDeleteEmailsInput = z.strictObject({
 
 export const PrepareBatchMoveEmailsInput = z.strictObject({
   email_ids: z
-    .array(z.number().int().positive())
+    .array(EmailIdSchema)
     .min(1)
     .max(50)
     .describe('The email IDs to move (max 50)'),
@@ -125,7 +131,7 @@ export const ConfirmBatchOperationInput = z.strictObject({
     .array(
       z.object({
         token_id: z.uuid().describe('The approval token'),
-        email_id: z.number().int().positive().describe('The email ID'),
+        email_id: EmailIdSchema.describe('The email ID'),
       })
     )
     .min(1)
@@ -138,15 +144,15 @@ export const ConfirmBatchOperationInput = z.strictObject({
 // =============================================================================
 
 export const MarkEmailReadInput = z.strictObject({
-  email_id: z.number().int().positive().describe('The email ID to mark as read'),
+  email_id: EmailIdSchema.describe('The email ID to mark as read'),
 });
 
 export const MarkEmailUnreadInput = z.strictObject({
-  email_id: z.number().int().positive().describe('The email ID to mark as unread'),
+  email_id: EmailIdSchema.describe('The email ID to mark as unread'),
 });
 
 export const SetEmailFlagInput = z.strictObject({
-  email_id: z.number().int().positive().describe('The email ID to flag'),
+  email_id: EmailIdSchema.describe('The email ID to flag'),
   flag_status: z
     .number()
     .int()
@@ -156,18 +162,18 @@ export const SetEmailFlagInput = z.strictObject({
 });
 
 export const ClearEmailFlagInput = z.strictObject({
-  email_id: z.number().int().positive().describe('The email ID to clear the flag from'),
+  email_id: EmailIdSchema.describe('The email ID to clear the flag from'),
 });
 
 export const SetEmailCategoriesInput = z.strictObject({
-  email_id: z.number().int().positive().describe('The email ID'),
+  email_id: EmailIdSchema.describe('The email ID'),
   categories: z
     .array(z.string().min(1))
     .describe('Categories to set (replaces existing). Use empty array to clear.'),
 });
 
 export const SetEmailImportanceInput = z.strictObject({
-  email_id: z.number().int().positive().describe('The email ID'),
+  email_id: EmailIdSchema.describe('The email ID'),
   importance: z.enum(['low', 'normal', 'high']).describe('Email importance level'),
 });
 
@@ -233,7 +239,7 @@ export type MoveFolderParams = z.infer<typeof MoveFolderInput>;
 // =============================================================================
 
 function emailPreview(row: EmailRow): {
-  id: number;
+  id: string | number;
   subject: string | null;
   sender: string | null;
   senderAddress: string | null;
@@ -568,7 +574,7 @@ export class MailboxOrganizationTools {
   }
 
   async confirmBatchOperation(params: ConfirmBatchOperationParams): Promise<{
-    results: Array<{ email_id: number; success: true } | { email_id: number; success: false; error: string }>;
+    results: Array<{ email_id: string | number; success: true } | { email_id: string | number; success: false; error: string }>;
     summary: { total: number; succeeded: number; failed: number };
   }> {
     const results = [];
@@ -685,7 +691,7 @@ export class MailboxOrganizationTools {
   // Private Helpers
   // ---------------------------------------------------------------------------
 
-  private async requireEmail(emailId: number): Promise<EmailRow> {
+  private async requireEmail(emailId: string | number): Promise<EmailRow> {
     const email = await this.repository.getEmail(emailId);
     if (email == null) {
       throw new NotFoundError('Email', emailId);
@@ -708,7 +714,7 @@ export class MailboxOrganizationTools {
   private async consumeAndVerifyEmail(
     tokenId: string,
     operation: OperationType,
-    emailId: number
+    emailId: string | number
   ): Promise<ApprovalToken> {
     const result = this.tokenManager.consumeToken(tokenId, operation, emailId);
     if (!result.valid) {

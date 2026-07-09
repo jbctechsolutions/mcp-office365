@@ -46,8 +46,6 @@ import * as path from 'path';
  */
 interface IdCache {
   folders: Map<number, string>;
-  messages: Map<number, string>;
-  conversations: Map<number, string>;
   tasks: Map<number, { taskListId: string; taskId: string }>;
   taskLists: Map<number, string>;
   attachments: Map<number, { messageId: string; attachmentId: string }>;
@@ -91,8 +89,6 @@ export class GraphRepository implements IRepository {
   private readonly deltaLinks: Map<number, string> = new Map();
   private readonly idCache: IdCache = {
     folders: new Map(),
-    messages: new Map(),
-    conversations: new Map(),
     tasks: new Map(),
     taskLists: new Map(),
     attachments: new Map(),
@@ -245,19 +241,8 @@ export class GraphRepository implements IRepository {
   }
 
   private async listEmailsWithGraphId(folderId: string, limit: number, offset: number): Promise<EmailRow[]> {
+    // Rows carry self-encoding em_ tokens (the mapper mints them) — no cache.
     const messages = await this.client.listMessages(folderId, limit, offset);
-
-    // Update ID cache
-    for (const message of messages) {
-      if (message.id != null) {
-        const numericId = hashStringToNumber(message.id);
-        this.idCache.messages.set(numericId, message.id);
-      }
-      if (message.conversationId != null) {
-        this.idCache.conversations.set(hashStringToNumber(message.conversationId), message.conversationId);
-      }
-    }
-
     return messages.map((m) => mapMessageToEmailRow(m, folderId));
   }
 
@@ -281,17 +266,6 @@ export class GraphRepository implements IRepository {
 
   private async listUnreadEmailsWithGraphId(folderId: string, limit: number, offset: number): Promise<EmailRow[]> {
     const messages = await this.client.listUnreadMessages(folderId, limit, offset);
-
-    for (const message of messages) {
-      if (message.id != null) {
-        const numericId = hashStringToNumber(message.id);
-        this.idCache.messages.set(numericId, message.id);
-      }
-      if (message.conversationId != null) {
-        this.idCache.conversations.set(hashStringToNumber(message.conversationId), message.conversationId);
-      }
-    }
-
     return messages.map((m) => mapMessageToEmailRow(m, folderId));
   }
 
@@ -301,17 +275,6 @@ export class GraphRepository implements IRepository {
 
   async searchEmailsAsync(query: string, limit: number): Promise<EmailRow[]> {
     const messages = await this.client.searchMessages(query, limit);
-
-    for (const message of messages) {
-      if (message.id != null) {
-        const numericId = hashStringToNumber(message.id);
-        this.idCache.messages.set(numericId, message.id);
-      }
-      if (message.conversationId != null) {
-        this.idCache.conversations.set(hashStringToNumber(message.conversationId), message.conversationId);
-      }
-    }
-
     return messages.map((m) => mapMessageToEmailRow(m));
   }
 
@@ -335,17 +298,6 @@ export class GraphRepository implements IRepository {
 
   private async searchEmailsInFolderWithGraphId(folderId: string, query: string, limit: number): Promise<EmailRow[]> {
     const messages = await this.client.searchMessagesInFolder(folderId, query, limit);
-
-    for (const message of messages) {
-      if (message.id != null) {
-        const numericId = hashStringToNumber(message.id);
-        this.idCache.messages.set(numericId, message.id);
-      }
-      if (message.conversationId != null) {
-        this.idCache.conversations.set(hashStringToNumber(message.conversationId), message.conversationId);
-      }
-    }
-
     return messages.map((m) => mapMessageToEmailRow(m, folderId));
   }
 
@@ -356,14 +308,6 @@ export class GraphRepository implements IRepository {
    */
   async searchEmailsStructuredAsync(compiled: CompiledSearch, limit: number): Promise<EmailRow[]> {
     const messages = await this.runStructuredSearch(compiled, limit);
-    for (const msg of messages) {
-      if (msg.id != null) {
-        this.idCache.messages.set(hashStringToNumber(msg.id), msg.id);
-      }
-      if (msg.conversationId != null) {
-        this.idCache.conversations.set(hashStringToNumber(msg.conversationId), msg.conversationId);
-      }
-    }
     return messages.map((m) => mapMessageToEmailRow(m));
   }
 
@@ -397,15 +341,6 @@ export class GraphRepository implements IRepository {
       this.deltaLinks.set(folderId, deltaLink);
     }
 
-    for (const msg of messages) {
-      if (msg.id != null) {
-        this.idCache.messages.set(hashStringToNumber(msg.id), msg.id);
-      }
-      if (msg.conversationId != null) {
-        this.idCache.conversations.set(hashStringToNumber(msg.conversationId), msg.conversationId);
-      }
-    }
-
     const activeMessages = messages.filter((m) => (m as unknown as Record<string, unknown>)['@removed'] == null);
     return {
       emails: activeMessages.map((m) => mapMessageToEmailRow(m)),
@@ -417,58 +352,15 @@ export class GraphRepository implements IRepository {
     throw new Error('Use getEmailAsync() for Graph repository');
   }
 
-  /**
-   * Populates the message ID cache by listing messages from mail folders.
-   * Used as a fallback when getEmailAsync is called with an ID not yet in cache
-   * (e.g. after server restart or when list_emails/search_emails wasn't called first).
-   */
-  private async refreshMessageCacheForGetEmail(targetId: number): Promise<boolean> {
-    let folders: FolderRow[];
-    try {
-      folders = await this.listFoldersAsync();
-    } catch {
-      return false;
-    }
-    if (folders.length === 0) return false;
-    const MESSAGE_LIMIT_PER_FOLDER = 100;
-    const MAX_FOLDERS_TO_SCAN = 15;
-    for (let i = 0; i < Math.min(folders.length, MAX_FOLDERS_TO_SCAN); i++) {
-      const folder = folders[i]!;
-      const graphFolderId = this.idCache.folders.get(folder.id);
-      if (graphFolderId == null) continue;
-      let messages: Array<{ id?: string | null; conversationId?: string | null }>;
-      try {
-        messages = await this.client.listMessages(graphFolderId, MESSAGE_LIMIT_PER_FOLDER, 0);
-      } catch {
-        continue;
-      }
-      if (!Array.isArray(messages)) continue;
-      for (const message of messages) {
-        if (message.id != null) {
-          const numericId = hashStringToNumber(message.id);
-          this.idCache.messages.set(numericId, message.id);
-          if (numericId === targetId) return true;
-        }
-        if (message.conversationId != null) {
-          this.idCache.conversations.set(hashStringToNumber(message.conversationId), message.conversationId);
-        }
-      }
-    }
-    return this.idCache.messages.has(targetId);
-  }
-
-  async getEmailAsync(id: number): Promise<EmailRow | undefined> {
-    let graphId = this.idCache.messages.get(id);
-    if (graphId == null) {
-      const found = await this.refreshMessageCacheForGetEmail(id);
-      if (found) graphId = this.idCache.messages.get(id) ?? undefined;
-    }
-    if (graphId == null) {
-      return undefined;
-    }
-
+  async getEmailAsync(id: string | number): Promise<EmailRow | undefined> {
+    const graphId = this.toGraphId(id, 'message');
     const message = await this.client.getMessage(graphId);
     return message != null ? mapMessageToEmailRow(message) : undefined;
+  }
+
+  /** Resolves a message id (durable `em_` token or raw Graph id) to its Graph id. */
+  getMessageGraphId(id: string | number): string {
+    return this.toGraphId(id, 'message');
   }
 
   getUnreadCount(): number {
@@ -507,26 +399,18 @@ export class GraphRepository implements IRepository {
   /**
    * Lists all messages in a conversation thread.
    *
-   * Looks up the message to get its conversationId, resolves the Graph string
-   * conversationId from cache, then queries for all messages with that ID.
+   * Resolves the message id to its Graph id (durable `em_` token or raw Graph
+   * id), fetches the message to read its raw Graph conversationId, then queries
+   * for all messages with that ID. No cache required.
    */
-  async listConversationAsync(messageId: number, limit: number): Promise<EmailRow[]> {
-    const email = await this.getEmailAsync(messageId);
-    if (email == null) throw new Error(`Message ID ${messageId} not found`);
-    if (email.conversationId == null) throw new Error('Message has no conversation ID');
+  async listConversationAsync(messageId: string | number, limit: number): Promise<EmailRow[]> {
+    const graphId = this.toGraphId(messageId, 'message');
+    const message = await this.client.getMessage(graphId);
+    if (message == null) throw new Error('Message not found');
+    const convId = message.conversationId;
+    if (convId == null) throw new Error('Message has no conversation ID');
 
-    const graphConversationId = this.idCache.conversations.get(email.conversationId);
-    if (graphConversationId == null) throw new Error('Conversation ID not found in cache. Try fetching the email first to populate the cache.');
-
-    const messages = await this.client.listConversationMessages(graphConversationId, limit);
-    for (const msg of messages) {
-      if (msg.id != null) {
-        this.idCache.messages.set(hashStringToNumber(msg.id), msg.id);
-      }
-      if (msg.conversationId != null) {
-        this.idCache.conversations.set(hashStringToNumber(msg.conversationId), msg.conversationId);
-      }
-    }
+    const messages = await this.client.listConversationMessages(convId, limit);
     return messages.map((m) => mapMessageToEmailRow(m));
   }
 
@@ -868,21 +752,20 @@ export class GraphRepository implements IRepository {
   }
 
   /**
-   * Returns the Graph string ID for a cached draft numeric ID (satisfies IMailSendRepository).
+   * Resolves a draft id (durable `em_` token or raw Graph id) to its Graph id
+   * (satisfies IMailSendRepository). Drafts are messages.
    */
-  getGraphIdForDraft(draftId: number): string | undefined {
-    return this.idCache.messages.get(draftId);
+  getGraphIdForDraft(draftId: string | number): string {
+    return this.toGraphId(draftId, 'message');
   }
 
   /**
-   * Gets the Graph string ID from a numeric ID.
+   * Gets the Graph string ID from a numeric folder ID.
    */
-  getGraphId(type: 'folder' | 'message', numericId: number): string | undefined {
+  getGraphId(type: 'folder', numericId: number): string | undefined {
     switch (type) {
       case 'folder':
         return this.idCache.folders.get(numericId);
-      case 'message':
-        return this.idCache.messages.get(numericId);
     }
   }
 
@@ -947,41 +830,35 @@ export class GraphRepository implements IRepository {
 
   // Async implementations
 
-  async moveEmailAsync(emailId: number, destinationFolderId: number): Promise<void> {
-    const graphMessageId = this.idCache.messages.get(emailId);
+  async moveEmailAsync(emailId: string | number, destinationFolderId: number): Promise<void> {
+    const graphMessageId = this.toGraphId(emailId, 'message');
     const graphFolderId = this.idCache.folders.get(destinationFolderId);
-    if (graphMessageId == null) throw new Error(`Message ID ${emailId} not found in cache. Try searching for or listing the item first to refresh the cache.`);
     if (graphFolderId == null) throw new Error(`Folder ID ${destinationFolderId} not found in cache. Try searching for or listing the item first to refresh the cache.`);
     await this.client.moveMessage(graphMessageId, graphFolderId);
   }
 
-  async deleteEmailAsync(emailId: number): Promise<void> {
-    const graphId = this.idCache.messages.get(emailId);
-    if (graphId == null) throw new Error(`Message ID ${emailId} not found in cache. Try searching for or listing the item first to refresh the cache.`);
+  async deleteEmailAsync(emailId: string | number): Promise<void> {
+    const graphId = this.toGraphId(emailId, 'message');
     await this.client.deleteMessage(graphId);
   }
 
-  async archiveEmailAsync(emailId: number): Promise<void> {
-    const graphId = this.idCache.messages.get(emailId);
-    if (graphId == null) throw new Error(`Message ID ${emailId} not found in cache. Try searching for or listing the item first to refresh the cache.`);
+  async archiveEmailAsync(emailId: string | number): Promise<void> {
+    const graphId = this.toGraphId(emailId, 'message');
     await this.client.archiveMessage(graphId);
   }
 
-  async junkEmailAsync(emailId: number): Promise<void> {
-    const graphId = this.idCache.messages.get(emailId);
-    if (graphId == null) throw new Error(`Message ID ${emailId} not found in cache. Try searching for or listing the item first to refresh the cache.`);
+  async junkEmailAsync(emailId: string | number): Promise<void> {
+    const graphId = this.toGraphId(emailId, 'message');
     await this.client.junkMessage(graphId);
   }
 
-  async markEmailReadAsync(emailId: number, isRead: boolean): Promise<void> {
-    const graphId = this.idCache.messages.get(emailId);
-    if (graphId == null) throw new Error(`Message ID ${emailId} not found in cache. Try searching for or listing the item first to refresh the cache.`);
+  async markEmailReadAsync(emailId: string | number, isRead: boolean): Promise<void> {
+    const graphId = this.toGraphId(emailId, 'message');
     await this.client.updateMessage(graphId, { isRead });
   }
 
-  async setEmailFlagAsync(emailId: number, flagStatus: number): Promise<void> {
-    const graphId = this.idCache.messages.get(emailId);
-    if (graphId == null) throw new Error(`Message ID ${emailId} not found in cache. Try searching for or listing the item first to refresh the cache.`);
+  async setEmailFlagAsync(emailId: string | number, flagStatus: number): Promise<void> {
+    const graphId = this.toGraphId(emailId, 'message');
     const flagStatusMap: Record<number, string> = {
       0: 'notFlagged',
       1: 'flagged',
@@ -992,15 +869,13 @@ export class GraphRepository implements IRepository {
     });
   }
 
-  async setEmailCategoriesAsync(emailId: number, categories: string[]): Promise<void> {
-    const graphId = this.idCache.messages.get(emailId);
-    if (graphId == null) throw new Error(`Message ID ${emailId} not found in cache. Try searching for or listing the item first to refresh the cache.`);
+  async setEmailCategoriesAsync(emailId: string | number, categories: string[]): Promise<void> {
+    const graphId = this.toGraphId(emailId, 'message');
     await this.client.updateMessage(graphId, { categories });
   }
 
-  async setEmailImportanceAsync(emailId: number, importance: string): Promise<void> {
-    const graphId = this.idCache.messages.get(emailId);
-    if (graphId == null) throw new Error(`Message ID ${emailId} not found in cache. Try searching for or listing the item first to refresh the cache.`);
+  async setEmailImportanceAsync(emailId: string | number, importance: string): Promise<void> {
+    const graphId = this.toGraphId(emailId, 'message');
     await this.client.updateMessage(graphId, { importance });
   }
 
@@ -1055,7 +930,7 @@ export class GraphRepository implements IRepository {
    * Creates a new draft message.
    *
    * Converts email address strings to Recipient objects, calls the Graph client,
-   * adds the returned draft to idCache.messages, and returns its numeric ID.
+   * and returns a durable `em_` token plus the raw Graph id.
    */
   async createDraftAsync(params: {
     subject: string;
@@ -1064,7 +939,7 @@ export class GraphRepository implements IRepository {
     to?: string[];
     cc?: string[];
     bcc?: string[];
-  }): Promise<{ numericId: number; graphId: string }> {
+  }): Promise<{ token: string; graphId: string }> {
     const toRecipients = (params.to ?? []).map(addr => ({
       emailAddress: { address: addr },
     }));
@@ -1084,19 +959,16 @@ export class GraphRepository implements IRepository {
     });
 
     const graphId = draft.id!;
-    const numericId = hashStringToNumber(graphId);
-    this.idCache.messages.set(numericId, graphId);
-    return { numericId, graphId };
+    return { token: mintSelfEncoded('message', graphId), graphId };
   }
 
   /**
    * Updates an existing draft message.
    *
-   * Looks up the Graph string ID from idCache.messages, then calls the client.
+   * Resolves the draft id to its Graph id, then calls the client.
    */
-  async updateDraftAsync(draftId: number, updates: Record<string, unknown>): Promise<void> {
-    const graphId = this.idCache.messages.get(draftId);
-    if (graphId == null) throw new Error(`Message ID ${draftId} not found in cache. Try searching for or listing the item first to refresh the cache.`);
+  async updateDraftAsync(draftId: string | number, updates: Record<string, unknown>): Promise<void> {
+    const graphId = this.toGraphId(draftId, 'message');
     await this.client.updateDraft(graphId, updates);
   }
 
@@ -1112,11 +984,10 @@ export class GraphRepository implements IRepository {
   /**
    * Sends an existing draft message.
    *
-   * Looks up the Graph string ID from idCache.messages, then calls the client.
+   * Resolves the id to its Graph id, then calls the client.
    */
-  async sendDraftAsync(draftId: number): Promise<void> {
-    const graphId = this.idCache.messages.get(draftId);
-    if (graphId == null) throw new Error(`Message ID ${draftId} not found in cache. Try searching for or listing the item first to refresh the cache.`);
+  async sendDraftAsync(draftId: string | number): Promise<void> {
+    const graphId = this.toGraphId(draftId, 'message');
     await this.client.sendDraft(graphId);
   }
 
@@ -1155,23 +1026,21 @@ export class GraphRepository implements IRepository {
   /**
    * Replies to a message (or replies all).
    *
-   * Looks up the Graph string ID from idCache.messages, then calls the client.
+   * Resolves the id to its Graph id, then calls the client.
    */
-  async replyMessageAsync(messageId: number, comment: string, replyAll: boolean): Promise<void> {
-    const graphId = this.idCache.messages.get(messageId);
-    if (graphId == null) throw new Error(`Message ID ${messageId} not found in cache. Try searching for or listing the item first to refresh the cache.`);
+  async replyMessageAsync(messageId: string | number, comment: string, replyAll: boolean): Promise<void> {
+    const graphId = this.toGraphId(messageId, 'message');
     await this.client.replyMessage(graphId, comment, replyAll);
   }
 
   /**
    * Forwards a message to specified recipients.
    *
-   * Looks up the Graph string ID from idCache.messages, converts recipient
-   * email strings to Recipient objects, then calls the client.
+   * Resolves the id to its Graph id, converts recipient email strings to
+   * Recipient objects, then calls the client.
    */
-  async forwardMessageAsync(messageId: number, toRecipients: string[], comment?: string): Promise<void> {
-    const graphId = this.idCache.messages.get(messageId);
-    if (graphId == null) throw new Error(`Message ID ${messageId} not found in cache. Try searching for or listing the item first to refresh the cache.`);
+  async forwardMessageAsync(messageId: string | number, toRecipients: string[], comment?: string): Promise<void> {
+    const graphId = this.toGraphId(messageId, 'message');
     const recipients = toRecipients.map(addr => ({
       emailAddress: { address: addr },
     }));
@@ -1185,19 +1054,18 @@ export class GraphRepository implements IRepository {
   /**
    * Creates a reply (or reply-all) draft for a message.
    *
-   * Looks up the Graph string ID from idCache.messages, creates the draft
-   * via the client, caches the new draft ID, and optionally updates the body.
+   * Resolves the source message id to its Graph id, creates the draft via the
+   * client, and optionally updates the body.
    *
-   * @returns The numeric and graph IDs of the new draft.
+   * @returns A durable `em_` token and the raw Graph id of the new draft.
    */
   async replyAsDraftAsync(
-    messageId: number,
+    messageId: string | number,
     replyAll = false,
     comment?: string,
     bodyType: string = 'text',
-  ): Promise<{ numericId: number; graphId: string }> {
-    const graphMessageId = this.idCache.messages.get(messageId);
-    if (graphMessageId == null) throw new Error(`Message ID ${messageId} not found in cache. Try searching for or listing the item first to refresh the cache.`);
+  ): Promise<{ token: string; graphId: string }> {
+    const graphMessageId = this.toGraphId(messageId, 'message');
 
     // Pass comment/body through createReply so the quoted thread is preserved
     const body = comment != null ? { contentType: bodyType, content: comment } : undefined;
@@ -1206,35 +1074,28 @@ export class GraphRepository implements IRepository {
       : await this.client.createReplyDraft(graphMessageId, undefined, body);
 
     const graphId = draft.id!;
-    const numericId = hashStringToNumber(graphId);
-    this.idCache.messages.set(numericId, graphId);
-
-    return { numericId, graphId };
+    return { token: mintSelfEncoded('message', graphId), graphId };
   }
 
   /**
    * Creates a forward draft for a message.
    *
-   * Looks up the Graph string ID from idCache.messages, creates the draft
-   * via the client, caches the new draft ID, and optionally updates the
-   * recipients and body.
+   * Resolves the source message id to its Graph id, creates the draft via the
+   * client, and optionally updates the recipients and body.
    *
-   * @returns The numeric and graph IDs of the new draft.
+   * @returns A durable `em_` token and the raw Graph id of the new draft.
    */
   async forwardAsDraftAsync(
-    messageId: number,
+    messageId: string | number,
     toRecipients?: string[],
     comment?: string,
     bodyType: string = 'text',
-  ): Promise<{ numericId: number; graphId: string }> {
-    const graphMessageId = this.idCache.messages.get(messageId);
-    if (graphMessageId == null) throw new Error(`Message ID ${messageId} not found in cache. Try searching for or listing the item first to refresh the cache.`);
+  ): Promise<{ token: string; graphId: string }> {
+    const graphMessageId = this.toGraphId(messageId, 'message');
 
     const draft = await this.client.createForwardDraft(graphMessageId);
 
     const graphId = draft.id!;
-    const numericId = hashStringToNumber(graphId);
-    this.idCache.messages.set(numericId, graphId);
 
     const updates: Record<string, unknown> = {};
     if (toRecipients != null && toRecipients.length > 0) {
@@ -1249,7 +1110,7 @@ export class GraphRepository implements IRepository {
       await this.client.updateDraft(graphId, updates);
     }
 
-    return { numericId, graphId };
+    return { token: mintSelfEncoded('message', graphId), graphId };
   }
 
   // ---------------------------------------------------------------------------
@@ -1321,21 +1182,20 @@ export class GraphRepository implements IRepository {
   /**
    * Lists attachments for a given email.
    *
-   * Looks up the Graph message ID from idCache.messages, calls
-   * client.listAttachments, hashes each attachment ID to a numeric key,
-   * and caches it in idCache.attachments with { messageId, attachmentId }.
+   * Resolves the id to its Graph id, calls client.listAttachments, hashes each
+   * attachment ID to a numeric key, and caches it in idCache.attachments with
+   * { messageId, attachmentId }.
    *
    * @returns Array of attachment metadata objects.
    */
-  async listAttachmentsAsync(emailId: number): Promise<Array<{
+  async listAttachmentsAsync(emailId: string | number): Promise<Array<{
     id: number;
     name: string;
     size: number;
     contentType: string;
     isInline: boolean;
   }>> {
-    const graphMessageId = this.idCache.messages.get(emailId);
-    if (graphMessageId == null) throw new Error(`Message ID ${emailId} not found in cache. Try searching for or listing the item first to refresh the cache.`);
+    const graphMessageId = this.toGraphId(emailId, 'message');
 
     const attachments = await this.client.listAttachments(graphMessageId);
 
@@ -2093,21 +1953,19 @@ export class GraphRepository implements IRepository {
   /**
    * Gets internet message headers for an email.
    */
-  async getMessageHeadersAsync(emailId: number): Promise<Array<{ name: string; value: string }>> {
-    const graphId = this.idCache.messages.get(emailId);
-    if (graphId == null) throw new Error(`Email ID ${emailId} not found in cache. Try searching for or listing the item first to refresh the cache.`);
+  async getMessageHeadersAsync(emailId: string | number): Promise<Array<{ name: string; value: string }>> {
+    const graphId = this.toGraphId(emailId, 'message');
     return await this.client.getMessageHeaders(graphId);
   }
 
   /**
    * Gets the MIME content of a message and saves it as an .eml file.
    */
-  async getMessageMimeAsync(emailId: number): Promise<{ filePath: string }> {
-    const graphId = this.idCache.messages.get(emailId);
-    if (graphId == null) throw new Error(`Email ID ${emailId} not found in cache. Try searching for or listing the item first to refresh the cache.`);
+  async getMessageMimeAsync(emailId: string | number): Promise<{ filePath: string }> {
+    const graphId = this.toGraphId(emailId, 'message');
     const mime = await this.client.getMessageMime(graphId);
     const downloadDir = getDownloadDir();
-    const filePath = path.join(downloadDir, `email-${emailId}.eml`);
+    const filePath = path.join(downloadDir, `email-${hashStringToNumber(graphId)}.eml`);
     fs.writeFileSync(filePath, mime, 'utf-8');
     return { filePath };
   }
