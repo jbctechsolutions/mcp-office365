@@ -5,41 +5,169 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [4.0.0] - 2026-07-09
 
-### Removed
+The v4.0.0 release completes the **durable-ID rollout** and the **Graph-only** transition, and adds
+several coverage tools. It is a **major** release: the ID format returned to clients changed (numeric
+hash → opaque token) and the AppleScript backend was removed. Read the **Migration guide** at the
+bottom before upgrading — most integrations need small changes to how they handle IDs.
 
-- **AppleScript backend removed.** The macOS/Outlook-desktop AppleScript
-  backend (frozen + deprecated since v3.0.0) is gone; the server is now
-  Graph-API-only. `USE_APPLESCRIPT` is no longer recognized. The Apple Notes
-  tools (`list_notes`/`get_note`/`search_notes`) are replaced by the OneNote
-  tools. `list_accounts` is also removed — it was backed exclusively by the
-  AppleScript account repository and had no Graph equivalent.
+### ⚠️ Breaking changes
+
+#### 1. Entity IDs are now opaque durable tokens, not numeric hashes
+
+Every entity ID the server returns is now an opaque, prefixed **durable token** (e.g.
+`em_QQ...`, `td_a1b2...`) instead of the old v2 numeric hash. Tokens are stable across sessions and,
+for self-encoding kinds, across machines. Tools accept a token wherever they previously took a numeric
+ID; passing a **legacy numeric ID now fails** with `NUMERIC_ID_UNSUPPORTED`.
+
+There are two token shapes:
+
+- **Self-encoding** — the token carries the immutable Graph ID directly (base64url), so it resolves by
+  decode with no server-side state and survives a lost/cold state store or a different machine.
+- **Alias-backed** — the token is a short deterministic digest backed by the machine-local alias table
+  (SQLite `state.db`). These are account-scoped; on a cold/foreign store they return `ID_UNKNOWN` and
+  must be refreshed by re-listing the parent collection.
+
+**Prefix reference (by family):**
+
+| Family | Prefixes | Kind |
+|--------|----------|------|
+| Mail message | `em_` | self-encoding |
+| Calendar event | `ev_` | self-encoding |
+| Contact | `ct_` | self-encoding |
+| Mail/calendar folder | `fd_` | self-encoding |
+| OneDrive drive item | `dr_` | self-encoding |
+| OneNote notebook / section / page | `nb_` / `ns_` / `np_` | self-encoding |
+| Team | `tm_` | alias-backed |
+| Channel | `cn_` | alias-backed |
+| Channel message | `xm_` | alias-backed |
+| Chat | `ch_` | alias-backed |
+| Chat message | `cm_` | alias-backed |
+| Task | `td_` | alias-backed |
+| Task list | `tl_` | alias-backed |
+| Task sub-resources (checklist item / linked resource / task attachment) | `ci_` / `lr_` / `ta_` | alias-backed |
+| Mail attachment | `at_` | alias-backed |
+| Mail rule | `mr_` | alias-backed |
+| Contact folder | `cf_` | alias-backed |
+| Category | `cg_` | alias-backed |
+| Focused-inbox override | `fo_` | alias-backed |
+| Calendar permission | `cp_` | alias-backed |
+| Online meeting | `om_` | alias-backed |
+| Meeting recording / transcript | `rc_` / `tr_` | alias-backed |
+| SharePoint site / document library / library item | `si_` / `dl_` / `li_` | alias-backed |
+| Planner plan / bucket / task | `pl_` / `pb_` / `pt_` | alias-backed |
+| SharePoint list / list item | `sl_` / `sn_` | alias-backed |
+
+**New typed error codes** an agent/client may now encounter (all non-retriable; each carries a
+`suggestion` telling the caller to re-list):
+
+- `NUMERIC_ID_UNSUPPORTED` — a legacy v2 numeric hash ID was passed on the Graph backend.
+- `ID_ENTITY_MISMATCH` — a token for one entity kind was passed where another kind was expected
+  (e.g. a folder token to a message tool).
+- `ID_UNKNOWN` — an alias-backed token could not be resolved (unknown, or a cold/lost state store).
+- `ID_FOREIGN_ACCOUNT` — the token was minted under a different signed-in account.
+- _(also defined, rarer: `ID_STALE`, `ID_COLLISION`.)_
+
+#### 2. AppleScript backend removed (Graph-only server)
+
+The AppleScript backend was removed (already on `main`). The server now talks only to Microsoft Graph.
+
+- Removed the `USE_APPLESCRIPT` environment variable (it is now ignored — the server always serves the
+  Graph surface).
+- Removed the Apple-only tools `list_notes`, `get_note`, `search_notes` (superseded by the OneNote
+  tools — see Added), and `list_accounts` (no Graph analog).
+
+#### 3. New Graph scopes require re-consent
+
+New tools call Graph endpoints that need additional delegated scopes. **Existing installs must
+re-consent** (the app will prompt on first use, or an admin can pre-grant):
+
+- `Notes.ReadWrite` — OneNote tools.
+- `Mail.Read.Shared`, `Calendars.Read.Shared`, `Files.Read.All` — shared-mailbox / delegate-access tools.
+
+#### 4. Pending v3 approval tokens are upgraded on read
+
+`ApprovalToken.targetId` is now a `string` (was `string | number`). A two-phase approval token minted
+by **v3** and still pending in `state.db` at upgrade time may have persisted a numeric target sentinel
+(e.g. `0` for `send_email` / `upload_file`); it is coerced to a string when read, so those in-flight
+tokens stay confirmable across the upgrade. No action needed.
 
 ### Added
 
-- **`list_my_planner_tasks`** — lists every Planner task assigned to the
-  signed-in user across all plans (`GET /me/planner/tasks`). Each task carries
-  its own `planId`, so no plan-by-plan enumeration is needed to find "my tasks".
-- **OneNote tools** — list_notebooks / list_note_sections / list_note_pages /
-  get_note_page / search_note_pages / create_note_page (Graph `/me/onenote`).
-  Durable `nb_`/`ns_`/`np_` tokens.
+- **OneNote tools** (Graph `/me/onenote`, durable `nb_`/`ns_`/`np_` tokens): `list_notebooks`,
+  `list_note_sections`, `list_note_pages`, `get_note_page`, `search_note_pages`, `create_note_page`.
+  These replace the removed Apple Notes tools.
+- **`list_my_planner_tasks`** — the current user's Planner tasks across all plans (`GET /me/planner/tasks`).
+- **SharePoint Lists tools** (durable `sl_`/`sn_` tokens): `list_lists`, `get_list`, `create_list`,
+  `list_list_columns`, `list_list_items`, `get_list_item`, `create_list_item`, `update_list_item`, and a
+  two-phase `prepare_delete_list_item` / `confirm_delete_list_item`.
+- **Shared-mailbox / delegate access** (read-only; `/users/{upn}/…`): `list_shared_mailbox_folders`,
+  `list_shared_mailbox_emails`, `get_shared_mailbox_email`, `search_shared_mailbox_emails`,
+  `list_shared_calendar_events`, `get_shared_calendar_event`, `list_shared_user_drive_items`,
+  `search_shared_user_drive_items`.
+- **Delta-sync change tracking**: `what_changed` (report what changed since the last sync using a
+  local mirror) and `reset_change_tracking`.
+
+Total tool count: **241**.
 
 ### Changed
 
-- **Durable contact IDs (U5b, Graph backend).** `get_contact` / `list_contacts`
-  / `search_contacts` / `update_contact` / `delete_contact` / contact photos now
-  use durable `ct_…` tokens that carry the immutable Graph id — they resolve on
-  any machine and survive a cold state store (no more in-session numeric-hash
-  cache). Contact id params accept a `ct_` token (Graph) or a numeric id
-  (AppleScript); a numeric id on Graph returns `NUMERIC_ID_UNSUPPORTED`. First
-  entity migrated; the rest follow.
-- **Durable event IDs (U5b, Graph backend).** `get_event` / `list_events` /
-  `search_events` / `create_event` / `update_event` / `delete_event` /
-  `respond_to_event` / `list_event_instances` now use durable `ev_…` tokens with
-  the same cold-resolve / `NUMERIC_ID_UNSUPPORTED` semantics as contacts. A
-  durable token for the wrong entity kind (e.g. a contact token as an event id)
-  is rejected with `ID_ENTITY_MISMATCH`.
+- **Planner writes are now fetch-before-update.** The Planner ETag is mutable and per-sub-resource, so
+  it is no longer cached inside the ID; each write fetches a fresh `@odata.etag`, PATCHes with
+  `If-Match`, and retries once on a `412`. Semantics are **last-writer-wins** across a stateless
+  get→update — a lone editor no longer sees spurious `412 Precondition Failed` errors.
+
+### Removed
+
+See **Breaking changes #2** — the AppleScript backend, the `USE_APPLESCRIPT` env var, and the
+`list_notes` / `get_note` / `search_notes` / `list_accounts` tools.
+
+### Durable IDs, canonical schemas & confirmation (U5b / U6 / U11 / U5b-3)
+
+- **All entity IDs are now durable tokens (completes U5b).** The migration begun in v3 is finished:
+  every Graph entity — mail, calendar, contacts, folders, drive items, OneNote, tasks/task-lists and
+  their checklist/linked-resource/attachment sub-resources, mail attachments/rules/categories/
+  focused-overrides, contact folders, teams/channels/chats and their messages, calendar permissions,
+  online meetings/recordings/transcripts, SharePoint sites/libraries/items and Lists, and Planner
+  plans/buckets/tasks — returns and accepts a durable token (see the prefix table). The legacy
+  in-session numeric-hash cache and the `hashStringToNumber` function are gone; all id types are now
+  plain `string`.
+- **U6 — canonical ID schemas + next-action hints.** Every tool's ID parameter references one canonical
+  per-entity Zod schema (`.trim()`-normalized, prefix-named description), so validation and tool docs
+  are consistent across the whole surface; ID classification stays authoritative in the resolver
+  (a numeric string now fails with `NUMERIC_ID_UNSUPPORTED` at that single point). `list_*` / `search_*`
+  / `create_*` results carry a short `next` hint naming the natural follow-up tool for the IDs returned.
+- **U11 — inline confirmation (`--confirm elicit`).** New server flag `--confirm token|elicit`
+  (default `token` = the existing two-phase flow). In `elicit` mode a destructive `prepare_*` asks the
+  user inline via MCP elicitation (capability-gated, ~60s) and, on accept, runs the paired `confirm_*`
+  in one round-trip; **decline** invalidates the token; **cancel / timeout / no elicitation capability**
+  gracefully **degrade** to returning the durable approval token. Fail-closed — nothing executes without
+  an explicit accept.
+- **U5b-3 — move-durable Exchange IDs.** Mail/event/contact requests now send
+  `Prefer: IdType="ImmutableId"` (scoped to Outlook item endpoints under `/me` or `/users/{id}`;
+  Teams/chat/To-Do excluded), so `em_`/`ev_`/`ct_` tokens survive an item moving between folders.
+  `$search`-minted IDs (which Graph returns in default form even with the header) are upgraded to
+  immutable at mint via `translateExchangeIds`. Verified against live Graph that the header only shapes
+  the *response* ID format — either ID form resolves in a request URL — so no previously-issued token
+  breaks. (A `translate-on-resolve` fallback and a `degraded_ids` count are deferred to a later release.)
+
+### Migration guide
+
+1. **Treat every ID as opaque.** Do not parse, construct, or infer meaning from an ID's characters. Pass
+   back exactly the token the server returned.
+2. **Always re-list to obtain current IDs.** Get IDs from the relevant `list_*` / `search_*` / `get_*`
+   response, then use them immediately in the same or a follow-up call. Do **not** persist old v2 numeric
+   IDs — they now return `NUMERIC_ID_UNSUPPORTED`.
+3. **Handle a cold alias store.** Alias-backed tokens (see the table) are account- and machine-scoped and
+   live in the local `state.db`. After a machine change, a wiped store, or signing in as a different
+   account, a previously-issued alias token returns `ID_UNKNOWN` / `ID_FOREIGN_ACCOUNT` — recover by
+   re-listing the parent collection to re-mint a fresh token. Self-encoding tokens (`em_ ev_ ct_ fd_ dr_
+   nb_ ns_ np_`) are not affected.
+4. **Re-consent the new Graph scopes** (`Notes.ReadWrite`; `Mail.Read.Shared`, `Calendars.Read.Shared`,
+   `Files.Read.All`) before using the OneNote and shared-mailbox tools.
+5. **Drop any dependence on the AppleScript backend / `USE_APPLESCRIPT`.** Replace `list_notes` /
+   `get_note` / `search_notes` usage with the OneNote tools; there is no replacement for `list_accounts`.
 
 ## [3.0.0] - 2026-07-08
 
