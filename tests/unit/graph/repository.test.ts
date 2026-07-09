@@ -3768,6 +3768,19 @@ describe('graph/repository', () => {
       it('rejects an unknown channel token', async () => {
         await expect(repository.getChannelAsync('cn_bogus')).rejects.toThrow('Unknown or unresolvable');
       });
+
+      it('a cn_ token does NOT self-heal across a cold store (documented alias tradeoff)', async () => {
+        // Unlike a tm_ token (which re-lists its parent), a composite cn_ token
+        // can't self-heal on a cold store — it has no parent handle to re-list
+        // from, so a fresh store yields ID_UNKNOWN. This locks the documented
+        // machine-scoped contract for alias-backed composites.
+        const tok = await teamToken('team-abc');
+        const chTok = await channelToken(tok, { id: 'ch-1', displayName: 'General', description: '', membershipType: 'standard' });
+
+        const fresh = StateStore.open({ dir: '/tmp/mcp-o365-repo-test-cold', warn: () => {} });
+        const repo2 = createGraphRepository(undefined, fresh);
+        await expect(repo2.getChannelAsync(chTok)).rejects.toThrow('Unknown or unresolvable');
+      });
     });
 
     describe('createChannelAsync', () => {

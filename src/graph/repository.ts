@@ -140,9 +140,13 @@ export class GraphRepository implements IRepository {
    */
   private mintAlias(entityType: EntityType, graphId: string): string {
     if (this.store == null) {
-      // Production always has a store; without one an alias could be minted but
-      // never resolved. Fail loudly instead of returning an unresolvable token.
-      throw new IdUnknownError(`<no store: cannot mint ${entityType}>`);
+      // Production always has a store (index.ts) and degraded mode still yields a
+      // non-null in-memory one, so this is only reachable from a store-less
+      // embedding. Fail loudly rather than mint a token nothing can resolve.
+      throw new IdUnknownError(
+        `${entityType} (durable state store unavailable)`,
+        'Alias-backed ids require the durable state store; construct the repository with one.',
+      );
     }
     return registerComposite(this.store, {
       entityType,
