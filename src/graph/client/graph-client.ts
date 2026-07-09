@@ -31,6 +31,7 @@ import type * as MicrosoftGraph from '@microsoft/microsoft-graph-types';
 import { getAccessToken, type DeviceCodeCallback } from '../auth/index.js';
 import { type BatchRequest, type BatchResponseItem, buildBatchPayload, splitIntoBatches, parseBatchResponse } from './batch.js';
 import { ResponseCache, CacheTTL, createCacheKey } from './cache.js';
+import { ImmutableIdMiddleware } from './immutable-id-middleware.js';
 
 /** Generic shape for a Graph API response containing a `.value` array. */
 interface GraphCollectionResponse<T> { value: T[] }
@@ -122,15 +123,19 @@ export class GraphClient {
       };
 
       // Chain mirrors the SDK default order (auth → retry → redirect → http),
-      // minus the cosmetic TelemetryHandler. RedirectHandler matters: the
-      // binary download endpoints (/content, /photo/$value, meeting recordings)
-      // 302 to a pre-authenticated CDN URL, so the redirect must be followed
-      // explicitly rather than relying on the underlying fetch default.
+      // minus the cosmetic TelemetryHandler, plus the immutable-ID preference
+      // (U5b-3) sitting right after auth so its Prefer header rides every retry
+      // attempt without being re-appended. RedirectHandler matters: the binary
+      // download endpoints (/content, /photo/$value, meeting recordings) 302 to
+      // a pre-authenticated CDN URL, so the redirect must be followed explicitly
+      // rather than relying on the underlying fetch default.
       const auth = new AuthenticationHandler(authProvider);
+      const immutableId = new ImmutableIdMiddleware();
       const retry = new RetryHandler(new RetryHandlerOptions(undefined, undefined, shouldRetry));
       const redirect = new RedirectHandler();
       const http = new HTTPMessageHandler();
-      auth.setNext(retry);
+      auth.setNext(immutableId);
+      immutableId.setNext(retry);
       retry.setNext(redirect);
       redirect.setNext(http);
 
@@ -280,7 +285,9 @@ export class GraphClient {
       .top(limit)
       .get() as PageCollection;
 
-    return response.value as MicrosoftGraph.Message[];
+    const messages = response.value as MicrosoftGraph.Message[];
+    await this.upgradeMessageIdsToImmutable(messages);
+    return messages;
   }
 
   /**
@@ -300,7 +307,9 @@ export class GraphClient {
       .top(limit)
       .get() as PageCollection;
 
-    return response.value as MicrosoftGraph.Message[];
+    const messages = response.value as MicrosoftGraph.Message[];
+    await this.upgradeMessageIdsToImmutable(messages);
+    return messages;
   }
 
   /**
@@ -334,7 +343,9 @@ export class GraphClient {
       .select(MESSAGE_SEARCH_SELECT)
       .top(limit)
       .get() as PageCollection;
-    return response.value as MicrosoftGraph.Message[];
+    const messages = response.value as MicrosoftGraph.Message[];
+    await this.upgradeMessageIdsToImmutable(messages);
+    return messages;
   }
 
   /**
@@ -364,7 +375,83 @@ export class GraphClient {
     const response = (await client.api('/search/query').post(body)) as SearchQueryResponse;
     const hits = response.value?.[0]?.hitsContainers?.[0]?.hits ?? [];
     // Guard against a hit without a resource so no undefined enters the mapper.
-    return hits.map((h) => h.resource).filter((r): r is MicrosoftGraph.Message => r != null);
+    const messages = hits.map((h) => h.resource).filter((r): r is MicrosoftGraph.Message => r != null);
+    await this.upgradeMessageIdsToImmutable(messages);
+    return messages;
+  }
+
+  /**
+   * Translates Exchange item IDs between formats (U5b-3 / D2). Used to upgrade
+   * the mutable REST IDs that `$search` returns into immutable REST entry IDs, so
+   * search-minted self-encoding tokens (`em_`) survive a later move. Returns a map
+   * of source ID → immutable target ID; IDs that Graph could not translate are
+   * simply absent (partial success is normal and handled by the caller).
+   */
+  async translateExchangeIds(
+    inputIds: string[],
+    sourceIdType: string = 'restId',
+    targetIdType: string = 'restImmutableEntryId'
+  ): Promise<Map<string, string>> {
+    const out = new Map<string, string>();
+    if (inputIds.length === 0) {
+      return out;
+    }
+    const client = await this.getClient();
+    // Graph caps translateExchangeIds at 1000 input IDs per call; chunk to stay
+    // under it even though search result sets are far smaller.
+    for (let i = 0; i < inputIds.length; i += 1000) {
+      const chunk = inputIds.slice(i, i + 1000);
+      const response = (await client.api('/me/translateExchangeIds').post({
+        inputIds: chunk,
+        sourceIdType,
+        targetIdType,
+      })) as { value?: Array<{ sourceId?: string; targetId?: string }> };
+      for (const pair of response.value ?? []) {
+        if (pair.sourceId != null && pair.sourceId.length > 0 && pair.targetId != null && pair.targetId.length > 0) {
+          out.set(pair.sourceId, pair.targetId);
+        }
+      }
+    }
+    return out;
+  }
+
+  /**
+   * Rewrites the mutable `$search`-minted IDs on a message list to their
+   * immutable equivalents in place (U5b-3 / D2), so the mapper mints durable
+   * `em_` tokens. Graceful degradation: if translation fails wholesale (throw) or
+   * for individual IDs (absent from the map), those messages keep their mutable
+   * ID — the `em_` token still resolves this session, it just isn't move-durable.
+   * Returns the number of IDs left un-upgraded (the caller's `degraded_ids` count).
+   */
+  private async upgradeMessageIdsToImmutable(messages: MicrosoftGraph.Message[]): Promise<number> {
+    const mutableIds = messages
+      .map((m) => m.id)
+      .filter((id): id is string => typeof id === 'string' && id.length > 0);
+    if (mutableIds.length === 0) {
+      return 0;
+    }
+
+    let translated: Map<string, string>;
+    try {
+      translated = await this.translateExchangeIds(mutableIds);
+    } catch {
+      // Whole-batch failure (throttled/unavailable): leave every ID mutable.
+      return mutableIds.length;
+    }
+
+    let degraded = 0;
+    for (const message of messages) {
+      if (typeof message.id !== 'string' || message.id.length === 0) {
+        continue;
+      }
+      const immutable = translated.get(message.id);
+      if (immutable != null) {
+        message.id = immutable;
+      } else {
+        degraded += 1;
+      }
+    }
+    return degraded;
   }
 
   /**
