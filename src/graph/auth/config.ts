@@ -55,6 +55,8 @@ export const GRAPH_SCOPES = [
   'Files.ReadWrite',
   // SharePoint
   'Sites.Read.All',
+  // OneNote (read/search pages + create pages)
+  'Notes.ReadWrite',
 ] as const;
 
 /**
