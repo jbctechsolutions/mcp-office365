@@ -27,11 +27,11 @@ declare module '../registry/types.js' {
 // =============================================================================
 
 export const ListChecklistItemsInput = z.strictObject({
-  task_id: z.number().int().positive().describe('Task ID from list_tasks or search_tasks'),
+  task_id: z.string().min(1).describe('Task ID (td_ token from list_tasks or search_tasks)'),
 });
 
 export const CreateChecklistItemInput = z.strictObject({
-  task_id: z.number().int().positive().describe('Task ID'),
+  task_id: z.string().min(1).describe('Task ID (td_ token)'),
   display_name: z.string().min(1).describe('Checklist item text'),
   is_checked: z.boolean().optional().describe('Whether the item is checked (default: false)'),
 });
@@ -65,8 +65,8 @@ export type ConfirmDeleteChecklistItemParams = z.infer<typeof ConfirmDeleteCheck
 // =============================================================================
 
 export interface IChecklistItemsRepository {
-  listChecklistItemsAsync(taskId: number): Promise<Array<{ id: number; displayName: string; isChecked: boolean; createdDateTime: string }>>;
-  createChecklistItemAsync(taskId: number, displayName: string, isChecked?: boolean): Promise<number>;
+  listChecklistItemsAsync(taskId: string | number): Promise<Array<{ id: number; displayName: string; isChecked: boolean; createdDateTime: string }>>;
+  createChecklistItemAsync(taskId: string | number, displayName: string, isChecked?: boolean): Promise<number>;
   updateChecklistItemAsync(checklistItemId: number, updates: { displayName?: string; isChecked?: boolean }): Promise<void>;
   deleteChecklistItemAsync(checklistItemId: number): Promise<void>;
 }

@@ -6,16 +6,17 @@
 /**
  * Durable-ID tokens (U5 / D1). Two shapes:
  *
- * - **Self-encoding** (`em_`, `ev_`, `ct_`, `fd_`, `dr_`, `td_`, `nb_`, `ns_`,
+ * - **Self-encoding** (`em_`, `ev_`, `ct_`, `fd_`, `dr_`, `nb_`, `ns_`,
  *   `np_`): the token carries the immutable Graph ID directly —
  *   `<prefix>_<base64url(graphId)>`.
  *   Resolution is a decode with zero storage, so it survives a cold/lost
  *   `state.db` and resolves on any machine (the core cold-state fix).
  *
- * - **Alias-backed** (`pl_`, `pt_`, `ch_`, `tm_`, `at_`, composite tuples): the
- *   token is a short deterministic digest of the entity's canonical key —
- *   `<prefix>_<base32(sha256(canonicalKey))[0..13]>` (70 bits) — backed by the
- *   alias table (D3). These are machine-scoped: a cold store yields `ID_UNKNOWN`.
+ * - **Alias-backed** (`pl_`, `pt_`, `ch_`, `tm_`, `at_`, `td_`, `tl_`,
+ *   composite tuples): the token is a short deterministic digest of the
+ *   entity's canonical key — `<prefix>_<base32(sha256(canonicalKey))[0..13]>`
+ *   (70 bits) — backed by the alias table (D3). These are machine-scoped: a
+ *   cold store yields `ID_UNKNOWN`.
  *
  * Determinism is a hard requirement: the same Graph ID / canonical key always
  * mints a byte-identical token.
@@ -31,6 +32,7 @@ export type EntityType =
   | 'folder'
   | 'driveItem'
   | 'task'
+  | 'taskList'
   | 'plan'
   | 'plannerTask'
   | 'chat'
@@ -64,7 +66,6 @@ export const SELF_ENCODING_PREFIXES: Readonly<Record<string, EntityType>> = Obje
     ct: 'contact',
     fd: 'folder',
     dr: 'driveItem',
-    td: 'task',
     nb: 'noteNotebook',
     ns: 'noteSection',
     np: 'notePage',
@@ -84,6 +85,8 @@ export const ALIAS_PREFIXES: Readonly<Record<string, EntityType>> = Object.assig
     cm: 'chatMessage',
     xm: 'channelMessage',
     ci: 'checklistItem',
+    td: 'task',
+    tl: 'taskList',
   } satisfies Record<string, EntityType>,
 );
 

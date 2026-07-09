@@ -49,7 +49,6 @@ export {
 export {
   mapMailFolderToRow,
   mapCalendarToFolderRow,
-  mapTaskListToFolderRow,
   mapMessageToEmailRow,
   mapEventToEventRow,
   mapContactToContactRow,

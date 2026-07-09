@@ -50,7 +50,7 @@ export const SearchTasksInput = z.strictObject({
 });
 
 export const GetTaskInput = z.strictObject({
-  task_id: z.number().int().positive().describe('The task ID to retrieve'),
+  task_id: z.string().min(1).describe('The task ID (td_ token) to retrieve'),
 });
 
 // Task write schemas (Graph API)
@@ -67,7 +67,7 @@ const RecurrenceSchema = z.strictObject({
 
 export const CreateTaskInput = z.strictObject({
   title: z.string().min(1),
-  task_list_id: z.number().int().positive(),
+  task_list_id: z.string().min(1).describe('The task list ID (tl_ token)'),
   body: z.string().optional(),
   body_type: z.enum(['text', 'html']).optional(),
   due_date: z.string().optional(),
@@ -78,7 +78,7 @@ export const CreateTaskInput = z.strictObject({
 });
 
 export const UpdateTaskInput = z.strictObject({
-  task_id: z.number().int().positive(),
+  task_id: z.string().min(1).describe('The task ID (td_ token)'),
   title: z.string().optional(),
   body: z.string().optional(),
   body_type: z.enum(['text', 'html']).optional(),
@@ -91,16 +91,16 @@ export const UpdateTaskInput = z.strictObject({
 });
 
 export const CompleteTaskInput = z.strictObject({
-  task_id: z.number().int().positive(),
+  task_id: z.string().min(1).describe('The task ID (td_ token)'),
 });
 
 export const PrepareDeleteTaskInput = z.strictObject({
-  task_id: z.number().int().positive(),
+  task_id: z.string().min(1).describe('The task ID (td_ token)'),
 });
 
 export const ConfirmDeleteTaskInput = z.strictObject({
   token_id: z.uuid(),
-  task_id: z.number().int().positive(),
+  task_id: z.string().min(1).describe('The task ID (td_ token)'),
 });
 
 // =============================================================================

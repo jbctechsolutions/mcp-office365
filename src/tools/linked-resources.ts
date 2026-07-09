@@ -27,11 +27,11 @@ declare module '../registry/types.js' {
 // =============================================================================
 
 export const ListLinkedResourcesInput = z.strictObject({
-  task_id: z.number().int().positive().describe('Task ID from list_tasks or search_tasks'),
+  task_id: z.string().min(1).describe('Task ID (td_ token from list_tasks or search_tasks)'),
 });
 
 export const CreateLinkedResourceInput = z.strictObject({
-  task_id: z.number().int().positive().describe('Task ID'),
+  task_id: z.string().min(1).describe('Task ID (td_ token)'),
   web_url: z.string().min(1).describe('URL of the linked resource'),
   application_name: z.string().min(1).describe('Name of the application the resource is associated with'),
   display_name: z.string().min(1).optional().describe('Display name of the linked resource'),
@@ -59,8 +59,8 @@ export type ConfirmDeleteLinkedResourceParams = z.infer<typeof ConfirmDeleteLink
 // =============================================================================
 
 export interface ILinkedResourcesRepository {
-  listLinkedResourcesAsync(taskId: number): Promise<Array<{ id: number; webUrl: string; applicationName: string; displayName: string }>>;
-  createLinkedResourceAsync(taskId: number, webUrl: string, applicationName: string, displayName?: string): Promise<number>;
+  listLinkedResourcesAsync(taskId: string | number): Promise<Array<{ id: number; webUrl: string; applicationName: string; displayName: string }>>;
+  createLinkedResourceAsync(taskId: string | number, webUrl: string, applicationName: string, displayName?: string): Promise<number>;
   deleteLinkedResourceAsync(linkedResourceId: number): Promise<void>;
 }
 

@@ -868,7 +868,7 @@ describe('graph/repository', () => {
     });
   });
 
-  describe('Tasks', () => {
+  describe('Tasks (durable tl_ / td_ tokens)', () => {
     describe('listTasks (sync)', () => {
       it('throws error (sync not supported)', () => {
         expect(() => repository.listTasks(50, 0)).toThrow('Use listTasksAsync()');
@@ -876,7 +876,7 @@ describe('graph/repository', () => {
     });
 
     describe('listTasksAsync', () => {
-      it('returns mapped task rows', async () => {
+      it('returns mapped task rows with durable td_/tl_ tokens', async () => {
         mockClient.listAllTasks.mockResolvedValue([
           { id: 'task-1', taskListId: 'list-1', title: 'Task 1' },
         ]);
@@ -885,6 +885,19 @@ describe('graph/repository', () => {
 
         expect(result).toHaveLength(1);
         expect(result[0].name).toBe('Task 1');
+        expect(result[0].id).toMatch(/^td_/);
+        expect(result[0].folderId).toMatch(/^tl_/);
+      });
+
+      it('skips tasks missing an id or taskListId', async () => {
+        mockClient.listAllTasks.mockResolvedValue([
+          { id: 'task-1', taskListId: undefined, title: 'No list' },
+          { id: undefined, taskListId: 'list-1', title: 'No id' },
+        ]);
+
+        const result = await repository.listTasksAsync(50, 0);
+
+        expect(result).toHaveLength(0);
       });
     });
 
@@ -911,7 +924,7 @@ describe('graph/repository', () => {
     });
 
     describe('searchTasksAsync', () => {
-      it('returns search results', async () => {
+      it('returns search results with a durable td_ token', async () => {
         mockClient.searchTasks.mockResolvedValue([
           { id: 'task-1', taskListId: 'list-1', title: 'Matching Task' },
         ]);
@@ -920,17 +933,18 @@ describe('graph/repository', () => {
 
         expect(result).toHaveLength(1);
         expect(result[0].name).toBe('Matching Task');
+        expect(result[0].id).toMatch(/^td_/);
         expect(mockClient.searchTasks).toHaveBeenCalledWith('Matching', 50);
       });
 
-      it('caches task IDs for later retrieval', async () => {
+      it('mints a td_ token resolvable via getTaskInfo', async () => {
         mockClient.searchTasks.mockResolvedValue([
           { id: 'task-1', taskListId: 'list-1', title: 'Task' },
         ]);
 
-        await repository.searchTasksAsync('Task', 50);
+        const result = await repository.searchTasksAsync('Task', 50);
 
-        const taskInfo = repository.getTaskInfo(hashStringToNumber('task-1'));
+        const taskInfo = repository.getTaskInfo(result[0].id);
         expect(taskInfo).toEqual({ taskListId: 'list-1', taskId: 'task-1' });
       });
     });
@@ -942,12 +956,13 @@ describe('graph/repository', () => {
     });
 
     describe('getTaskAsync', () => {
-      it('returns task by numeric ID', async () => {
-        // Populate task cache
+      it('returns task by td_ token', async () => {
+        // Mint a td_ token via listTasksAsync
         mockClient.listAllTasks.mockResolvedValue([
           { id: 'task-1', taskListId: 'list-1', title: 'Task 1' },
         ]);
-        await repository.listTasksAsync(50, 0);
+        const tasks = await repository.listTasksAsync(50, 0);
+        const tok = tasks[0].id;
 
         mockClient.getTask.mockResolvedValue({
           id: 'task-1',
@@ -955,13 +970,18 @@ describe('graph/repository', () => {
           status: 'completed',
         });
 
-        const result = await repository.getTaskAsync(hashStringToNumber('task-1'));
+        const result = await repository.getTaskAsync(tok);
 
         expect(result?.name).toBe('Task 1');
         expect(mockClient.getTask).toHaveBeenCalledWith('list-1', 'task-1');
       });
 
-      it('returns undefined when task ID not in cache', async () => {
+      it('returns undefined for an unknown td_ token (contract)', async () => {
+        const result = await repository.getTaskAsync('td_bogus');
+        expect(result).toBeUndefined();
+      });
+
+      it('returns undefined for a legacy numeric id (contract)', async () => {
         const result = await repository.getTaskAsync(99999);
         expect(result).toBeUndefined();
       });
@@ -969,7 +989,7 @@ describe('graph/repository', () => {
   });
 
   describe('listTaskListsAsync', () => {
-    it('returns mapped task lists with numeric IDs', async () => {
+    it('returns mapped task lists with durable tl_ tokens', async () => {
       mockClient.listTaskLists.mockResolvedValue([
         { id: 'list-1', displayName: 'My Tasks', wellknownListName: 'defaultList' },
         { id: 'list-2', displayName: 'Work', wellknownListName: 'none' },
@@ -978,27 +998,24 @@ describe('graph/repository', () => {
       const result = await repository.listTaskListsAsync();
 
       expect(result).toHaveLength(2);
-      expect(result[0]).toEqual({
-        id: hashStringToNumber('list-1'),
-        name: 'My Tasks',
-        isDefault: true,
-      });
-      expect(result[1]).toEqual({
-        id: hashStringToNumber('list-2'),
-        name: 'Work',
-        isDefault: false,
-      });
+      expect(result[0].id).toMatch(/^tl_/);
+      expect(result[0].name).toBe('My Tasks');
+      expect(result[0].isDefault).toBe(true);
+      expect(result[1].id).toMatch(/^tl_/);
+      expect(result[1].id).not.toBe(result[0].id);
+      expect(result[1].name).toBe('Work');
+      expect(result[1].isDefault).toBe(false);
     });
 
-    it('caches task list IDs', async () => {
+    it('mints a tl_ token resolvable via getTaskListGraphId', async () => {
       mockClient.listTaskLists.mockResolvedValue([
         { id: 'list-1', displayName: 'My Tasks', wellknownListName: 'defaultList' },
       ]);
 
-      await repository.listTaskListsAsync();
+      const result = await repository.listTaskListsAsync();
 
-      const cachedId = repository.getTaskListGraphId(hashStringToNumber('list-1'));
-      expect(cachedId).toBe('list-1');
+      const graphId = repository.getTaskListGraphId(result[0].id);
+      expect(graphId).toBe('list-1');
     });
 
     it('detects default list via wellknownListName', async () => {
@@ -2377,50 +2394,22 @@ describe('graph/repository', () => {
   });
 
   describe('Task Write Operations (Async)', () => {
-    describe('taskLists cache population', () => {
-      it('populates taskLists cache in listTasksAsync', async () => {
-        mockClient.listAllTasks.mockResolvedValue([
-          { id: 'task-1', taskListId: 'list-1', title: 'Task 1' },
-          { id: 'task-2', taskListId: 'list-2', title: 'Task 2' },
-        ]);
-
-        await repository.listTasksAsync(50, 0);
-
-        // Verify taskLists cache was populated
-        const idCache = (repository as any).idCache;
-        expect(idCache.taskLists.get(hashStringToNumber('list-1'))).toBe('list-1');
-        expect(idCache.taskLists.get(hashStringToNumber('list-2'))).toBe('list-2');
-      });
-
-      it('populates taskLists cache in listIncompleteTasksAsync', async () => {
-        mockClient.listAllTasks.mockResolvedValue([
-          { id: 'task-3', taskListId: 'list-3', title: 'Task 3' },
-        ]);
-
-        await repository.listIncompleteTasksAsync(50, 0);
-
-        const idCache = (repository as any).idCache;
-        expect(idCache.taskLists.get(hashStringToNumber('list-3'))).toBe('list-3');
-      });
-    });
-
     describe('createTaskAsync', () => {
-      it('creates a task with all fields and caches the result', async () => {
-        // Populate taskLists cache
-        mockClient.listAllTasks.mockResolvedValue([
-          { id: 'task-existing', taskListId: 'list-1', title: 'Existing' },
+      it('creates a task with all fields and returns a resolvable td_ token', async () => {
+        mockClient.listTaskLists.mockResolvedValue([
+          { id: 'list-1', displayName: 'List', wellknownListName: 'none' },
         ]);
-        await repository.listTasksAsync(50, 0);
+        const lists = await repository.listTaskListsAsync();
+        const listTok = lists[0].id;
 
         mockClient.createTask.mockResolvedValue({
           id: 'task-new-1',
           title: 'New Task',
         });
 
-        const listNumericId = hashStringToNumber('list-1');
-        const numericId = await repository.createTaskAsync({
+        const taskTok = await repository.createTaskAsync({
           title: 'New Task',
-          task_list_id: listNumericId,
+          task_list_id: listTok,
           body: 'Some notes',
           body_type: 'text',
           due_date: '2026-03-01T00:00:00Z',
@@ -2437,28 +2426,28 @@ describe('graph/repository', () => {
           reminderDateTime: { dateTime: '2026-02-28T09:00:00Z', timeZone: 'UTC' },
         });
 
-        expect(numericId).toBe(hashStringToNumber('task-new-1'));
+        expect(taskTok).toMatch(/^td_/);
 
-        // Verify cached in tasks
-        const taskInfo = repository.getTaskInfo(numericId);
+        // Verify the token resolves
+        const taskInfo = repository.getTaskInfo(taskTok);
         expect(taskInfo).toEqual({ taskListId: 'list-1', taskId: 'task-new-1' });
       });
 
       it('creates a task with only required fields', async () => {
-        mockClient.listAllTasks.mockResolvedValue([
-          { id: 'task-existing', taskListId: 'list-1', title: 'Existing' },
+        mockClient.listTaskLists.mockResolvedValue([
+          { id: 'list-1', displayName: 'List', wellknownListName: 'none' },
         ]);
-        await repository.listTasksAsync(50, 0);
+        const lists = await repository.listTaskListsAsync();
+        const listTok = lists[0].id;
 
         mockClient.createTask.mockResolvedValue({
           id: 'task-min',
           title: 'Minimal Task',
         });
 
-        const listNumericId = hashStringToNumber('list-1');
         await repository.createTaskAsync({
           title: 'Minimal Task',
-          task_list_id: listNumericId,
+          task_list_id: listTok,
         });
 
         expect(mockClient.createTask).toHaveBeenCalledWith('list-1', {
@@ -2467,20 +2456,20 @@ describe('graph/repository', () => {
       });
 
       it('creates a task with daily recurrence (noEnd)', async () => {
-        mockClient.listAllTasks.mockResolvedValue([
-          { id: 'task-existing', taskListId: 'list-1', title: 'Existing' },
+        mockClient.listTaskLists.mockResolvedValue([
+          { id: 'list-1', displayName: 'List', wellknownListName: 'none' },
         ]);
-        await repository.listTasksAsync(50, 0);
+        const lists = await repository.listTaskListsAsync();
+        const listTok = lists[0].id;
 
         mockClient.createTask.mockResolvedValue({
           id: 'task-recur-1',
           title: 'Daily Task',
         });
 
-        const listNumericId = hashStringToNumber('list-1');
         await repository.createTaskAsync({
           title: 'Daily Task',
-          task_list_id: listNumericId,
+          task_list_id: listTok,
           recurrence: {
             pattern: 'daily',
             interval: 1,
@@ -2505,20 +2494,20 @@ describe('graph/repository', () => {
       });
 
       it('creates a task with weekly recurrence and days_of_week', async () => {
-        mockClient.listAllTasks.mockResolvedValue([
-          { id: 'task-existing', taskListId: 'list-1', title: 'Existing' },
+        mockClient.listTaskLists.mockResolvedValue([
+          { id: 'list-1', displayName: 'List', wellknownListName: 'none' },
         ]);
-        await repository.listTasksAsync(50, 0);
+        const lists = await repository.listTaskListsAsync();
+        const listTok = lists[0].id;
 
         mockClient.createTask.mockResolvedValue({
           id: 'task-recur-2',
           title: 'Weekly Task',
         });
 
-        const listNumericId = hashStringToNumber('list-1');
         await repository.createTaskAsync({
           title: 'Weekly Task',
-          task_list_id: listNumericId,
+          task_list_id: listTok,
           recurrence: {
             pattern: 'weekly',
             interval: 2,
@@ -2547,20 +2536,20 @@ describe('graph/repository', () => {
       });
 
       it('creates a task with monthly recurrence and day_of_month', async () => {
-        mockClient.listAllTasks.mockResolvedValue([
-          { id: 'task-existing', taskListId: 'list-1', title: 'Existing' },
+        mockClient.listTaskLists.mockResolvedValue([
+          { id: 'list-1', displayName: 'List', wellknownListName: 'none' },
         ]);
-        await repository.listTasksAsync(50, 0);
+        const lists = await repository.listTaskListsAsync();
+        const listTok = lists[0].id;
 
         mockClient.createTask.mockResolvedValue({
           id: 'task-recur-3',
           title: 'Monthly Task',
         });
 
-        const listNumericId = hashStringToNumber('list-1');
         await repository.createTaskAsync({
           title: 'Monthly Task',
-          task_list_id: listNumericId,
+          task_list_id: listTok,
           recurrence: {
             pattern: 'monthly',
             day_of_month: 15,
@@ -2588,47 +2577,56 @@ describe('graph/repository', () => {
       });
 
       it('creates a task without recurrence — no recurrence field in graph object', async () => {
-        mockClient.listAllTasks.mockResolvedValue([
-          { id: 'task-existing', taskListId: 'list-1', title: 'Existing' },
+        mockClient.listTaskLists.mockResolvedValue([
+          { id: 'list-1', displayName: 'List', wellknownListName: 'none' },
         ]);
-        await repository.listTasksAsync(50, 0);
+        const lists = await repository.listTaskListsAsync();
+        const listTok = lists[0].id;
 
         mockClient.createTask.mockResolvedValue({
           id: 'task-no-recur',
           title: 'No Recurrence',
         });
 
-        const listNumericId = hashStringToNumber('list-1');
         await repository.createTaskAsync({
           title: 'No Recurrence',
-          task_list_id: listNumericId,
+          task_list_id: listTok,
         });
 
         const callArgs = mockClient.createTask.mock.calls[0][1];
         expect(callArgs).not.toHaveProperty('recurrence');
       });
 
-      it('throws when task list ID not in cache', async () => {
+      it('rejects a legacy numeric task list id', async () => {
         await expect(
           repository.createTaskAsync({
             title: 'Test',
             task_list_id: 99999,
           })
-        ).rejects.toThrow('Task list ID 99999 not found in cache. Try searching for or listing the item first to refresh the cache.');
+        ).rejects.toThrow('not supported');
+      });
+
+      it('rejects an unknown tl_ token', async () => {
+        await expect(
+          repository.createTaskAsync({
+            title: 'Test',
+            task_list_id: 'tl_bogus',
+          })
+        ).rejects.toThrow('Unknown or unresolvable');
       });
     });
 
     describe('updateTaskAsync', () => {
-      it('looks up task info and calls client.updateTask', async () => {
-        // Populate task cache
+      it('resolves the td_ token and calls client.updateTask', async () => {
         mockClient.listAllTasks.mockResolvedValue([
           { id: 'task-1', taskListId: 'list-1', title: 'Old Title' },
         ]);
-        await repository.listTasksAsync(50, 0);
+        const tasks = await repository.listTasksAsync(50, 0);
+        const tok = tasks[0].id;
 
         mockClient.updateTask.mockResolvedValue(undefined);
 
-        await repository.updateTaskAsync(hashStringToNumber('task-1'), {
+        await repository.updateTaskAsync(tok, {
           title: 'New Title',
         });
 
@@ -2641,11 +2639,12 @@ describe('graph/repository', () => {
         mockClient.listAllTasks.mockResolvedValue([
           { id: 'task-1', taskListId: 'list-1', title: 'Old Title' },
         ]);
-        await repository.listTasksAsync(50, 0);
+        const tasks = await repository.listTasksAsync(50, 0);
+        const tok = tasks[0].id;
 
         mockClient.updateTask.mockResolvedValue(undefined);
 
-        await repository.updateTaskAsync(hashStringToNumber('task-1'), {
+        await repository.updateTaskAsync(tok, {
           recurrence: {
             pattern: {
               type: 'yearly',
@@ -2672,24 +2671,30 @@ describe('graph/repository', () => {
         });
       });
 
-      it('throws if task not in cache', async () => {
+      it('rejects a legacy numeric task id', async () => {
         await expect(
           repository.updateTaskAsync(99999, { title: 'Nope' })
-        ).rejects.toThrow('Task ID 99999 not found in cache. Try searching for or listing the item first to refresh the cache.');
+        ).rejects.toThrow('not supported');
+      });
+
+      it('rejects an unknown td_ token', async () => {
+        await expect(
+          repository.updateTaskAsync('td_bogus', { title: 'Nope' })
+        ).rejects.toThrow('Unknown or unresolvable');
       });
     });
 
     describe('completeTaskAsync', () => {
       it('calls updateTaskAsync with completed status', async () => {
-        // Populate task cache
         mockClient.listAllTasks.mockResolvedValue([
           { id: 'task-1', taskListId: 'list-1', title: 'To Complete' },
         ]);
-        await repository.listTasksAsync(50, 0);
+        const tasks = await repository.listTasksAsync(50, 0);
+        const tok = tasks[0].id;
 
         mockClient.updateTask.mockResolvedValue(undefined);
 
-        await repository.completeTaskAsync(hashStringToNumber('task-1'));
+        await repository.completeTaskAsync(tok);
 
         expect(mockClient.updateTask).toHaveBeenCalledWith('list-1', 'task-1', {
           status: 'completed',
@@ -2700,98 +2705,101 @@ describe('graph/repository', () => {
         });
       });
 
-      it('throws if task not in cache', async () => {
+      it('rejects an unknown td_ token', async () => {
         await expect(
-          repository.completeTaskAsync(99999)
-        ).rejects.toThrow('Task ID 99999 not found in cache. Try searching for or listing the item first to refresh the cache.');
+          repository.completeTaskAsync('td_bogus')
+        ).rejects.toThrow('Unknown or unresolvable');
       });
     });
 
     describe('deleteTaskAsync', () => {
-      it('calls client.deleteTask and removes from idCache', async () => {
-        // Populate task cache
+      it('resolves the td_ token and calls client.deleteTask', async () => {
         mockClient.listAllTasks.mockResolvedValue([
           { id: 'task-del', taskListId: 'list-1', title: 'To Delete' },
         ]);
-        await repository.listTasksAsync(50, 0);
+        const tasks = await repository.listTasksAsync(50, 0);
+        const tok = tasks[0].id;
 
         mockClient.deleteTask.mockResolvedValue(undefined);
 
-        const numericId = hashStringToNumber('task-del');
-        await repository.deleteTaskAsync(numericId);
+        await repository.deleteTaskAsync(tok);
 
         expect(mockClient.deleteTask).toHaveBeenCalledWith('list-1', 'task-del');
-
-        // Verify it was removed from cache
-        const taskInfo = repository.getTaskInfo(numericId);
-        expect(taskInfo).toBeUndefined();
       });
 
-      it('throws if task not in cache', async () => {
+      it('rejects an unknown td_ token', async () => {
+        await expect(
+          repository.deleteTaskAsync('td_bogus')
+        ).rejects.toThrow('Unknown or unresolvable');
+      });
+
+      it('rejects a legacy numeric task id', async () => {
         await expect(
           repository.deleteTaskAsync(99999)
-        ).rejects.toThrow('Task ID 99999 not found in cache. Try searching for or listing the item first to refresh the cache.');
+        ).rejects.toThrow('not supported');
       });
     });
 
     describe('createTaskListAsync', () => {
-      it('creates task list and caches the result', async () => {
+      it('creates task list and returns a resolvable tl_ token', async () => {
         mockClient.createTaskList.mockResolvedValue({
           id: 'new-list-1',
           displayName: 'My New List',
         });
 
-        const numericId = await repository.createTaskListAsync('My New List');
+        const listTok = await repository.createTaskListAsync('My New List');
 
         expect(mockClient.createTaskList).toHaveBeenCalledWith('My New List');
-        expect(numericId).toBe(hashStringToNumber('new-list-1'));
+        expect(listTok).toMatch(/^tl_/);
 
-        // Verify it was cached in taskLists
-        const idCache = (repository as any).idCache;
-        expect(idCache.taskLists.get(numericId)).toBe('new-list-1');
+        const graphId = repository.getTaskListGraphId(listTok);
+        expect(graphId).toBe('new-list-1');
       });
     });
 
     describe('renameTaskListAsync', () => {
       it('calls updateTaskList with correct args', async () => {
-        // First cache the task list
         mockClient.listTaskLists.mockResolvedValue([
           { id: 'list-abc', displayName: 'Old Name', isOwner: true, isShared: false, wellknownListName: 'none' },
         ]);
-        await repository.listTaskListsAsync();
+        const lists = await repository.listTaskListsAsync();
+        const tok = lists[0].id;
 
         mockClient.updateTaskList.mockResolvedValue(undefined);
-        const numericId = hashStringToNumber('list-abc');
-        await repository.renameTaskListAsync(numericId, 'New Name');
+        await repository.renameTaskListAsync(tok, 'New Name');
 
         expect(mockClient.updateTaskList).toHaveBeenCalledWith('list-abc', { displayName: 'New Name' });
       });
 
-      it('throws for unknown ID', async () => {
-        await expect(repository.renameTaskListAsync(999999, 'Name')).rejects.toThrow('not found in cache');
+      it('rejects an unknown tl_ token', async () => {
+        await expect(repository.renameTaskListAsync('tl_bogus', 'Name')).rejects.toThrow('Unknown or unresolvable');
+      });
+
+      it('rejects a legacy numeric id', async () => {
+        await expect(repository.renameTaskListAsync(999999, 'Name')).rejects.toThrow('not supported');
       });
     });
 
     describe('deleteTaskListAsync', () => {
-      it('deletes a task list and removes from cache', async () => {
-        // First cache the task list
+      it('resolves the tl_ token and calls client.deleteTaskList', async () => {
         mockClient.listTaskLists.mockResolvedValue([
           { id: 'list-del', displayName: 'To Delete', isOwner: true, isShared: false, wellknownListName: 'none' },
         ]);
-        await repository.listTaskListsAsync();
+        const lists = await repository.listTaskListsAsync();
+        const tok = lists[0].id;
 
         mockClient.deleteTaskList.mockResolvedValue(undefined);
-        const numericId = hashStringToNumber('list-del');
-        await repository.deleteTaskListAsync(numericId);
+        await repository.deleteTaskListAsync(tok);
 
         expect(mockClient.deleteTaskList).toHaveBeenCalledWith('list-del');
-
-        // Should throw if we try to delete again (removed from cache)
-        await expect(repository.deleteTaskListAsync(numericId)).rejects.toThrow('not found in cache');
       });
 
-      it('throws for unknown ID', async () => {
-        await expect(repository.deleteTaskListAsync(999999)).rejects.toThrow('not found in cache');
+      it('rejects an unknown tl_ token', async () => {
+        await expect(repository.deleteTaskListAsync('tl_bogus')).rejects.toThrow('Unknown or unresolvable');
+      });
+
+      it('rejects a legacy numeric id', async () => {
+        await expect(repository.deleteTaskListAsync(999999)).rejects.toThrow('not supported');
       });
     });
   });
@@ -2909,17 +2917,21 @@ describe('graph/repository', () => {
     });
 
     describe('getTaskInfo', () => {
-      it('returns undefined when task ID not cached', () => {
+      it('returns undefined for a legacy numeric id (contract)', () => {
         expect(repository.getTaskInfo(99999)).toBeUndefined();
       });
 
-      it('returns task info when cached', async () => {
+      it('returns undefined for an unknown td_ token (contract)', () => {
+        expect(repository.getTaskInfo('td_bogus')).toBeUndefined();
+      });
+
+      it('returns task info for a resolvable td_ token', async () => {
         mockClient.listAllTasks.mockResolvedValue([
           { id: 'task-1', taskListId: 'list-1', title: 'Task 1' },
         ]);
-        await repository.listTasksAsync(50, 0);
+        const tasks = await repository.listTasksAsync(50, 0);
 
-        const info = repository.getTaskInfo(hashStringToNumber('task-1'));
+        const info = repository.getTaskInfo(tasks[0].id);
 
         expect(info).toEqual({ taskListId: 'list-1', taskId: 'task-1' });
       });

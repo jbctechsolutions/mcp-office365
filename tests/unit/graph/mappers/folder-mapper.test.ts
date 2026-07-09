@@ -12,9 +12,7 @@ import type * as MicrosoftGraph from '@microsoft/microsoft-graph-types';
 import {
   mapMailFolderToRow,
   mapCalendarToFolderRow,
-  mapTaskListToFolderRow,
 } from '../../../../src/graph/mappers/folder-mapper.js';
-import { hashStringToNumber } from '../../../../src/graph/mappers/utils.js';
 import { mintSelfEncoded, parseToken } from '../../../../src/ids/token.js';
 
 describe('graph/mappers/folder-mapper', () => {
@@ -147,53 +145,6 @@ describe('graph/mappers/folder-mapper', () => {
       };
 
       const result = mapCalendarToFolderRow(calendar);
-
-      expect(result.name).toBeNull();
-    });
-  });
-
-  describe('mapTaskListToFolderRow', () => {
-    it('maps task list with all fields', () => {
-      const taskList: MicrosoftGraph.TodoTaskList = {
-        id: 'tasklist-123',
-        displayName: 'My Tasks',
-        isOwner: true,
-        isShared: false,
-        wellknownListName: 'defaultList',
-      };
-
-      const result = mapTaskListToFolderRow(taskList);
-
-      // Task lists are a separate, not-yet-migrated entity — still hash-based,
-      // just stringified to satisfy the now-string-only shared FolderRow.id.
-      expect(result.id).toBe(String(hashStringToNumber('tasklist-123')));
-      expect(result.name).toBe('My Tasks');
-      expect(result.parentId).toBeNull();
-      expect(result.folderType).toBe(3); // Task folder
-      expect(result.specialType).toBe(0);
-      expect(result.accountId).toBe(1);
-      expect(result.messageCount).toBe(0);
-      expect(result.unreadCount).toBe(0);
-    });
-
-    it('handles task list with null id', () => {
-      const taskList: MicrosoftGraph.TodoTaskList = {
-        id: undefined,
-        displayName: 'Test List',
-      };
-
-      const result = mapTaskListToFolderRow(taskList);
-
-      expect(result.id).toBe(String(hashStringToNumber('')));
-    });
-
-    it('handles task list with null displayName', () => {
-      const taskList: MicrosoftGraph.TodoTaskList = {
-        id: 'tasklist-123',
-        displayName: undefined,
-      };
-
-      const result = mapTaskListToFolderRow(taskList);
 
       expect(result.name).toBeNull();
     });

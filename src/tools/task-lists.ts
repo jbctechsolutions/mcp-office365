@@ -34,17 +34,17 @@ export const CreateTaskListInput = z.strictObject({
 });
 
 export const RenameTaskListInput = z.strictObject({
-  task_list_id: z.number().int().positive().describe('Task list ID'),
+  task_list_id: z.string().min(1).describe('Task list ID (tl_ token)'),
   name: z.string().min(1).describe('New name for the task list'),
 });
 
 export const PrepareDeleteTaskListInput = z.strictObject({
-  task_list_id: z.number().int().positive().describe('Task list ID to delete'),
+  task_list_id: z.string().min(1).describe('Task list ID (tl_ token) to delete'),
 });
 
 export const ConfirmDeleteTaskListInput = z.strictObject({
   token_id: z.string().uuid().describe('Approval token from prepare_delete_task_list'),
-  task_list_id: z.number().int().positive().describe('The task list ID to delete'),
+  task_list_id: z.string().min(1).describe('The task list ID (tl_ token) to delete'),
 });
 
 // =============================================================================
@@ -79,8 +79,8 @@ export class GraphTaskListsTools {
   }
 
   async createTaskList(params: CreateTaskListParams): Promise<ToolResult> {
-    const numericId = await this.repository.createTaskListAsync(params.display_name);
-    return jsonResult({ id: numericId, display_name: params.display_name, status: 'created' });
+    const listId = await this.repository.createTaskListAsync(params.display_name);
+    return jsonResult({ id: listId, display_name: params.display_name, status: 'created' });
   }
 
   async renameTaskList(params: RenameTaskListParams): Promise<ToolResult> {

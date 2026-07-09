@@ -10,7 +10,6 @@
 import type * as MicrosoftGraph from '@microsoft/microsoft-graph-types';
 import type { TaskRow } from '../../database/repository.js';
 import {
-  hashStringToNumber,
   dateTimeTimeZoneToTimestamp,
   importanceToPriority,
   createGraphContentPath,
@@ -24,9 +23,11 @@ export interface TodoTaskWithList extends MicrosoftGraph.TodoTask {
 }
 
 /**
- * Maps a Graph TodoTask to a TaskRow.
+ * Maps a Graph TodoTask to a TaskRow. `id`/`folderId` are pre-minted durable
+ * tokens (`td_`/`tl_`) — mappers are pure and cannot mint alias tokens
+ * themselves, so the repository computes them and passes them in.
  */
-export function mapTaskToTaskRow(task: TodoTaskWithList): TaskRow {
+export function mapTaskToTaskRow(task: TodoTaskWithList, id: string | number, folderId: string | number): TaskRow {
   const taskId = task.id ?? '';
 
   // Type assertions needed due to Graph API's NullableOption types
@@ -35,8 +36,8 @@ export function mapTaskToTaskRow(task: TodoTaskWithList): TaskRow {
   const startDateTime = task.startDateTime as { dateTime?: string; timeZone?: string } | null | undefined;
 
   return {
-    id: hashStringToNumber(taskId),
-    folderId: task.taskListId != null ? hashStringToNumber(task.taskListId) : 0,
+    id,
+    folderId,
     name: task.title ?? null,
     isCompleted: task.status === 'completed' ? 1 : 0,
     dueDate: dateTimeTimeZoneToTimestamp(dueDateTime),

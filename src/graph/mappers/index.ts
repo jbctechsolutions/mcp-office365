@@ -12,7 +12,6 @@
 export {
   mapMailFolderToRow,
   mapCalendarToFolderRow,
-  mapTaskListToFolderRow,
 } from './folder-mapper.js';
 
 export { mapMessageToEmailRow } from './email-mapper.js';

@@ -88,8 +88,12 @@ export interface ContactRow {
 }
 
 export interface TaskRow {
-  readonly id: number;
-  readonly folderId: number;
+  // Durable composite `td_…` token on the Graph backend (U5); numeric on the
+  // AppleScript/SQLite backend (D4).
+  readonly id: string | number;
+  // Durable alias-backed `tl_…` token on the Graph backend (U5); numeric on the
+  // AppleScript/SQLite backend (D4).
+  readonly folderId: string | number;
   readonly name: string | null;
   readonly isCompleted: number;
   readonly dueDate: number | null;
@@ -148,7 +152,7 @@ export interface IRepository {
   listTasks(limit: number, offset: number): TaskRow[];
   listIncompleteTasks(limit: number, offset: number): TaskRow[];
   searchTasks(query: string, limit: number): TaskRow[];
-  getTask(id: number): TaskRow | undefined;
+  getTask(id: string | number): TaskRow | undefined;
 
   // Notes
   listNotes(limit: number, offset: number): NoteRow[];
@@ -410,7 +414,7 @@ export class OutlookRepository implements IRepository {
     });
   }
 
-  getTask(id: number): TaskRow | undefined {
+  getTask(id: string | number): TaskRow | undefined {
     return this.connection.execute((db) => {
       const stmt = db.prepare(queries.GET_TASK);
       return stmt.get(id) as TaskRow | undefined;

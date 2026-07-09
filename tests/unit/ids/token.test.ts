@@ -139,6 +139,23 @@ describe('ids/token — composite / alias-backed', () => {
     expect(parsed?.kind).toBe('alias');
     expect(parsed?.entityType).toBe('channelMessage');
   });
+
+  it('mints a td_ token for task (composite {taskListId, taskId}) and classifies it as alias', () => {
+    const token = mintComposite('task', canonicalKey('task', { taskListId: 'L', taskId: 'T' }));
+    expect(token.startsWith('td_')).toBe(true);
+    const parsed = parseToken(token);
+    expect(parsed?.kind).toBe('alias');
+    expect(parsed?.entityType).toBe('task');
+    expect(parsed?.graphId).toBeUndefined();
+  });
+
+  it('mints a tl_ token for taskList and classifies it as alias', () => {
+    const token = mintComposite('taskList', 'k');
+    expect(token.startsWith('tl_')).toBe(true);
+    const parsed = parseToken(token);
+    expect(parsed?.kind).toBe('alias');
+    expect(parsed?.entityType).toBe('taskList');
+  });
 });
 
 describe('ids/token — parse guards', () => {
