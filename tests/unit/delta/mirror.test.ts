@@ -20,6 +20,7 @@ class FakeClient {
   mailQueue: MsgResp[] = [];
   calQueue: EvtResp[] = [];
   lastMailDeltaLink: string | undefined;
+  lastCalDeltaLink: string | undefined;
 
   getMessagesDelta(_folderId: string, deltaLink?: string): Promise<MsgResp> {
     this.lastMailDeltaLink = deltaLink;
@@ -28,7 +29,8 @@ class FakeClient {
     return Promise.resolve(next);
   }
 
-  getCalendarViewDelta(_start: string, _end: string, _deltaLink?: string): Promise<EvtResp> {
+  getCalendarViewDelta(_start: string, _end: string, deltaLink?: string): Promise<EvtResp> {
+    this.lastCalDeltaLink = deltaLink;
     const next = this.calQueue.shift();
     if (next == null) throw new Error('no scripted calendar response');
     return Promise.resolve(next);
@@ -39,8 +41,8 @@ function msg(id: string, extra: Record<string, unknown> = {}): unknown {
   return { id, subject: `subject-${id}`, receivedDateTime: '2026-01-01T00:00:00Z', isRead: false, ...extra };
 }
 
-function removed(id: string): unknown {
-  return { id, '@removed': { reason: 'deleted' } };
+function removed(id: string, reason = 'deleted'): unknown {
+  return { id, '@removed': { reason } };
 }
 
 let dir: string;
@@ -114,6 +116,46 @@ describe('DeltaMirror mail', () => {
     expect(second.resources[0]!.baseline).toBe(true);
   });
 
+  it('does NOT report @removed reason "changed" as a deletion, but drops it from the mirror', async () => {
+    fake.mailQueue.push({ messages: [msg('a'), msg('b')], deltaLink: 'link-1' });
+    await mirror.sync(['mail']);
+
+    // b left the view (moved folder) — a real delete only for reason 'deleted'.
+    fake.mailQueue.push({ messages: [removed('b', 'changed')], deltaLink: 'link-2' });
+    const report = await mirror.sync(['mail']);
+    const mail = report.resources[0]!;
+
+    expect(mail.deleted).toHaveLength(0);
+    expect(store.delta.getItem('acct-1', 'mail:inbox', 'b')).toBeNull(); // still cleaned up
+    expect(mail.trackedCount).toBe(1); // only a remains
+  });
+
+  it('a baseline replaces the mirror so stale rows from a cursor-less round cannot linger', async () => {
+    // First round returns no cursor → re-baseline pending, mirror = {a, b}.
+    fake.mailQueue.push({ messages: [msg('a'), msg('b')], deltaLink: '' });
+    await mirror.sync(['mail']);
+    expect(store.delta.countItems('acct-1', 'mail:inbox')).toBe(2);
+
+    // Next baseline sees only {a} (b deleted while un-cursored) → mirror replaced.
+    fake.mailQueue.push({ messages: [msg('a')], deltaLink: 'link-2' });
+    const report = await mirror.sync(['mail']);
+    expect(report.resources[0]!.trackedCount).toBe(1);
+    expect(store.delta.getItem('acct-1', 'mail:inbox', 'b')).toBeNull();
+  });
+
+  it('collapses a created-then-deleted id within one round (no phantom create)', async () => {
+    fake.mailQueue.push({ messages: [msg('seed')], deltaLink: 'link-1' });
+    await mirror.sync(['mail']);
+
+    // 'x' appears as a value entry then as @removed in the same response.
+    fake.mailQueue.push({ messages: [msg('x'), removed('x')], deltaLink: 'link-2' });
+    const report = await mirror.sync(['mail']);
+    const mail = report.resources[0]!;
+
+    expect(mail.created).toHaveLength(0);
+    expect(store.delta.getItem('acct-1', 'mail:inbox', 'x')).toBeNull();
+  });
+
   it('reset clears tracking so the next sync re-baselines', async () => {
     fake.mailQueue.push({ messages: [msg('a')], deltaLink: 'link-1' });
     await mirror.sync(['mail']);
@@ -147,6 +189,23 @@ describe('DeltaMirror calendar', () => {
     const updated = cal.updated[0]!;
     expect(updated.token.startsWith('ev_')).toBe(true);
     expect(parseToken(updated.token)?.graphId).toBe('e1');
+  });
+
+  it('force re-baselines the calendar once its cursor exceeds the max age (stale window)', async () => {
+    let clock = 1_000_000;
+    const aging = new DeltaMirror(fake as unknown as GraphClient, store, () => 'acct-1', () => clock);
+
+    fake.calQueue.push({ events: [{ id: 'e1', subject: 'x' }], deltaLink: 'cal-1' });
+    await aging.sync(['calendar']);
+
+    // Advance 8 days (> 7-day cap). The stored cursor is treated as absent.
+    clock += 8 * 24 * 60 * 60 * 1000;
+    fake.calQueue.push({ events: [{ id: 'e1', subject: 'x' }], deltaLink: 'cal-2' });
+    const report = await aging.sync(['calendar']);
+
+    expect(report.resources[0]!.baseline).toBe(true);
+    expect(fake.lastCalDeltaLink).toBeUndefined(); // re-fetched with a fresh window
+    expect(store.delta.getDeltaLink('acct-1', 'calendar:primary')).toBe('cal-2');
   });
 });
 

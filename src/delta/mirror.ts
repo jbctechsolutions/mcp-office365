@@ -29,6 +29,12 @@ export type ResourceKey = 'mail' | 'calendar';
 /** How far forward/back the initial calendar-view window spans (baked into the cursor). */
 const CALENDAR_WINDOW_PAST_MS = 1 * 24 * 60 * 60 * 1000;
 const CALENDAR_WINDOW_FUTURE_MS = 90 * 24 * 60 * 60 * 1000;
+/**
+ * The calendar cursor bakes an absolute time window that cannot advance, so it
+ * is force-refreshed (re-baselined with a fresh window) once it is this old —
+ * bounding how far the tracked window can drift from "now".
+ */
+const CALENDAR_CURSOR_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 
 /** A single change surfaced to the caller. */
 export interface ChangeEntry {
@@ -63,6 +69,8 @@ export interface ChangeReport {
 interface RawDelta {
   graphId: string;
   removed: boolean;
+  /** `@removed.reason`: 'deleted' (gone) vs 'changed' (left this view). */
+  removedReason: string;
   summary: string;
   snapshot: Record<string, unknown>;
 }
@@ -72,6 +80,8 @@ interface ResourceDescriptor {
   /** Storage key in the delta tables (namespaced, room for future scoping). */
   storageKey: string;
   entityType: EntityType;
+  /** When set, a cursor older than this is force-refreshed with a fresh window. */
+  maxCursorAgeMs?: number;
   fetch(
     client: GraphClient,
     deltaLink: string | undefined,
@@ -79,9 +89,11 @@ interface ResourceDescriptor {
   ): Promise<{ items: RawDelta[]; deltaLink: string }>;
 }
 
-/** Reads `@removed` regardless of the concrete Graph type. */
-function isRemoved(item: unknown): boolean {
-  return (item as Record<string, unknown>)['@removed'] != null;
+/** Reads `@removed` (and its reason) regardless of the concrete Graph type. */
+function removal(item: unknown): { removed: boolean; reason: string } {
+  const marker = (item as Record<string, unknown>)['@removed'] as { reason?: string } | null | undefined;
+  if (marker == null) return { removed: false, reason: '' };
+  return { removed: true, reason: marker.reason ?? 'deleted' };
 }
 
 const MAIL_RESOURCE: ResourceDescriptor = {
@@ -94,9 +106,11 @@ const MAIL_RESOURCE: ResourceDescriptor = {
     for (const m of messages) {
       const graphId = m.id ?? '';
       if (graphId.length === 0) continue;
+      const { removed, reason } = removal(m);
       items.push({
         graphId,
-        removed: isRemoved(m),
+        removed,
+        removedReason: reason,
         summary: m.subject ?? '(no subject)',
         snapshot: {
           from: m.from?.emailAddress?.address ?? '',
@@ -113,6 +127,7 @@ const CALENDAR_RESOURCE: ResourceDescriptor = {
   key: 'calendar',
   storageKey: 'calendar:primary',
   entityType: 'event',
+  maxCursorAgeMs: CALENDAR_CURSOR_MAX_AGE_MS,
   async fetch(client, deltaLink, now) {
     const start = new Date(now - CALENDAR_WINDOW_PAST_MS).toISOString();
     const end = new Date(now + CALENDAR_WINDOW_FUTURE_MS).toISOString();
@@ -121,9 +136,11 @@ const CALENDAR_RESOURCE: ResourceDescriptor = {
     for (const e of events) {
       const graphId = e.id ?? '';
       if (graphId.length === 0) continue;
+      const { removed, reason } = removal(e);
       items.push({
         graphId,
-        removed: isRemoved(e),
+        removed,
+        removedReason: reason,
         summary: e.subject ?? '(no subject)',
         snapshot: {
           start: e.start?.dateTime ?? '',
@@ -176,10 +193,24 @@ export class DeltaMirror {
 
   private async syncResource(desc: ResourceDescriptor, syncedAt: number): Promise<ResourceChangeSet> {
     const accountId = this.accountId();
-    const prevLink = this.store.delta.getDeltaLink(accountId, desc.storageKey);
+    const cursor = this.store.delta.getCursor(accountId, desc.storageKey);
+
+    // A stale calendar-style cursor (fixed window that can no longer advance) is
+    // treated as absent so this round re-baselines with a fresh window.
+    const stale =
+      cursor != null &&
+      desc.maxCursorAgeMs != null &&
+      syncedAt - cursor.syncedAt > desc.maxCursorAgeMs;
+    const prevLink = stale ? undefined : (cursor?.deltaLink ?? undefined);
     const baseline = prevLink == null;
 
-    const { items, deltaLink } = await desc.fetch(this.client, prevLink ?? undefined, syncedAt);
+    const { items, deltaLink } = await desc.fetch(this.client, prevLink, syncedAt);
+    // Collapse duplicate ids within one response (last entry wins, per Graph
+    // ordering) so a created-then-deleted or repeated id can't be double-counted
+    // or leave the report inconsistent with the committed mirror.
+    const latest = new Map<string, RawDelta>();
+    for (const item of items) latest.set(item.graphId, item);
+
     const seen = baseline ? new Set<string>() : this.store.delta.getSeenIds(accountId, desc.storageKey);
 
     const upserts: MirrorItem[] = [];
@@ -188,20 +219,16 @@ export class DeltaMirror {
     const updated: ChangeEntry[] = [];
     const deleted: ChangeEntry[] = [];
 
-    for (const item of items) {
+    for (const item of latest.values()) {
       const token = mintSelfEncoded(desc.entityType, item.graphId);
       if (item.removed) {
+        // Drop from the mirror either way, but only report an actual deletion
+        // ('deleted'). 'changed' means the item merely left our view (moved
+        // folder / rescheduled out of window) — reporting it as deleted lies.
         deletes.push(item.graphId);
-        // Only report deletes we were actually mirroring — Graph can surface
-        // `@removed` for items outside our view (e.g. the calendar window edge).
-        if (!baseline && seen.has(item.graphId)) {
+        if (!baseline && item.removedReason === 'deleted' && seen.has(item.graphId)) {
           const known = this.store.delta.getItem(accountId, desc.storageKey, item.graphId);
-          deleted.push({
-            token,
-            graphId: item.graphId,
-            summary: known?.summary ?? '',
-            changeType: 'deleted',
-          });
+          deleted.push({ token, graphId: item.graphId, summary: known?.summary ?? '', changeType: 'deleted' });
         }
         continue;
       }
@@ -214,7 +241,15 @@ export class DeltaMirror {
       }
     }
 
-    this.store.delta.commit({ accountId, resource: desc.storageKey, deltaLink, syncedAt, upserts, deletes });
+    this.store.delta.commit({
+      accountId,
+      resource: desc.storageKey,
+      deltaLink,
+      syncedAt,
+      upserts,
+      deletes,
+      replaceMirror: baseline,
+    });
 
     const result: ResourceChangeSet = {
       resource: desc.key,

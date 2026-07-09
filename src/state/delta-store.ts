@@ -45,6 +45,18 @@ export interface DeltaCommit {
   upserts: readonly MirrorItem[];
   /** Graph ids to drop from the mirror. */
   deletes: readonly string[];
+  /**
+   * When true, the fetch was a full baseline: the mirror is replaced by
+   * `upserts` (existing rows for the resource are wiped first) so it exactly
+   * reflects current state and no stale rows survive. `deletes` is ignored.
+   */
+  replaceMirror?: boolean;
+}
+
+/** A stored delta cursor with its last-sync timestamp. */
+export interface DeltaCursor {
+  deltaLink: string;
+  syncedAt: number;
 }
 
 interface RawItemRow {
@@ -69,6 +81,15 @@ export class DeltaStore {
       .prepare('SELECT delta_link FROM delta_links WHERE account_id = ? AND resource = ?')
       .get(accountId, resource) as { delta_link: string } | undefined;
     return row?.delta_link ?? null;
+  }
+
+  /** Returns the cursor plus its last-sync time (for age-based re-baseline), or null. */
+  getCursor(accountId: string, resource: string): DeltaCursor | null {
+    const row = this.db
+      .prepare('SELECT delta_link, synced_at FROM delta_links WHERE account_id = ? AND resource = ?')
+      .get(accountId, resource) as { delta_link: string; synced_at: number } | undefined;
+    if (row === undefined) return null;
+    return { deltaLink: row.delta_link, syncedAt: row.synced_at };
   }
 
   /** Returns the set of graph ids already mirrored for a resource. */
@@ -107,6 +128,13 @@ export class DeltaStore {
    */
   commit(commit: DeltaCommit): void {
     const apply = this.db.transaction((c: DeltaCommit): void => {
+      // A baseline replaces the mirror wholesale, so no stale row from a prior
+      // (possibly cursor-less) round can survive to inflate counts or force a
+      // future add to misclassify as an update.
+      if (c.replaceMirror === true) {
+        this.db.prepare('DELETE FROM delta_items WHERE account_id = ? AND resource = ?').run(c.accountId, c.resource);
+      }
+
       if (c.deltaLink.length > 0) {
         this.db
           .prepare(

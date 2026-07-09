@@ -409,28 +409,30 @@ export class GraphClient {
     deltaLink?: string
   ): Promise<{ messages: MicrosoftGraph.Message[]; deltaLink: string }> {
     const client = await this.getClient();
-    let response;
+    let page: PageCollection;
 
     if (deltaLink != null) {
-      response = await client.api(deltaLink).get() as PageCollection;
+      page = await client.api(deltaLink).get() as PageCollection;
     } else {
-      response = await client
+      page = await client
         .api(`/me/mailFolders/${folderId}/messages/delta`)
         .select('id,subject,from,toRecipients,ccRecipients,receivedDateTime,sentDateTime,isRead,hasAttachments,importance,flag,bodyPreview,conversationId,internetMessageId,parentFolderId')
         .top(50)
         .get() as PageCollection;
     }
 
-    const messages: MicrosoftGraph.Message[] = [...((response.value as MicrosoftGraph.Message[] | undefined) ?? [])];
+    const messages: MicrosoftGraph.Message[] = [...((page.value as MicrosoftGraph.Message[] | undefined) ?? [])];
 
-    let nextLink = response['@odata.nextLink'];
+    // The deltaLink lands on the LAST page; paging through nextLinks and reading
+    // it from the first response would yield '' whenever the delta spans >1 page.
+    let nextLink = page['@odata.nextLink'];
     while (nextLink != null) {
-      const nextPage = await client.api(nextLink).get() as PageCollection;
-      messages.push(...((nextPage.value as MicrosoftGraph.Message[] | undefined) ?? []));
-      nextLink = nextPage['@odata.nextLink'];
+      page = await client.api(nextLink).get() as PageCollection;
+      messages.push(...((page.value as MicrosoftGraph.Message[] | undefined) ?? []));
+      nextLink = page['@odata.nextLink'];
     }
 
-    const newDeltaLink = response['@odata.deltaLink'] ?? '';
+    const newDeltaLink = page['@odata.deltaLink'] ?? '';
     return { messages, deltaLink: newDeltaLink };
   }
 
