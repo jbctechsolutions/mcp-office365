@@ -212,6 +212,13 @@ describe('SharedMailboxTools', () => {
         tools.listEvents({ mailbox: 'shared@example.com', start: 'not-a-date', end: '2026-07-02T00:00:00Z' }),
       ).rejects.toThrow(/ISO 8601/);
     });
+
+    it('rejects start after end', async () => {
+      await expect(
+        tools.listEvents({ mailbox: 'shared@example.com', start: '2026-07-03T00:00:00Z', end: '2026-07-02T00:00:00Z' }),
+      ).rejects.toThrow(/on or before/);
+      expect(client.listSharedEvents).not.toHaveBeenCalled();
+    });
   });
 
   describe('getEvent', () => {

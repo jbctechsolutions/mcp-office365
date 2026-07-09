@@ -338,6 +338,9 @@ export class SharedMailboxTools {
       if (Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime())) {
         throw new ValidationError('start and end must be valid ISO 8601 date-times.');
       }
+      if (startDate.getTime() > endDate.getTime()) {
+        throw new ValidationError('start must be on or before end.');
+      }
     }
     const events = await this.client.listSharedEvents(params.mailbox, params.limit ?? 25, startDate, endDate);
     return jsonResult({ mailbox: params.mailbox, events: events.map(mapEvent) });

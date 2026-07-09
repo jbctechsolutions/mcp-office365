@@ -2043,7 +2043,7 @@ export class GraphClient {
   async listSharedMailFolders(mailbox: string): Promise<MicrosoftGraph.MailFolder[]> {
     const client = await this.getClient();
     const response = await client
-      .api(`/users/${mailbox}/mailFolders`)
+      .api(`/users/${encodeURIComponent(mailbox)}/mailFolders`)
       .select('id,displayName,parentFolderId,totalItemCount,unreadItemCount')
       .top(100)
       .get() as PageCollection;
@@ -2058,15 +2058,18 @@ export class GraphClient {
   ): Promise<MicrosoftGraph.Message[]> {
     const client = await this.getClient();
     const apiPath = folderId != null
-      ? `/users/${mailbox}/mailFolders/${folderId}/messages`
-      : `/users/${mailbox}/messages`;
+      ? `/users/${encodeURIComponent(mailbox)}/mailFolders/${encodeURIComponent(folderId)}/messages`
+      : `/users/${encodeURIComponent(mailbox)}/messages`;
     let request = client
       .api(apiPath)
       .select('id,subject,from,toRecipients,ccRecipients,receivedDateTime,sentDateTime,isRead,hasAttachments,importance,flag,bodyPreview,conversationId')
-      .orderby('receivedDateTime desc')
       .top(limit);
     if (unreadOnly) {
+      // Graph rejects `$orderby` on a property not led by `$filter` (isRead),
+      // so drop the sort when filtering unread and rely on the default order.
       request = request.filter('isRead eq false');
+    } else {
+      request = request.orderby('receivedDateTime desc');
     }
     const response = await request.get() as PageCollection;
     return response.value as MicrosoftGraph.Message[];
@@ -2082,7 +2085,7 @@ export class GraphClient {
       ? 'id,subject,from,toRecipients,ccRecipients,receivedDateTime,sentDateTime,isRead,hasAttachments,importance,flag,body,bodyPreview,conversationId,parentFolderId'
       : 'id,subject,from,toRecipients,ccRecipients,receivedDateTime,sentDateTime,isRead,hasAttachments,importance,flag,bodyPreview,conversationId,parentFolderId';
     return await client
-      .api(`/users/${mailbox}/messages/${messageId}`)
+      .api(`/users/${encodeURIComponent(mailbox)}/messages/${encodeURIComponent(messageId)}`)
       .select(select)
       .get() as MicrosoftGraph.Message;
   }
@@ -2094,9 +2097,12 @@ export class GraphClient {
   ): Promise<MicrosoftGraph.Message[]> {
     const client = await this.getClient();
     // Mail $search cannot be combined with $orderby, so ordering is omitted.
+    // Strip embedded double quotes so a stray `"` can't break out of the
+    // quoted KQL `$search="..."` term.
+    const safeQuery = query.replace(/"/g, ' ');
     const response = await client
-      .api(`/users/${mailbox}/messages`)
-      .query({ $search: `"${query}"` })
+      .api(`/users/${encodeURIComponent(mailbox)}/messages`)
+      .query({ $search: `"${safeQuery}"` })
       .select('id,subject,from,toRecipients,ccRecipients,receivedDateTime,sentDateTime,isRead,hasAttachments,importance,flag,bodyPreview,conversationId')
       .top(limit)
       .get() as PageCollection;
@@ -2112,7 +2118,7 @@ export class GraphClient {
     const client = await this.getClient();
     if (startDate != null && endDate != null) {
       const response = await client
-        .api(`/users/${mailbox}/calendarView`)
+        .api(`/users/${encodeURIComponent(mailbox)}/calendarView`)
         .query({ startDateTime: startDate.toISOString(), endDateTime: endDate.toISOString() })
         .select('id,subject,start,end,location,isAllDay,organizer,attendees,bodyPreview')
         .orderby('start/dateTime')
@@ -2121,7 +2127,7 @@ export class GraphClient {
       return response.value as MicrosoftGraph.Event[];
     }
     const response = await client
-      .api(`/users/${mailbox}/events`)
+      .api(`/users/${encodeURIComponent(mailbox)}/events`)
       .select('id,subject,start,end,location,isAllDay,organizer,attendees,bodyPreview')
       .orderby('start/dateTime')
       .top(limit)
@@ -2132,7 +2138,7 @@ export class GraphClient {
   async getSharedEvent(mailbox: string, eventId: string): Promise<MicrosoftGraph.Event> {
     const client = await this.getClient();
     return await client
-      .api(`/users/${mailbox}/events/${eventId}`)
+      .api(`/users/${encodeURIComponent(mailbox)}/events/${encodeURIComponent(eventId)}`)
       .select('id,subject,start,end,location,isAllDay,organizer,attendees,body,recurrence,bodyPreview')
       .get() as MicrosoftGraph.Event;
   }
@@ -2140,16 +2146,19 @@ export class GraphClient {
   async listSharedDriveItems(mailbox: string, itemId?: string): Promise<GraphEntity[]> {
     const client = await this.getClient();
     const apiPath = itemId != null
-      ? `/users/${mailbox}/drive/items/${itemId}/children`
-      : `/users/${mailbox}/drive/root/children`;
+      ? `/users/${encodeURIComponent(mailbox)}/drive/items/${encodeURIComponent(itemId)}/children`
+      : `/users/${encodeURIComponent(mailbox)}/drive/root/children`;
     const response = await client.api(apiPath).get() as GraphCollectionResponse<GraphEntity>;
     return response.value;
   }
 
   async searchSharedDriveItems(mailbox: string, query: string, limit: number = 25): Promise<GraphEntity[]> {
     const client = await this.getClient();
+    // Escape for the OData string literal first (a lone `'` closes the literal;
+    // OData escapes it by doubling), then URL-encode the whole term.
+    const safeQuery = encodeURIComponent(query.replace(/'/g, "''"));
     const response = await client
-      .api(`/users/${mailbox}/drive/root/search(q='${encodeURIComponent(query)}')`)
+      .api(`/users/${encodeURIComponent(mailbox)}/drive/root/search(q='${safeQuery}')`)
       .top(limit)
       .get() as GraphCollectionResponse<GraphEntity>;
     return response.value;

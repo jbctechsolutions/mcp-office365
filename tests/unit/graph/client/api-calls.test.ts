@@ -1428,6 +1428,95 @@ describe('Graph API endpoint and method validation', () => {
   // Comprehensive endpoint pattern validation
   // =========================================================================
 
+  describe('Shared mailbox / delegate endpoints (#40)', () => {
+    it('listSharedMailFolders targets /users/{upn}/mailFolders with an encoded UPN', async () => {
+      setupMock();
+      await client.listSharedMailFolders('shared@example.com');
+      const call = apiCalls.at(-1)!;
+      expect(call.url).toBe('/users/shared%40example.com/mailFolders');
+      expect(call.topValue).toBe(100);
+    });
+
+    it('encodes a guest (#EXT#) UPN so it is not truncated as a URL fragment', async () => {
+      setupMock();
+      await client.listSharedMailFolders('alice_contoso.com#EXT#@fabrikam.onmicrosoft.com');
+      const call = apiCalls.at(-1)!;
+      expect(call.url).toContain('%23EXT%23');
+      expect(call.url).not.toContain('#');
+    });
+
+    it('listSharedMessages orders by receivedDateTime when not filtering unread', async () => {
+      setupMock();
+      await client.listSharedMessages('shared@example.com');
+      const call = apiCalls.at(-1)!;
+      expect(call.url).toBe('/users/shared%40example.com/messages');
+      expect(call.orderbyExpr).toBe('receivedDateTime desc');
+      expect(call.filterExpr).toBeUndefined();
+    });
+
+    it('listSharedMessages drops $orderby when filtering unread (Graph rejects the combo)', async () => {
+      setupMock();
+      await client.listSharedMessages('shared@example.com', undefined, 25, true);
+      const call = apiCalls.at(-1)!;
+      expect(call.filterExpr).toBe('isRead eq false');
+      expect(call.orderbyExpr).toBeUndefined();
+    });
+
+    it('listSharedMessages scopes to a folder when folderId is given', async () => {
+      setupMock();
+      await client.listSharedMessages('shared@example.com', 'FOLDER1');
+      const call = apiCalls.at(-1)!;
+      expect(call.url).toBe('/users/shared%40example.com/mailFolders/FOLDER1/messages');
+    });
+
+    it('getSharedMessage includes body only when requested', async () => {
+      setupMock({ id: 'm1' });
+      await client.getSharedMessage('shared@example.com', 'm1', true);
+      expect(apiCalls.at(-1)!.selectFields).toContain(',body,');
+      setupMock({ id: 'm1' });
+      await client.getSharedMessage('shared@example.com', 'm1', false);
+      expect(apiCalls.at(-1)!.selectFields).not.toContain(',body,');
+    });
+
+    it('searchSharedMessages strips embedded double quotes from the $search term', async () => {
+      setupMock();
+      await client.searchSharedMessages('shared@example.com', 'a"b invoice');
+      const call = apiCalls.at(-1)!;
+      expect(call.queryParams.$search).toBe('"a b invoice"');
+    });
+
+    it('listSharedEvents uses calendarView with a window and events without', async () => {
+      setupMock();
+      await client.listSharedEvents('shared@example.com', 10, new Date('2026-07-01T00:00:00Z'), new Date('2026-07-02T00:00:00Z'));
+      let call = apiCalls.at(-1)!;
+      expect(call.url).toBe('/users/shared%40example.com/calendarView');
+      expect(call.queryParams.startDateTime).toBe('2026-07-01T00:00:00.000Z');
+
+      setupMock();
+      await client.listSharedEvents('shared@example.com', 10);
+      call = apiCalls.at(-1)!;
+      expect(call.url).toBe('/users/shared%40example.com/events');
+      expect(call.orderbyExpr).toBe('start/dateTime');
+    });
+
+    it('searchSharedDriveItems doubles apostrophes for the OData string literal', async () => {
+      setupMock();
+      await client.searchSharedDriveItems('shared@example.com', "O'Brien budget");
+      const call = apiCalls.at(-1)!;
+      expect(call.url).toContain("search(q='O''Brien");
+      expect(call.url.startsWith('/users/shared%40example.com/drive/root/search')).toBe(true);
+    });
+
+    it('listSharedDriveItems targets root or an item’s children', async () => {
+      setupMock();
+      await client.listSharedDriveItems('shared@example.com');
+      expect(apiCalls.at(-1)!.url).toBe('/users/shared%40example.com/drive/root/children');
+      setupMock();
+      await client.listSharedDriveItems('shared@example.com', 'ITEM1');
+      expect(apiCalls.at(-1)!.url).toBe('/users/shared%40example.com/drive/items/ITEM1/children');
+    });
+  });
+
   describe('All endpoints match valid Graph v1.0 patterns', () => {
     it('every API call across all methods uses a valid endpoint', async () => {
       // Exercise every read method
