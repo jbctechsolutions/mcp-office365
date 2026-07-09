@@ -4832,6 +4832,36 @@ describe('graph/repository', () => {
         expect(mockClient.updatePlan).toHaveBeenNthCalledWith(2, 'graph-plan-1', { title: 'Renamed' }, 'W/"etag-refreshed"');
       });
 
+      it('propagates a second 412 without retrying a third time', async () => {
+        const planTok = await planToken('graph-plan-1');
+        mockClient.getPlan.mockResolvedValue({ title: 'P', '@odata.etag': 'W/"e"' });
+        mockClient.updatePlan
+          .mockRejectedValueOnce({ statusCode: 412 })
+          .mockRejectedValueOnce({ statusCode: 412 });
+
+        await expect(repository.updatePlanAsync(planTok, { title: 'X' })).rejects.toMatchObject({ statusCode: 412 });
+        expect(mockClient.updatePlan).toHaveBeenCalledTimes(2);
+        expect(mockClient.getPlan).toHaveBeenCalledTimes(2);
+      });
+
+      it('does NOT retry on a non-412 write error', async () => {
+        const planTok = await planToken('graph-plan-1');
+        mockClient.getPlan.mockResolvedValue({ title: 'P', '@odata.etag': 'W/"e"' });
+        mockClient.updatePlan.mockRejectedValueOnce({ statusCode: 500 });
+
+        await expect(repository.updatePlanAsync(planTok, { title: 'X' })).rejects.toMatchObject({ statusCode: 500 });
+        expect(mockClient.updatePlan).toHaveBeenCalledTimes(1);
+        expect(mockClient.getPlan).toHaveBeenCalledTimes(1);
+      });
+
+      it('fails loudly when the fetched entity has no @odata.etag (never sends an empty If-Match)', async () => {
+        const planTok = await planToken('graph-plan-1');
+        mockClient.getPlan.mockResolvedValue({ title: 'P' });
+
+        await expect(repository.updatePlanAsync(planTok, { title: 'X' })).rejects.toThrow(/no @odata\.etag/);
+        expect(mockClient.updatePlan).not.toHaveBeenCalled();
+      });
+
       it('resolvePlanId re-lists on a cold-miss pl_ token then resolves', async () => {
         const planTok = await planToken('graph-plan-1');
         // Simulate a cold store: a fresh repository sharing no prior list.

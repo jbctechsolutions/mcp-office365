@@ -196,20 +196,39 @@ export class GraphRepository implements IRepository {
   }
 
   /**
-   * Fetches a fresh etag immediately before a write (U5b-5 — etags are never
-   * cached across calls) and retries the write once with a re-fetched etag on a
-   * 412, covering the narrow race between the fetch and the write.
+   * Fetches a fresh etag immediately before a write (U5b-5 — the Planner etag is
+   * mutable and per-sub-resource, so it can't ride in the durable token or a
+   * cache) and retries the write once with a re-fetched etag on a 412, covering
+   * the narrow race between the fetch and the write.
+   *
+   * CONCURRENCY SEMANTIC (deliberate, last-writer-wins): because MCP tool calls
+   * are stateless, the etag the caller observed at an earlier `get_*` cannot be
+   * carried into a later `update_*`. We therefore re-read the etag at write time,
+   * which means a concurrent edit landing between the caller's read and their
+   * write is NOT detected — the write overwrites it. This is the intended
+   * trade-off (it eliminates the spurious 412s the old cached-etag path produced
+   * for a lone editor); Planner writes are not cross-read conflict-protected.
    */
   private async withFreshEtag<T>(
     fetchEtag: () => Promise<string>,
     write: (etag: string) => Promise<T>,
   ): Promise<T> {
-    const etag = await fetchEtag();
+    // An empty If-Match is never a valid write intent — fail loudly rather than
+    // send `If-Match: ''` (which would 400/412 confusingly, or on a lenient
+    // endpoint become an unconditional overwrite).
+    const fetch = async (): Promise<string> => {
+      const etag = await fetchEtag();
+      if (etag.length === 0) {
+        throw new Error('Cannot perform a conditional write: the entity returned no @odata.etag.');
+      }
+      return etag;
+    };
+    const etag = await fetch();
     try {
       return await write(etag);
     } catch (e) {
       if (this.isPreconditionFailed(e)) {
-        return await write(await fetchEtag());
+        return await write(await fetch());
       }
       throw e;
     }
