@@ -12,7 +12,7 @@
  *   Resolution is a decode with zero storage, so it survives a cold/lost
  *   `state.db` and resolves on any machine (the core cold-state fix).
  *
- * - **Alias-backed** (`pl_`, `pt_`, `ch_`, `tm_`, `at_`, `td_`, `tl_`, `mr_`,
+ * - **Alias-backed** (`pl_`, `pb_`, `pt_`, `ch_`, `tm_`, `at_`, `td_`, `tl_`, `mr_`,
  *   `cf_`, `cg_`, `fo_`, `cp_`, `om_`, `rc_`, `tr_`, `si_`, `dl_`, `li_`, composite tuples): the token is a short deterministic digest of the
  *   entity's canonical key — `<prefix>_<base32(sha256(canonicalKey))[0..13]>`
  *   (70 bits) — backed by the alias table (D3). These are machine-scoped: a
@@ -38,6 +38,7 @@ export type EntityType =
   | 'task'
   | 'taskList'
   | 'plan'
+  | 'plannerBucket'
   | 'plannerTask'
   | 'chat'
   | 'team'
@@ -94,6 +95,7 @@ export const ALIAS_PREFIXES: Readonly<Record<string, EntityType>> = Object.assig
   Object.create(null) as Record<string, EntityType>,
   {
     pl: 'plan',
+    pb: 'plannerBucket',
     pt: 'plannerTask',
     ch: 'chat',
     tm: 'team',

@@ -34,25 +34,25 @@ declare module '../registry/types.js' {
 // =============================================================================
 
 export const GenerateKanbanBoardInput = z.strictObject({
-  plan_id: z.number().int().positive().describe('Plan ID from list_plans'),
+  plan_id: z.string().min(1).describe('Plan ID from list_plans'),
   format: z.enum(['html', 'svg', 'markdown', 'mermaid']).default('html').describe('Output format'),
   output_path: z.string().optional().describe('Custom file path for output (default: temp directory)'),
 });
 
 export const GenerateGanttChartInput = z.strictObject({
-  plan_id: z.number().int().positive().describe('Plan ID from list_plans'),
+  plan_id: z.string().min(1).describe('Plan ID from list_plans'),
   format: z.enum(['html', 'svg', 'markdown', 'mermaid']).default('html').describe('Output format'),
   output_path: z.string().optional().describe('Custom file path for output (default: temp directory)'),
 });
 
 export const GeneratePlanSummaryInput = z.strictObject({
-  plan_id: z.number().int().positive().describe('Plan ID from list_plans'),
+  plan_id: z.string().min(1).describe('Plan ID from list_plans'),
   format: z.enum(['html', 'svg', 'markdown', 'mermaid']).default('html').describe('Output format'),
   output_path: z.string().optional().describe('Custom file path for output (default: temp directory)'),
 });
 
 export const GenerateBurndownChartInput = z.strictObject({
-  plan_id: z.number().int().positive().describe('Plan ID from list_plans'),
+  plan_id: z.string().min(1).describe('Plan ID from list_plans'),
   format: z.enum(['html', 'svg', 'markdown', 'mermaid']).default('html').describe('Output format'),
   output_path: z.string().optional().describe('Custom file path for output (default: temp directory)'),
 });
@@ -71,7 +71,7 @@ export type GenerateBurndownChartParams = z.infer<typeof GenerateBurndownChartIn
 // =============================================================================
 
 export interface IPlannerVisualizationRepository {
-  getPlanVisualizationDataAsync(planId: number): Promise<PlanVisualizationData>;
+  getPlanVisualizationDataAsync(planId: string | number): Promise<PlanVisualizationData>;
 }
 
 // =============================================================================

@@ -462,13 +462,14 @@ export interface ErrorEnvelope {
 }
 
 /** Shape of a Microsoft Graph SDK error (has a numeric HTTP `statusCode`). */
-interface GraphSdkErrorLike {
+export interface GraphSdkErrorLike {
   statusCode: number;
   code?: string;
   message?: string;
 }
 
-function isGraphSdkError(error: unknown): error is GraphSdkErrorLike {
+/** True when `error` has the shape of a raw Graph SDK error (numeric `statusCode`). */
+export function isGraphSdkError(error: unknown): error is GraphSdkErrorLike {
   return (
     typeof error === 'object' &&
     error !== null &&

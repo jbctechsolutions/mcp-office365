@@ -35,23 +35,13 @@ import { currentAccountId } from './auth/index.js';
 import { resolveId } from '../ids/resolver.js';
 import { registerComposite } from '../ids/mint.js';
 import { mintSelfEncoded, type EntityType } from '../ids/token.js';
-import { IdUnknownError } from '../utils/errors.js';
+import { IdUnknownError, isGraphSdkError } from '../utils/errors.js';
 import type { StateStore } from '../state/store.js';
 import type { CompiledSearch } from '../search/compiler.js';
 import { downloadAttachment, getDownloadDir } from './attachments.js';
 import type { PlanVisualizationData } from '../visualization/types.js';
 import * as fs from 'fs';
 import * as path from 'path';
-
-/**
- * Cache for mapping numeric IDs back to Graph string IDs.
- */
-interface IdCache {
-  plans: Map<number, { planId: string; etag: string }>;
-  plannerBuckets: Map<number, { planId: string; bucketId: string; etag: string }>;
-  plannerTasks: Map<number, { taskId: string; etag: string }>;
-  plannerTaskDetails: Map<number, { taskId: string; etag: string }>;
-}
 
 /**
  * Repository implementation using Microsoft Graph API.
@@ -63,12 +53,6 @@ export class GraphRepository implements IRepository {
   private readonly store: StateStore | undefined;
   private readonly accountId: () => string;
   private readonly deltaLinks: Map<string, string> = new Map();
-  private readonly idCache: IdCache = {
-    plans: new Map(),
-    plannerBuckets: new Map(),
-    plannerTasks: new Map(),
-    plannerTaskDetails: new Map(),
-  };
 
   constructor(
     deviceCodeCallback?: DeviceCodeCallback,
@@ -185,13 +169,69 @@ export class GraphRepository implements IRepository {
     }
   }
 
-  private async resolvePlanId(planId: number): Promise<{ planId: string; etag: string }> {
-    let cached = this.idCache.plans.get(planId);
-    if (cached != null) return cached;
-    await this.listPlansAsync();
-    cached = this.idCache.plans.get(planId);
-    if (cached != null) return cached;
-    throw new Error(`Plan ID ${planId} not found. Verify the ID is correct by calling list_plans.`);
+  private async resolvePlanId(planId: string | number): Promise<string> {
+    // pl_ tokens resolve from the alias store. On a cold miss (never listed this
+    // session, or a lost store) re-list — listPlansAsync deterministically
+    // re-mints and re-stores the same token — then resolve again.
+    try {
+      return this.toGraphId(planId, 'plan');
+    } catch (e) {
+      if (e instanceof IdUnknownError) {
+        await this.listPlansAsync();
+        return this.toGraphId(planId, 'plan');
+      }
+      throw e;
+    }
+  }
+
+  /** True for an HTTP 412 (Precondition Failed) — the `If-Match` etag we sent no
+   * longer matches the entity's current etag. */
+  private isPreconditionFailed(e: unknown): boolean {
+    return isGraphSdkError(e) && e.statusCode === 412;
+  }
+
+  /** Extracts the OData etag from a fetched entity, defaulting to `''` when absent. */
+  private extractEtag(entity: unknown): string {
+    return ((entity as Record<string, unknown>)['@odata.etag'] as string | undefined) ?? '';
+  }
+
+  /**
+   * Fetches a fresh etag immediately before a write (U5b-5 — the Planner etag is
+   * mutable and per-sub-resource, so it can't ride in the durable token or a
+   * cache) and retries the write once with a re-fetched etag on a 412, covering
+   * the narrow race between the fetch and the write.
+   *
+   * CONCURRENCY SEMANTIC (deliberate, last-writer-wins): because MCP tool calls
+   * are stateless, the etag the caller observed at an earlier `get_*` cannot be
+   * carried into a later `update_*`. We therefore re-read the etag at write time,
+   * which means a concurrent edit landing between the caller's read and their
+   * write is NOT detected — the write overwrites it. This is the intended
+   * trade-off (it eliminates the spurious 412s the old cached-etag path produced
+   * for a lone editor); Planner writes are not cross-read conflict-protected.
+   */
+  private async withFreshEtag<T>(
+    fetchEtag: () => Promise<string>,
+    write: (etag: string) => Promise<T>,
+  ): Promise<T> {
+    // An empty If-Match is never a valid write intent — fail loudly rather than
+    // send `If-Match: ''` (which would 400/412 confusingly, or on a lenient
+    // endpoint become an unconditional overwrite).
+    const fetch = async (): Promise<string> => {
+      const etag = await fetchEtag();
+      if (etag.length === 0) {
+        throw new Error('Cannot perform a conditional write: the entity returned no @odata.etag.');
+      }
+      return etag;
+    };
+    const etag = await fetch();
+    try {
+      return await write(etag);
+    } catch (e) {
+      if (this.isPreconditionFailed(e)) {
+        return await write(await fetch());
+      }
+      throw e;
+    }
   }
 
   private async resolveChatId(chatId: string | number): Promise<string> {
@@ -2262,17 +2302,14 @@ export class GraphRepository implements IRepository {
   // ===========================================================================
 
   /**
-   * Lists all plans the current user has.
+   * Lists all plans the current user has, minting durable pl_ tokens.
    */
-  async listPlansAsync(): Promise<Array<{ id: number; title: string; owner: string; createdDateTime: string }>> {
+  async listPlansAsync(): Promise<Array<{ id: string; title: string; owner: string; createdDateTime: string }>> {
     const plans = await this.client.listPlans();
     return plans.map((plan) => {
       const graphId = plan.id!;
-      const numericId = hashStringToNumber(graphId);
-      const etag = ((plan as unknown as Record<string, unknown>)['@odata.etag'] as string | undefined) ?? '';
-      this.idCache.plans.set(numericId, { planId: graphId, etag });
       return {
-        id: numericId,
+        id: this.mintAlias('plan', graphId),
         title: plan.title ?? '',
         owner: plan.owner ?? '',
         createdDateTime: plan.createdDateTime ?? '',
@@ -2281,44 +2318,40 @@ export class GraphRepository implements IRepository {
   }
 
   /**
-   * Gets a specific plan by cached numeric ID.
+   * Gets a specific plan.
    */
-  async getPlanAsync(planId: number): Promise<{ id: number; title: string; owner: string; createdDateTime: string; etag: string }> {
-    const cached = await this.resolvePlanId(planId);
-    const plan = await this.client.getPlan(cached.planId);
-    const etag = ((plan as unknown as Record<string, unknown>)['@odata.etag'] as string | undefined) ?? '';
-    this.idCache.plans.set(planId, { planId: cached.planId, etag });
+  async getPlanAsync(planId: string | number): Promise<{ id: string; title: string; owner: string; createdDateTime: string; etag: string }> {
+    const graphPlanId = await this.resolvePlanId(planId);
+    const plan = await this.client.getPlan(graphPlanId);
     return {
-      id: planId,
+      id: String(planId),
       title: plan.title ?? '',
       owner: plan.owner ?? '',
       createdDateTime: plan.createdDateTime ?? '',
-      etag,
+      etag: this.extractEtag(plan),
     };
   }
 
   /**
    * Creates a new plan.
    */
-  async createPlanAsync(title: string, groupId: string): Promise<number> {
+  async createPlanAsync(title: string, groupId: string): Promise<string> {
     const plan = await this.client.createPlan(title, groupId);
-    const graphId = plan.id!;
-    const numericId = hashStringToNumber(graphId);
-    const etag = ((plan as unknown as Record<string, unknown>)['@odata.etag'] as string | undefined) ?? '';
-    this.idCache.plans.set(numericId, { planId: graphId, etag });
-    return numericId;
+    return this.mintAlias('plan', plan.id!);
   }
 
   /**
-   * Updates a plan (requires cached ETag).
+   * Updates a plan (U5b-5: fetches a fresh etag immediately before the write —
+   * etags are never cached across calls).
    */
-  async updatePlanAsync(planId: number, updates: { title?: string }): Promise<void> {
-    const cached = await this.resolvePlanId(planId);
+  async updatePlanAsync(planId: string | number, updates: { title?: string }): Promise<void> {
+    const graphPlanId = await this.resolvePlanId(planId);
     const graphUpdates: Record<string, unknown> = {};
     if (updates.title != null) graphUpdates['title'] = updates.title;
-    const result = await this.client.updatePlan(cached.planId, graphUpdates, cached.etag);
-    const newEtag = ((result as unknown as Record<string, unknown>)['@odata.etag'] as string | undefined) ?? cached.etag;
-    this.idCache.plans.set(planId, { planId: cached.planId, etag: newEtag });
+    await this.withFreshEtag(
+      async () => this.extractEtag(await this.client.getPlan(graphPlanId)),
+      (etag) => this.client.updatePlan(graphPlanId, graphUpdates, etag),
+    );
   }
 
   // ===========================================================================
@@ -2326,20 +2359,17 @@ export class GraphRepository implements IRepository {
   // ===========================================================================
 
   /**
-   * Lists all buckets in a plan.
+   * Lists all buckets in a plan, minting durable pb_ tokens.
    */
-  async listBucketsAsync(planId: number): Promise<Array<{ id: number; name: string; planId: number; orderHint: string }>> {
-    const cached = await this.resolvePlanId(planId);
-    const buckets = await this.client.listBuckets(cached.planId);
+  async listBucketsAsync(planId: string | number): Promise<Array<{ id: string; name: string; planId: string; orderHint: string }>> {
+    const graphPlanId = await this.resolvePlanId(planId);
+    const buckets = await this.client.listBuckets(graphPlanId);
     return buckets.map((bucket) => {
       const graphId = bucket.id!;
-      const numericId = hashStringToNumber(graphId);
-      const etag = ((bucket as unknown as Record<string, unknown>)['@odata.etag'] as string | undefined) ?? '';
-      this.idCache.plannerBuckets.set(numericId, { planId: cached.planId, bucketId: graphId, etag });
       return {
-        id: numericId,
+        id: this.mintAlias('plannerBucket', graphId),
         name: bucket.name ?? '',
-        planId,
+        planId: String(planId),
         orderHint: bucket.orderHint ?? '',
       };
     });
@@ -2348,37 +2378,34 @@ export class GraphRepository implements IRepository {
   /**
    * Creates a new bucket in a plan.
    */
-  async createBucketAsync(planId: number, name: string): Promise<number> {
-    const cached = await this.resolvePlanId(planId);
-    const bucket = await this.client.createBucket(cached.planId, name);
-    const graphId = bucket.id!;
-    const numericId = hashStringToNumber(graphId);
-    const etag = ((bucket as unknown as Record<string, unknown>)['@odata.etag'] as string | undefined) ?? '';
-    this.idCache.plannerBuckets.set(numericId, { planId: cached.planId, bucketId: graphId, etag });
-    return numericId;
+  async createBucketAsync(planId: string | number, name: string): Promise<string> {
+    const graphPlanId = await this.resolvePlanId(planId);
+    const bucket = await this.client.createBucket(graphPlanId, name);
+    return this.mintAlias('plannerBucket', bucket.id!);
   }
 
   /**
-   * Updates a bucket (requires cached ETag).
+   * Updates a bucket (U5b-5: fetches a fresh etag immediately before the write).
    */
-  async updateBucketAsync(bucketId: number, updates: { name?: string }): Promise<void> {
-    const cached = this.idCache.plannerBuckets.get(bucketId);
-    if (cached == null) throw new Error(`Bucket ID ${bucketId} not found in cache. Try listing buckets first.`);
+  async updateBucketAsync(bucketId: string | number, updates: { name?: string }): Promise<void> {
+    const graphBucketId = this.toGraphId(bucketId, 'plannerBucket');
     const graphUpdates: Record<string, unknown> = {};
     if (updates.name != null) graphUpdates['name'] = updates.name;
-    const result = await this.client.updateBucket(cached.bucketId, graphUpdates, cached.etag);
-    const newEtag = ((result as unknown as Record<string, unknown>)['@odata.etag'] as string | undefined) ?? cached.etag;
-    this.idCache.plannerBuckets.set(bucketId, { planId: cached.planId, bucketId: cached.bucketId, etag: newEtag });
+    await this.withFreshEtag(
+      async () => this.extractEtag(await this.client.getBucket(graphBucketId)),
+      (etag) => this.client.updateBucket(graphBucketId, graphUpdates, etag),
+    );
   }
 
   /**
-   * Deletes a bucket (requires cached ETag).
+   * Deletes a bucket (U5b-5: fetches a fresh etag immediately before the write).
    */
-  async deleteBucketAsync(bucketId: number): Promise<void> {
-    const cached = this.idCache.plannerBuckets.get(bucketId);
-    if (cached == null) throw new Error(`Bucket ID ${bucketId} not found in cache. Try listing buckets first.`);
-    await this.client.deleteBucket(cached.bucketId, cached.etag);
-    this.idCache.plannerBuckets.delete(bucketId);
+  async deleteBucketAsync(bucketId: string | number): Promise<void> {
+    const graphBucketId = this.toGraphId(bucketId, 'plannerBucket');
+    await this.withFreshEtag(
+      async () => this.extractEtag(await this.client.getBucket(graphBucketId)),
+      (etag) => this.client.deleteBucket(graphBucketId, etag),
+    );
   }
 
   // ===========================================================================
@@ -2386,29 +2413,21 @@ export class GraphRepository implements IRepository {
   // ===========================================================================
 
   /**
-   * Lists all tasks in a plan.
+   * Lists all tasks in a plan, minting durable pt_ tokens.
    */
-  async listPlannerTasksAsync(planId: number): Promise<Array<{
-    id: number; title: string; bucketId: number | null; assignees: string[];
+  async listPlannerTasksAsync(planId: string | number): Promise<Array<{
+    id: string; title: string; bucketId: string | null; assignees: string[];
     percentComplete: number; priority: number; startDateTime: string;
     dueDateTime: string; createdDateTime: string;
   }>> {
-    const cached = await this.resolvePlanId(planId);
-    const tasks = await this.client.listPlannerTasks(cached.planId);
+    const graphPlanId = await this.resolvePlanId(planId);
+    const tasks = await this.client.listPlannerTasks(graphPlanId);
     return tasks.map((task) => {
       const graphId = task.id!;
-      const numericId = hashStringToNumber(graphId);
-      const etag = ((task as unknown as Record<string, unknown>)['@odata.etag'] as string | undefined) ?? '';
-      this.idCache.plannerTasks.set(numericId, { taskId: graphId, etag });
-      // Resolve bucket numeric ID if present
-      let bucketNumericId: number | null = null;
-      if (task.bucketId != null) {
-        bucketNumericId = hashStringToNumber(task.bucketId);
-      }
       return {
-        id: numericId,
+        id: this.mintAlias('plannerTask', graphId),
         title: task.title ?? '',
-        bucketId: bucketNumericId,
+        bucketId: task.bucketId != null ? this.mintAlias('plannerBucket', task.bucketId) : null,
         assignees: task.assignments != null ? Object.keys(task.assignments) : [],
         percentComplete: task.percentComplete ?? 0,
         priority: task.priority ?? 5,
@@ -2422,36 +2441,22 @@ export class GraphRepository implements IRepository {
   /**
    * Lists all Planner tasks assigned to the signed-in user, across every plan
    * (`GET /me/planner/tasks`). Unlike the plan-scoped list, each task carries its
-   * own `planId`; the plan and task ids are cached so follow-up get/update calls
-   * resolve without a re-list.
+   * own `planId`; the plan/bucket/task durable tokens are minted so follow-up
+   * get/update calls resolve without a re-list.
    */
   async listMyPlannerTasksAsync(): Promise<Array<{
-    id: number; title: string; planId: number; bucketId: number | null;
+    id: string; title: string; planId: string; bucketId: string | null;
     assignees: string[]; percentComplete: number; priority: number;
     startDateTime: string; dueDateTime: string; createdDateTime: string;
   }>> {
     const tasks = await this.client.listMyPlannerTasks();
     return tasks.map((task) => {
       const graphId = task.id!;
-      const numericId = hashStringToNumber(graphId);
-      const etag = ((task as unknown as Record<string, unknown>)['@odata.etag'] as string | undefined) ?? '';
-      this.idCache.plannerTasks.set(numericId, { taskId: graphId, etag });
-      let planNumericId = 0;
-      if (task.planId != null) {
-        planNumericId = hashStringToNumber(task.planId);
-        if (!this.idCache.plans.has(planNumericId)) {
-          this.idCache.plans.set(planNumericId, { planId: task.planId, etag: '' });
-        }
-      }
-      let bucketNumericId: number | null = null;
-      if (task.bucketId != null) {
-        bucketNumericId = hashStringToNumber(task.bucketId);
-      }
       return {
-        id: numericId,
+        id: this.mintAlias('plannerTask', graphId),
         title: task.title ?? '',
-        planId: planNumericId,
-        bucketId: bucketNumericId,
+        planId: task.planId != null ? this.mintAlias('plan', task.planId) : '',
+        bucketId: task.bucketId != null ? this.mintAlias('plannerBucket', task.bucketId) : null,
         assignees: task.assignments != null ? Object.keys(task.assignments) : [],
         percentComplete: task.percentComplete ?? 0,
         priority: task.priority ?? 5,
@@ -2463,27 +2468,20 @@ export class GraphRepository implements IRepository {
   }
 
   /**
-   * Gets a specific planner task by cached numeric ID.
+   * Gets a specific planner task.
    */
-  async getPlannerTaskAsync(taskId: number): Promise<{
-    id: number; title: string; bucketId: number | null; assignees: string[];
+  async getPlannerTaskAsync(taskId: string | number): Promise<{
+    id: string; title: string; bucketId: string | null; assignees: string[];
     percentComplete: number; priority: number; startDateTime: string;
     dueDateTime: string; createdDateTime: string; conversationThreadId: string;
     orderHint: string; etag: string;
   }> {
-    const cached = this.idCache.plannerTasks.get(taskId);
-    if (cached == null) throw new Error(`Task ID ${taskId} not found in cache. Try listing planner tasks first.`);
-    const task = await this.client.getPlannerTask(cached.taskId);
-    const etag = ((task as unknown as Record<string, unknown>)['@odata.etag'] as string | undefined) ?? '';
-    this.idCache.plannerTasks.set(taskId, { taskId: cached.taskId, etag });
-    let bucketNumericId: number | null = null;
-    if (task.bucketId != null) {
-      bucketNumericId = hashStringToNumber(task.bucketId);
-    }
+    const gTaskId = this.toGraphId(taskId, 'plannerTask');
+    const task = await this.client.getPlannerTask(gTaskId);
     return {
-      id: taskId,
+      id: String(taskId),
       title: task.title ?? '',
-      bucketId: bucketNumericId,
+      bucketId: task.bucketId != null ? this.mintAlias('plannerBucket', task.bucketId) : null,
       assignees: task.assignments != null ? Object.keys(task.assignments) : [],
       percentComplete: task.percentComplete ?? 0,
       priority: task.priority ?? 5,
@@ -2492,7 +2490,7 @@ export class GraphRepository implements IRepository {
       createdDateTime: task.createdDateTime ?? '',
       conversationThreadId: task.conversationThreadId ?? '',
       orderHint: task.orderHint ?? '',
-      etag,
+      etag: this.extractEtag(task),
     };
   }
 
@@ -2500,41 +2498,35 @@ export class GraphRepository implements IRepository {
    * Creates a new planner task.
    */
   async createPlannerTaskAsync(
-    planId: number,
+    planId: string | number,
     title: string,
-    bucketId?: number,
+    bucketId?: string | number,
     assignments?: Record<string, object>,
     priority?: number,
     startDate?: string,
     dueDate?: string,
-  ): Promise<number> {
-    const cachedPlan = await this.resolvePlanId(planId);
-    const body: Record<string, unknown> = { planId: cachedPlan.planId, title };
+  ): Promise<string> {
+    const graphPlanId = await this.resolvePlanId(planId);
+    const body: Record<string, unknown> = { planId: graphPlanId, title };
     if (bucketId != null) {
-      const cachedBucket = this.idCache.plannerBuckets.get(bucketId);
-      if (cachedBucket == null) throw new Error(`Bucket ID ${bucketId} not found in cache. Try listing buckets first.`);
-      body.bucketId = cachedBucket.bucketId;
+      body.bucketId = this.toGraphId(bucketId, 'plannerBucket');
     }
     if (assignments != null) body.assignments = assignments;
     if (priority != null) body.priority = priority;
     if (startDate != null) body.startDateTime = startDate;
     if (dueDate != null) body.dueDateTime = dueDate;
     const task = await this.client.createPlannerTask(body);
-    const graphId = task.id!;
-    const numericId = hashStringToNumber(graphId);
-    const etag = ((task as unknown as Record<string, unknown>)['@odata.etag'] as string | undefined) ?? '';
-    this.idCache.plannerTasks.set(numericId, { taskId: graphId, etag });
-    return numericId;
+    return this.mintAlias('plannerTask', task.id!);
   }
 
   /**
-   * Updates a planner task (requires cached ETag).
+   * Updates a planner task (U5b-5: fetches a fresh etag immediately before the write).
    */
   async updatePlannerTaskAsync(
-    taskId: number,
+    taskId: string | number,
     updates: {
       title?: string;
-      bucketId?: number;
+      bucketId?: string | number;
       percentComplete?: number;
       priority?: number;
       startDate?: string;
@@ -2542,33 +2534,30 @@ export class GraphRepository implements IRepository {
       assignments?: Record<string, object>;
     },
   ): Promise<void> {
-    const cached = this.idCache.plannerTasks.get(taskId);
-    if (cached == null) throw new Error(`Task ID ${taskId} not found in cache. Try listing planner tasks first.`);
+    const gTaskId = this.toGraphId(taskId, 'plannerTask');
     const graphUpdates: Record<string, unknown> = {};
     if (updates.title != null) graphUpdates['title'] = updates.title;
-    if (updates.bucketId != null) {
-      const cachedBucket = this.idCache.plannerBuckets.get(updates.bucketId);
-      if (cachedBucket == null) throw new Error(`Bucket ID ${updates.bucketId} not found in cache. Try listing buckets first.`);
-      graphUpdates['bucketId'] = cachedBucket.bucketId;
-    }
+    if (updates.bucketId != null) graphUpdates['bucketId'] = this.toGraphId(updates.bucketId, 'plannerBucket');
     if (updates.percentComplete != null) graphUpdates['percentComplete'] = updates.percentComplete;
     if (updates.priority != null) graphUpdates['priority'] = updates.priority;
     if (updates.startDate != null) graphUpdates['startDateTime'] = updates.startDate;
     if (updates.dueDate != null) graphUpdates['dueDateTime'] = updates.dueDate;
     if (updates.assignments != null) graphUpdates['assignments'] = updates.assignments;
-    const result = await this.client.updatePlannerTask(cached.taskId, graphUpdates, cached.etag);
-    const newEtag = ((result as unknown as Record<string, unknown>)['@odata.etag'] as string | undefined) ?? cached.etag;
-    this.idCache.plannerTasks.set(taskId, { taskId: cached.taskId, etag: newEtag });
+    await this.withFreshEtag(
+      async () => this.extractEtag(await this.client.getPlannerTask(gTaskId)),
+      (etag) => this.client.updatePlannerTask(gTaskId, graphUpdates, etag),
+    );
   }
 
   /**
-   * Deletes a planner task (requires cached ETag).
+   * Deletes a planner task (U5b-5: fetches a fresh etag immediately before the write).
    */
-  async deletePlannerTaskAsync(taskId: number): Promise<void> {
-    const cached = this.idCache.plannerTasks.get(taskId);
-    if (cached == null) throw new Error(`Task ID ${taskId} not found in cache. Try listing planner tasks first.`);
-    await this.client.deletePlannerTask(cached.taskId, cached.etag);
-    this.idCache.plannerTasks.delete(taskId);
+  async deletePlannerTaskAsync(taskId: string | number): Promise<void> {
+    const gTaskId = this.toGraphId(taskId, 'plannerTask');
+    await this.withFreshEtag(
+      async () => this.extractEtag(await this.client.getPlannerTask(gTaskId)),
+      (etag) => this.client.deletePlannerTask(gTaskId, etag),
+    );
   }
 
   // ===========================================================================
@@ -2576,23 +2565,21 @@ export class GraphRepository implements IRepository {
   // ===========================================================================
 
   /**
-   * Gets details for a planner task (description, checklist, references).
+   * Gets details for a planner task (description, checklist, references). Task
+   * details piggyback the pt_ task token — they have no id of their own.
    */
-  async getPlannerTaskDetailsAsync(taskId: number): Promise<{
-    id: number; description: string; checklist: Record<string, unknown>;
+  async getPlannerTaskDetailsAsync(taskId: string | number): Promise<{
+    id: string; description: string; checklist: Record<string, unknown>;
     references: Record<string, unknown>; etag: string;
   }> {
-    const cached = this.idCache.plannerTasks.get(taskId);
-    if (cached == null) throw new Error(`Task ID ${taskId} not found in cache. Try listing planner tasks first.`);
-    const details = await this.client.getPlannerTaskDetails(cached.taskId);
-    const etag = ((details as unknown as Record<string, unknown>)['@odata.etag'] as string | undefined) ?? '';
-    this.idCache.plannerTaskDetails.set(taskId, { taskId: cached.taskId, etag });
+    const gTaskId = this.toGraphId(taskId, 'plannerTask');
+    const details = await this.client.getPlannerTaskDetails(gTaskId);
     return {
-      id: taskId,
+      id: String(taskId),
       description: details.description ?? '',
       checklist: (details.checklist as Record<string, unknown>) ?? {},
       references: (details.references as Record<string, unknown>) ?? {},
-      etag,
+      etag: this.extractEtag(details),
     };
   }
 
@@ -2605,8 +2592,8 @@ export class GraphRepository implements IRepository {
    * Partial failures are handled gracefully: tasks whose detail fetch failed will
    * have `details` set to `undefined`.
    */
-  async listPlannerTasksWithDetailsAsync(planId: number): Promise<Array<{
-    id: number; title: string; bucketId: number | null; assignees: string[];
+  async listPlannerTasksWithDetailsAsync(planId: string | number): Promise<Array<{
+    id: string; title: string; bucketId: string | null; assignees: string[];
     percentComplete: number; priority: number; startDateTime: string;
     dueDateTime: string; createdDateTime: string;
     details?: {
@@ -2616,18 +2603,16 @@ export class GraphRepository implements IRepository {
       etag: string;
     } | undefined;
   }>> {
-    // Step 1: List all tasks (populates idCache.plannerTasks)
+    // Step 1: List all tasks (mints pt_ tokens, registered in the alias store)
     const tasks = await this.listPlannerTasksAsync(planId);
 
     if (tasks.length === 0) return [];
 
     // Step 2: Build batch requests for each task's details
     const batchRequests: BatchRequest[] = tasks.map((task) => {
-      const cached = this.idCache.plannerTasks.get(task.id);
-      // cached is guaranteed to exist since listPlannerTasksAsync just populated it
-      const graphTaskId = cached!.taskId;
+      const graphTaskId = this.toGraphId(task.id, 'plannerTask');
       return {
-        id: String(task.id),
+        id: task.id,
         method: 'GET',
         url: `/planner/tasks/${graphTaskId}/details`,
       };
@@ -2638,15 +2623,10 @@ export class GraphRepository implements IRepository {
 
     // Step 4: Merge details into tasks
     return tasks.map((task) => {
-      const result = batchResults.get(String(task.id));
+      const result = batchResults.get(task.id);
       if (result != null && result.status >= 200 && result.status < 300) {
         const detailBody = result.body as Record<string, unknown>;
         const etag = result.headers?.ETag ?? result.headers?.etag ?? '';
-        // Cache the task detail ETag for later updates
-        const cachedTask = this.idCache.plannerTasks.get(task.id);
-        if (cachedTask != null) {
-          this.idCache.plannerTaskDetails.set(task.id, { taskId: cachedTask.taskId, etag });
-        }
         return {
           ...task,
           details: {
@@ -2663,27 +2643,27 @@ export class GraphRepository implements IRepository {
   }
 
   /**
-   * Updates details for a planner task (requires cached ETag from getPlannerTaskDetailsAsync).
+   * Updates details for a planner task (U5b-5: fetches a fresh etag immediately
+   * before the write — the task details etag is independent of the task's own
+   * etag).
    */
   async updatePlannerTaskDetailsAsync(
-    taskId: number,
+    taskId: string | number,
     updates: {
       description?: string;
       checklist?: Record<string, object>;
       references?: Record<string, object>;
     },
   ): Promise<void> {
-    const cachedTask = this.idCache.plannerTasks.get(taskId);
-    if (cachedTask == null) throw new Error(`Task ID ${taskId} not found in cache. Try listing planner tasks first.`);
-    const cachedDetails = this.idCache.plannerTaskDetails.get(taskId);
-    if (cachedDetails == null) throw new Error(`Task details ETag for task ${taskId} not found in cache. Call get_planner_task_details first.`);
+    const gTaskId = this.toGraphId(taskId, 'plannerTask');
     const graphUpdates: Record<string, unknown> = {};
     if (updates.description != null) graphUpdates['description'] = updates.description;
     if (updates.checklist != null) graphUpdates['checklist'] = updates.checklist;
     if (updates.references != null) graphUpdates['references'] = updates.references;
-    const result = await this.client.updatePlannerTaskDetails(cachedTask.taskId, graphUpdates, cachedDetails.etag);
-    const newEtag = ((result as unknown as Record<string, unknown>)['@odata.etag'] as string | undefined) ?? cachedDetails.etag;
-    this.idCache.plannerTaskDetails.set(taskId, { taskId: cachedTask.taskId, etag: newEtag });
+    await this.withFreshEtag(
+      async () => this.extractEtag(await this.client.getPlannerTaskDetails(gTaskId)),
+      (etag) => this.client.updatePlannerTaskDetails(gTaskId, graphUpdates, etag),
+    );
   }
 
   // ===========================================================================
@@ -2693,7 +2673,7 @@ export class GraphRepository implements IRepository {
   /**
    * Assembles plan, buckets, and tasks into a unified visualization data object.
    */
-  async getPlanVisualizationDataAsync(planId: number): Promise<PlanVisualizationData> {
+  async getPlanVisualizationDataAsync(planId: string | number): Promise<PlanVisualizationData> {
     const plan = await this.getPlanAsync(planId);
     const buckets = await this.listBucketsAsync(planId);
     const tasks = await this.listPlannerTasksAsync(planId);
@@ -2711,7 +2691,7 @@ export class GraphRepository implements IRepository {
       tasks: tasks.map(t => ({
         id: t.id,
         title: t.title,
-        bucketId: t.bucketId ?? 0,
+        bucketId: t.bucketId ?? '',
         percentComplete: t.percentComplete,
         priority: t.priority,
         startDateTime: t.startDateTime || null,

@@ -8,12 +8,12 @@
  */
 
 export interface PlanVisualizationData {
-  plan: { id: number; title: string };
-  buckets: Array<{ id: number; name: string; orderHint: string }>;
+  plan: { id: string; title: string };
+  buckets: Array<{ id: string; name: string; orderHint: string }>;
   tasks: Array<{
-    id: number;
+    id: string;
     title: string;
-    bucketId: number;
+    bucketId: string;
     percentComplete: number;
     priority: number;
     startDateTime?: string | null;

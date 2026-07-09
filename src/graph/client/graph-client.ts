@@ -1923,6 +1923,11 @@ export class GraphClient {
     return await client.api('/planner/buckets').post({ planId, name }) as MicrosoftGraph.PlannerBucket;
   }
 
+  async getBucket(bucketId: string): Promise<MicrosoftGraph.PlannerBucket> {
+    const client = await this.getClient();
+    return await client.api(`/planner/buckets/${bucketId}`).get() as MicrosoftGraph.PlannerBucket;
+  }
+
   async updateBucket(bucketId: string, updates: Record<string, unknown>, etag: string): Promise<MicrosoftGraph.PlannerBucket> {
     const client = await this.getClient();
     return await client.api(`/planner/buckets/${bucketId}`).header('If-Match', etag).patch(updates) as MicrosoftGraph.PlannerBucket;
