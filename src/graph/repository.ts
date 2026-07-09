@@ -3182,7 +3182,13 @@ export class GraphRepository implements IRepository {
       body.description = description;
     }
     const created = await this.client.createSharePointList(graphSiteId, body);
-    return this.mintAliasComposite('sharePointList', { siteId: graphSiteId, listId: created.id as string });
+    const newListId = created.id as string | undefined;
+    if (newListId == null || newListId.length === 0) {
+      // Mint guard (matches #46/#47): a composite token minted with an empty id
+      // would digest to a resolvable-but-wrong token and be reported as 'created'.
+      throw new Error('SharePoint list creation returned no id.');
+    }
+    return this.mintAliasComposite('sharePointList', { siteId: graphSiteId, listId: newListId });
   }
 
   /**
@@ -3257,7 +3263,12 @@ export class GraphRepository implements IRepository {
   async createSharePointListItemAsync(listId: string | number, fields: Record<string, unknown>): Promise<string> {
     const { siteId, listId: graphListId } = this.toGraphParts(listId, 'sharePointList', ['siteId', 'listId']);
     const created = await this.client.createSharePointListItem(siteId, graphListId, fields);
-    return this.mintAliasComposite('sharePointListItem', { siteId, listId: graphListId, itemId: created.id as string });
+    const newItemId = created.id as string | undefined;
+    if (newItemId == null || newItemId.length === 0) {
+      // Mint guard (matches #46/#47): see createSharePointListAsync.
+      throw new Error('SharePoint list item creation returned no id.');
+    }
+    return this.mintAliasComposite('sharePointListItem', { siteId, listId: graphListId, itemId: newItemId });
   }
 
   /**
