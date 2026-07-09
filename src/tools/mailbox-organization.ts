@@ -194,10 +194,7 @@ export const RenameFolderInput = z.strictObject({
 
 export const MoveFolderInput = z.strictObject({
   folder_id: Id.folder.describe('The folder to move — a `fd_` token from list_folders.'),
-  destination_parent_id: z
-    .string()
-    .min(1)
-    .describe('The destination parent folder ID'),
+  destination_parent_id: Id.folder.describe('The destination parent folder — a `fd_` token from list_folders.'),
 });
 
 // =============================================================================

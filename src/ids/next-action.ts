@@ -25,7 +25,7 @@ import { prefixForEntity, type EntityType } from './token.js';
  */
 export const FOLLOWUP_TOOLS: Partial<Record<EntityType, string>> = {
   task: 'get_task, update_task, or complete_task',
-  taskList: 'list_tasks or create_task',
+  taskList: 'create_task',
   plan: 'get_plan or list_buckets',
   plannerBucket: 'list_planner_tasks or create_planner_task',
   plannerTask: 'get_planner_task or update_planner_task',
