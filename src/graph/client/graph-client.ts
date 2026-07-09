@@ -2028,6 +2028,133 @@ export class GraphClient {
     return response.value;
   }
 
+  // ===========================================================================
+  // Shared Mailbox / Delegate Access (/users/{upn}/...) — read-only (#40)
+  // ===========================================================================
+  //
+  // These mirror the `/me/...` read paths but target another user's mailbox,
+  // calendar, or drive via delegate/shared access. Unlike the `/me` variants,
+  // they deliberately DO NOT swallow errors: a 403 must surface (mapped to
+  // GRAPH_PERMISSION_DENIED at the dispatch chokepoint) so the caller learns
+  // they lack shared access rather than getting a silent empty/`null` result.
+  // Results are returned with raw Graph ids (durable tokens are `/me`- and
+  // account-scoped, so they cannot address another mailbox's items).
+
+  async listSharedMailFolders(mailbox: string): Promise<MicrosoftGraph.MailFolder[]> {
+    const client = await this.getClient();
+    const response = await client
+      .api(`/users/${mailbox}/mailFolders`)
+      .select('id,displayName,parentFolderId,totalItemCount,unreadItemCount')
+      .top(100)
+      .get() as PageCollection;
+    return response.value as MicrosoftGraph.MailFolder[];
+  }
+
+  async listSharedMessages(
+    mailbox: string,
+    folderId?: string,
+    limit: number = 25,
+    unreadOnly: boolean = false,
+  ): Promise<MicrosoftGraph.Message[]> {
+    const client = await this.getClient();
+    const apiPath = folderId != null
+      ? `/users/${mailbox}/mailFolders/${folderId}/messages`
+      : `/users/${mailbox}/messages`;
+    let request = client
+      .api(apiPath)
+      .select('id,subject,from,toRecipients,ccRecipients,receivedDateTime,sentDateTime,isRead,hasAttachments,importance,flag,bodyPreview,conversationId')
+      .orderby('receivedDateTime desc')
+      .top(limit);
+    if (unreadOnly) {
+      request = request.filter('isRead eq false');
+    }
+    const response = await request.get() as PageCollection;
+    return response.value as MicrosoftGraph.Message[];
+  }
+
+  async getSharedMessage(
+    mailbox: string,
+    messageId: string,
+    includeBody: boolean = false,
+  ): Promise<MicrosoftGraph.Message> {
+    const client = await this.getClient();
+    const select = includeBody
+      ? 'id,subject,from,toRecipients,ccRecipients,receivedDateTime,sentDateTime,isRead,hasAttachments,importance,flag,body,bodyPreview,conversationId,parentFolderId'
+      : 'id,subject,from,toRecipients,ccRecipients,receivedDateTime,sentDateTime,isRead,hasAttachments,importance,flag,bodyPreview,conversationId,parentFolderId';
+    return await client
+      .api(`/users/${mailbox}/messages/${messageId}`)
+      .select(select)
+      .get() as MicrosoftGraph.Message;
+  }
+
+  async searchSharedMessages(
+    mailbox: string,
+    query: string,
+    limit: number = 25,
+  ): Promise<MicrosoftGraph.Message[]> {
+    const client = await this.getClient();
+    // Mail $search cannot be combined with $orderby, so ordering is omitted.
+    const response = await client
+      .api(`/users/${mailbox}/messages`)
+      .query({ $search: `"${query}"` })
+      .select('id,subject,from,toRecipients,ccRecipients,receivedDateTime,sentDateTime,isRead,hasAttachments,importance,flag,bodyPreview,conversationId')
+      .top(limit)
+      .get() as PageCollection;
+    return response.value as MicrosoftGraph.Message[];
+  }
+
+  async listSharedEvents(
+    mailbox: string,
+    limit: number = 25,
+    startDate?: Date,
+    endDate?: Date,
+  ): Promise<MicrosoftGraph.Event[]> {
+    const client = await this.getClient();
+    if (startDate != null && endDate != null) {
+      const response = await client
+        .api(`/users/${mailbox}/calendarView`)
+        .query({ startDateTime: startDate.toISOString(), endDateTime: endDate.toISOString() })
+        .select('id,subject,start,end,location,isAllDay,organizer,attendees,bodyPreview')
+        .orderby('start/dateTime')
+        .top(limit)
+        .get() as PageCollection;
+      return response.value as MicrosoftGraph.Event[];
+    }
+    const response = await client
+      .api(`/users/${mailbox}/events`)
+      .select('id,subject,start,end,location,isAllDay,organizer,attendees,bodyPreview')
+      .orderby('start/dateTime')
+      .top(limit)
+      .get() as PageCollection;
+    return response.value as MicrosoftGraph.Event[];
+  }
+
+  async getSharedEvent(mailbox: string, eventId: string): Promise<MicrosoftGraph.Event> {
+    const client = await this.getClient();
+    return await client
+      .api(`/users/${mailbox}/events/${eventId}`)
+      .select('id,subject,start,end,location,isAllDay,organizer,attendees,body,recurrence,bodyPreview')
+      .get() as MicrosoftGraph.Event;
+  }
+
+  async listSharedDriveItems(mailbox: string, itemId?: string): Promise<GraphEntity[]> {
+    const client = await this.getClient();
+    const apiPath = itemId != null
+      ? `/users/${mailbox}/drive/items/${itemId}/children`
+      : `/users/${mailbox}/drive/root/children`;
+    const response = await client.api(apiPath).get() as GraphCollectionResponse<GraphEntity>;
+    return response.value;
+  }
+
+  async searchSharedDriveItems(mailbox: string, query: string, limit: number = 25): Promise<GraphEntity[]> {
+    const client = await this.getClient();
+    const response = await client
+      .api(`/users/${mailbox}/drive/root/search(q='${encodeURIComponent(query)}')`)
+      .top(limit)
+      .get() as GraphCollectionResponse<GraphEntity>;
+    return response.value;
+  }
+
 
   /**
    * Sends multiple requests in a single $batch call to the Graph API.

@@ -6,7 +6,7 @@
 
 MCP server for Microsoft 365 -- mail, calendar, contacts, tasks, teams, people, and planner.
 
-A [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) server that provides **221 tools** for full read/write access to Microsoft 365 via the Microsoft Graph API. Manage your emails, calendar events, contacts, tasks, OneNote notes, Teams channels and chats, people directory, and Planner boards directly through MCP.
+A [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) server that provides **229 tools** for full read/write access to Microsoft 365 via the Microsoft Graph API. Manage your emails, calendar events, contacts, tasks, OneNote notes, Teams channels and chats, people directory, and Planner boards directly through MCP.
 
 ## Features Overview
 
@@ -38,7 +38,8 @@ A [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) server that p
 | Teams -- Chats | 6 | 1:1 and group chats, send messages |
 | People & Presence | 8 | People search, org chart, presence status |
 | Planner | 18 | Plans, buckets, tasks, task details with ETag |
-| **Total** | **221** | |
+| Shared Mailbox | 8 | Read another user's mailbox, calendar, and OneDrive via delegate/shared access |
+| **Total** | **229** | |
 
 ## Quick Start
 
@@ -69,7 +70,7 @@ tool surface:
 | `--read-only` | Expose only read tools (`readOnlyHint: true`). All writes, `prepare_*`/`confirm_*`, and destructive tools are hidden; calling one returns a `READ_ONLY_MODE` error. Note: `download_*` and `get_*_photo` tools are excluded too — they write fetched bytes to local disk and so are not read-only. |
 
 Valid presets: `mail`, `calendar`, `contacts`, `tasks`, `notes`, `teams`,
-`planner`, `files`, `sharepoint`, `excel`, `people`, `meetings` (plus `all`).
+`planner`, `files`, `sharepoint`, `excel`, `people`, `meetings`, `shared` (plus `all`).
 An unknown preset name fails startup with the valid list.
 
 ```bash
@@ -180,7 +181,7 @@ For production, work accounts with conditional access, or full control over the 
 
 ## Tool Reference
 
-All 221 tools listed below.
+All 229 tools listed below.
 
 <details>
 <summary><strong>Mail -- Reading (9)</strong></summary>
@@ -574,9 +575,27 @@ All 221 tools listed below.
 
 </details>
 
+<details>
+<summary><strong>Shared Mailbox (8)</strong> <em>(Graph API)</em></summary>
+
+Read another user's mailbox, calendar, or OneDrive via `/users/{upn}/...`, relying on the signed-in user having delegate/shared access (`Mail.Read.Shared` / `Calendars.Read.Shared` / `Files.Read.All`). Read-only. These return **raw Graph ids** (not durable tokens, which are scoped to your own `/me` mailbox); pass the `mailbox` plus the raw id back to the matching `get_*` tool.
+
+| Tool | Description |
+| --- | --- |
+| `list_shared_mailbox_folders` | List mail folders in a shared/delegated mailbox |
+| `list_shared_mailbox_emails` | List emails in a shared/delegated mailbox (optionally by folder) |
+| `get_shared_mailbox_email` | Get a single email from a shared/delegated mailbox by raw Graph id |
+| `search_shared_mailbox_emails` | Full-text search a shared/delegated mailbox |
+| `list_shared_calendar_events` | List events from another user's calendar (optionally within a window) |
+| `get_shared_calendar_event` | Get a single event from another user's calendar by raw Graph id |
+| `list_shared_user_drive_items` | List items in another user's OneDrive (root or a folder) |
+| `search_shared_user_drive_items` | Search another user's OneDrive |
+
+</details>
+
 ## Architecture
 
-The server connects to Microsoft 365 cloud services via the **Microsoft Graph API**. Full read/write access across all 221 tools. No Outlook installation required. Works on macOS, Windows, and Linux.
+The server connects to Microsoft 365 cloud services via the **Microsoft Graph API**. Full read/write access across all 229 tools. No Outlook installation required. Works on macOS, Windows, and Linux.
 
 ### Two-Phase Approval
 
@@ -625,6 +644,9 @@ These delegated permissions are requested via Microsoft Graph:
 | `User.ReadBasic.All` | Read basic user profiles and photos |
 | `Presence.Read.All` | Read user presence/availability |
 | `Group.Read.All` | Read Microsoft 365 groups (for Planner) |
+| `Mail.Read.Shared` | Read mail in shared/delegated mailboxes |
+| `Calendars.Read.Shared` | Read shared/delegated calendars |
+| `Files.Read.All` | Read another user's OneDrive files (shared/delegate access) |
 
 ## Environment Variables
 

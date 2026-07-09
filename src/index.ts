@@ -56,6 +56,7 @@ import { LinkedResourcesTools } from './tools/linked-resources.js';
 import { TaskAttachmentsTools } from './tools/task-attachments.js';
 import { TeamsTools } from './tools/teams.js';
 import { PeopleTools } from './tools/people.js';
+import { SharedMailboxTools } from './tools/shared-mailbox.js';
 import { MeetingsTools } from './tools/meetings.js';
 import { OneNoteTools } from './tools/onenote.js';
 import { ExcelTools } from './tools/excel.js';
@@ -156,6 +157,7 @@ export function createServer(options: ServerOptions = {}): Server {
   let focusedOverridesTools: FocusedOverridesTools | null = null;
   let teamsTools: TeamsTools | null = null;
   let peopleTools: PeopleTools | null = null;
+  let sharedMailboxTools: SharedMailboxTools | null = null;
   let plannerTools: PlannerTools | null = null;
   let plannerVisualizationTools: PlannerVisualizationTools | null = null;
   let meetingsTools: MeetingsTools | null = null;
@@ -217,6 +219,7 @@ export function createServer(options: ServerOptions = {}): Server {
     linkedResourcesTools = new LinkedResourcesTools(graphRepository, tokenManager);
     taskAttachmentsTools = new TaskAttachmentsTools(graphRepository, tokenManager);
     peopleTools = new PeopleTools(graphRepository.getClient());
+    sharedMailboxTools = new SharedMailboxTools(graphRepository.getClient());
     plannerTools = new PlannerTools(graphRepository, tokenManager);
     plannerVisualizationTools = new PlannerVisualizationTools(graphRepository);
     meetingsTools = new MeetingsTools(graphRepository);
@@ -255,6 +258,7 @@ export function createServer(options: ServerOptions = {}): Server {
         && linkedResourcesTools != null
         && taskAttachmentsTools != null
         && peopleTools != null
+        && sharedMailboxTools != null
         && plannerVisualizationTools != null
         && meetingsTools != null
         && onenoteTools != null
@@ -282,6 +286,7 @@ export function createServer(options: ServerOptions = {}): Server {
               linkedResources: linkedResourcesTools,
               taskAttachments: taskAttachmentsTools,
               people: peopleTools,
+              sharedMailbox: sharedMailboxTools,
               plannerVisualization: plannerVisualizationTools,
               meetings: meetingsTools,
               onenote: onenoteTools,

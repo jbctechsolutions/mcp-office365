@@ -55,8 +55,14 @@ describe('graph/auth/config', () => {
       expect(GRAPH_SCOPES).toContain('Notes.ReadWrite');
     });
 
-    it('has exactly 19 scopes', () => {
-      expect(GRAPH_SCOPES).toHaveLength(19);
+    it('includes the shared-mailbox / delegate-access scopes (#40)', () => {
+      expect(GRAPH_SCOPES).toContain('Mail.Read.Shared');
+      expect(GRAPH_SCOPES).toContain('Calendars.Read.Shared');
+      expect(GRAPH_SCOPES).toContain('Files.Read.All');
+    });
+
+    it('has exactly 22 scopes', () => {
+      expect(GRAPH_SCOPES).toHaveLength(22);
     });
   });
 
