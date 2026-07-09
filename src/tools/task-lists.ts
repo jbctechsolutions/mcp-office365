@@ -11,6 +11,8 @@
  */
 
 import { z } from 'zod';
+import { Id } from '../ids/schema.js';
+import { nextActionFor } from '../ids/next-action.js';
 import type { GraphRepository } from '../graph/repository.js';
 import type { ApprovalTokenManager } from '../approval/index.js';
 import { defineTool } from '../registry/define-tool.js';
@@ -35,17 +37,17 @@ export const CreateTaskListInput = z.strictObject({
 });
 
 export const RenameTaskListInput = z.strictObject({
-  task_list_id: z.string().min(1).describe('Task list ID (tl_ token)'),
+  task_list_id: Id.taskList,
   name: z.string().min(1).describe('New name for the task list'),
 });
 
 export const PrepareDeleteTaskListInput = z.strictObject({
-  task_list_id: z.string().min(1).describe('Task list ID (tl_ token) to delete'),
+  task_list_id: Id.taskList,
 });
 
 export const ConfirmDeleteTaskListInput = z.strictObject({
   token_id: z.string().uuid().describe('Approval token from prepare_delete_task_list'),
-  task_list_id: z.string().min(1).describe('The task list ID (tl_ token) to delete'),
+  task_list_id: Id.taskList,
 });
 
 // =============================================================================
@@ -76,12 +78,12 @@ export class GraphTaskListsTools {
 
   async listTaskLists(): Promise<ToolResult> {
     const lists = await this.repository.listTaskListsAsync();
-    return jsonResult({ task_lists: lists });
+    return jsonResult({ task_lists: lists, next: nextActionFor('taskList') ?? undefined });
   }
 
   async createTaskList(params: CreateTaskListParams): Promise<ToolResult> {
     const listId = await this.repository.createTaskListAsync(params.display_name);
-    return jsonResult({ id: listId, display_name: params.display_name, status: 'created' });
+    return jsonResult({ id: listId, display_name: params.display_name, status: 'created', next: nextActionFor('taskList') ?? undefined });
   }
 
   async renameTaskList(params: RenameTaskListParams): Promise<ToolResult> {

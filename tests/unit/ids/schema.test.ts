@@ -9,7 +9,7 @@
 
 import { describe, it, expect } from 'vitest';
 import { Id, idSchema, optionalIdSchema, describeId, ENTITY_META } from '../../../src/ids/schema.js';
-import { nextActionFor } from '../../../src/ids/next-action.js';
+import { nextActionFor, FOLLOWUP_TOOLS } from '../../../src/ids/next-action.js';
 import { prefixForEntity, mintSelfEncoded, type EntityType } from '../../../src/ids/token.js';
 import { allToolDefinitions } from '../../../src/registry/all-tools.js';
 
@@ -91,5 +91,14 @@ describe('nextActionFor', () => {
 
   it('returns null for entities without a defined follow-up', () => {
     expect(nextActionFor('recording')).toBeNull();
+  });
+
+  it('every follow-up tool named in a hint is a registered tool (no drift)', () => {
+    const registered = new Set(allToolDefinitions().map((d) => d.name));
+    for (const [entity, tools] of Object.entries(FOLLOWUP_TOOLS)) {
+      for (const tool of tools.split(/,|\bor\b/).map((t) => t.trim()).filter(Boolean)) {
+        expect(registered.has(tool), `${entity} → "${tool}"`).toBe(true);
+      }
+    }
   });
 });

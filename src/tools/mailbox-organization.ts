@@ -62,7 +62,7 @@ export const ConfirmDeleteEmailInput = z.strictObject({
 
 export const PrepareMoveEmailInput = z.strictObject({
   email_id: EmailIdSchema.describe('The email ID to move'),
-  destination_folder_id: z.string().min(1).describe('The destination folder ID'),
+  destination_folder_id: Id.folder.describe('The destination folder — a `fd_` token from list_folders.'),
 });
 
 export const ConfirmMoveEmailInput = z.strictObject({
@@ -89,21 +89,21 @@ export const ConfirmJunkEmailInput = z.strictObject({
 });
 
 export const PrepareDeleteFolderInput = z.strictObject({
-  folder_id: z.string().min(1).describe('The folder ID to delete'),
+  folder_id: Id.folder.describe('The folder to delete — a `fd_` token from list_folders.'),
 });
 
 export const ConfirmDeleteFolderInput = z.strictObject({
   token_id: z.uuid().describe('The approval token from prepare_delete_folder'),
-  folder_id: z.string().min(1).describe('The folder ID to delete'),
+  folder_id: Id.folder.describe('The folder to delete — a `fd_` token from list_folders.'),
 });
 
 export const PrepareEmptyFolderInput = z.strictObject({
-  folder_id: z.string().min(1).describe('The folder ID to empty'),
+  folder_id: Id.folder.describe('The folder to empty — a `fd_` token from list_folders.'),
 });
 
 export const ConfirmEmptyFolderInput = z.strictObject({
   token_id: z.uuid().describe('The approval token from prepare_empty_folder'),
-  folder_id: z.string().min(1).describe('The folder ID to empty'),
+  folder_id: Id.folder.describe('The folder to empty — a `fd_` token from list_folders.'),
 });
 
 export const PrepareBatchDeleteEmailsInput = z.strictObject({
@@ -120,7 +120,7 @@ export const PrepareBatchMoveEmailsInput = z.strictObject({
     .min(1)
     .max(50)
     .describe('The email IDs to move (max 50)'),
-  destination_folder_id: z.string().min(1).describe('The destination folder ID'),
+  destination_folder_id: Id.folder.describe('The destination folder — a `fd_` token from list_folders.'),
 });
 
 export const ConfirmBatchOperationInput = z.strictObject({
@@ -188,16 +188,13 @@ export const CreateFolderInput = z.strictObject({
 });
 
 export const RenameFolderInput = z.strictObject({
-  folder_id: z.string().min(1).describe('The folder ID to rename'),
+  folder_id: Id.folder.describe('The folder to rename — a `fd_` token from list_folders.'),
   new_name: z.string().min(1).max(255).describe('The new folder name'),
 });
 
 export const MoveFolderInput = z.strictObject({
-  folder_id: z.string().min(1).describe('The folder ID to move'),
-  destination_parent_id: z
-    .string()
-    .min(1)
-    .describe('The destination parent folder ID'),
+  folder_id: Id.folder.describe('The folder to move — a `fd_` token from list_folders.'),
+  destination_parent_id: Id.folder.describe('The destination parent folder — a `fd_` token from list_folders.'),
 });
 
 // =============================================================================

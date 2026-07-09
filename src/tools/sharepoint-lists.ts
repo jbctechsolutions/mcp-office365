@@ -13,6 +13,8 @@
  */
 
 import { z } from 'zod';
+import { Id } from '../ids/schema.js';
+import { nextActionFor } from '../ids/next-action.js';
 import type { ApprovalTokenManager } from '../approval/index.js';
 import { defineTool } from '../registry/define-tool.js';
 import { requireGraphToolset } from '../registry/context.js';
@@ -29,49 +31,49 @@ declare module '../registry/types.js' {
 // =============================================================================
 
 export const ListListsInput = z.strictObject({
-  site_id: z.string().min(1).describe('Site ID (si_ token from list_sites or search_sites)'),
+  site_id: Id.site,
 });
 
 export const GetListInput = z.strictObject({
-  list_id: z.string().min(1).describe('List ID (sl_ token from list_lists)'),
+  list_id: Id.sharePointList,
 });
 
 export const CreateListInput = z.strictObject({
-  site_id: z.string().min(1).describe('Site ID (si_ token from list_sites or search_sites)'),
+  site_id: Id.site,
   display_name: z.string().min(1).describe('Display name for the new list'),
   description: z.string().optional().describe('Optional description for the list'),
 });
 
 export const ListListColumnsInput = z.strictObject({
-  list_id: z.string().min(1).describe('List ID (sl_ token from list_lists)'),
+  list_id: Id.sharePointList,
 });
 
 export const ListListItemsInput = z.strictObject({
-  list_id: z.string().min(1).describe('List ID (sl_ token from list_lists)'),
+  list_id: Id.sharePointList,
   limit: z.number().int().min(1).max(200).default(50).describe('Maximum items to return (1-200)'),
 });
 
 export const GetListItemInput = z.strictObject({
-  item_id: z.string().min(1).describe('List item ID (sn_ token from list_list_items)'),
+  item_id: Id.sharePointListItem,
 });
 
 export const CreateListItemInput = z.strictObject({
-  list_id: z.string().min(1).describe('List ID (sl_ token from list_lists)'),
+  list_id: Id.sharePointList,
   fields: z.record(z.string(), z.unknown()).describe('Column name → value map for the new item (e.g. { "Title": "New row", "Status": "Open" })'),
 });
 
 export const UpdateListItemInput = z.strictObject({
-  item_id: z.string().min(1).describe('List item ID (sn_ token from list_list_items)'),
+  item_id: Id.sharePointListItem,
   fields: z.record(z.string(), z.unknown()).describe('Column name → value map of fields to update'),
 });
 
 export const PrepareDeleteListItemInput = z.strictObject({
-  item_id: z.string().min(1).describe('List item ID (sn_ token) to delete'),
+  item_id: Id.sharePointListItem,
 });
 
 export const ConfirmDeleteListItemInput = z.strictObject({
   token_id: z.string().uuid().describe('Approval token from prepare_delete_list_item'),
-  item_id: z.string().min(1).describe('The list item ID to delete'),
+  item_id: Id.sharePointListItem,
 });
 
 // =============================================================================
@@ -136,7 +138,7 @@ export class SharePointListsTools {
 
   async listLists(params: ListListsParams): Promise<ToolResult> {
     const lists = await this.repository.listSharePointListsAsync(params.site_id);
-    return jsonResult({ lists });
+    return jsonResult({ lists, next: nextActionFor('sharePointList') ?? undefined });
   }
 
   async getList(params: GetListParams): Promise<ToolResult> {
@@ -146,7 +148,7 @@ export class SharePointListsTools {
 
   async createList(params: CreateListParams): Promise<ToolResult> {
     const listId = await this.repository.createSharePointListAsync(params.site_id, params.display_name, params.description);
-    return jsonResult({ id: listId, display_name: params.display_name, status: 'created' });
+    return jsonResult({ id: listId, display_name: params.display_name, status: 'created', next: nextActionFor('sharePointList') ?? undefined });
   }
 
   async listListColumns(params: ListListColumnsParams): Promise<ToolResult> {
@@ -156,7 +158,7 @@ export class SharePointListsTools {
 
   async listListItems(params: ListListItemsParams): Promise<ToolResult> {
     const items = await this.repository.listSharePointListItemsAsync(params.list_id, params.limit);
-    return jsonResult({ items });
+    return jsonResult({ items, next: nextActionFor('sharePointListItem') ?? undefined });
   }
 
   async getListItem(params: GetListItemParams): Promise<ToolResult> {
@@ -166,7 +168,7 @@ export class SharePointListsTools {
 
   async createListItem(params: CreateListItemParams): Promise<ToolResult> {
     const itemId = await this.repository.createSharePointListItemAsync(params.list_id, params.fields);
-    return jsonResult({ id: itemId, status: 'created' });
+    return jsonResult({ id: itemId, status: 'created', next: nextActionFor('sharePointListItem') ?? undefined });
   }
 
   async updateListItem(params: UpdateListItemParams): Promise<ToolResult> {

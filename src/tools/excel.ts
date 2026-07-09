@@ -12,6 +12,7 @@
  */
 
 import { z } from 'zod';
+import { Id } from '../ids/schema.js';
 import type { ApprovalTokenManager } from '../approval/index.js';
 import { defineTool } from '../registry/define-tool.js';
 import { approvalTokenLink } from '../registry/elicit-links.js';
@@ -29,22 +30,22 @@ declare module '../registry/types.js' {
 // =============================================================================
 
 export const ListWorksheetsInput = z.strictObject({
-  file_id: z.string().min(1).describe('Durable ID of the Excel file (dr_ token from list_drive_items/search_drive_items, or a raw Graph item id)'),
+  file_id: Id.driveItem.describe('Durable ID of the Excel file — a dr_ token from list_drive_items / search_drive_items.'),
 });
 
 export const GetWorksheetRangeInput = z.strictObject({
-  file_id: z.string().min(1).describe('Durable ID of the Excel file (dr_ token from list_drive_items/search_drive_items, or a raw Graph item id)'),
+  file_id: Id.driveItem.describe('Durable ID of the Excel file — a dr_ token from list_drive_items / search_drive_items.'),
   worksheet_name: z.string().describe('Name of the worksheet'),
   range: z.string().describe('Cell range e.g. "A1:D10"'),
 });
 
 export const GetUsedRangeInput = z.strictObject({
-  file_id: z.string().min(1).describe('Durable ID of the Excel file (dr_ token from list_drive_items/search_drive_items, or a raw Graph item id)'),
+  file_id: Id.driveItem.describe('Durable ID of the Excel file — a dr_ token from list_drive_items / search_drive_items.'),
   worksheet_name: z.string().describe('Name of the worksheet'),
 });
 
 export const PrepareUpdateRangeInput = z.strictObject({
-  file_id: z.string().min(1).describe('Durable ID of the Excel file (dr_ token from list_drive_items/search_drive_items, or a raw Graph item id)'),
+  file_id: Id.driveItem.describe('Durable ID of the Excel file — a dr_ token from list_drive_items / search_drive_items.'),
   worksheet_name: z.string().describe('Name of the worksheet'),
   range: z.string().describe('Cell range e.g. "A1:D10"'),
   values: z.array(z.array(z.unknown())).describe('2D array of cell values'),
@@ -55,7 +56,7 @@ export const ConfirmUpdateRangeInput = z.strictObject({
 });
 
 export const GetTableDataInput = z.strictObject({
-  file_id: z.string().min(1).describe('Durable ID of the Excel file (dr_ token from list_drive_items/search_drive_items, or a raw Graph item id)'),
+  file_id: Id.driveItem.describe('Durable ID of the Excel file — a dr_ token from list_drive_items / search_drive_items.'),
   table_name: z.string().describe('Name of the Excel table'),
 });
 

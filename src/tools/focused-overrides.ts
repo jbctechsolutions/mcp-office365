@@ -11,6 +11,7 @@
  */
 
 import { z } from 'zod';
+import { Id } from '../ids/schema.js';
 import type { ApprovalTokenManager } from '../approval/index.js';
 import { defineTool } from '../registry/define-tool.js';
 import { approvalTokenLink } from '../registry/elicit-links.js';
@@ -33,7 +34,7 @@ export const CreateFocusedOverrideInput = z.strictObject({
 });
 
 export const PrepareDeleteFocusedOverrideInput = z.strictObject({
-  override_id: z.string().min(1).describe('Override ID to delete'),
+  override_id: Id.focusedOverride,
 });
 
 export const ConfirmDeleteFocusedOverrideInput = z.strictObject({

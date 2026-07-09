@@ -11,6 +11,7 @@
  */
 
 import { z } from 'zod';
+import { Id } from '../ids/schema.js';
 import type { ApprovalTokenManager } from '../approval/index.js';
 import { defineTool } from '../registry/define-tool.js';
 import { approvalTokenLink } from '../registry/elicit-links.js';
@@ -28,18 +29,18 @@ declare module '../registry/types.js' {
 // =============================================================================
 
 export const ListLinkedResourcesInput = z.strictObject({
-  task_id: z.string().min(1).describe('Task ID (td_ token from list_tasks or search_tasks)'),
+  task_id: Id.task,
 });
 
 export const CreateLinkedResourceInput = z.strictObject({
-  task_id: z.string().min(1).describe('Task ID (td_ token)'),
+  task_id: Id.task,
   web_url: z.string().min(1).describe('URL of the linked resource'),
   application_name: z.string().min(1).describe('Name of the application the resource is associated with'),
   display_name: z.string().min(1).optional().describe('Display name of the linked resource'),
 });
 
 export const PrepareDeleteLinkedResourceInput = z.strictObject({
-  linked_resource_id: z.string().min(1).describe('Linked resource ID to delete'),
+  linked_resource_id: Id.linkedResource,
 });
 
 export const ConfirmDeleteLinkedResourceInput = z.strictObject({

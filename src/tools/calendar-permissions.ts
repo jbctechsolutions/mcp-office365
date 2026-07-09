@@ -11,6 +11,7 @@
  */
 
 import { z } from 'zod';
+import { Id } from '../ids/schema.js';
 import type { ApprovalTokenManager } from '../approval/index.js';
 import { defineTool } from '../registry/define-tool.js';
 import { approvalTokenLink } from '../registry/elicit-links.js';
@@ -28,17 +29,17 @@ declare module '../registry/types.js' {
 // =============================================================================
 
 export const ListCalendarPermissionsInput = z.strictObject({
-  calendar_id: z.string().min(1).describe('Calendar ID'),
+  calendar_id: Id.folder.describe('Calendar ID — a durable folder (fd_) token or raw Graph calendar id.'),
 });
 
 export const CreateCalendarPermissionInput = z.strictObject({
-  calendar_id: z.string().min(1).describe('Calendar ID'),
+  calendar_id: Id.folder.describe('Calendar ID — a durable folder (fd_) token or raw Graph calendar id.'),
   email_address: z.string().email().describe('Email of person to share with'),
   role: z.enum(['read', 'write', 'delegateWithoutPrivateEventAccess', 'delegateWithPrivateEventAccess']).describe('Permission level'),
 });
 
 export const PrepareDeleteCalendarPermissionInput = z.strictObject({
-  permission_id: z.string().min(1).describe('Calendar permission ID (cp_ token from list_calendar_permissions)'),
+  permission_id: Id.calendarPermission,
 });
 
 export const ConfirmDeleteCalendarPermissionInput = z.strictObject({

@@ -12,6 +12,8 @@
  */
 
 import { z } from 'zod';
+import { Id } from '../ids/schema.js';
+import { nextActionFor } from '../ids/next-action.js';
 import { defineTool } from '../registry/define-tool.js';
 import { requireGraphToolset } from '../registry/context.js';
 import type { ToolContext, ToolDefinition } from '../registry/types.js';
@@ -31,24 +33,24 @@ export const ListOnlineMeetingsInput = z.strictObject({
 });
 
 export const GetOnlineMeetingInput = z.strictObject({
-  meeting_id: z.string().min(1).describe('Meeting ID (om_ token from list_online_meetings)'),
+  meeting_id: Id.onlineMeeting,
 });
 
 export const ListMeetingRecordingsInput = z.strictObject({
-  meeting_id: z.string().min(1).describe('Meeting ID (om_ token from list_online_meetings)'),
+  meeting_id: Id.onlineMeeting,
 });
 
 export const DownloadMeetingRecordingInput = z.strictObject({
-  recording_id: z.string().min(1).describe('Recording ID (rc_ token from list_meeting_recordings)'),
+  recording_id: Id.recording,
   output_path: z.string().min(1).describe('Local file path to save the recording'),
 });
 
 export const ListMeetingTranscriptsInput = z.strictObject({
-  meeting_id: z.string().min(1).describe('Meeting ID (om_ token from list_online_meetings)'),
+  meeting_id: Id.onlineMeeting,
 });
 
 export const GetMeetingTranscriptContentInput = z.strictObject({
-  transcript_id: z.string().min(1).describe('Transcript ID (tr_ token from list_meeting_transcripts)'),
+  transcript_id: Id.transcript,
   format: z.enum(['text/vtt', 'text/plain']).optional().describe('Transcript format (default text/vtt)'),
 });
 
@@ -104,7 +106,7 @@ export class MeetingsTools {
     return {
       content: [{
         type: 'text' as const,
-        text: JSON.stringify({ meetings }, null, 2),
+        text: JSON.stringify({ meetings, next: nextActionFor('onlineMeeting') ?? undefined }, null, 2),
       }],
     };
   }

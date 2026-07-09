@@ -10,6 +10,7 @@
  */
 
 import { z } from 'zod';
+import { Id } from '../ids/schema.js';
 import { defineTool } from '../registry/define-tool.js';
 import { tokenIdLink } from '../registry/elicit-links.js';
 import { requireGraphToolset } from '../registry/context.js';
@@ -36,7 +37,7 @@ export const ListContactsInput = z.strictObject({
     .default(50)
     .describe('Maximum number of contacts to return (1-100)'),
   offset: z.number().int().min(0).default(0).describe('Number of contacts to skip'),
-  folder_id: z.string().min(1).optional().describe('Filter contacts by contact folder ID'),
+  folder_id: Id.contactFolder.optional().describe('Filter contacts by contact folder ID.'),
 });
 
 export const SearchContactsInput = z.strictObject({

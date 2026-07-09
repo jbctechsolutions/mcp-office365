@@ -125,12 +125,12 @@ export const ListAttachmentsInput = z.strictObject({
 
 export const DownloadAttachmentInput = z.strictObject({
   email_id: EmailIdSchema.describe('The email ID containing the attachment'),
-  attachment_id: z.string().min(1).describe('Attachment ID (at_ token from list_attachments)'),
+  attachment_id: Id.attachment,
   save_path: z.string().min(1).describe('Absolute file path where the attachment should be saved'),
 });
 
 export const CheckNewEmailsInput = z.strictObject({
-  folder_id: z.string().min(1).describe('Folder ID to check for new emails'),
+  folder_id: Id.folder.describe('Folder to check for new emails — a `fd_` token from list_folders.'),
 });
 
 export const GetMessageHeadersInput = z.strictObject({

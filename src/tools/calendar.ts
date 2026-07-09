@@ -10,6 +10,7 @@
  */
 
 import { z } from 'zod';
+import { Id } from '../ids/schema.js';
 import type { Attendee } from '../types/index.js';
 import { defineTool } from '../registry/define-tool.js';
 import { tokenIdLink } from '../registry/elicit-links.js';
@@ -37,7 +38,7 @@ const EventIdSchema = z.union([z.string().min(1), z.number().int().positive()]);
 export const ListCalendarsInput = z.strictObject({});
 
 export const ListEventsInput = z.strictObject({
-  calendar_id: z.string().min(1).optional().describe('Optional calendar folder ID'),
+  calendar_id: Id.folder.optional().describe('Optional calendar folder ID — a durable folder (fd_) token.'),
   start_date: z.string().optional().describe('Start date filter (ISO 8601 format)'),
   end_date: z.string().optional().describe('End date filter (ISO 8601 format)'),
   limit: z
@@ -179,7 +180,7 @@ export const CreateEventGraphInput = z.strictObject({
   title: z.string().min(1),
   start_date: graphIsoDateString,
   end_date: graphIsoDateString,
-  calendar_id: z.string().min(1).optional(),
+  calendar_id: Id.folder.optional(),
   location: z.string().optional(),
   description: z.string().optional(),
   is_all_day: z.boolean().optional().default(false),

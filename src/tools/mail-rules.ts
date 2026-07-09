@@ -11,6 +11,7 @@
  */
 
 import { z } from 'zod';
+import { Id } from '../ids/schema.js';
 import type { ApprovalTokenManager } from '../approval/index.js';
 import { defineTool } from '../registry/define-tool.js';
 import { tokenIdLink } from '../registry/elicit-links.js';
@@ -52,12 +53,12 @@ export const CreateMailRuleInput = z.strictObject({
 });
 
 export const PrepareDeleteMailRuleInput = z.strictObject({
-  rule_id: z.string().min(1).describe('The rule ID to delete'),
+  rule_id: Id.mailRule,
 });
 
 export const ConfirmDeleteMailRuleInput = z.strictObject({
   token_id: z.string().uuid().describe('Approval token from prepare_delete_mail_rule'),
-  rule_id: z.string().min(1).describe('The rule ID to delete'),
+  rule_id: Id.mailRule,
 });
 
 // =============================================================================

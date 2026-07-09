@@ -11,6 +11,8 @@
  */
 
 import { z } from 'zod';
+import { Id } from '../ids/schema.js';
+import { nextActionFor } from '../ids/next-action.js';
 import type { ApprovalTokenManager } from '../approval/index.js';
 import { defineTool } from '../registry/define-tool.js';
 import { approvalTokenLink } from '../registry/elicit-links.js';
@@ -28,7 +30,7 @@ declare module '../registry/types.js' {
 // =============================================================================
 
 export const ListDriveItemsInput = z.strictObject({
-  folder_id: z.string().min(1).optional().describe('Folder ID (dr_ token from a previous list_drive_items call). Omit to list root.'),
+  folder_id: Id.driveItem.optional().describe('Folder ID — a dr_ token from a previous list_drive_items call. Omit to list root.'),
 });
 
 export const SearchDriveItemsInput = z.strictObject({
@@ -37,11 +39,11 @@ export const SearchDriveItemsInput = z.strictObject({
 });
 
 export const GetDriveItemInput = z.strictObject({
-  item_id: z.string().min(1).describe('Drive item ID (dr_ token from list_drive_items or search_drive_items)'),
+  item_id: Id.driveItem,
 });
 
 export const DownloadFileInput = z.strictObject({
-  item_id: z.string().min(1).describe('Drive item ID (dr_ token from list_drive_items or search_drive_items)'),
+  item_id: Id.driveItem,
   output_path: z.string().min(1).describe('Absolute file path where the file should be saved'),
 });
 
@@ -60,13 +62,13 @@ export const ListRecentFilesInput = z.strictObject({});
 export const ListSharedWithMeInput = z.strictObject({});
 
 export const CreateSharingLinkInput = z.strictObject({
-  item_id: z.string().min(1).describe('Drive item ID (dr_ token from list_drive_items or search_drive_items)'),
+  item_id: Id.driveItem,
   type: z.enum(['view', 'edit']).describe('Permission type: view (read-only) or edit (read-write)'),
   scope: z.enum(['anonymous', 'organization']).describe('Link scope: anonymous (anyone with link) or organization (org members only)'),
 });
 
 export const PrepareDeleteDriveItemInput = z.strictObject({
-  item_id: z.string().min(1).describe('Drive item ID (dr_ token from list_drive_items or search_drive_items)'),
+  item_id: Id.driveItem,
 });
 
 export const ConfirmDeleteDriveItemInput = z.strictObject({
@@ -142,7 +144,7 @@ export class OneDriveTools {
     return {
       content: [{
         type: 'text' as const,
-        text: JSON.stringify({ items }, null, 2),
+        text: JSON.stringify({ items, next: nextActionFor('driveItem') ?? undefined }, null, 2),
       }],
     };
   }
@@ -154,7 +156,7 @@ export class OneDriveTools {
     return {
       content: [{
         type: 'text' as const,
-        text: JSON.stringify({ items }, null, 2),
+        text: JSON.stringify({ items, next: nextActionFor('driveItem') ?? undefined }, null, 2),
       }],
     };
   }
@@ -270,7 +272,7 @@ export class OneDriveTools {
     return {
       content: [{
         type: 'text' as const,
-        text: JSON.stringify({ items }, null, 2),
+        text: JSON.stringify({ items, next: nextActionFor('driveItem') ?? undefined }, null, 2),
       }],
     };
   }
@@ -282,7 +284,7 @@ export class OneDriveTools {
     return {
       content: [{
         type: 'text' as const,
-        text: JSON.stringify({ items }, null, 2),
+        text: JSON.stringify({ items, next: nextActionFor('driveItem') ?? undefined }, null, 2),
       }],
     };
   }

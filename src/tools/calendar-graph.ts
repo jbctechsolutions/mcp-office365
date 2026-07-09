@@ -11,6 +11,7 @@
  */
 
 import type { GraphRepository } from '../graph/repository.js';
+import { nextActionFor } from '../ids/next-action.js';
 import type { GraphContentReaders } from '../graph/content-readers.js';
 import type { EventRow, FolderRow } from '../database/repository.js';
 import { unixTimestampToLocalIso } from '../graph/mappers/utils.js';
@@ -117,7 +118,7 @@ export class GraphCalendarTools {
     } else {
       events = await this.repository.listEventsAsync(params.limit);
     }
-    return jsonResult({ events: events.map(transformGraphEventRow) });
+    return jsonResult({ events: events.map(transformGraphEventRow), next: nextActionFor('event') ?? undefined });
   }
 
   async getEvent(params: GetEventParams): Promise<ToolResult> {
@@ -149,7 +150,7 @@ export class GraphCalendarTools {
       }
       return true;
     });
-    return jsonResult({ events: events.slice(0, params.limit).map(transformGraphEventRow) });
+    return jsonResult({ events: events.slice(0, params.limit).map(transformGraphEventRow), next: nextActionFor('event') ?? undefined });
   }
 
   async createEvent(params: CreateEventGraphParams): Promise<ToolResult> {
@@ -201,7 +202,7 @@ export class GraphCalendarTools {
       is_all_day: params.is_all_day,
       is_recurring: params.recurrence != null,
     };
-    return jsonResult(result);
+    return jsonResult({ ...result, next: nextActionFor('event') ?? undefined });
   }
 
   async updateEvent(params: UpdateEventParams): Promise<ToolResult> {

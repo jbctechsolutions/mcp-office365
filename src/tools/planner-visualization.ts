@@ -11,6 +11,7 @@
  */
 
 import { z } from 'zod';
+import { Id } from '../ids/schema.js';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
@@ -34,25 +35,25 @@ declare module '../registry/types.js' {
 // =============================================================================
 
 export const GenerateKanbanBoardInput = z.strictObject({
-  plan_id: z.string().min(1).describe('Plan ID from list_plans'),
+  plan_id: Id.plan,
   format: z.enum(['html', 'svg', 'markdown', 'mermaid']).default('html').describe('Output format'),
   output_path: z.string().optional().describe('Custom file path for output (default: temp directory)'),
 });
 
 export const GenerateGanttChartInput = z.strictObject({
-  plan_id: z.string().min(1).describe('Plan ID from list_plans'),
+  plan_id: Id.plan,
   format: z.enum(['html', 'svg', 'markdown', 'mermaid']).default('html').describe('Output format'),
   output_path: z.string().optional().describe('Custom file path for output (default: temp directory)'),
 });
 
 export const GeneratePlanSummaryInput = z.strictObject({
-  plan_id: z.string().min(1).describe('Plan ID from list_plans'),
+  plan_id: Id.plan,
   format: z.enum(['html', 'svg', 'markdown', 'mermaid']).default('html').describe('Output format'),
   output_path: z.string().optional().describe('Custom file path for output (default: temp directory)'),
 });
 
 export const GenerateBurndownChartInput = z.strictObject({
-  plan_id: z.string().min(1).describe('Plan ID from list_plans'),
+  plan_id: Id.plan,
   format: z.enum(['html', 'svg', 'markdown', 'mermaid']).default('html').describe('Output format'),
   output_path: z.string().optional().describe('Custom file path for output (default: temp directory)'),
 });

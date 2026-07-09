@@ -11,6 +11,7 @@
  */
 
 import { z } from 'zod';
+import { Id } from '../ids/schema.js';
 import type { ApprovalTokenManager } from '../approval/index.js';
 import { defineTool } from '../registry/define-tool.js';
 import { approvalTokenLink } from '../registry/elicit-links.js';
@@ -28,23 +29,23 @@ declare module '../registry/types.js' {
 // =============================================================================
 
 export const ListChecklistItemsInput = z.strictObject({
-  task_id: z.string().min(1).describe('Task ID (td_ token from list_tasks or search_tasks)'),
+  task_id: Id.task,
 });
 
 export const CreateChecklistItemInput = z.strictObject({
-  task_id: z.string().min(1).describe('Task ID (td_ token)'),
+  task_id: Id.task,
   display_name: z.string().min(1).describe('Checklist item text'),
   is_checked: z.boolean().optional().describe('Whether the item is checked (default: false)'),
 });
 
 export const UpdateChecklistItemInput = z.strictObject({
-  checklist_item_id: z.string().min(1).describe('Checklist item ID'),
+  checklist_item_id: Id.checklistItem,
   display_name: z.string().min(1).optional().describe('New text'),
   is_checked: z.boolean().optional().describe('Toggle checked state'),
 });
 
 export const PrepareDeleteChecklistItemInput = z.strictObject({
-  checklist_item_id: z.string().min(1).describe('Checklist item ID to delete'),
+  checklist_item_id: Id.checklistItem,
 });
 
 export const ConfirmDeleteChecklistItemInput = z.strictObject({
