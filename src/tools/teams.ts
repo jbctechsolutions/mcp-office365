@@ -29,27 +29,27 @@ declare module '../registry/types.js' {
 export const NoInput = z.strictObject({});
 
 export const ListChannelsInput = z.strictObject({
-  team_id: z.number().int().positive().describe('Team ID'),
+  team_id: z.string().min(1).describe('Team ID (tm_ token from list_teams, or a raw Graph id)'),
 });
 
 export const GetChannelInput = z.strictObject({
-  channel_id: z.number().int().positive().describe('Channel ID'),
+  channel_id: z.string().min(1).describe('Channel ID (cn_ token from list_channels)'),
 });
 
 export const CreateChannelInput = z.strictObject({
-  team_id: z.number().int().positive().describe('Team ID'),
+  team_id: z.string().min(1).describe('Team ID (tm_ token from list_teams, or a raw Graph id)'),
   name: z.string().min(1).describe('Channel name'),
   description: z.string().optional().describe('Channel description'),
 });
 
 export const UpdateChannelInput = z.strictObject({
-  channel_id: z.number().int().positive().describe('Channel ID'),
+  channel_id: z.string().min(1).describe('Channel ID (cn_ token from list_channels)'),
   name: z.string().min(1).optional().describe('New name'),
   description: z.string().optional().describe('New description'),
 });
 
 export const PrepareDeleteChannelInput = z.strictObject({
-  channel_id: z.number().int().positive().describe('Channel ID'),
+  channel_id: z.string().min(1).describe('Channel ID (cn_ token from list_channels)'),
 });
 
 export const ConfirmDeleteChannelInput = z.strictObject({
@@ -57,11 +57,11 @@ export const ConfirmDeleteChannelInput = z.strictObject({
 });
 
 export const ListTeamMembersInput = z.strictObject({
-  team_id: z.number().int().positive().describe('Team ID'),
+  team_id: z.string().min(1).describe('Team ID (tm_ token from list_teams, or a raw Graph id)'),
 });
 
 export const ListChannelMessagesInput = z.strictObject({
-  channel_id: z.number().int().positive().describe('Channel ID from list_channels'),
+  channel_id: z.string().min(1).describe('Channel ID (cn_ token from list_channels)'),
   limit: z.number().int().min(1).max(50).optional().describe('Max messages to return (default 25, max 50)'),
 });
 
@@ -70,7 +70,7 @@ export const GetChannelMessageInput = z.strictObject({
 });
 
 export const PrepareSendChannelMessageInput = z.strictObject({
-  channel_id: z.number().int().positive().describe('Channel ID to send message to'),
+  channel_id: z.string().min(1).describe('Channel ID (cn_ token) to send message to'),
   body: z.string().min(1).describe('Message body'),
   content_type: z.enum(['text', 'html']).optional().describe('Content type (default: html)'),
 });
@@ -170,14 +170,14 @@ export type RemoveMessageReactionParams = z.infer<typeof RemoveMessageReactionIn
 // =============================================================================
 
 export interface ITeamsRepository {
-  listTeamsAsync(): Promise<Array<{ id: number; name: string; description: string }>>;
-  listChannelsAsync(teamId: number): Promise<Array<{ id: number; name: string; description: string; membershipType: string }>>;
-  getChannelAsync(channelId: number): Promise<{ id: number; name: string; description: string; membershipType: string; webUrl: string }>;
-  createChannelAsync(teamId: number, name: string, description?: string): Promise<number>;
-  updateChannelAsync(channelId: number, updates: { name?: string; description?: string }): Promise<void>;
-  deleteChannelAsync(channelId: number): Promise<void>;
-  listTeamMembersAsync(teamId: number): Promise<Array<{ id: string; displayName: string; email: string; roles: string[] }>>;
-  listChannelMessagesAsync(channelId: number, limit?: number): Promise<Array<{
+  listTeamsAsync(): Promise<Array<{ id: string; name: string; description: string }>>;
+  listChannelsAsync(teamId: string): Promise<Array<{ id: string; name: string; description: string; membershipType: string }>>;
+  getChannelAsync(channelId: string): Promise<{ id: string; name: string; description: string; membershipType: string; webUrl: string }>;
+  createChannelAsync(teamId: string, name: string, description?: string): Promise<string>;
+  updateChannelAsync(channelId: string, updates: { name?: string; description?: string }): Promise<void>;
+  deleteChannelAsync(channelId: string): Promise<void>;
+  listTeamMembersAsync(teamId: string): Promise<Array<{ id: string; displayName: string; email: string; roles: string[] }>>;
+  listChannelMessagesAsync(channelId: string, limit?: number): Promise<Array<{
     id: number; senderName: string; senderEmail: string; bodyPreview: string;
     bodyContent: string; contentType: string; createdDateTime: string;
   }>>;
@@ -186,7 +186,7 @@ export interface ITeamsRepository {
     contentType: string; createdDateTime: string;
     replies: Array<{ id: number; senderName: string; senderEmail: string; bodyContent: string; contentType: string; createdDateTime: string }>;
   }>;
-  sendChannelMessageAsync(channelId: number, body: string, contentType?: string): Promise<number>;
+  sendChannelMessageAsync(channelId: string, body: string, contentType?: string): Promise<number>;
   replyToChannelMessageAsync(messageId: number, body: string, contentType?: string): Promise<number>;
   listChatsAsync(limit?: number): Promise<Array<{ id: number; topic: string; chatType: string; lastMessagePreview: string; createdDateTime: string }>>;
   getChatAsync(chatId: number): Promise<{ id: number; topic: string; chatType: string; createdDateTime: string; webUrl: string }>;
@@ -337,7 +337,7 @@ export class TeamsTools {
       };
     }
 
-    await this.repo.deleteChannelAsync((result.token!.targetId as number));
+    await this.repo.deleteChannelAsync((result.token!.targetId as string));
     return {
       content: [{
         type: 'text' as const,
@@ -441,7 +441,7 @@ export class TeamsTools {
       };
     }
     const { body, contentType } = result.token!.metadata as { body: string; contentType: string };
-    const messageId = await this.repo.sendChannelMessageAsync((result.token!.targetId as number), body, contentType);
+    const messageId = await this.repo.sendChannelMessageAsync((result.token!.targetId as string), body, contentType);
     return {
       content: [{
         type: 'text' as const,

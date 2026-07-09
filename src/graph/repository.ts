@@ -33,7 +33,9 @@ import {
 import type { DeviceCodeCallback } from './auth/index.js';
 import { currentAccountId } from './auth/index.js';
 import { resolveId } from '../ids/resolver.js';
+import { registerComposite } from '../ids/mint.js';
 import { mintSelfEncoded, type EntityType } from '../ids/token.js';
+import { IdUnknownError } from '../utils/errors.js';
 import type { StateStore } from '../state/store.js';
 import type { CompiledSearch } from '../search/compiler.js';
 import { downloadAttachment, getDownloadDir } from './attachments.js';
@@ -54,8 +56,6 @@ interface IdCache {
   focusedOverrides: Map<number, string>;
   calendarGroups: Map<number, string>;
   calendarPermissions: Map<number, { calendarId: string; permissionId: string }>;
-  teams: Map<number, string>;
-  channels: Map<number, { teamId: string; channelId: string }>;
   channelMessages: Map<number, { teamId: string; channelId: string; messageId: string }>;
   chats: Map<number, string>;
   chatMessages: Map<number, { chatId: string; messageId: string }>;
@@ -94,8 +94,6 @@ export class GraphRepository implements IRepository {
     focusedOverrides: new Map(),
     calendarGroups: new Map(),
     calendarPermissions: new Map(),
-    teams: new Map(),
-    channels: new Map(),
     channelMessages: new Map(),
     chats: new Map(),
     chatMessages: new Map(),
@@ -134,17 +132,99 @@ export class GraphRepository implements IRepository {
     return resolveId(id, this.accountId(), this.store, expectedEntityType).graphId;
   }
 
+  /**
+   * Mints an alias-backed token for a single-Graph-id entity (e.g. team, chat)
+   * and records token → graphId in the alias table so it resolves on later calls.
+   * Alias-backed (not self-encoding) so the token is short and account-scoped: a
+   * cold store yields ID_UNKNOWN rather than leaking a decodable tenant-global id.
+   */
+  private mintAlias(entityType: EntityType, graphId: string): string {
+    if (this.store == null) {
+      // Production always has a store (index.ts) and degraded mode still yields a
+      // non-null in-memory one, so this is only reachable from a store-less
+      // embedding. Fail loudly rather than mint a token nothing can resolve.
+      throw new IdUnknownError(
+        `${entityType} (durable state store unavailable)`,
+        'Alias-backed ids require the durable state store; construct the repository with one.',
+      );
+    }
+    return registerComposite(this.store, {
+      entityType,
+      parts: { id: graphId },
+      graphId,
+      accountId: this.accountId(),
+    });
+  }
+
+  /**
+   * Mints an alias-backed token for a composite entity whose Graph URL needs a
+   * tuple of ids (e.g. channel {teamId, channelId}). The tuple is the canonical
+   * key AND is stored JSON-encoded as the resolved value, so {@link toGraphParts}
+   * can recover every field.
+   */
+  private mintAliasComposite(entityType: EntityType, parts: Readonly<Record<string, string>>): string {
+    if (this.store == null) {
+      throw new IdUnknownError(`<no store: cannot mint ${entityType}>`);
+    }
+    return registerComposite(this.store, {
+      entityType,
+      parts,
+      graphId: JSON.stringify(parts),
+      accountId: this.accountId(),
+    });
+  }
+
+  /**
+   * Resolves a composite token to its identifying tuple. The alias row stores the
+   * tuple JSON-encoded; a raw (non-token) string can't carry a tuple, so anything
+   * that doesn't decode to a JSON object carrying every required key is an unusable
+   * id (ID_UNKNOWN). Generic over the key set so callers get a precisely-typed
+   * result — every requested field is a guaranteed non-empty string.
+   */
+  private toGraphParts<K extends string>(
+    id: string | number,
+    entityType: EntityType,
+    keys: readonly K[],
+  ): Record<K, string> {
+    const raw = this.toGraphId(id, entityType);
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(raw);
+    } catch {
+      throw new IdUnknownError(String(id));
+    }
+    if (parsed == null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      throw new IdUnknownError(String(id));
+    }
+    const obj = parsed as Record<string, unknown>;
+    const out = {} as Record<K, string>;
+    for (const key of keys) {
+      const value = obj[key];
+      if (typeof value !== 'string' || value.length === 0) {
+        throw new IdUnknownError(String(id));
+      }
+      out[key] = value;
+    }
+    return out;
+  }
+
   // ===========================================================================
   // Cache Resolvers (auto-fetch parent on cache miss)
   // ===========================================================================
 
-  private async resolveTeamId(teamId: number): Promise<string> {
-    let graphId = this.idCache.teams.get(teamId);
-    if (graphId != null) return graphId;
-    await this.listTeamsAsync();
-    graphId = this.idCache.teams.get(teamId);
-    if (graphId != null) return graphId;
-    throw new Error(`Team ID ${teamId} not found. Verify the ID is correct by calling list_teams.`);
+  private async resolveTeamId(teamId: string | number): Promise<string> {
+    // tm_ tokens resolve from the alias store. On a cold miss (never listed this
+    // session, or a lost store) re-list — listTeamsAsync deterministically
+    // re-mints and re-stores the same token — then resolve again.
+    try {
+      return this.toGraphId(teamId, 'team');
+    } catch (e) {
+      if (e instanceof IdUnknownError) {
+        await this.listTeamsAsync();
+        return this.toGraphId(teamId, 'team');
+      }
+      throw e;
+    }
   }
 
   private async resolvePlanId(planId: number): Promise<{ planId: string; etag: string }> {
@@ -2021,78 +2101,68 @@ export class GraphRepository implements IRepository {
   /**
    * Lists all joined teams with cached numeric IDs.
    */
-  async listTeamsAsync(): Promise<Array<{ id: number; name: string; description: string }>> {
+  async listTeamsAsync(): Promise<Array<{ id: string; name: string; description: string }>> {
     const teams = await this.client.listJoinedTeams();
     return teams.map((team) => {
       const graphId = team.id!;
-      const numericId = hashStringToNumber(graphId);
-      this.idCache.teams.set(numericId, graphId);
-      return { id: numericId, name: team.displayName ?? '', description: team.description ?? '' };
+      return { id: this.mintAlias('team', graphId), name: team.displayName ?? '', description: team.description ?? '' };
     });
   }
 
   /**
    * Lists all channels in a team with cached numeric IDs.
    */
-  async listChannelsAsync(teamId: number): Promise<Array<{ id: number; name: string; description: string; membershipType: string }>> {
+  async listChannelsAsync(teamId: string | number): Promise<Array<{ id: string; name: string; description: string; membershipType: string }>> {
     const graphTeamId = await this.resolveTeamId(teamId);
     const channels = await this.client.listChannels(graphTeamId);
     return channels.map((ch) => {
       const graphId = ch.id!;
-      const numericId = hashStringToNumber(graphId);
-      this.idCache.channels.set(numericId, { teamId: graphTeamId, channelId: graphId });
-      return { id: numericId, name: ch.displayName ?? '', description: ch.description ?? '', membershipType: ch.membershipType ?? 'standard' };
+      const id = this.mintAliasComposite('channel', { teamId: graphTeamId, channelId: graphId });
+      return { id, name: ch.displayName ?? '', description: ch.description ?? '', membershipType: ch.membershipType ?? 'standard' };
     });
   }
 
   /**
-   * Gets a specific channel by cached numeric ID.
+   * Gets a specific channel by durable cn_ token.
    */
-  async getChannelAsync(channelId: number): Promise<{ id: number; name: string; description: string; membershipType: string; webUrl: string }> {
-    const cached = this.idCache.channels.get(channelId);
-    if (cached == null) throw new Error(`Channel ID ${channelId} not found in cache. Try listing channels first.`);
-    const ch = await this.client.getChannel(cached.teamId, cached.channelId);
-    return { id: channelId, name: ch.displayName ?? '', description: ch.description ?? '', membershipType: ch.membershipType ?? 'standard', webUrl: ch.webUrl ?? '' };
+  async getChannelAsync(channelId: string | number): Promise<{ id: string; name: string; description: string; membershipType: string; webUrl: string }> {
+    const { teamId, channelId: graphChannelId } = this.toGraphParts(channelId, 'channel', ['teamId', 'channelId']);
+    const ch = await this.client.getChannel(teamId, graphChannelId);
+    return { id: String(channelId), name: ch.displayName ?? '', description: ch.description ?? '', membershipType: ch.membershipType ?? 'standard', webUrl: ch.webUrl ?? '' };
   }
 
   /**
    * Creates a new channel in a team.
    */
-  async createChannelAsync(teamId: number, name: string, description?: string): Promise<number> {
+  async createChannelAsync(teamId: string | number, name: string, description?: string): Promise<string> {
     const graphTeamId = await this.resolveTeamId(teamId);
     const ch = await this.client.createChannel(graphTeamId, name, description);
-    const graphId = ch.id!;
-    const numericId = hashStringToNumber(graphId);
-    this.idCache.channels.set(numericId, { teamId: graphTeamId, channelId: graphId });
-    return numericId;
+    return this.mintAliasComposite('channel', { teamId: graphTeamId, channelId: ch.id! });
   }
 
   /**
    * Updates a channel's properties.
    */
-  async updateChannelAsync(channelId: number, updates: { name?: string; description?: string }): Promise<void> {
-    const cached = this.idCache.channels.get(channelId);
-    if (cached == null) throw new Error(`Channel ID ${channelId} not found in cache. Try listing channels first.`);
+  async updateChannelAsync(channelId: string | number, updates: { name?: string; description?: string }): Promise<void> {
+    const { teamId, channelId: graphChannelId } = this.toGraphParts(channelId, 'channel', ['teamId', 'channelId']);
     const graphUpdates: Record<string, unknown> = {};
     if (updates.name != null) graphUpdates['displayName'] = updates.name;
     if (updates.description != null) graphUpdates['description'] = updates.description;
-    await this.client.updateChannel(cached.teamId, cached.channelId, graphUpdates);
+    await this.client.updateChannel(teamId, graphChannelId, graphUpdates);
   }
 
   /**
    * Deletes a channel.
    */
-  async deleteChannelAsync(channelId: number): Promise<void> {
-    const cached = this.idCache.channels.get(channelId);
-    if (cached == null) throw new Error(`Channel ID ${channelId} not found in cache. Try listing channels first.`);
-    await this.client.deleteChannel(cached.teamId, cached.channelId);
-    this.idCache.channels.delete(channelId);
+  async deleteChannelAsync(channelId: string | number): Promise<void> {
+    const { teamId, channelId: graphChannelId } = this.toGraphParts(channelId, 'channel', ['teamId', 'channelId']);
+    await this.client.deleteChannel(teamId, graphChannelId);
   }
 
   /**
    * Lists members of a team.
    */
-  async listTeamMembersAsync(teamId: number): Promise<Array<{ id: string; displayName: string; email: string; roles: string[] }>> {
+  async listTeamMembersAsync(teamId: string | number): Promise<Array<{ id: string; displayName: string; email: string; roles: string[] }>> {
     const graphTeamId = await this.resolveTeamId(teamId);
     const members = await this.client.listTeamMembers(graphTeamId);
     return members.map((m) => ({
@@ -2110,17 +2180,16 @@ export class GraphRepository implements IRepository {
   /**
    * Lists recent messages in a channel.
    */
-  async listChannelMessagesAsync(channelId: number, limit: number = 25): Promise<Array<{
+  async listChannelMessagesAsync(channelId: string | number, limit: number = 25): Promise<Array<{
     id: number; senderName: string; senderEmail: string; bodyPreview: string;
     bodyContent: string; contentType: string; createdDateTime: string;
   }>> {
-    const cached = this.idCache.channels.get(channelId);
-    if (cached == null) throw new Error(`Channel ID ${channelId} not found in cache. Try listing channels first.`);
-    const messages = await this.client.listChannelMessages(cached.teamId, cached.channelId, limit);
+    const { teamId, channelId: graphChannelId } = this.toGraphParts(channelId, 'channel', ['teamId', 'channelId']);
+    const messages = await this.client.listChannelMessages(teamId, graphChannelId, limit);
     return messages.map((msg) => {
       const graphId = msg.id!;
       const numericId = hashStringToNumber(graphId);
-      this.idCache.channelMessages.set(numericId, { teamId: cached.teamId, channelId: cached.channelId, messageId: graphId });
+      this.idCache.channelMessages.set(numericId, { teamId, channelId: graphChannelId, messageId: graphId });
       return {
         id: numericId,
         senderName: msg.from?.user?.displayName ?? msg.from?.application?.displayName ?? '',
@@ -2173,13 +2242,12 @@ export class GraphRepository implements IRepository {
   /**
    * Sends a new message to a channel.
    */
-  async sendChannelMessageAsync(channelId: number, body: string, contentType: string = 'html'): Promise<number> {
-    const cached = this.idCache.channels.get(channelId);
-    if (cached == null) throw new Error(`Channel ID ${channelId} not found in cache. Try listing channels first.`);
-    const msg = await this.client.sendChannelMessage(cached.teamId, cached.channelId, body, contentType);
+  async sendChannelMessageAsync(channelId: string | number, body: string, contentType: string = 'html'): Promise<number> {
+    const { teamId, channelId: graphChannelId } = this.toGraphParts(channelId, 'channel', ['teamId', 'channelId']);
+    const msg = await this.client.sendChannelMessage(teamId, graphChannelId, body, contentType);
     const graphId = msg.id!;
     const numericId = hashStringToNumber(graphId);
-    this.idCache.channelMessages.set(numericId, { teamId: cached.teamId, channelId: cached.channelId, messageId: graphId });
+    this.idCache.channelMessages.set(numericId, { teamId, channelId: graphChannelId, messageId: graphId });
     return numericId;
   }
 

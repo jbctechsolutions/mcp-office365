@@ -11,6 +11,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { GraphRepository, createGraphRepository } from '../../../src/graph/repository.js';
 import { hashStringToNumber } from '../../../src/graph/mappers/utils.js';
 import { mintSelfEncoded } from '../../../src/ids/token.js';
+import { StateStore } from '../../../src/state/store.js';
 import { downloadAttachment } from '../../../src/graph/attachments.js';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -169,7 +170,11 @@ describe('graph/repository', () => {
 
   beforeEach(async () => {
     vi.clearAllMocks();
-    repository = createGraphRepository();
+    // Alias-backed entities (teams, channels, …) need a store to resolve their
+    // tokens. fs is mocked in this suite, so StateStore.open degrades to an
+    // in-memory sqlite db — still a fully-functional alias table for the run.
+    const store = StateStore.open({ dir: '/tmp/mcp-o365-repo-test', warn: () => {} });
+    repository = createGraphRepository(undefined, store);
     // Access the internal client for mocking
     mockClient = (repository as any).client;
   });
@@ -3637,9 +3642,22 @@ describe('graph/repository', () => {
     });
   });
 
-  describe('Teams', () => {
+  describe('Teams (durable tm_ / cn_ tokens)', () => {
+    // Helper: list teams and return the durable tm_ token for the given Graph id.
+    async function teamToken(graphId: string, displayName = 'Eng', description = ''): Promise<string> {
+      mockClient.listJoinedTeams.mockResolvedValue([{ id: graphId, displayName, description }]);
+      const teams = await repository.listTeamsAsync();
+      return teams[0].id;
+    }
+    // Helper: list channels under a team token and return the first cn_ token.
+    async function channelToken(teamTok: string, channel: Record<string, unknown>): Promise<string> {
+      mockClient.listChannels.mockResolvedValue([channel]);
+      const channels = await repository.listChannelsAsync(teamTok);
+      return channels[0].id;
+    }
+
     describe('listTeamsAsync', () => {
-      it('returns mapped teams with cached IDs', async () => {
+      it('mints durable tm_ tokens', async () => {
         mockClient.listJoinedTeams.mockResolvedValue([
           { id: 'team-abc', displayName: 'Engineering', description: 'Eng team' },
           { id: 'team-def', displayName: 'Marketing', description: 'Mktg team' },
@@ -3648,23 +3666,18 @@ describe('graph/repository', () => {
         const result = await repository.listTeamsAsync();
 
         expect(result).toHaveLength(2);
-        expect(result[0].id).toBe(hashStringToNumber('team-abc'));
+        expect(result[0].id).toMatch(/^tm_/);
+        expect(result[0].id).not.toBe(result[1].id);
         expect(result[0].name).toBe('Engineering');
         expect(result[0].description).toBe('Eng team');
         expect(result[1].name).toBe('Marketing');
       });
 
-      it('caches team IDs', async () => {
-        mockClient.listJoinedTeams.mockResolvedValue([
-          { id: 'team-abc', displayName: 'Engineering', description: '' },
-        ]);
-
-        await repository.listTeamsAsync();
-
-        // Verify cache works by using listChannelsAsync (which needs cached team ID)
+      it('the tm_ token resolves for follow-up channel calls', async () => {
+        const tok = await teamToken('team-abc');
         mockClient.listChannels.mockResolvedValue([]);
-        const numericId = hashStringToNumber('team-abc');
-        await expect(repository.listChannelsAsync(numericId)).resolves.toEqual([]);
+        await expect(repository.listChannelsAsync(tok)).resolves.toEqual([]);
+        expect(mockClient.listChannels).toHaveBeenCalledWith('team-abc');
       });
 
       it('defaults displayName and description to empty string when null', async () => {
@@ -3680,45 +3693,50 @@ describe('graph/repository', () => {
     });
 
     describe('listChannelsAsync', () => {
-      it('returns mapped channels', async () => {
-        // First cache the team
-        mockClient.listJoinedTeams.mockResolvedValue([
-          { id: 'team-abc', displayName: 'Eng', description: '' },
-        ]);
-        await repository.listTeamsAsync();
-        const teamId = hashStringToNumber('team-abc');
+      it('mints durable cn_ tokens', async () => {
+        const tok = await teamToken('team-abc');
 
         mockClient.listChannels.mockResolvedValue([
           { id: 'ch-1', displayName: 'General', description: 'Default', membershipType: 'standard' },
           { id: 'ch-2', displayName: 'Dev', description: '', membershipType: 'private' },
         ]);
 
-        const result = await repository.listChannelsAsync(teamId);
+        const result = await repository.listChannelsAsync(tok);
 
         expect(result).toHaveLength(2);
-        expect(result[0].id).toBe(hashStringToNumber('ch-1'));
+        expect(result[0].id).toMatch(/^cn_/);
+        expect(result[0].id).not.toBe(result[1].id);
         expect(result[0].name).toBe('General');
         expect(result[0].membershipType).toBe('standard');
         expect(result[1].membershipType).toBe('private');
         expect(mockClient.listChannels).toHaveBeenCalledWith('team-abc');
       });
 
-      it('throws for uncached team ID', async () => {
-        mockClient.listJoinedTeams.mockResolvedValue([]);
-        await expect(repository.listChannelsAsync(999999)).rejects.toThrow('not found');
+      it('rejects a legacy numeric team id', async () => {
+        await expect(repository.listChannelsAsync(999999)).rejects.toThrow('not supported');
+      });
+
+      it('re-lists on a cold-miss tm_ token then resolves', async () => {
+        // A tm_ token minted in a prior session isn't in this store; resolveTeamId
+        // re-lists (deterministic re-mint) and resolves.
+        const tok = await teamToken('team-abc');
+        const fresh = StateStore.open({ dir: '/tmp/mcp-o365-repo-test-2', warn: () => {} });
+        const repo2 = createGraphRepository(undefined, fresh);
+        const client2 = (repo2 as any).client;
+        client2.listJoinedTeams.mockResolvedValue([{ id: 'team-abc', displayName: 'Eng', description: '' }]);
+        client2.listChannels.mockResolvedValue([]);
+        await expect(repo2.listChannelsAsync(tok)).resolves.toEqual([]);
+        expect(client2.listJoinedTeams).toHaveBeenCalled();
       });
 
       it('defaults fields to empty/standard when null', async () => {
-        mockClient.listJoinedTeams.mockResolvedValue([
-          { id: 'team-abc', displayName: 'Eng', description: '' },
-        ]);
-        await repository.listTeamsAsync();
+        const tok = await teamToken('team-abc');
 
         mockClient.listChannels.mockResolvedValue([
           { id: 'ch-null', displayName: null, description: null, membershipType: null },
         ]);
 
-        const result = await repository.listChannelsAsync(hashStringToNumber('team-abc'));
+        const result = await repository.listChannelsAsync(tok);
 
         expect(result[0].name).toBe('');
         expect(result[0].description).toBe('');
@@ -3727,17 +3745,9 @@ describe('graph/repository', () => {
     });
 
     describe('getChannelAsync', () => {
-      it('returns channel details', async () => {
-        // Cache team and channel
-        mockClient.listJoinedTeams.mockResolvedValue([
-          { id: 'team-abc', displayName: 'Eng', description: '' },
-        ]);
-        await repository.listTeamsAsync();
-
-        mockClient.listChannels.mockResolvedValue([
-          { id: 'ch-1', displayName: 'General', description: '', membershipType: 'standard' },
-        ]);
-        await repository.listChannelsAsync(hashStringToNumber('team-abc'));
+      it('resolves the cn_ token to (teamId, channelId)', async () => {
+        const tok = await teamToken('team-abc');
+        const chTok = await channelToken(tok, { id: 'ch-1', displayName: 'General', description: '', membershipType: 'standard' });
 
         mockClient.getChannel.mockResolvedValue({
           id: 'ch-1',
@@ -3747,73 +3757,65 @@ describe('graph/repository', () => {
           webUrl: 'https://teams.microsoft.com/...',
         });
 
-        const channelId = hashStringToNumber('ch-1');
-        const result = await repository.getChannelAsync(channelId);
+        const result = await repository.getChannelAsync(chTok);
 
-        expect(result.id).toBe(channelId);
+        expect(result.id).toBe(chTok);
         expect(result.name).toBe('General');
         expect(result.webUrl).toBe('https://teams.microsoft.com/...');
         expect(mockClient.getChannel).toHaveBeenCalledWith('team-abc', 'ch-1');
       });
 
-      it('throws for uncached channel ID', async () => {
-        await expect(repository.getChannelAsync(999999)).rejects.toThrow('not found in cache');
+      it('rejects an unknown channel token', async () => {
+        await expect(repository.getChannelAsync('cn_bogus')).rejects.toThrow('Unknown or unresolvable');
+      });
+
+      it('a cn_ token does NOT self-heal across a cold store (documented alias tradeoff)', async () => {
+        // Unlike a tm_ token (which re-lists its parent), a composite cn_ token
+        // can't self-heal on a cold store — it has no parent handle to re-list
+        // from, so a fresh store yields ID_UNKNOWN. This locks the documented
+        // machine-scoped contract for alias-backed composites.
+        const tok = await teamToken('team-abc');
+        const chTok = await channelToken(tok, { id: 'ch-1', displayName: 'General', description: '', membershipType: 'standard' });
+
+        const fresh = StateStore.open({ dir: '/tmp/mcp-o365-repo-test-cold', warn: () => {} });
+        const repo2 = createGraphRepository(undefined, fresh);
+        await expect(repo2.getChannelAsync(chTok)).rejects.toThrow('Unknown or unresolvable');
       });
     });
 
     describe('createChannelAsync', () => {
-      it('creates a channel and caches the ID', async () => {
-        mockClient.listJoinedTeams.mockResolvedValue([
-          { id: 'team-abc', displayName: 'Eng', description: '' },
-        ]);
-        await repository.listTeamsAsync();
+      it('creates a channel and returns a resolvable cn_ token', async () => {
+        const tok = await teamToken('team-abc');
 
-        mockClient.createChannel.mockResolvedValue({
-          id: 'ch-new',
-          displayName: 'New Channel',
-        });
+        mockClient.createChannel.mockResolvedValue({ id: 'ch-new', displayName: 'New Channel' });
 
-        const teamId = hashStringToNumber('team-abc');
-        const channelId = await repository.createChannelAsync(teamId, 'New Channel', 'Description');
+        const chTok = await repository.createChannelAsync(tok, 'New Channel', 'Description');
 
-        expect(channelId).toBe(hashStringToNumber('ch-new'));
+        expect(chTok).toMatch(/^cn_/);
         expect(mockClient.createChannel).toHaveBeenCalledWith('team-abc', 'New Channel', 'Description');
 
-        // Verify the channel was cached
         mockClient.getChannel.mockResolvedValue({
-          id: 'ch-new',
-          displayName: 'New Channel',
-          description: 'Description',
-          membershipType: 'standard',
-          webUrl: '',
+          id: 'ch-new', displayName: 'New Channel', description: 'Description',
+          membershipType: 'standard', webUrl: '',
         });
-        const channel = await repository.getChannelAsync(channelId);
+        const channel = await repository.getChannelAsync(chTok);
         expect(channel.name).toBe('New Channel');
+        expect(mockClient.getChannel).toHaveBeenCalledWith('team-abc', 'ch-new');
       });
 
-      it('throws for uncached team ID', async () => {
-        mockClient.listJoinedTeams.mockResolvedValue([]);
-        await expect(repository.createChannelAsync(999999, 'Test')).rejects.toThrow('not found');
+      it('rejects a legacy numeric team id', async () => {
+        await expect(repository.createChannelAsync(999999, 'Test')).rejects.toThrow('not supported');
       });
     });
 
     describe('updateChannelAsync', () => {
       it('updates channel with mapped properties', async () => {
-        // Cache team and channel
-        mockClient.listJoinedTeams.mockResolvedValue([
-          { id: 'team-abc', displayName: 'Eng', description: '' },
-        ]);
-        await repository.listTeamsAsync();
-
-        mockClient.listChannels.mockResolvedValue([
-          { id: 'ch-1', displayName: 'General', description: '', membershipType: 'standard' },
-        ]);
-        await repository.listChannelsAsync(hashStringToNumber('team-abc'));
+        const tok = await teamToken('team-abc');
+        const chTok = await channelToken(tok, { id: 'ch-1', displayName: 'General', description: '', membershipType: 'standard' });
 
         mockClient.updateChannel.mockResolvedValue(undefined);
 
-        const channelId = hashStringToNumber('ch-1');
-        await repository.updateChannelAsync(channelId, { name: 'Renamed', description: 'New desc' });
+        await repository.updateChannelAsync(chTok, { name: 'Renamed', description: 'New desc' });
 
         expect(mockClient.updateChannel).toHaveBeenCalledWith('team-abc', 'ch-1', {
           displayName: 'Renamed',
@@ -3822,74 +3824,50 @@ describe('graph/repository', () => {
       });
 
       it('only sends provided fields', async () => {
-        mockClient.listJoinedTeams.mockResolvedValue([
-          { id: 'team-abc', displayName: 'Eng', description: '' },
-        ]);
-        await repository.listTeamsAsync();
-
-        mockClient.listChannels.mockResolvedValue([
-          { id: 'ch-1', displayName: 'General', description: '', membershipType: 'standard' },
-        ]);
-        await repository.listChannelsAsync(hashStringToNumber('team-abc'));
+        const tok = await teamToken('team-abc');
+        const chTok = await channelToken(tok, { id: 'ch-1', displayName: 'General', description: '', membershipType: 'standard' });
 
         mockClient.updateChannel.mockResolvedValue(undefined);
 
-        const channelId = hashStringToNumber('ch-1');
-        await repository.updateChannelAsync(channelId, { name: 'Renamed' });
+        await repository.updateChannelAsync(chTok, { name: 'Renamed' });
 
         expect(mockClient.updateChannel).toHaveBeenCalledWith('team-abc', 'ch-1', {
           displayName: 'Renamed',
         });
       });
 
-      it('throws for uncached channel ID', async () => {
-        await expect(repository.updateChannelAsync(999999, { name: 'Test' })).rejects.toThrow('not found in cache');
+      it('rejects an unknown channel token', async () => {
+        await expect(repository.updateChannelAsync('cn_bogus', { name: 'Test' })).rejects.toThrow('Unknown or unresolvable');
       });
     });
 
     describe('deleteChannelAsync', () => {
-      it('deletes a channel and removes from cache', async () => {
-        // Cache team and channel
-        mockClient.listJoinedTeams.mockResolvedValue([
-          { id: 'team-abc', displayName: 'Eng', description: '' },
-        ]);
-        await repository.listTeamsAsync();
-
-        mockClient.listChannels.mockResolvedValue([
-          { id: 'ch-1', displayName: 'General', description: '', membershipType: 'standard' },
-        ]);
-        await repository.listChannelsAsync(hashStringToNumber('team-abc'));
+      it('resolves the token and deletes the channel', async () => {
+        const tok = await teamToken('team-abc');
+        const chTok = await channelToken(tok, { id: 'ch-1', displayName: 'General', description: '', membershipType: 'standard' });
 
         mockClient.deleteChannel.mockResolvedValue(undefined);
 
-        const channelId = hashStringToNumber('ch-1');
-        await repository.deleteChannelAsync(channelId);
+        await repository.deleteChannelAsync(chTok);
 
         expect(mockClient.deleteChannel).toHaveBeenCalledWith('team-abc', 'ch-1');
-
-        // Verify channel was removed from cache
-        await expect(repository.getChannelAsync(channelId)).rejects.toThrow('not found in cache');
       });
 
-      it('throws for uncached channel ID', async () => {
-        await expect(repository.deleteChannelAsync(999999)).rejects.toThrow('not found in cache');
+      it('rejects an unknown channel token', async () => {
+        await expect(repository.deleteChannelAsync('cn_bogus')).rejects.toThrow('Unknown or unresolvable');
       });
     });
 
     describe('listTeamMembersAsync', () => {
       it('returns mapped team members', async () => {
-        mockClient.listJoinedTeams.mockResolvedValue([
-          { id: 'team-abc', displayName: 'Eng', description: '' },
-        ]);
-        await repository.listTeamsAsync();
+        const tok = await teamToken('team-abc');
 
         mockClient.listTeamMembers.mockResolvedValue([
           { id: 'member-1', displayName: 'Alice', email: 'alice@example.com', roles: ['owner'] },
           { id: 'member-2', displayName: 'Bob', email: 'bob@example.com', roles: [] },
         ]);
 
-        const teamId = hashStringToNumber('team-abc');
-        const result = await repository.listTeamMembersAsync(teamId);
+        const result = await repository.listTeamMembersAsync(tok);
 
         expect(result).toHaveLength(2);
         expect(result[0]).toEqual({
@@ -3902,22 +3880,18 @@ describe('graph/repository', () => {
         expect(mockClient.listTeamMembers).toHaveBeenCalledWith('team-abc');
       });
 
-      it('throws for uncached team ID', async () => {
-        mockClient.listJoinedTeams.mockResolvedValue([]);
-        await expect(repository.listTeamMembersAsync(999999)).rejects.toThrow('not found');
+      it('rejects a legacy numeric team id', async () => {
+        await expect(repository.listTeamMembersAsync(999999)).rejects.toThrow('not supported');
       });
 
       it('defaults fields to empty when null', async () => {
-        mockClient.listJoinedTeams.mockResolvedValue([
-          { id: 'team-abc', displayName: 'Eng', description: '' },
-        ]);
-        await repository.listTeamsAsync();
+        const tok = await teamToken('team-abc');
 
         mockClient.listTeamMembers.mockResolvedValue([
           { id: null, displayName: null, email: null, roles: null },
         ]);
 
-        const result = await repository.listTeamMembersAsync(hashStringToNumber('team-abc'));
+        const result = await repository.listTeamMembersAsync(tok);
 
         expect(result[0]).toEqual({
           id: '',
