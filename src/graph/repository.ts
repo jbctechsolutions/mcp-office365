@@ -47,15 +47,10 @@ import * as path from 'path';
  * Cache for mapping numeric IDs back to Graph string IDs.
  */
 interface IdCache {
-  calendarGroups: Map<number, string>;
-  calendarPermissions: Map<number, { calendarId: string; permissionId: string }>;
   plans: Map<number, { planId: string; etag: string }>;
   plannerBuckets: Map<number, { planId: string; bucketId: string; etag: string }>;
   plannerTasks: Map<number, { taskId: string; etag: string }>;
   plannerTaskDetails: Map<number, { taskId: string; etag: string }>;
-  onlineMeetings: Map<number, string>;
-  recordings: Map<number, { meetingId: string; recordingId: string }>;
-  transcripts: Map<number, { meetingId: string; transcriptId: string }>;
   sites: Map<number, string>;
   documentLibraries: Map<number, { siteId: string; driveId: string }>;
   libraryDriveItems: Map<number, { driveId: string; itemId: string }>;
@@ -72,15 +67,10 @@ export class GraphRepository implements IRepository {
   private readonly accountId: () => string;
   private readonly deltaLinks: Map<string, string> = new Map();
   private readonly idCache: IdCache = {
-    calendarGroups: new Map(),
-    calendarPermissions: new Map(),
     plans: new Map(),
     plannerBuckets: new Map(),
     plannerTasks: new Map(),
     plannerTaskDetails: new Map(),
-    onlineMeetings: new Map(),
-    recordings: new Map(),
-    transcripts: new Map(),
     sites: new Map(),
     documentLibraries: new Map(),
     libraryDriveItems: new Map(),
@@ -1881,15 +1871,16 @@ export class GraphRepository implements IRepository {
 
   /**
    * Lists all calendar groups.
+   *
+   * Orphan entity: no Graph URL takes a calendar-group id as a path segment,
+   * so this returns the raw Graph id string rather than minting a token.
    */
-  async listCalendarGroupsAsync(): Promise<Array<{ id: number; name: string; classId: string }>> {
+  async listCalendarGroupsAsync(): Promise<Array<{ id: string; name: string; classId: string }>> {
     const groups = await this.client.listCalendarGroups();
     return groups.map((group) => {
       const graphId = group.id!;
-      const numericId = hashStringToNumber(graphId);
-      this.idCache.calendarGroups.set(numericId, graphId);
       return {
-        id: numericId,
+        id: graphId,
         name: group.name ?? '',
         classId: group.classId?.toString() ?? '',
       };
@@ -1899,12 +1890,9 @@ export class GraphRepository implements IRepository {
   /**
    * Creates a new calendar group.
    */
-  async createCalendarGroupAsync(name: string): Promise<number> {
+  async createCalendarGroupAsync(name: string): Promise<string> {
     const created = await this.client.createCalendarGroup(name);
-    const graphId = created.id!;
-    const numericId = hashStringToNumber(graphId);
-    this.idCache.calendarGroups.set(numericId, graphId);
-    return numericId;
+    return created.id!;
   }
 
   // ===========================================================================
@@ -1914,16 +1902,14 @@ export class GraphRepository implements IRepository {
   /**
    * Lists all permissions for a calendar.
    */
-  async listCalendarPermissionsAsync(calendarId: string): Promise<Array<{ id: number; emailAddress: string; role: string; isRemovable: boolean; isInsideOrganization: boolean }>> {
+  async listCalendarPermissionsAsync(calendarId: string): Promise<Array<{ id: string; emailAddress: string; role: string; isRemovable: boolean; isInsideOrganization: boolean }>> {
     const graphCalendarId = this.toGraphId(calendarId, 'folder');
 
     const permissions = await this.client.listCalendarPermissions(graphCalendarId);
     return permissions.map((perm) => {
       const graphPermId = perm.id!;
-      const numericId = hashStringToNumber(graphPermId);
-      this.idCache.calendarPermissions.set(numericId, { calendarId: graphCalendarId, permissionId: graphPermId });
       return {
-        id: numericId,
+        id: this.mintAliasComposite('calendarPermission', { calendarId: graphCalendarId, permissionId: graphPermId }),
         emailAddress: perm.emailAddress?.address ?? '',
         role: perm.role ?? 'none',
         isRemovable: perm.isRemovable ?? false,
@@ -1935,7 +1921,7 @@ export class GraphRepository implements IRepository {
   /**
    * Creates a calendar permission (shares a calendar with someone).
    */
-  async createCalendarPermissionAsync(calendarId: string, email: string, role: string): Promise<number> {
+  async createCalendarPermissionAsync(calendarId: string, email: string, role: string): Promise<string> {
     const graphCalendarId = this.toGraphId(calendarId, 'folder');
 
     const permission = await this.client.createCalendarPermission(graphCalendarId, {
@@ -1946,23 +1932,15 @@ export class GraphRepository implements IRepository {
       role,
     });
 
-    const graphPermId = permission.id!;
-    const numericId = hashStringToNumber(graphPermId);
-    this.idCache.calendarPermissions.set(numericId, { calendarId: graphCalendarId, permissionId: graphPermId });
-    return numericId;
+    return this.mintAliasComposite('calendarPermission', { calendarId: graphCalendarId, permissionId: permission.id! });
   }
 
   /**
    * Deletes a calendar permission.
    */
-  async deleteCalendarPermissionAsync(permissionId: number): Promise<void> {
-    const cached = this.idCache.calendarPermissions.get(permissionId);
-    if (cached == null) {
-      throw new Error(`Calendar permission ID ${permissionId} not found in cache. Please call list_calendar_permissions first.`);
-    }
-
-    await this.client.deleteCalendarPermission(cached.calendarId, cached.permissionId);
-    this.idCache.calendarPermissions.delete(permissionId);
+  async deleteCalendarPermissionAsync(permissionId: string | number): Promise<void> {
+    const { calendarId, permissionId: permId } = this.toGraphParts(permissionId, 'calendarPermission', ['calendarId', 'permissionId']);
+    await this.client.deleteCalendarPermission(calendarId, permId);
   }
 
   // ===========================================================================
@@ -2754,15 +2732,13 @@ export class GraphRepository implements IRepository {
   // ===========================================================================
 
   async listOnlineMeetingsAsync(limit?: number): Promise<Array<{
-    id: number; subject: string; startDateTime: string; endDateTime: string; joinUrl: string;
+    id: string; subject: string; startDateTime: string; endDateTime: string; joinUrl: string;
   }>> {
     const meetings = await this.client.listOnlineMeetings(limit ?? 20);
     return meetings.map((meeting) => {
       const graphId = (meeting.id as string | undefined) ?? '';
-      const numericId = hashStringToNumber(graphId);
-      this.idCache.onlineMeetings.set(numericId, graphId);
       return {
-        id: numericId,
+        id: this.mintAlias('onlineMeeting', graphId),
         subject: (meeting.subject as string | undefined) ?? '',
         startDateTime: (meeting.startDateTime as string | undefined) ?? '',
         endDateTime: (meeting.endDateTime as string | undefined) ?? '',
@@ -2771,12 +2747,12 @@ export class GraphRepository implements IRepository {
     });
   }
 
-  async getOnlineMeetingAsync(meetingId: number): Promise<{
-    id: number; subject: string; startDateTime: string; endDateTime: string; joinUrl: string;
+  async getOnlineMeetingAsync(meetingId: string | number): Promise<{
+    id: string; subject: string; startDateTime: string; endDateTime: string; joinUrl: string;
     participants: unknown;
   } | undefined> {
-    const mapMeeting = (m: Record<string, unknown>): { id: number; subject: string; startDateTime: string; endDateTime: string; joinUrl: string; participants: unknown } => ({
-      id: meetingId,
+    const mapMeeting = (m: Record<string, unknown>): { id: string; subject: string; startDateTime: string; endDateTime: string; joinUrl: string; participants: unknown } => ({
+      id: String(meetingId),
       subject: (m.subject as string | undefined) ?? '',
       startDateTime: (m.startDateTime as string | undefined) ?? '',
       endDateTime: (m.endDateTime as string | undefined) ?? '',
@@ -2784,67 +2760,71 @@ export class GraphRepository implements IRepository {
       participants: m.participants ?? null,
     });
 
-    const graphId = this.idCache.onlineMeetings.get(meetingId);
-    if (graphId == null) {
-      // Try to refresh cache
-      await this.listOnlineMeetingsAsync(100);
-      const refreshedId = this.idCache.onlineMeetings.get(meetingId);
-      if (refreshedId == null) return undefined;
-      const meeting = await this.client.getOnlineMeeting(refreshedId);
-      return mapMeeting(meeting);
+    // om_ tokens resolve from the alias store. On a cold miss (never listed this
+    // session, or a lost store) re-list — listOnlineMeetingsAsync deterministically
+    // re-mints and re-stores the same token — then retry the resolve, matching
+    // the resolveTeamId self-heal pattern. A final miss means "not found" (the
+    // documented contract), not an error.
+    let graphId: string;
+    try {
+      graphId = this.toGraphId(meetingId, 'onlineMeeting');
+    } catch (e) {
+      if (e instanceof IdUnknownError) {
+        await this.listOnlineMeetingsAsync();
+        try {
+          graphId = this.toGraphId(meetingId, 'onlineMeeting');
+        } catch (e2) {
+          if (e2 instanceof IdUnknownError) return undefined;
+          throw e2;
+        }
+      } else {
+        throw e;
+      }
     }
     const meeting = await this.client.getOnlineMeeting(graphId);
     return mapMeeting(meeting);
   }
 
-  async listMeetingRecordingsAsync(meetingId: number): Promise<Array<{
-    id: number; createdDateTime: string; recordingContentUrl: string;
+  async listMeetingRecordingsAsync(meetingId: string | number): Promise<Array<{
+    id: string; createdDateTime: string; recordingContentUrl: string;
   }>> {
-    const graphMeetingId = this.idCache.onlineMeetings.get(meetingId);
-    if (graphMeetingId == null) throw new Error(`Meeting ID ${meetingId} not found in cache. Try listing online meetings first.`);
+    const graphMeetingId = this.toGraphId(meetingId, 'onlineMeeting');
     const recordings = await this.client.listMeetingRecordings(graphMeetingId);
     return recordings.map((recording) => {
       const graphId = (recording.id as string | undefined) ?? '';
-      const numericId = hashStringToNumber(graphId);
-      this.idCache.recordings.set(numericId, { meetingId: graphMeetingId, recordingId: graphId });
       return {
-        id: numericId,
+        id: this.mintAliasComposite('recording', { meetingId: graphMeetingId, recordingId: graphId }),
         createdDateTime: (recording.createdDateTime as string | undefined) ?? '',
         recordingContentUrl: (recording.recordingContentUrl as string | undefined) ?? '',
       };
     });
   }
 
-  async downloadMeetingRecordingAsync(recordingId: number, outputPath: string): Promise<string> {
-    const cached = this.idCache.recordings.get(recordingId);
-    if (cached == null) throw new Error(`Recording ID ${recordingId} not found in cache. Call list_meeting_recordings first.`);
-    const content = await this.client.getMeetingRecordingContent(cached.meetingId, cached.recordingId);
+  async downloadMeetingRecordingAsync(recordingId: string | number, outputPath: string): Promise<string> {
+    const { meetingId, recordingId: recId } = this.toGraphParts(recordingId, 'recording', ['meetingId', 'recordingId']);
+    const content = await this.client.getMeetingRecordingContent(meetingId, recId);
     fs.writeFileSync(outputPath, Buffer.from(content));
     return outputPath;
   }
 
-  async listMeetingTranscriptsAsync(meetingId: number): Promise<Array<{
-    id: number; createdDateTime: string; contentUrl: string;
+  async listMeetingTranscriptsAsync(meetingId: string | number): Promise<Array<{
+    id: string; createdDateTime: string; contentUrl: string;
   }>> {
-    const graphMeetingId = this.idCache.onlineMeetings.get(meetingId);
-    if (graphMeetingId == null) throw new Error(`Meeting ID ${meetingId} not found in cache. Try listing online meetings first.`);
+    const graphMeetingId = this.toGraphId(meetingId, 'onlineMeeting');
     const transcripts = await this.client.listMeetingTranscripts(graphMeetingId);
     return transcripts.map((transcript) => {
       const graphId = (transcript.id as string | undefined) ?? '';
-      const numericId = hashStringToNumber(graphId);
-      this.idCache.transcripts.set(numericId, { meetingId: graphMeetingId, transcriptId: graphId });
       return {
-        id: numericId,
+        id: this.mintAliasComposite('transcript', { meetingId: graphMeetingId, transcriptId: graphId }),
         createdDateTime: (transcript.createdDateTime as string | undefined) ?? '',
         contentUrl: (transcript.contentUrl as string | undefined) ?? '',
       };
     });
   }
 
-  async getMeetingTranscriptContentAsync(transcriptId: number, format?: string): Promise<string> {
-    const cached = this.idCache.transcripts.get(transcriptId);
-    if (cached == null) throw new Error(`Transcript ID ${transcriptId} not found in cache. Call list_meeting_transcripts first.`);
-    return await this.client.getMeetingTranscriptContent(cached.meetingId, cached.transcriptId, format ?? 'text/vtt');
+  async getMeetingTranscriptContentAsync(transcriptId: string | number, format?: string): Promise<string> {
+    const { meetingId, transcriptId: tId } = this.toGraphParts(transcriptId, 'transcript', ['meetingId', 'transcriptId']);
+    return await this.client.getMeetingTranscriptContent(meetingId, tId, format ?? 'text/vtt');
   }
 
   // ===========================================================================

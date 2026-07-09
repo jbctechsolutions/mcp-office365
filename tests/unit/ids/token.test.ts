@@ -188,6 +188,41 @@ describe('ids/token — composite / alias-backed', () => {
     expect(parsed?.kind).toBe('alias');
     expect(parsed?.entityType).toBe('focusedOverride');
   });
+
+  it('mints a cp_ token for calendarPermission (composite {calendarId, permissionId}) and classifies it as alias', () => {
+    const token = mintComposite('calendarPermission', canonicalKey('calendarPermission', { calendarId: 'C', permissionId: 'P' }));
+    expect(token.startsWith('cp_')).toBe(true);
+    const parsed = parseToken(token);
+    expect(parsed?.kind).toBe('alias');
+    expect(parsed?.entityType).toBe('calendarPermission');
+    expect(parsed?.graphId).toBeUndefined();
+  });
+
+  it('mints an om_ token for onlineMeeting and classifies it as alias', () => {
+    const token = mintComposite('onlineMeeting', 'k');
+    expect(token.startsWith('om_')).toBe(true);
+    const parsed = parseToken(token);
+    expect(parsed?.kind).toBe('alias');
+    expect(parsed?.entityType).toBe('onlineMeeting');
+  });
+
+  it('mints an rc_ token for recording (composite {meetingId, recordingId}) and classifies it as alias', () => {
+    const token = mintComposite('recording', canonicalKey('recording', { meetingId: 'M', recordingId: 'R' }));
+    expect(token.startsWith('rc_')).toBe(true);
+    const parsed = parseToken(token);
+    expect(parsed?.kind).toBe('alias');
+    expect(parsed?.entityType).toBe('recording');
+    expect(parsed?.graphId).toBeUndefined();
+  });
+
+  it('mints a tr_ token for transcript (composite {meetingId, transcriptId}) and classifies it as alias', () => {
+    const token = mintComposite('transcript', canonicalKey('transcript', { meetingId: 'M', transcriptId: 'T' }));
+    expect(token.startsWith('tr_')).toBe(true);
+    const parsed = parseToken(token);
+    expect(parsed?.kind).toBe('alias');
+    expect(parsed?.entityType).toBe('transcript');
+    expect(parsed?.graphId).toBeUndefined();
+  });
 });
 
 describe('ids/token — parse guards', () => {

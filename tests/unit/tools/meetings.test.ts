@@ -8,7 +8,16 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { MeetingsTools, type IMeetingsRepository } from '../../../src/tools/meetings.js';
+import { MeetingsTools, type IMeetingsRepository, GetOnlineMeetingInput } from '../../../src/tools/meetings.js';
+
+describe('MeetingsTools schema', () => {
+  it('accepts an om_ meeting token and rejects a legacy numeric meeting id', () => {
+    // Online meetings now emit om_ tokens; a numeric meeting_id must fail
+    // validation so the producer/consumer contract can't silently desync.
+    expect(GetOnlineMeetingInput.safeParse({ meeting_id: 'om_AbC' }).success).toBe(true);
+    expect(GetOnlineMeetingInput.safeParse({ meeting_id: 1 }).success).toBe(false);
+  });
+});
 
 describe('MeetingsTools', () => {
   let repo: IMeetingsRepository;
@@ -33,8 +42,8 @@ describe('MeetingsTools', () => {
   describe('listOnlineMeetings', () => {
     it('returns meetings from the repository', async () => {
       const mockMeetings = [
-        { id: 1, subject: 'Sprint Planning', startDateTime: '2026-03-01T10:00:00Z', endDateTime: '2026-03-01T11:00:00Z', joinUrl: 'https://teams.microsoft.com/l/meetup-join/1' },
-        { id: 2, subject: 'Standup', startDateTime: '2026-03-02T09:00:00Z', endDateTime: '2026-03-02T09:15:00Z', joinUrl: 'https://teams.microsoft.com/l/meetup-join/2' },
+        { id: 'om_1', subject: 'Sprint Planning', startDateTime: '2026-03-01T10:00:00Z', endDateTime: '2026-03-01T11:00:00Z', joinUrl: 'https://teams.microsoft.com/l/meetup-join/1' },
+        { id: 'om_2', subject: 'Standup', startDateTime: '2026-03-02T09:00:00Z', endDateTime: '2026-03-02T09:15:00Z', joinUrl: 'https://teams.microsoft.com/l/meetup-join/2' },
       ];
       vi.mocked(repo.listOnlineMeetingsAsync).mockResolvedValue(mockMeetings);
 
@@ -65,7 +74,7 @@ describe('MeetingsTools', () => {
   describe('getOnlineMeeting', () => {
     it('returns meeting details', async () => {
       const mockMeeting = {
-        id: 1,
+        id: 'om_1',
         subject: 'Sprint Planning',
         startDateTime: '2026-03-01T10:00:00Z',
         endDateTime: '2026-03-01T11:00:00Z',
@@ -74,9 +83,9 @@ describe('MeetingsTools', () => {
       };
       vi.mocked(repo.getOnlineMeetingAsync).mockResolvedValue(mockMeeting);
 
-      const result = await tools.getOnlineMeeting({ meeting_id: 1 });
+      const result = await tools.getOnlineMeeting({ meeting_id: 'om_1' });
 
-      expect(repo.getOnlineMeetingAsync).toHaveBeenCalledWith(1);
+      expect(repo.getOnlineMeetingAsync).toHaveBeenCalledWith('om_1');
       const parsed = JSON.parse(result.content[0].text);
       expect(parsed.meeting).toEqual(mockMeeting);
     });
@@ -84,7 +93,7 @@ describe('MeetingsTools', () => {
     it('returns error when meeting not found', async () => {
       vi.mocked(repo.getOnlineMeetingAsync).mockResolvedValue(undefined);
 
-      const result = await tools.getOnlineMeeting({ meeting_id: 999 });
+      const result = await tools.getOnlineMeeting({ meeting_id: 'om_missing' });
 
       const parsed = JSON.parse(result.content[0].text);
       expect(parsed.error).toBe('Meeting not found');
@@ -98,14 +107,14 @@ describe('MeetingsTools', () => {
   describe('listMeetingRecordings', () => {
     it('returns recordings for a meeting', async () => {
       const mockRecordings = [
-        { id: 10, createdDateTime: '2026-03-01T11:05:00Z', recordingContentUrl: 'https://graph.microsoft.com/v1.0/...' },
-        { id: 11, createdDateTime: '2026-03-01T11:10:00Z', recordingContentUrl: 'https://graph.microsoft.com/v1.0/...' },
+        { id: 'rc_10', createdDateTime: '2026-03-01T11:05:00Z', recordingContentUrl: 'https://graph.microsoft.com/v1.0/...' },
+        { id: 'rc_11', createdDateTime: '2026-03-01T11:10:00Z', recordingContentUrl: 'https://graph.microsoft.com/v1.0/...' },
       ];
       vi.mocked(repo.listMeetingRecordingsAsync).mockResolvedValue(mockRecordings);
 
-      const result = await tools.listMeetingRecordings({ meeting_id: 1 });
+      const result = await tools.listMeetingRecordings({ meeting_id: 'om_1' });
 
-      expect(repo.listMeetingRecordingsAsync).toHaveBeenCalledWith(1);
+      expect(repo.listMeetingRecordingsAsync).toHaveBeenCalledWith('om_1');
       const parsed = JSON.parse(result.content[0].text);
       expect(parsed.recordings).toEqual(mockRecordings);
     });
@@ -115,9 +124,9 @@ describe('MeetingsTools', () => {
     it('saves file and returns path', async () => {
       vi.mocked(repo.downloadMeetingRecordingAsync).mockResolvedValue('/tmp/recording.mp4');
 
-      const result = await tools.downloadMeetingRecording({ recording_id: 10, output_path: '/tmp/recording.mp4' });
+      const result = await tools.downloadMeetingRecording({ recording_id: 'rc_10', output_path: '/tmp/recording.mp4' });
 
-      expect(repo.downloadMeetingRecordingAsync).toHaveBeenCalledWith(10, '/tmp/recording.mp4');
+      expect(repo.downloadMeetingRecordingAsync).toHaveBeenCalledWith('rc_10', '/tmp/recording.mp4');
       const parsed = JSON.parse(result.content[0].text);
       expect(parsed.success).toBe(true);
       expect(parsed.file_path).toBe('/tmp/recording.mp4');
@@ -132,13 +141,13 @@ describe('MeetingsTools', () => {
   describe('listMeetingTranscripts', () => {
     it('returns transcripts for a meeting', async () => {
       const mockTranscripts = [
-        { id: 20, createdDateTime: '2026-03-01T11:05:00Z', contentUrl: 'https://graph.microsoft.com/v1.0/...' },
+        { id: 'tr_20', createdDateTime: '2026-03-01T11:05:00Z', contentUrl: 'https://graph.microsoft.com/v1.0/...' },
       ];
       vi.mocked(repo.listMeetingTranscriptsAsync).mockResolvedValue(mockTranscripts);
 
-      const result = await tools.listMeetingTranscripts({ meeting_id: 1 });
+      const result = await tools.listMeetingTranscripts({ meeting_id: 'om_1' });
 
-      expect(repo.listMeetingTranscriptsAsync).toHaveBeenCalledWith(1);
+      expect(repo.listMeetingTranscriptsAsync).toHaveBeenCalledWith('om_1');
       const parsed = JSON.parse(result.content[0].text);
       expect(parsed.transcripts).toEqual(mockTranscripts);
     });
@@ -149,9 +158,9 @@ describe('MeetingsTools', () => {
       const vttContent = 'WEBVTT\n\n00:00:00.000 --> 00:00:05.000\nHello everyone, welcome to the meeting.';
       vi.mocked(repo.getMeetingTranscriptContentAsync).mockResolvedValue(vttContent);
 
-      const result = await tools.getMeetingTranscriptContent({ transcript_id: 20 });
+      const result = await tools.getMeetingTranscriptContent({ transcript_id: 'tr_20' });
 
-      expect(repo.getMeetingTranscriptContentAsync).toHaveBeenCalledWith(20, undefined);
+      expect(repo.getMeetingTranscriptContentAsync).toHaveBeenCalledWith('tr_20', undefined);
       const parsed = JSON.parse(result.content[0].text);
       expect(parsed.transcript).toBe(vttContent);
     });
@@ -159,9 +168,9 @@ describe('MeetingsTools', () => {
     it('passes format to the repository', async () => {
       vi.mocked(repo.getMeetingTranscriptContentAsync).mockResolvedValue('Hello everyone');
 
-      await tools.getMeetingTranscriptContent({ transcript_id: 20, format: 'text/plain' });
+      await tools.getMeetingTranscriptContent({ transcript_id: 'tr_20', format: 'text/plain' });
 
-      expect(repo.getMeetingTranscriptContentAsync).toHaveBeenCalledWith(20, 'text/plain');
+      expect(repo.getMeetingTranscriptContentAsync).toHaveBeenCalledWith('tr_20', 'text/plain');
     });
   });
 });

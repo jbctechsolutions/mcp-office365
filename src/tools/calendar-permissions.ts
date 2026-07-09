@@ -37,7 +37,7 @@ export const CreateCalendarPermissionInput = z.strictObject({
 });
 
 export const PrepareDeleteCalendarPermissionInput = z.strictObject({
-  permission_id: z.number().int().positive().describe('Calendar permission ID'),
+  permission_id: z.string().min(1).describe('Calendar permission ID (cp_ token from list_calendar_permissions)'),
 });
 
 export const ConfirmDeleteCalendarPermissionInput = z.strictObject({
@@ -58,9 +58,9 @@ export type ConfirmDeleteCalendarPermissionParams = z.infer<typeof ConfirmDelete
 // =============================================================================
 
 export interface ICalendarPermissionsRepository {
-  listCalendarPermissionsAsync(calendarId: string): Promise<Array<{ id: number; emailAddress: string; role: string; isRemovable: boolean; isInsideOrganization: boolean }>>;
-  createCalendarPermissionAsync(calendarId: string, email: string, role: string): Promise<number>;
-  deleteCalendarPermissionAsync(permissionId: number): Promise<void>;
+  listCalendarPermissionsAsync(calendarId: string): Promise<Array<{ id: string; emailAddress: string; role: string; isRemovable: boolean; isInsideOrganization: boolean }>>;
+  createCalendarPermissionAsync(calendarId: string, email: string, role: string): Promise<string>;
+  deleteCalendarPermissionAsync(permissionId: string | number): Promise<void>;
 }
 
 // =============================================================================
@@ -160,7 +160,7 @@ export class CalendarPermissionsTools {
       };
     }
 
-    await this.repo.deleteCalendarPermissionAsync((result.token!.targetId as number));
+    await this.repo.deleteCalendarPermissionAsync((result.token!.targetId as string));
     return {
       content: [{
         type: 'text' as const,

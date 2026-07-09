@@ -13,10 +13,14 @@
  *   `state.db` and resolves on any machine (the core cold-state fix).
  *
  * - **Alias-backed** (`pl_`, `pt_`, `ch_`, `tm_`, `at_`, `td_`, `tl_`, `mr_`,
- *   `cf_`, `cg_`, `fo_`, composite tuples): the token is a short deterministic digest of the
+ *   `cf_`, `cg_`, `fo_`, `cp_`, `om_`, `rc_`, `tr_`, composite tuples): the token is a short deterministic digest of the
  *   entity's canonical key — `<prefix>_<base32(sha256(canonicalKey))[0..13]>`
  *   (70 bits) — backed by the alias table (D3). These are machine-scoped: a
  *   cold store yields `ID_UNKNOWN`.
+ *
+ * Calendar groups are an **orphan** entity: minted for display but never
+ * resolved back (no Graph URL takes a calendar-group id as a path segment),
+ * so they are returned as the raw Graph id string rather than a token.
  *
  * Determinism is a hard requirement: the same Graph ID / canonical key always
  * mints a byte-identical token.
@@ -50,7 +54,11 @@ export type EntityType =
   | 'mailRule'
   | 'contactFolder'
   | 'category'
-  | 'focusedOverride';
+  | 'focusedOverride'
+  | 'calendarPermission'
+  | 'onlineMeeting'
+  | 'recording'
+  | 'transcript';
 
 /** How a token encodes its target. */
 export type TokenKind = 'self' | 'alias';
@@ -99,6 +107,10 @@ export const ALIAS_PREFIXES: Readonly<Record<string, EntityType>> = Object.assig
     cf: 'contactFolder',
     cg: 'category',
     fo: 'focusedOverride',
+    cp: 'calendarPermission',
+    om: 'onlineMeeting',
+    rc: 'recording',
+    tr: 'transcript',
   } satisfies Record<string, EntityType>,
 );
 

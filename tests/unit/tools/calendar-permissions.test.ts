@@ -8,8 +8,17 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { CalendarPermissionsTools, type ICalendarPermissionsRepository } from '../../../src/tools/calendar-permissions.js';
+import { CalendarPermissionsTools, type ICalendarPermissionsRepository, PrepareDeleteCalendarPermissionInput } from '../../../src/tools/calendar-permissions.js';
 import { ApprovalTokenManager } from '../../../src/approval/index.js';
+
+describe('CalendarPermissionsTools schema', () => {
+  it('accepts a cp_ permission token and rejects a legacy numeric permission id', () => {
+    // Calendar permissions now emit cp_ tokens; a numeric permission_id must
+    // fail validation so the producer/consumer contract can't silently desync.
+    expect(PrepareDeleteCalendarPermissionInput.safeParse({ permission_id: 'cp_AbC' }).success).toBe(true);
+    expect(PrepareDeleteCalendarPermissionInput.safeParse({ permission_id: 42 }).success).toBe(false);
+  });
+});
 
 describe('CalendarPermissionsTools', () => {
   let repo: ICalendarPermissionsRepository;
@@ -29,14 +38,14 @@ describe('CalendarPermissionsTools', () => {
   describe('listCalendarPermissions', () => {
     it('returns permissions from the repository', async () => {
       const mockPermissions = [
-        { id: 1, emailAddress: 'alice@example.com', role: 'read', isRemovable: true, isInsideOrganization: true },
-        { id: 2, emailAddress: 'bob@example.com', role: 'write', isRemovable: true, isInsideOrganization: false },
+        { id: 'cp_1', emailAddress: 'alice@example.com', role: 'read', isRemovable: true, isInsideOrganization: true },
+        { id: 'cp_2', emailAddress: 'bob@example.com', role: 'write', isRemovable: true, isInsideOrganization: false },
       ];
       vi.mocked(repo.listCalendarPermissionsAsync).mockResolvedValue(mockPermissions);
 
-      const result = await tools.listCalendarPermissions({ calendar_id: 10 });
+      const result = await tools.listCalendarPermissions({ calendar_id: 'fd_10' });
 
-      expect(repo.listCalendarPermissionsAsync).toHaveBeenCalledWith(10);
+      expect(repo.listCalendarPermissionsAsync).toHaveBeenCalledWith('fd_10');
       expect(result.content).toHaveLength(1);
       const parsed = JSON.parse(result.content[0].text);
       expect(parsed.permissions).toEqual(mockPermissions);
@@ -45,31 +54,31 @@ describe('CalendarPermissionsTools', () => {
 
   describe('createCalendarPermission', () => {
     it('creates a permission and returns the ID', async () => {
-      vi.mocked(repo.createCalendarPermissionAsync).mockResolvedValue(42);
+      vi.mocked(repo.createCalendarPermissionAsync).mockResolvedValue('cp_42');
 
       const result = await tools.createCalendarPermission({
-        calendar_id: 10,
+        calendar_id: 'fd_10',
         email_address: 'alice@example.com',
         role: 'read',
       });
 
-      expect(repo.createCalendarPermissionAsync).toHaveBeenCalledWith(10, 'alice@example.com', 'read');
+      expect(repo.createCalendarPermissionAsync).toHaveBeenCalledWith('fd_10', 'alice@example.com', 'read');
       const parsed = JSON.parse(result.content[0].text);
       expect(parsed.success).toBe(true);
-      expect(parsed.permission_id).toBe(42);
+      expect(parsed.permission_id).toBe('cp_42');
       expect(parsed.message).toBe('Calendar permission created');
     });
   });
 
   describe('prepareDeleteCalendarPermission', () => {
     it('generates an approval token', () => {
-      const result = tools.prepareDeleteCalendarPermission({ permission_id: 42 });
+      const result = tools.prepareDeleteCalendarPermission({ permission_id: 'cp_42' });
 
       const parsed = JSON.parse(result.content[0].text);
       expect(parsed.approval_token).toBeDefined();
       expect(typeof parsed.approval_token).toBe('string');
       expect(parsed.expires_at).toBeDefined();
-      expect(parsed.permission_id).toBe(42);
+      expect(parsed.permission_id).toBe('cp_42');
       expect(parsed.action).toContain('confirm_delete_calendar_permission');
     });
   });
@@ -79,7 +88,7 @@ describe('CalendarPermissionsTools', () => {
       vi.mocked(repo.deleteCalendarPermissionAsync).mockResolvedValue(undefined);
 
       // Generate a token first
-      const prepareResult = tools.prepareDeleteCalendarPermission({ permission_id: 42 });
+      const prepareResult = tools.prepareDeleteCalendarPermission({ permission_id: 'cp_42' });
       const { approval_token } = JSON.parse(prepareResult.content[0].text);
 
       const result = await tools.confirmDeleteCalendarPermission({ approval_token });
@@ -87,7 +96,7 @@ describe('CalendarPermissionsTools', () => {
       const parsed = JSON.parse(result.content[0].text);
       expect(parsed.success).toBe(true);
       expect(parsed.message).toBe('Calendar permission deleted');
-      expect(repo.deleteCalendarPermissionAsync).toHaveBeenCalledWith(42);
+      expect(repo.deleteCalendarPermissionAsync).toHaveBeenCalledWith('cp_42');
     });
 
     it('returns error for invalid token', async () => {
@@ -104,7 +113,7 @@ describe('CalendarPermissionsTools', () => {
     it('returns error for already consumed token', async () => {
       vi.mocked(repo.deleteCalendarPermissionAsync).mockResolvedValue(undefined);
 
-      const prepareResult = tools.prepareDeleteCalendarPermission({ permission_id: 42 });
+      const prepareResult = tools.prepareDeleteCalendarPermission({ permission_id: 'cp_42' });
       const { approval_token } = JSON.parse(prepareResult.content[0].text);
 
       // Consume the token
