@@ -250,6 +250,24 @@ describe('ids/token — composite / alias-backed', () => {
     expect(parsed?.graphId).toBeUndefined();
   });
 
+  it('mints an sl_ token for sharePointList (composite {siteId, listId}) and classifies it as alias', () => {
+    const token = mintComposite('sharePointList', canonicalKey('sharePointList', { siteId: 'S', listId: 'L' }));
+    expect(token.startsWith('sl_')).toBe(true);
+    const parsed = parseToken(token);
+    expect(parsed?.kind).toBe('alias');
+    expect(parsed?.entityType).toBe('sharePointList');
+    expect(parsed?.graphId).toBeUndefined();
+  });
+
+  it('mints an sn_ token for sharePointListItem (composite {siteId, listId, itemId}) and classifies it as alias', () => {
+    const token = mintComposite('sharePointListItem', canonicalKey('sharePointListItem', { siteId: 'S', listId: 'L', itemId: 'I' }));
+    expect(token.startsWith('sn_')).toBe(true);
+    const parsed = parseToken(token);
+    expect(parsed?.kind).toBe('alias');
+    expect(parsed?.entityType).toBe('sharePointListItem');
+    expect(parsed?.graphId).toBeUndefined();
+  });
+
   it('mints a pb_ token for plannerBucket (single-id) and classifies it as alias', () => {
     const token = mintComposite('plannerBucket', 'k');
     expect(token.startsWith('pb_')).toBe(true);

@@ -24,6 +24,7 @@ import { plannerVisualizationToolDefinitions } from '../tools/planner-visualizat
 import { meetingsToolDefinitions } from '../tools/meetings.js';
 import { onenoteToolDefinitions } from '../tools/onenote.js';
 import { sharePointToolDefinitions } from '../tools/sharepoint.js';
+import { sharePointListsToolDefinitions } from '../tools/sharepoint-lists.js';
 import { teamsToolDefinitions } from '../tools/teams.js';
 import { plannerToolDefinitions } from '../tools/planner.js';
 import { oneDriveToolDefinitions } from '../tools/onedrive.js';
@@ -55,6 +56,7 @@ export function allToolDefinitions(): ToolDefinition[] {
     ...meetingsToolDefinitions(),
     ...onenoteToolDefinitions(),
     ...sharePointToolDefinitions(),
+    ...sharePointListsToolDefinitions(),
     ...teamsToolDefinitions(),
     ...plannerToolDefinitions(),
     ...oneDriveToolDefinitions(),
