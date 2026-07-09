@@ -2,24 +2,28 @@
 
 _Last updated: 2026-07-09. Working branch: `mcp-server-fixes` worktree. `main` is the release target._
 
-**Session progress:** 8 PRs merged — #47 driveItems (dr_), #48 teams+channels **alias pilot**
-(tm_/cn_), #49 chats/chatMessages/channelMessages (ch_/cm_/xm_), #51 tasks+taskLists (td_/tl_),
-#52 task sub-resources (ci_/lr_/ta_), #53 mail/contact sub-resources (at_/mr_/cf_/cg_/fo_),
-#54 calendar+meetings (cp_/om_/rc_/tr_), #55 SharePoint chain (si_/dl_/li_). **19 entities durable;
-the alias-composite wave is ~90% done.** Adversarial review caught 3 real bugs pre-merge (driveItem
-empty-id guard #47; sub-entity task_id schema break #51; contacts folder_id cross-consumer #53).
-Follow-up issue #50 (channel reply operability). **The ONLY remaining hashStringToNumber entity sites
-are Planner (plan/bucket).** CodeRabbit + Copilot hit fair-usage/quota limits mid-session → the opus
-adversarial reviews are the primary external gate.
+**Session progress: 12 PRs merged. THE DURABLE-ID ROLLOUT IS COMPLETE.** Every Office 365 entity
+uses durable tokens; `IdCache` is gone; **`hashStringToNumber` is deleted from the codebase (#60)**.
+Migration PRs: #47 driveItems (dr_), #48 teams+channels **alias pilot** (tm_/cn_), #49 chat/messages
+(ch_/cm_/xm_), #51 tasks+taskLists (td_/tl_), #52 task sub-resources (ci_/lr_/ta_), #53 mail/contact
+sub-resources (at_/mr_/cf_/cg_/fo_), #54 calendar+meetings (cp_/om_/rc_/tr_), #55 SharePoint chain
+(si_/dl_/li_), #58 **Planner + U5b-5 fetch-before-update** (pl_/pb_/pt_). Plus #57 shared-mailbox
+tools (#40, read-only delegate access, teammate), #60 delete-hashStringToNumber cleanup.
+**~22 entities durable.** Adversarial review caught 4 real bugs pre-merge (driveItem empty-id guard #47;
+sub-entity task_id schema break #51; contacts folder_id cross-consumer #53; Planner empty-etag guard +
+last-writer-wins doc #58). Follow-up issue #50 (channel reply operability). CodeRabbit + Copilot hit
+fair-usage/quota limits → opus adversarial reviews are the primary external gate.
 
-**NEXT (in order):** (1) **Planner + U5b-5** — the last & most delicate alias PR: plans (pl_), buckets
-(pb_ NEW), plannerTasks (pt_), plannerTaskDetails (piggyback pt_). Etags are mutable & per-sub-resource
-so they CANNOT ride in the token — drop the cached etag and **fetch-before-update**: fetch fresh
-`@odata.etag`, PATCH with `If-Match`, ONE 412 retry (re-fetch etag). `resolvePlanId` is actively
-called; graph-client If-Match methods at graph-client.ts:1912/1928/1933/1965/1970/1980. (2) U5b-3
-immutable-ID pref. (3) **Union cleanup + delete hashStringToNumber** (the payoff — after Planner only
-2 filename hashes + the email-mapper conversationId hash remain, all non-entity). (4) #38/#40 coverage
-tools. (5) U6/U11/U12. (6) tag v4.0.0.
+**Fleet:** running as team-lead with parallel teammates on the separable additive work — #57 (#40
+shared mailboxes) MERGED; #59 (U12 delta-sync) in review/rebase; #38 (SharePoint Lists) assigned.
+
+**REMAINING to v4.0.0:** (a) merge #59 (U12) + #38 (SharePoint Lists) when ready. (b) **U5b-3**
+immutable-ID pref (`Prefer: IdType="ImmutableId"` middleware in graph-client + `translateExchangeIds`
+for $search-minted mutable ids + `mutable=1` ID_STALE fallback). (c) **U6** canonical per-entity Zod
+schemas + alias coercion + next-action hints. (d) **U11** elicitation (`--confirm elicit`, 60s wait →
+durable token). (e) **Union narrowing (deferred, mechanical):** ~225 legacy `string | number` id
+unions → `string` (they work as-is — cosmetic/type-safety). (f) **tag v4.0.0** (version bump +
+CHANGELOG breaking-changes migration matrix + OIDC release workflow publishes).
 
 ## Release strategy (decided)
 
