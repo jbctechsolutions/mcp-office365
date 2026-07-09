@@ -13,6 +13,7 @@
 import * as fs from 'fs';
 import { z } from 'zod';
 import { defineTool } from '../registry/define-tool.js';
+import { tokenIdLink } from '../registry/elicit-links.js';
 import { requireGraphToolset } from '../registry/context.js';
 import { Id } from '../ids/schema.js';
 import type { ToolContext, ToolDefinition, ToolResult } from '../registry/types.js';
@@ -915,6 +916,7 @@ export function mailSendToolDefinitions(): ToolDefinition[] {
       presets: ['mail'],
       backends: ['graph'],
       handler: async (ctx, params) => jsonResult(await tools(ctx).prepareSendDraft(params)),
+      onElicit: tokenIdLink('confirm_send_draft', ['draft_id']),
     }),
     defineTool({
       name: 'confirm_send_draft',
@@ -935,6 +937,7 @@ export function mailSendToolDefinitions(): ToolDefinition[] {
       presets: ['mail'],
       backends: ['graph'],
       handler: (ctx, params) => jsonResult(tools(ctx).prepareSendEmail(params)),
+      onElicit: tokenIdLink('confirm_send_email'),
     }),
     defineTool({
       name: 'confirm_send_email',
@@ -955,6 +958,7 @@ export function mailSendToolDefinitions(): ToolDefinition[] {
       presets: ['mail'],
       backends: ['graph'],
       handler: async (ctx, params) => jsonResult(await tools(ctx).prepareReplyEmail(params)),
+      onElicit: tokenIdLink('confirm_reply_email', ['message_id']),
     }),
     defineTool({
       name: 'confirm_reply_email',
@@ -975,6 +979,7 @@ export function mailSendToolDefinitions(): ToolDefinition[] {
       presets: ['mail'],
       backends: ['graph'],
       handler: async (ctx, params) => jsonResult(await tools(ctx).prepareForwardEmail(params)),
+      onElicit: tokenIdLink('confirm_forward_email', ['message_id']),
     }),
     defineTool({
       name: 'confirm_forward_email',

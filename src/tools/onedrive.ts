@@ -13,6 +13,7 @@
 import { z } from 'zod';
 import type { ApprovalTokenManager } from '../approval/index.js';
 import { defineTool } from '../registry/define-tool.js';
+import { approvalTokenLink } from '../registry/elicit-links.js';
 import { requireGraphToolset } from '../registry/context.js';
 import type { ToolContext, ToolDefinition } from '../registry/types.js';
 
@@ -428,6 +429,7 @@ export function oneDriveToolDefinitions(): ToolDefinition[] {
       presets: ['files'],
       backends: ['graph'],
       handler: (ctx, params) => tools(ctx).prepareUploadFile(params),
+      onElicit: approvalTokenLink('confirm_upload_file'),
     }),
     defineTool({
       name: 'confirm_upload_file',
@@ -478,6 +480,7 @@ export function oneDriveToolDefinitions(): ToolDefinition[] {
       presets: ['files'],
       backends: ['graph'],
       handler: (ctx, params) => tools(ctx).prepareDeleteDriveItem(params),
+      onElicit: approvalTokenLink('confirm_delete_drive_item'),
     }),
     defineTool({
       name: 'confirm_delete_drive_item',

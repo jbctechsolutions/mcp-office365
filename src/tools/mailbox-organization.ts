@@ -28,6 +28,7 @@ import {
 } from '../utils/errors.js';
 import { appleTimestampToIso } from '../utils/dates.js';
 import { defineTool } from '../registry/define-tool.js';
+import { batchLink, tokenIdLink } from '../registry/elicit-links.js';
 import { requireGraphToolset } from '../registry/context.js';
 import { Id } from '../ids/schema.js';
 import type { ToolContext, ToolDefinition, ToolResult } from '../registry/types.js';
@@ -798,6 +799,7 @@ export function mailboxOrganizationToolDefinitions(): ToolDefinition[] {
       presets: ['mail'],
       backends: ['graph'],
       handler: async (ctx, params) => jsonResult(await orgToolsFor(ctx).prepareDeleteEmail(params)),
+      onElicit: tokenIdLink('confirm_delete_email', ['email_id']),
     }),
     defineTool({
       name: 'confirm_delete_email',
@@ -818,6 +820,7 @@ export function mailboxOrganizationToolDefinitions(): ToolDefinition[] {
       presets: ['mail'],
       backends: ['graph'],
       handler: async (ctx, params) => jsonResult(await orgToolsFor(ctx).prepareMoveEmail(params)),
+      onElicit: tokenIdLink('confirm_move_email', ['email_id']),
     }),
     defineTool({
       name: 'confirm_move_email',
@@ -838,6 +841,7 @@ export function mailboxOrganizationToolDefinitions(): ToolDefinition[] {
       presets: ['mail'],
       backends: ['graph'],
       handler: async (ctx, params) => jsonResult(await orgToolsFor(ctx).prepareArchiveEmail(params)),
+      onElicit: tokenIdLink('confirm_archive_email', ['email_id']),
     }),
     defineTool({
       name: 'confirm_archive_email',
@@ -858,6 +862,7 @@ export function mailboxOrganizationToolDefinitions(): ToolDefinition[] {
       presets: ['mail'],
       backends: ['graph'],
       handler: async (ctx, params) => jsonResult(await orgToolsFor(ctx).prepareJunkEmail(params)),
+      onElicit: tokenIdLink('confirm_junk_email', ['email_id']),
     }),
     defineTool({
       name: 'confirm_junk_email',
@@ -878,6 +883,7 @@ export function mailboxOrganizationToolDefinitions(): ToolDefinition[] {
       presets: ['mail'],
       backends: ['graph'],
       handler: async (ctx, params) => jsonResult(await orgToolsFor(ctx).prepareDeleteFolder(params)),
+      onElicit: tokenIdLink('confirm_delete_folder', ['folder_id']),
     }),
     defineTool({
       name: 'confirm_delete_folder',
@@ -898,6 +904,7 @@ export function mailboxOrganizationToolDefinitions(): ToolDefinition[] {
       presets: ['mail'],
       backends: ['graph'],
       handler: async (ctx, params) => jsonResult(await orgToolsFor(ctx).prepareEmptyFolder(params)),
+      onElicit: tokenIdLink('confirm_empty_folder', ['folder_id']),
     }),
     defineTool({
       name: 'confirm_empty_folder',
@@ -920,6 +927,7 @@ export function mailboxOrganizationToolDefinitions(): ToolDefinition[] {
       presets: ['mail'],
       backends: ['graph'],
       handler: async (ctx, params) => jsonResult(await orgToolsFor(ctx).prepareBatchDeleteEmails(params)),
+      onElicit: batchLink('confirm_batch_operation'),
     }),
     defineTool({
       name: 'prepare_batch_move_emails',
@@ -930,6 +938,7 @@ export function mailboxOrganizationToolDefinitions(): ToolDefinition[] {
       presets: ['mail'],
       backends: ['graph'],
       handler: async (ctx, params) => jsonResult(await orgToolsFor(ctx).prepareBatchMoveEmails(params)),
+      onElicit: batchLink('confirm_batch_operation'),
     }),
     defineTool({
       name: 'confirm_batch_operation',

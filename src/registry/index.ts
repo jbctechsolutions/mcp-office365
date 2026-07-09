@@ -15,6 +15,11 @@ export type {
   ToolContext,
   ToolDefinition,
   GraphToolsets,
+  ConfirmMode,
+  ElicitOutcome,
+  ElicitRequest,
+  Elicitor,
+  ElicitLink,
 } from './types.js';
 export { ToolRegistry, toInputSchema } from './registry.js';
 export type { SurfaceOptions } from './registry.js';

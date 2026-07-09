@@ -11,6 +11,7 @@
 
 import { z } from 'zod';
 import { defineTool } from '../registry/define-tool.js';
+import { tokenIdLink } from '../registry/elicit-links.js';
 import { requireGraphToolset } from '../registry/context.js';
 import type { ToolDefinition } from '../registry/types.js';
 import type { GraphContactsTools } from './contacts-graph.js';
@@ -229,6 +230,7 @@ export function contactsToolDefinitions(): ToolDefinition[] {
       presets: ['contacts'],
       backends: ['graph'],
       handler: (ctx, params) => requireGraphToolset(ctx, 'contactsGraph').prepareDeleteContact(params),
+      onElicit: tokenIdLink('confirm_delete_contact', ['contact_id']),
     }),
     defineTool({
       name: 'confirm_delete_contact',

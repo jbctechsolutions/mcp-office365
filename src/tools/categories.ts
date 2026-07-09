@@ -13,6 +13,7 @@
 import { z } from 'zod';
 import type { ApprovalTokenManager } from '../approval/index.js';
 import { defineTool } from '../registry/define-tool.js';
+import { approvalTokenLink } from '../registry/elicit-links.js';
 import { requireGraphToolset } from '../registry/context.js';
 import type { ToolContext, ToolDefinition } from '../registry/types.js';
 
@@ -206,6 +207,7 @@ export function categoriesToolDefinitions(): ToolDefinition[] {
       presets: ['mail'],
       backends: ['graph'],
       handler: (ctx, params) => tools(ctx).prepareDeleteCategory(params),
+      onElicit: approvalTokenLink('confirm_delete_category'),
     }),
     defineTool({
       name: 'confirm_delete_category',

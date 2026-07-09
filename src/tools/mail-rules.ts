@@ -13,6 +13,7 @@
 import { z } from 'zod';
 import type { ApprovalTokenManager } from '../approval/index.js';
 import { defineTool } from '../registry/define-tool.js';
+import { tokenIdLink } from '../registry/elicit-links.js';
 import { requireGraphToolset } from '../registry/context.js';
 import type { ToolContext, ToolDefinition } from '../registry/types.js';
 
@@ -253,6 +254,7 @@ export function mailRulesToolDefinitions(): ToolDefinition[] {
       presets: ['mail'],
       backends: ['graph'],
       handler: (ctx, params) => tools(ctx).prepareDeleteMailRule(params),
+      onElicit: tokenIdLink('confirm_delete_mail_rule', ['rule_id']),
     }),
     defineTool({
       name: 'confirm_delete_mail_rule',

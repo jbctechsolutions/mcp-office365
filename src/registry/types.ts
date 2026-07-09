@@ -66,6 +66,27 @@ export interface ToolResult {
 // eslint-disable-next-line @typescript-eslint/no-empty-interface
 export interface GraphToolsets {}
 
+/** How a destructive `prepare_*` step seeks confirmation (U11). */
+export type ConfirmMode = 'token' | 'elicit';
+
+/** Outcome of an inline elicitation (U11). */
+export type ElicitOutcome =
+  /** The user explicitly confirmed — execute now. */
+  | 'accept'
+  /** The user explicitly said no — abort AND invalidate the token. */
+  | 'decline'
+  /** Cancelled, timed out, or the client can't elicit — fall back to the token flow. */
+  | 'degrade';
+
+/** A yes/no confirmation request sent to the client (U11). */
+export interface ElicitRequest {
+  /** Human-readable description of the action being confirmed. */
+  readonly message: string;
+}
+
+/** Sends an inline confirmation to the client, resolving to its outcome (U11). */
+export type Elicitor = (request: ElicitRequest) => Promise<ElicitOutcome>;
+
 /**
  * Runtime context passed to a tool handler. Built once per call after the
  * backend is initialized; carries the live toolset instances so handlers no
@@ -75,6 +96,38 @@ export interface ToolContext {
   readonly backend: Backend;
   readonly tokenManager: ApprovalTokenManager;
   readonly graph: GraphToolsets | null;
+  /** Confirmation mode for destructive prepares (default 'token' when absent). */
+  readonly confirmMode?: ConfirmMode;
+  /** Inline elicitor, present only when the client advertised the capability. */
+  readonly elicit?: Elicitor;
+}
+
+/**
+ * Links a `prepare_*` tool to its `confirm_*` counterpart so the dispatch-level
+ * elicitation interceptor (U11) can execute inline on an accepted confirmation.
+ * Declarative on purpose: no handler body changes, and the confirm tool's exact
+ * validation + execution is reused.
+ *
+ * @typeParam S - the prepare tool's Zod input schema.
+ */
+export interface ElicitLink<S extends z.ZodType = z.ZodType> {
+  /** Name of the paired confirm tool (e.g. 'confirm_delete_channel'). */
+  readonly confirmTool: string;
+  /**
+   * Builds the confirm tool's params from the prepare params + the prepare
+   * result (which carries the freshly minted token(s)). Handles heterogeneous
+   * confirm shapes: plain `approval_token`, `token_id` + target id, and the
+   * batch confirm that takes an array of `{ token_id, email_id }` pairs.
+   */
+  readonly buildParams: (prepareParams: z.infer<S>, prepareResult: ToolResult) => unknown;
+  /**
+   * Token ids minted by this prepare, so a declined action can invalidate them.
+   * Empty means "no token in the result" — dispatch then degrades without
+   * eliciting.
+   */
+  readonly collectTokenIds: (prepareResult: ToolResult) => string[];
+  /** Optional custom confirmation prompt; a generic one is derived when absent. */
+  readonly message?: (prepareParams: z.infer<S>) => string;
 }
 
 /**
@@ -102,4 +155,15 @@ export interface ToolDefinition<S extends z.ZodType = z.ZodType> {
   readonly backends: readonly Backend[];
   /** Handler invoked with the runtime context and validated params. */
   readonly handler: (ctx: ToolContext, params: z.infer<S>) => Promise<ToolResult> | ToolResult;
+  /**
+   * Present on `prepare_*` tools to opt into inline elicitation (U11). When the
+   * server runs with `--confirm elicit` and the client can elicit, dispatch
+   * runs the prepare, asks the user inline, and on accept executes the linked
+   * confirm tool — otherwise it degrades to the normal token response.
+   *
+   * `NoInfer` keeps this field out of `S` inference so the generic is fixed by
+   * `input` alone — otherwise a helper returning the default `ElicitLink` would
+   * widen `S` and collapse the handler's `params` to `unknown`.
+   */
+  readonly onElicit?: ElicitLink<NoInfer<S>>;
 }

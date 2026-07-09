@@ -14,6 +14,7 @@
 import { z } from 'zod';
 import type { ApprovalTokenManager } from '../approval/index.js';
 import { defineTool } from '../registry/define-tool.js';
+import { approvalTokenLink } from '../registry/elicit-links.js';
 import { requireGraphToolset } from '../registry/context.js';
 import type { ToolContext, ToolDefinition } from '../registry/types.js';
 
@@ -277,6 +278,7 @@ export function excelToolDefinitions(): ToolDefinition[] {
       presets: ['excel'],
       backends: ['graph'],
       handler: (ctx, params) => tools(ctx).prepareUpdateRange(params),
+      onElicit: approvalTokenLink('confirm_update_range'),
     }),
     defineTool({
       name: 'confirm_update_range',

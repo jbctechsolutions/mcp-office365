@@ -13,6 +13,7 @@
 import { z } from 'zod';
 import type { ApprovalTokenManager } from '../approval/index.js';
 import { defineTool } from '../registry/define-tool.js';
+import { approvalTokenLink } from '../registry/elicit-links.js';
 import { requireGraphToolset } from '../registry/context.js';
 import type { ToolContext, ToolDefinition } from '../registry/types.js';
 
@@ -211,6 +212,7 @@ export function linkedResourcesToolDefinitions(): ToolDefinition[] {
       presets: ['tasks'],
       backends: ['graph'],
       handler: (ctx, params) => tools(ctx).prepareDeleteLinkedResource(params),
+      onElicit: approvalTokenLink('confirm_delete_linked_resource'),
     }),
     defineTool({
       name: 'confirm_delete_linked_resource',

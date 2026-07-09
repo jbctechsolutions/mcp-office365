@@ -13,6 +13,7 @@
 import { z } from 'zod';
 import type { ApprovalTokenManager } from '../approval/index.js';
 import { defineTool } from '../registry/define-tool.js';
+import { approvalTokenLink } from '../registry/elicit-links.js';
 import { requireGraphToolset } from '../registry/context.js';
 import type { ToolContext, ToolDefinition } from '../registry/types.js';
 
@@ -243,6 +244,7 @@ export function checklistItemsToolDefinitions(): ToolDefinition[] {
       presets: ['tasks'],
       backends: ['graph'],
       handler: (ctx, params) => tools(ctx).prepareDeleteChecklistItem(params),
+      onElicit: approvalTokenLink('confirm_delete_checklist_item'),
     }),
     defineTool({
       name: 'confirm_delete_checklist_item',
