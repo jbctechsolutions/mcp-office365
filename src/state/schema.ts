@@ -12,9 +12,8 @@
  * - `aliases`          — durable-ID token → Graph ID map (composite/mutable IDs).
  * - `approval_tokens`  — two-phase approval tokens + redemption receipts.
  * - `meta`             — schema version + one-shot migration markers.
- *
- * The `delta_links` table intentionally ships later with U12 (the delta mirror),
- * keeping U4 free of Workstream-7-only schema per the slip rule.
+ * - `delta_links`      — per-resource Graph delta cursors (U12 mirror).
+ * - `delta_items`      — local mirror of seen items, to classify add/update/delete.
  */
 
 /** Ordered forward migrations. Index i migrates schema version i → i+1. */
@@ -44,6 +43,30 @@ export const MIGRATIONS: readonly string[] = [
   );
 
   CREATE INDEX IF NOT EXISTS idx_approval_tokens_expires_at ON approval_tokens (expires_at);
+  `,
+  // v1 → v2: delta-sync mirror (U12). One cursor row per (account, resource),
+  // plus a per-item mirror so a subsequent delta round can tell an added item
+  // from an updated one (Graph delta reports both as a plain value entry).
+  `
+  CREATE TABLE IF NOT EXISTS delta_links (
+    account_id  TEXT NOT NULL,
+    resource    TEXT NOT NULL,
+    delta_link  TEXT NOT NULL,
+    synced_at   INTEGER NOT NULL,
+    PRIMARY KEY (account_id, resource)
+  );
+
+  CREATE TABLE IF NOT EXISTS delta_items (
+    account_id   TEXT NOT NULL,
+    resource     TEXT NOT NULL,
+    graph_id     TEXT NOT NULL,
+    token        TEXT NOT NULL,
+    summary      TEXT NOT NULL DEFAULT '',
+    snapshot     TEXT,
+    first_seen   INTEGER NOT NULL,
+    last_changed INTEGER NOT NULL,
+    PRIMARY KEY (account_id, resource, graph_id)
+  );
   `,
 ];
 

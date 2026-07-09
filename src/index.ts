@@ -64,6 +64,7 @@ import { OneDriveTools } from './tools/onedrive.js';
 import { PlannerTools } from './tools/planner.js';
 import { PlannerVisualizationTools } from './tools/planner-visualization.js';
 import { SharePointTools } from './tools/sharepoint.js';
+import { DeltaTools } from './tools/what-changed.js';
 import { ApprovalTokenManager } from './approval/index.js';
 import { StateStore } from './state/store.js';
 import {
@@ -168,6 +169,7 @@ export function createServer(options: ServerOptions = {}): Server {
   let checklistItemsTools: ChecklistItemsTools | null = null;
   let linkedResourcesTools: LinkedResourcesTools | null = null;
   let taskAttachmentsTools: TaskAttachmentsTools | null = null;
+  let deltaTools: DeltaTools | null = null;
 
   // Graph-specific state
   let graphRepository: GraphRepository | null = null;
@@ -227,6 +229,7 @@ export function createServer(options: ServerOptions = {}): Server {
     oneDriveTools = new OneDriveTools(graphRepository, tokenManager);
     sharePointTools = new SharePointTools(graphRepository);
     excelTools = new ExcelTools(graphRepository, tokenManager);
+    deltaTools = new DeltaTools(graphRepository.getClient(), stateStore, currentAccountId);
 
     initialized = true;
   });
@@ -277,6 +280,7 @@ export function createServer(options: ServerOptions = {}): Server {
         && sendTools != null
         && schedulingTools != null
         && orgTools != null
+        && deltaTools != null
           ? {
               rules: rulesTools,
               categories: categoriesTools,
@@ -305,6 +309,7 @@ export function createServer(options: ServerOptions = {}): Server {
               scheduling: schedulingTools,
               mailboxOrg: orgTools,
               mailboxSettings: graphMailboxSettingsTools,
+              delta: deltaTools,
             }
           : null,
     };

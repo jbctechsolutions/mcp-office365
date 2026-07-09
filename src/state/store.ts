@@ -20,6 +20,7 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { runMigrations, migrateLegacyTokens } from './migrate.js';
 import { APPROVAL_RETENTION_MS } from './schema.js';
+import { DeltaStore } from './delta-store.js';
 
 type DB = Database.Database;
 
@@ -109,6 +110,8 @@ export class StateStore {
   readonly journalMode: string;
   /** Effective `busy_timeout` pragma in ms. */
   readonly busyTimeout: number;
+  /** Delta-sync mirror storage (U12), sharing this store's connection. */
+  readonly delta: DeltaStore;
 
   private readonly db: DB;
   private readonly now: () => number;
@@ -120,6 +123,7 @@ export class StateStore {
     this.now = now;
     this.journalMode = String(db.pragma('journal_mode', { simple: true }));
     this.busyTimeout = Number(db.pragma('busy_timeout', { simple: true }));
+    this.delta = new DeltaStore(db, now);
   }
 
   /**

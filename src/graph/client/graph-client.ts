@@ -434,6 +434,47 @@ export class GraphClient {
     return { messages, deltaLink: newDeltaLink };
   }
 
+  /**
+   * Gets calendar-view delta for incremental event sync (U12).
+   *
+   * The v1.0 event delta is served by `/me/calendarView/delta`, bounded by a
+   * start/end window that is baked into the returned deltaLink — subsequent
+   * rounds just follow that link. `$select` is unsupported here, so full event
+   * objects come back; deletes arrive as `@removed` entries. The deltaLink lands
+   * on the *last* page, so it is read after paging (not from the first response).
+   */
+  async getCalendarViewDelta(
+    startDateTime: string,
+    endDateTime: string,
+    deltaLink?: string
+  ): Promise<{ events: MicrosoftGraph.Event[]; deltaLink: string }> {
+    const client = await this.getClient();
+    let page: PageCollection;
+
+    if (deltaLink != null) {
+      page = await client.api(deltaLink).get() as PageCollection;
+    } else {
+      const start = encodeURIComponent(startDateTime);
+      const end = encodeURIComponent(endDateTime);
+      page = await client
+        .api(`/me/calendarView/delta?startDateTime=${start}&endDateTime=${end}`)
+        .header('Prefer', 'odata.maxpagesize=50')
+        .get() as PageCollection;
+    }
+
+    const events: MicrosoftGraph.Event[] = [...((page.value as MicrosoftGraph.Event[] | undefined) ?? [])];
+
+    let nextLink = page['@odata.nextLink'];
+    while (nextLink != null) {
+      page = await client.api(nextLink).get() as PageCollection;
+      events.push(...((page.value as MicrosoftGraph.Event[] | undefined) ?? []));
+      nextLink = page['@odata.nextLink'];
+    }
+
+    const newDeltaLink = page['@odata.deltaLink'] ?? '';
+    return { events, deltaLink: newDeltaLink };
+  }
+
   // ===========================================================================
   // Mail Rules
   // ===========================================================================
