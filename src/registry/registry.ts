@@ -186,7 +186,16 @@ export class ToolRegistry {
       if (confirmDef == null) {
         return prepareResult;
       }
-      const confirmParams = confirmDef.input.parse(link.buildParams(prepareParams, prepareResult));
+      // Only the param mapping/validation is guarded: a bad buildParams must
+      // degrade (return the still-live token) rather than error out an accepted
+      // action. The confirm handler runs OUTSIDE the guard so a genuine
+      // execution error (e.g. a Graph failure) surfaces normally, not masked.
+      let confirmParams: unknown;
+      try {
+        confirmParams = confirmDef.input.parse(link.buildParams(prepareParams, prepareResult));
+      } catch {
+        return prepareResult;
+      }
       return confirmDef.handler(ctx, confirmParams);
     }
 

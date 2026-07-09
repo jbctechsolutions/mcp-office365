@@ -66,9 +66,11 @@ function buildRegistry(): ToolRegistry {
       name: 'prepare_c', description: '', input: z.strictObject({ email_ids: z.array(z.string()) }),
       annotations: {}, destructive: true, presets: [], backends: ['graph'],
       handler: (_ctx, p) => {
+        // Mirror the REAL batch prepare shape: `{ token_id, email: { id, … } }`
+        // (the token's target is email.id). batchLink must map email.id → email_id.
         const tokens = p.email_ids.map((id) => ({
           token_id: tm.generateToken({ operation: 'batch_delete_emails', targetType: 'email', targetId: id, targetHash: id }).tokenId,
-          email_id: id,
+          email: { id, subject: `subject-${id}` },
         }));
         return json({ tokens });
       },
@@ -153,6 +155,43 @@ describe('dispatch elicitation interceptor', () => {
 
     expect(confirmCalls).toEqual([]);
     expect(tm.size).toBe(0); // all three burned
+  });
+
+  it('batch accept maps each entry.email.id to the confirm email_id', async () => {
+    const reg = buildRegistry();
+    await reg.dispatch('prepare_c', { email_ids: ['e1', 'e2'] }, ctxWith(elicitReturning('accept')), SURFACE);
+    const tokens = (confirmCalls[0]!.params as { tokens: Array<{ token_id: string; email_id: string }> }).tokens;
+    expect(tokens).toEqual([
+      { token_id: expect.any(String), email_id: 'e1' },
+      { token_id: expect.any(String), email_id: 'e2' },
+    ]);
+  });
+
+  it('accept with a buildParams that fails the confirm schema degrades (no error, token left live)', async () => {
+    const reg = new ToolRegistry();
+    reg.register([
+      defineTool({
+        name: 'prepare_bad', description: '', input: z.strictObject({ id: z.string() }),
+        annotations: {}, destructive: true, presets: [], backends: ['graph'],
+        handler: (_ctx, p) => {
+          const t = tm.generateToken({ operation: 'delete_category', targetType: 'category', targetId: p.id, targetHash: p.id });
+          return json({ approval_token: t.tokenId });
+        },
+        // Intentionally wrong: emits a key the confirm schema rejects.
+        onElicit: { confirmTool: 'confirm_bad', collectTokenIds: (r) => { const t = (JSON.parse(r.content[0]!.text) as { approval_token: string }).approval_token; return [t]; }, buildParams: () => ({ nope: true }) },
+      }),
+      defineTool({
+        name: 'confirm_bad', description: '', input: z.strictObject({ approval_token: z.string() }),
+        annotations: {}, destructive: true, presets: [], backends: ['graph'],
+        handler: (_ctx, p) => { confirmCalls.push({ tool: 'confirm_bad', params: p }); return json({ ran: 'confirm_bad' }); },
+      }),
+    ]);
+
+    const res = await reg.dispatch('prepare_bad', { id: 'c1' }, ctxWith(elicitReturning('accept')), SURFACE);
+    expect(confirmCalls).toEqual([]); // confirm never ran
+    const body = parse(res);
+    expect(body).toHaveProperty('approval_token'); // degraded to the token response
+    expect(tm.lookupToken(body.approval_token as string)).toBeDefined(); // token still live
   });
 
   it('token mode bypasses elicitation entirely', async () => {

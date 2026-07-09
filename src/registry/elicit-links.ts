@@ -77,15 +77,34 @@ export function tokenIdLink(confirmTool: string, copyFields: readonly string[] =
 
 /**
  * Shape C: the batch confirm takes `{ tokens: [{ token_id, email_id }, …] }`,
- * one pair per email — read straight from the prepare result (the prepare mints
- * a token per id and returns the pairs).
+ * one pair per email. The batch prepare returns `{ tokens: [{ token_id, email:
+ * { id, … } }] }` where the token's target is `email.id`, so `email_id` is read
+ * from `email.id` (with a direct `email_id` fallback for robustness).
+ *
+ * `collectTokenIds` gathers EVERY minted `token_id` independently of the id
+ * mapping, so a decline invalidates all of them even if a pair is malformed.
  */
 export function batchLink(confirmTool: string): ElicitLink {
   return {
     confirmTool,
-    collectTokenIds: (result) => tokenPairs(result).map((pair) => pair.token_id),
-    buildParams: (_prepareParams, result) => ({ tokens: tokenPairs(result) }),
+    collectTokenIds: (result) => batchTokenIds(result),
+    buildParams: (_prepareParams, result) => ({ tokens: batchPairs(result) }),
   };
+}
+
+/** Raw `tokens` array from a batch prepare result, or []. */
+function batchEntries(result: ToolResult): Array<Record<string, unknown>> {
+  const tokens = parseResult(result)['tokens'];
+  return Array.isArray(tokens) ? (tokens as Array<Record<string, unknown>>) : [];
+}
+
+/** Every minted token id in the batch result (authoritative for invalidation). */
+function batchTokenIds(result: ToolResult): string[] {
+  const ids: string[] = [];
+  for (const entry of batchEntries(result)) {
+    if (typeof entry['token_id'] === 'string') ids.push(entry['token_id']);
+  }
+  return ids;
 }
 
 interface TokenPair {
@@ -93,15 +112,13 @@ interface TokenPair {
   email_id: string | number;
 }
 
-/** Extracts the `{ token_id, email_id }` pairs from a batch prepare result. */
-function tokenPairs(result: ToolResult): TokenPair[] {
-  const tokens = parseResult(result)['tokens'];
-  if (!Array.isArray(tokens)) return [];
+/** The `{ token_id, email_id }` pairs the batch confirm expects. */
+function batchPairs(result: ToolResult): TokenPair[] {
   const pairs: TokenPair[] = [];
-  for (const entry of tokens) {
-    const rec = entry as Record<string, unknown>;
-    const tokenId = rec['token_id'];
-    const emailId = rec['email_id'];
+  for (const entry of batchEntries(result)) {
+    const tokenId = entry['token_id'];
+    const email = entry['email'] as Record<string, unknown> | undefined;
+    const emailId = email?.['id'] ?? entry['email_id'];
     if (typeof tokenId === 'string' && (typeof emailId === 'string' || typeof emailId === 'number')) {
       pairs.push({ token_id: tokenId, email_id: emailId });
     }
