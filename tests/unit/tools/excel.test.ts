@@ -40,9 +40,9 @@ describe('ExcelTools', () => {
       ];
       vi.mocked(repo.listWorksheetsAsync).mockResolvedValue(mockWorksheets);
 
-      const result = await tools.listWorksheets({ file_id: 100 });
+      const result = await tools.listWorksheets({ file_id: 'dr_file1' });
 
-      expect(repo.listWorksheetsAsync).toHaveBeenCalledWith(100);
+      expect(repo.listWorksheetsAsync).toHaveBeenCalledWith('dr_file1');
       expect(result.content).toHaveLength(1);
       const parsed = JSON.parse(result.content[0].text);
       expect(parsed.worksheets).toEqual(mockWorksheets);
@@ -62,12 +62,12 @@ describe('ExcelTools', () => {
       vi.mocked(repo.getWorksheetRangeAsync).mockResolvedValue(mockRange);
 
       const result = await tools.getWorksheetRange({
-        file_id: 100,
+        file_id: 'dr_file1',
         worksheet_name: 'Sheet1',
         range: 'A1:B2',
       });
 
-      expect(repo.getWorksheetRangeAsync).toHaveBeenCalledWith(100, 'Sheet1', 'A1:B2');
+      expect(repo.getWorksheetRangeAsync).toHaveBeenCalledWith('dr_file1', 'Sheet1', 'A1:B2');
       const parsed = JSON.parse(result.content[0].text);
       expect(parsed.range.values).toEqual([['Name', 'Age'], ['Alice', 30]]);
     });
@@ -86,11 +86,11 @@ describe('ExcelTools', () => {
       vi.mocked(repo.getUsedRangeAsync).mockResolvedValue(mockRange);
 
       const result = await tools.getUsedRange({
-        file_id: 100,
+        file_id: 'dr_file1',
         worksheet_name: 'Sheet1',
       });
 
-      expect(repo.getUsedRangeAsync).toHaveBeenCalledWith(100, 'Sheet1');
+      expect(repo.getUsedRangeAsync).toHaveBeenCalledWith('dr_file1', 'Sheet1');
       const parsed = JSON.parse(result.content[0].text);
       expect(parsed.range.values).toEqual([['A', 'B', 'C'], [1, 2, 3], [4, 5, 6]]);
     });
@@ -109,11 +109,11 @@ describe('ExcelTools', () => {
       vi.mocked(repo.getTableDataAsync).mockResolvedValue(mockRows);
 
       const result = await tools.getTableData({
-        file_id: 100,
+        file_id: 'dr_file1',
         table_name: 'EmployeeTable',
       });
 
-      expect(repo.getTableDataAsync).toHaveBeenCalledWith(100, 'EmployeeTable');
+      expect(repo.getTableDataAsync).toHaveBeenCalledWith('dr_file1', 'EmployeeTable');
       const parsed = JSON.parse(result.content[0].text);
       expect(parsed.rows).toEqual(mockRows);
     });
@@ -126,7 +126,7 @@ describe('ExcelTools', () => {
   describe('prepareUpdateRange', () => {
     it('generates an approval token with range info', () => {
       const result = tools.prepareUpdateRange({
-        file_id: 100,
+        file_id: 'dr_file1',
         worksheet_name: 'Sheet1',
         range: 'A1:B2',
         values: [['X', 'Y'], [1, 2]],
@@ -136,7 +136,7 @@ describe('ExcelTools', () => {
       const parsed = JSON.parse(result.content[0].text);
       expect(parsed.approval_token).toBeDefined();
       expect(typeof parsed.approval_token).toBe('string');
-      expect(parsed.file_id).toBe(100);
+      expect(parsed.file_id).toBe('dr_file1');
       expect(parsed.worksheet_name).toBe('Sheet1');
       expect(parsed.range).toBe('A1:B2');
       expect(parsed.cell_count).toBe(4);
@@ -146,7 +146,7 @@ describe('ExcelTools', () => {
 
     it('correctly counts cells in values array', () => {
       const result = tools.prepareUpdateRange({
-        file_id: 100,
+        file_id: 'dr_file1',
         worksheet_name: 'Data',
         range: 'A1:C1',
         values: [['a', 'b', 'c']],
@@ -167,7 +167,7 @@ describe('ExcelTools', () => {
 
       // Generate a token first
       const prepareResult = tools.prepareUpdateRange({
-        file_id: 100,
+        file_id: 'dr_file1',
         worksheet_name: 'Sheet1',
         range: 'A1:B2',
         values: [['X', 'Y'], [1, 2]],
@@ -178,7 +178,7 @@ describe('ExcelTools', () => {
       const result = await tools.confirmUpdateRange({ approval_token });
 
       expect(repo.updateWorksheetRangeAsync).toHaveBeenCalledWith(
-        100,
+        'dr_file1',
         'Sheet1',
         'A1:B2',
         [['X', 'Y'], [1, 2]],
@@ -205,7 +205,7 @@ describe('ExcelTools', () => {
 
       // Generate and consume a token
       const prepareResult = tools.prepareUpdateRange({
-        file_id: 100,
+        file_id: 'dr_file1',
         worksheet_name: 'Sheet1',
         range: 'A1:A1',
         values: [['done']],
@@ -227,7 +227,7 @@ describe('ExcelTools', () => {
       const shortTools = new ExcelTools(repo, shortTtlManager);
 
       const prepareResult = shortTools.prepareUpdateRange({
-        file_id: 100,
+        file_id: 'dr_file1',
         worksheet_name: 'Sheet1',
         range: 'A1:A1',
         values: [['expired']],

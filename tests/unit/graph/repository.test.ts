@@ -132,6 +132,11 @@ vi.mock('../../../src/graph/client/index.js', () => ({
       listTeamMembers: vi.fn(),
       // Planner operations
       listMyPlannerTasks: vi.fn(),
+      // OneDrive operations
+      listDriveItems: vi.fn(),
+      searchDriveItems: vi.fn(),
+      listRecentDriveItems: vi.fn(),
+      listSharedWithMe: vi.fn(),
     };
   }),
 }));
@@ -3973,6 +3978,23 @@ describe('graph/repository', () => {
         const cached = (repository as any).idCache.plans.get(hashStringToNumber('graph-plan-A'));
         expect(cached).toEqual({ planId: 'graph-plan-A', etag: '' });
       });
+    });
+  });
+
+  describe('OneDrive drive items (dr_ tokens)', () => {
+    it('mints dr_ tokens for listed items and does not crash on an id-less row', async () => {
+      // An id-less row must degrade to id:'' (parity with the folder mapper's
+      // empty-id guard, #46) — mintSelfEncoded throws on an empty id, so an
+      // unguarded mint would abort the whole list and hide every valid sibling.
+      mockClient.listDriveItems.mockResolvedValue([
+        { id: 'drive-item-1', name: 'report.pdf', size: 10, lastModifiedDateTime: '', folder: null, webUrl: '' },
+        { id: '', name: 'ghost', size: 0, lastModifiedDateTime: '', folder: null, webUrl: '' },
+      ]);
+
+      const result = await repository.listDriveItemsAsync();
+
+      expect(result[0].id).toBe(mintSelfEncoded('driveItem', 'drive-item-1'));
+      expect(result[1].id).toBe('');
     });
   });
 });

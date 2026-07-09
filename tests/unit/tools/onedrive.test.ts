@@ -39,8 +39,8 @@ describe('OneDriveTools', () => {
   describe('listDriveItems', () => {
     it('returns items from the root when no folder_id provided', async () => {
       const mockItems = [
-        { id: 1, name: 'Documents', size: 0, lastModified: '2026-01-01T00:00:00Z', isFolder: true, webUrl: 'https://example.com/Documents' },
-        { id: 2, name: 'report.pdf', size: 1024, lastModified: '2026-01-02T00:00:00Z', isFolder: false, webUrl: 'https://example.com/report.pdf' },
+        { id: 'dr_item1', name: 'Documents', size: 0, lastModified: '2026-01-01T00:00:00Z', isFolder: true, webUrl: 'https://example.com/Documents' },
+        { id: 'dr_item2', name: 'report.pdf', size: 1024, lastModified: '2026-01-02T00:00:00Z', isFolder: false, webUrl: 'https://example.com/report.pdf' },
       ];
       vi.mocked(repo.listDriveItemsAsync).mockResolvedValue(mockItems);
 
@@ -53,13 +53,13 @@ describe('OneDriveTools', () => {
 
     it('returns items from a specific folder', async () => {
       const mockItems = [
-        { id: 3, name: 'notes.txt', size: 256, lastModified: '2026-01-03T00:00:00Z', isFolder: false, webUrl: 'https://example.com/notes.txt' },
+        { id: 'dr_item3', name: 'notes.txt', size: 256, lastModified: '2026-01-03T00:00:00Z', isFolder: false, webUrl: 'https://example.com/notes.txt' },
       ];
       vi.mocked(repo.listDriveItemsAsync).mockResolvedValue(mockItems);
 
-      const result = await tools.listDriveItems({ folder_id: 1 });
+      const result = await tools.listDriveItems({ folder_id: 'dr_folder1' });
 
-      expect(repo.listDriveItemsAsync).toHaveBeenCalledWith(1);
+      expect(repo.listDriveItemsAsync).toHaveBeenCalledWith('dr_folder1');
       const parsed = JSON.parse(result.content[0].text);
       expect(parsed.items).toHaveLength(1);
     });
@@ -72,7 +72,7 @@ describe('OneDriveTools', () => {
   describe('searchDriveItems', () => {
     it('searches and returns matching items', async () => {
       const mockItems = [
-        { id: 10, name: 'budget.xlsx', size: 2048, lastModified: '2026-02-01T00:00:00Z', isFolder: false, webUrl: 'https://example.com/budget.xlsx' },
+        { id: 'dr_item10', name: 'budget.xlsx', size: 2048, lastModified: '2026-02-01T00:00:00Z', isFolder: false, webUrl: 'https://example.com/budget.xlsx' },
       ];
       vi.mocked(repo.searchDriveItemsAsync).mockResolvedValue(mockItems);
 
@@ -99,16 +99,16 @@ describe('OneDriveTools', () => {
   describe('getDriveItem', () => {
     it('returns item details', async () => {
       const mockItem = {
-        id: 10, name: 'budget.xlsx', size: 2048, lastModified: '2026-02-01T00:00:00Z',
+        id: 'dr_item10', name: 'budget.xlsx', size: 2048, lastModified: '2026-02-01T00:00:00Z',
         isFolder: false, webUrl: 'https://example.com/budget.xlsx',
         mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
         createdBy: 'John Doe',
       };
       vi.mocked(repo.getDriveItemAsync).mockResolvedValue(mockItem);
 
-      const result = await tools.getDriveItem({ item_id: 10 });
+      const result = await tools.getDriveItem({ item_id: 'dr_item10' });
 
-      expect(repo.getDriveItemAsync).toHaveBeenCalledWith(10);
+      expect(repo.getDriveItemAsync).toHaveBeenCalledWith('dr_item10');
       const parsed = JSON.parse(result.content[0].text);
       expect(parsed.item).toEqual(mockItem);
     });
@@ -122,9 +122,9 @@ describe('OneDriveTools', () => {
     it('downloads and returns the saved path and size', async () => {
       vi.mocked(repo.downloadFileAsync).mockResolvedValue({ savedPath: '/tmp/report.pdf', size: 1024 });
 
-      const result = await tools.downloadFile({ item_id: 2, output_path: '/tmp/report.pdf' });
+      const result = await tools.downloadFile({ item_id: 'dr_item2', output_path: '/tmp/report.pdf' });
 
-      expect(repo.downloadFileAsync).toHaveBeenCalledWith(2, '/tmp/report.pdf');
+      expect(repo.downloadFileAsync).toHaveBeenCalledWith('dr_item2', '/tmp/report.pdf');
       const parsed = JSON.parse(result.content[0].text);
       expect(parsed.success).toBe(true);
       expect(parsed.savedPath).toBe('/tmp/report.pdf');
@@ -156,7 +156,7 @@ describe('OneDriveTools', () => {
 
   describe('confirmUploadFile', () => {
     it('uploads the file using stored metadata', async () => {
-      vi.mocked(repo.uploadFileAsync).mockResolvedValue(42);
+      vi.mocked(repo.uploadFileAsync).mockResolvedValue('dr_uploaded');
 
       const prepareResult = tools.prepareUploadFile({
         parent_path: 'Documents',
@@ -170,7 +170,7 @@ describe('OneDriveTools', () => {
       expect(repo.uploadFileAsync).toHaveBeenCalledWith('Documents', 'test.txt', '/tmp/test.txt');
       const parsed = JSON.parse(result.content[0].text);
       expect(parsed.success).toBe(true);
-      expect(parsed.item_id).toBe(42);
+      expect(parsed.item_id).toBe('dr_uploaded');
     });
 
     it('rejects invalid token', async () => {
@@ -182,7 +182,7 @@ describe('OneDriveTools', () => {
     });
 
     it('rejects already consumed token', async () => {
-      vi.mocked(repo.uploadFileAsync).mockResolvedValue(42);
+      vi.mocked(repo.uploadFileAsync).mockResolvedValue('dr_uploaded');
 
       const prepareResult = tools.prepareUploadFile({
         parent_path: 'Documents',
@@ -208,7 +208,7 @@ describe('OneDriveTools', () => {
   describe('listRecentFiles', () => {
     it('returns recent files', async () => {
       const mockItems = [
-        { id: 20, name: 'recent.docx', size: 512, lastModified: '2026-03-01T00:00:00Z', isFolder: false, webUrl: 'https://example.com/recent.docx' },
+        { id: 'dr_item20', name: 'recent.docx', size: 512, lastModified: '2026-03-01T00:00:00Z', isFolder: false, webUrl: 'https://example.com/recent.docx' },
       ];
       vi.mocked(repo.listRecentFilesAsync).mockResolvedValue(mockItems);
 
@@ -226,7 +226,7 @@ describe('OneDriveTools', () => {
   describe('listSharedWithMe', () => {
     it('returns shared files', async () => {
       const mockItems = [
-        { id: 30, name: 'shared.pptx', size: 4096, lastModified: '2026-03-02T00:00:00Z', isFolder: false, webUrl: 'https://example.com/shared.pptx' },
+        { id: 'dr_item30', name: 'shared.pptx', size: 4096, lastModified: '2026-03-02T00:00:00Z', isFolder: false, webUrl: 'https://example.com/shared.pptx' },
       ];
       vi.mocked(repo.listSharedWithMeAsync).mockResolvedValue(mockItems);
 
@@ -249,9 +249,9 @@ describe('OneDriveTools', () => {
         scope: 'anonymous',
       });
 
-      const result = await tools.createSharingLink({ item_id: 10, type: 'view', scope: 'anonymous' });
+      const result = await tools.createSharingLink({ item_id: 'dr_item10', type: 'view', scope: 'anonymous' });
 
-      expect(repo.createSharingLinkAsync).toHaveBeenCalledWith(10, 'view', 'anonymous');
+      expect(repo.createSharingLinkAsync).toHaveBeenCalledWith('dr_item10', 'view', 'anonymous');
       const parsed = JSON.parse(result.content[0].text);
       expect(parsed.success).toBe(true);
       expect(parsed.link.webUrl).toBe('https://example.com/share/abc');
@@ -266,9 +266,9 @@ describe('OneDriveTools', () => {
         scope: 'organization',
       });
 
-      const result = await tools.createSharingLink({ item_id: 10, type: 'edit', scope: 'organization' });
+      const result = await tools.createSharingLink({ item_id: 'dr_item10', type: 'edit', scope: 'organization' });
 
-      expect(repo.createSharingLinkAsync).toHaveBeenCalledWith(10, 'edit', 'organization');
+      expect(repo.createSharingLinkAsync).toHaveBeenCalledWith('dr_item10', 'edit', 'organization');
       const parsed = JSON.parse(result.content[0].text);
       expect(parsed.success).toBe(true);
       expect(parsed.link.type).toBe('edit');
@@ -282,12 +282,12 @@ describe('OneDriveTools', () => {
 
   describe('prepareDeleteDriveItem', () => {
     it('returns an approval token', () => {
-      const result = tools.prepareDeleteDriveItem({ item_id: 10 });
+      const result = tools.prepareDeleteDriveItem({ item_id: 'dr_item10' });
 
       const parsed = JSON.parse(result.content[0].text);
       expect(parsed.approval_token).toBeDefined();
       expect(parsed.expires_at).toBeDefined();
-      expect(parsed.item_id).toBe(10);
+      expect(parsed.item_id).toBe('dr_item10');
       expect(parsed.action).toContain('confirm_delete_drive_item');
     });
   });
@@ -296,12 +296,12 @@ describe('OneDriveTools', () => {
     it('deletes the drive item with valid token', async () => {
       vi.mocked(repo.deleteDriveItemAsync).mockResolvedValue(undefined);
 
-      const prepareResult = tools.prepareDeleteDriveItem({ item_id: 10 });
+      const prepareResult = tools.prepareDeleteDriveItem({ item_id: 'dr_item10' });
       const token = JSON.parse(prepareResult.content[0].text).approval_token;
 
       const result = await tools.confirmDeleteDriveItem({ approval_token: token });
 
-      expect(repo.deleteDriveItemAsync).toHaveBeenCalledWith(10);
+      expect(repo.deleteDriveItemAsync).toHaveBeenCalledWith('dr_item10');
       const parsed = JSON.parse(result.content[0].text);
       expect(parsed.success).toBe(true);
       expect(parsed.message).toBe('Drive item deleted');
@@ -318,7 +318,7 @@ describe('OneDriveTools', () => {
     it('rejects already consumed token', async () => {
       vi.mocked(repo.deleteDriveItemAsync).mockResolvedValue(undefined);
 
-      const prepareResult = tools.prepareDeleteDriveItem({ item_id: 10 });
+      const prepareResult = tools.prepareDeleteDriveItem({ item_id: 'dr_item10' });
       const token = JSON.parse(prepareResult.content[0].text).approval_token;
 
       await tools.confirmDeleteDriveItem({ approval_token: token });

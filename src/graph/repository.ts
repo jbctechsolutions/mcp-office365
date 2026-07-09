@@ -69,7 +69,6 @@ interface IdCache {
   onlineMeetings: Map<number, string>;
   recordings: Map<number, { meetingId: string; recordingId: string }>;
   transcripts: Map<number, { meetingId: string; transcriptId: string }>;
-  driveItems: Map<number, string>;
   sites: Map<number, string>;
   documentLibraries: Map<number, { siteId: string; driveId: string }>;
   libraryDriveItems: Map<number, { driveId: string; itemId: string }>;
@@ -110,7 +109,6 @@ export class GraphRepository implements IRepository {
     onlineMeetings: new Map(),
     recordings: new Map(),
     transcripts: new Map(),
-    driveItems: new Map(),
     sites: new Map(),
     documentLibraries: new Map(),
     libraryDriveItems: new Map(),
@@ -2904,33 +2902,28 @@ export class GraphRepository implements IRepository {
   // Excel Online (Workbook)
   // ===========================================================================
 
-  async listWorksheetsAsync(fileId: number): Promise<Record<string, unknown>[]> {
-    const driveItemId = this.idCache.driveItems.get(fileId);
-    if (driveItemId == null) throw new Error(`Drive item ID ${fileId} not found in cache. List OneDrive or SharePoint files first.`);
+  async listWorksheetsAsync(fileId: string): Promise<Record<string, unknown>[]> {
+    const driveItemId = this.toGraphId(fileId, 'driveItem');
     return await this.client.listWorksheets(driveItemId);
   }
 
-  async getWorksheetRangeAsync(fileId: number, worksheetName: string, range: string): Promise<Record<string, unknown>> {
-    const driveItemId = this.idCache.driveItems.get(fileId);
-    if (driveItemId == null) throw new Error(`Drive item ID ${fileId} not found in cache. List OneDrive or SharePoint files first.`);
+  async getWorksheetRangeAsync(fileId: string, worksheetName: string, range: string): Promise<Record<string, unknown>> {
+    const driveItemId = this.toGraphId(fileId, 'driveItem');
     return await this.client.getWorksheetRange(driveItemId, worksheetName, range);
   }
 
-  async getUsedRangeAsync(fileId: number, worksheetName: string): Promise<Record<string, unknown>> {
-    const driveItemId = this.idCache.driveItems.get(fileId);
-    if (driveItemId == null) throw new Error(`Drive item ID ${fileId} not found in cache. List OneDrive or SharePoint files first.`);
+  async getUsedRangeAsync(fileId: string, worksheetName: string): Promise<Record<string, unknown>> {
+    const driveItemId = this.toGraphId(fileId, 'driveItem');
     return await this.client.getUsedRange(driveItemId, worksheetName);
   }
 
-  async updateWorksheetRangeAsync(fileId: number, worksheetName: string, range: string, values: unknown[][]): Promise<Record<string, unknown>> {
-    const driveItemId = this.idCache.driveItems.get(fileId);
-    if (driveItemId == null) throw new Error(`Drive item ID ${fileId} not found in cache. List OneDrive or SharePoint files first.`);
+  async updateWorksheetRangeAsync(fileId: string, worksheetName: string, range: string, values: unknown[][]): Promise<Record<string, unknown>> {
+    const driveItemId = this.toGraphId(fileId, 'driveItem');
     return await this.client.updateWorksheetRange(driveItemId, worksheetName, range, values);
   }
 
-  async getTableDataAsync(fileId: number, tableName: string): Promise<Record<string, unknown>[]> {
-    const driveItemId = this.idCache.driveItems.get(fileId);
-    if (driveItemId == null) throw new Error(`Drive item ID ${fileId} not found in cache. List OneDrive or SharePoint files first.`);
+  async getTableDataAsync(fileId: string, tableName: string): Promise<Record<string, unknown>[]> {
+    const driveItemId = this.toGraphId(fileId, 'driveItem');
     return await this.client.getTableData(driveItemId, tableName);
   }
 
@@ -2940,22 +2933,19 @@ export class GraphRepository implements IRepository {
   /**
    * Lists files/folders in a drive folder (or root).
    */
-  async listDriveItemsAsync(folderId?: number): Promise<Array<{
-    id: number; name: string; size: number; lastModified: string;
+  async listDriveItemsAsync(folderId?: string): Promise<Array<{
+    id: string; name: string; size: number; lastModified: string;
     isFolder: boolean; webUrl: string;
   }>> {
-    let graphFolderId: string | undefined;
-    if (folderId != null) {
-      graphFolderId = this.idCache.driveItems.get(folderId);
-      if (graphFolderId == null) throw new Error(`Drive item ID ${folderId} not found in cache. Try listing drive items first.`);
-    }
+    const graphFolderId = folderId != null
+      ? this.toGraphId(folderId, 'driveItem')
+      : undefined;
     const items = await this.client.listDriveItems(graphFolderId);
+    // Rows carry self-encoding dr_ tokens (minted here) — no cache.
     return items.map((item) => {
       const itemId = item.id as string;
-      const numericId = hashStringToNumber(itemId);
-      this.idCache.driveItems.set(numericId, itemId);
       return {
-        id: numericId,
+        id: itemId.length > 0 ? mintSelfEncoded('driveItem', itemId) : '',
         name: (item.name as string | undefined) ?? '',
         size: (item.size as number | undefined) ?? 0,
         lastModified: (item.lastModifiedDateTime as string | undefined) ?? '',
@@ -2969,16 +2959,14 @@ export class GraphRepository implements IRepository {
    * Searches drive items by query.
    */
   async searchDriveItemsAsync(query: string, limit?: number): Promise<Array<{
-    id: number; name: string; size: number; lastModified: string;
+    id: string; name: string; size: number; lastModified: string;
     isFolder: boolean; webUrl: string;
   }>> {
     const items = await this.client.searchDriveItems(query, limit);
     return items.map((item) => {
       const itemId = item.id as string;
-      const numericId = hashStringToNumber(itemId);
-      this.idCache.driveItems.set(numericId, itemId);
       return {
-        id: numericId,
+        id: itemId.length > 0 ? mintSelfEncoded('driveItem', itemId) : '',
         name: (item.name as string | undefined) ?? '',
         size: (item.size as number | undefined) ?? 0,
         lastModified: (item.lastModifiedDateTime as string | undefined) ?? '',
@@ -2991,18 +2979,17 @@ export class GraphRepository implements IRepository {
   /**
    * Gets metadata for a specific drive item.
    */
-  async getDriveItemAsync(itemId: number): Promise<{
-    id: number; name: string; size: number; lastModified: string;
+  async getDriveItemAsync(itemId: string): Promise<{
+    id: string; name: string; size: number; lastModified: string;
     isFolder: boolean; webUrl: string; mimeType: string; createdBy: string;
   }> {
-    const graphId = this.idCache.driveItems.get(itemId);
-    if (graphId == null) throw new Error(`Drive item ID ${itemId} not found in cache. Try listing drive items first.`);
+    const graphId = this.toGraphId(itemId, 'driveItem');
     const item = await this.client.getDriveItem(graphId);
     const fileObj = item.file as Record<string, unknown> | undefined;
     const createdByObj = item.createdBy as Record<string, unknown> | undefined;
     const createdByUser = createdByObj?.user as Record<string, unknown> | undefined;
     return {
-      id: itemId,
+      id: mintSelfEncoded('driveItem', graphId),
       name: (item.name as string | undefined) ?? '',
       size: (item.size as number | undefined) ?? 0,
       lastModified: (item.lastModifiedDateTime as string | undefined) ?? '',
@@ -3016,9 +3003,8 @@ export class GraphRepository implements IRepository {
   /**
    * Downloads a drive item to a local file.
    */
-  async downloadFileAsync(itemId: number, outputPath: string): Promise<{ savedPath: string; size: number }> {
-    const graphId = this.idCache.driveItems.get(itemId);
-    if (graphId == null) throw new Error(`Drive item ID ${itemId} not found in cache. Try listing drive items first.`);
+  async downloadFileAsync(itemId: string, outputPath: string): Promise<{ savedPath: string; size: number }> {
+    const graphId = this.toGraphId(itemId, 'driveItem');
     const content = await this.client.downloadDriveItem(graphId);
     const buffer = Buffer.from(content);
     fs.writeFileSync(outputPath, buffer);
@@ -3028,29 +3014,25 @@ export class GraphRepository implements IRepository {
   /**
    * Uploads a local file to OneDrive.
    */
-  async uploadFileAsync(parentPath: string, fileName: string, localFilePath: string): Promise<number> {
+  async uploadFileAsync(parentPath: string, fileName: string, localFilePath: string): Promise<string> {
     const content = fs.readFileSync(localFilePath);
     const result = await this.client.uploadDriveItem(parentPath, fileName, content);
     const resultId = result.id as string;
-    const numericId = hashStringToNumber(resultId);
-    this.idCache.driveItems.set(numericId, resultId);
-    return numericId;
+    return mintSelfEncoded('driveItem', resultId);
   }
 
   /**
    * Lists recently accessed drive items.
    */
   async listRecentFilesAsync(): Promise<Array<{
-    id: number; name: string; size: number; lastModified: string;
+    id: string; name: string; size: number; lastModified: string;
     isFolder: boolean; webUrl: string;
   }>> {
     const items = await this.client.listRecentDriveItems();
     return items.map((item) => {
       const itemId = item.id as string;
-      const numericId = hashStringToNumber(itemId);
-      this.idCache.driveItems.set(numericId, itemId);
       return {
-        id: numericId,
+        id: itemId.length > 0 ? mintSelfEncoded('driveItem', itemId) : '',
         name: (item.name as string | undefined) ?? '',
         size: (item.size as number | undefined) ?? 0,
         lastModified: (item.lastModifiedDateTime as string | undefined) ?? '',
@@ -3064,16 +3046,14 @@ export class GraphRepository implements IRepository {
    * Lists drive items shared with the user.
    */
   async listSharedWithMeAsync(): Promise<Array<{
-    id: number; name: string; size: number; lastModified: string;
+    id: string; name: string; size: number; lastModified: string;
     isFolder: boolean; webUrl: string;
   }>> {
     const items = await this.client.listSharedWithMe();
     return items.map((item) => {
       const itemId = item.id as string;
-      const numericId = hashStringToNumber(itemId);
-      this.idCache.driveItems.set(numericId, itemId);
       return {
-        id: numericId,
+        id: itemId.length > 0 ? mintSelfEncoded('driveItem', itemId) : '',
         name: (item.name as string | undefined) ?? '',
         size: (item.size as number | undefined) ?? 0,
         lastModified: (item.lastModifiedDateTime as string | undefined) ?? '',
@@ -3086,11 +3066,10 @@ export class GraphRepository implements IRepository {
   /**
    * Creates a sharing link for a drive item.
    */
-  async createSharingLinkAsync(itemId: number, type: string, scope: string): Promise<{
+  async createSharingLinkAsync(itemId: string, type: string, scope: string): Promise<{
     webUrl: string; type: string; scope: string;
   }> {
-    const graphId = this.idCache.driveItems.get(itemId);
-    if (graphId == null) throw new Error(`Drive item ID ${itemId} not found in cache. Try listing drive items first.`);
+    const graphId = this.toGraphId(itemId, 'driveItem');
     const result = await this.client.createSharingLink(graphId, type, scope);
     const link = result.link as Record<string, unknown> | undefined;
     return {
@@ -3103,11 +3082,9 @@ export class GraphRepository implements IRepository {
   /**
    * Deletes a drive item.
    */
-  async deleteDriveItemAsync(itemId: number): Promise<void> {
-    const graphId = this.idCache.driveItems.get(itemId);
-    if (graphId == null) throw new Error(`Drive item ID ${itemId} not found in cache. Try listing drive items first.`);
+  async deleteDriveItemAsync(itemId: string): Promise<void> {
+    const graphId = this.toGraphId(itemId, 'driveItem');
     await this.client.deleteDriveItem(graphId);
-    this.idCache.driveItems.delete(itemId);
   }
 
   // ===========================================================================
