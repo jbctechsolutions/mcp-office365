@@ -27,11 +27,11 @@ declare module '../registry/types.js' {
 // =============================================================================
 
 export const ListCalendarPermissionsInput = z.strictObject({
-  calendar_id: z.number().int().positive().describe('Calendar ID'),
+  calendar_id: z.string().min(1).describe('Calendar ID'),
 });
 
 export const CreateCalendarPermissionInput = z.strictObject({
-  calendar_id: z.number().int().positive().describe('Calendar ID'),
+  calendar_id: z.string().min(1).describe('Calendar ID'),
   email_address: z.string().email().describe('Email of person to share with'),
   role: z.enum(['read', 'write', 'delegateWithoutPrivateEventAccess', 'delegateWithPrivateEventAccess']).describe('Permission level'),
 });
@@ -58,8 +58,8 @@ export type ConfirmDeleteCalendarPermissionParams = z.infer<typeof ConfirmDelete
 // =============================================================================
 
 export interface ICalendarPermissionsRepository {
-  listCalendarPermissionsAsync(calendarId: number): Promise<Array<{ id: number; emailAddress: string; role: string; isRemovable: boolean; isInsideOrganization: boolean }>>;
-  createCalendarPermissionAsync(calendarId: number, email: string, role: string): Promise<number>;
+  listCalendarPermissionsAsync(calendarId: string): Promise<Array<{ id: number; emailAddress: string; role: string; isRemovable: boolean; isInsideOrganization: boolean }>>;
+  createCalendarPermissionAsync(calendarId: string, email: string, role: string): Promise<number>;
   deleteCalendarPermissionAsync(permissionId: number): Promise<void>;
 }
 

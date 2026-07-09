@@ -45,7 +45,6 @@ import * as path from 'path';
  * Cache for mapping numeric IDs back to Graph string IDs.
  */
 interface IdCache {
-  folders: Map<number, string>;
   tasks: Map<number, { taskListId: string; taskId: string }>;
   taskLists: Map<number, string>;
   attachments: Map<number, { messageId: string; attachmentId: string }>;
@@ -54,7 +53,6 @@ interface IdCache {
   categories: Map<number, string>;
   focusedOverrides: Map<number, string>;
   calendarGroups: Map<number, string>;
-  calendars: Map<number, string>;
   calendarPermissions: Map<number, { calendarId: string; permissionId: string }>;
   teams: Map<number, string>;
   channels: Map<number, { teamId: string; channelId: string }>;
@@ -86,9 +84,8 @@ export class GraphRepository implements IRepository {
   private readonly client: GraphClient;
   private readonly store: StateStore | undefined;
   private readonly accountId: () => string;
-  private readonly deltaLinks: Map<number, string> = new Map();
+  private readonly deltaLinks: Map<string, string> = new Map();
   private readonly idCache: IdCache = {
-    folders: new Map(),
     tasks: new Map(),
     taskLists: new Map(),
     attachments: new Map(),
@@ -97,7 +94,6 @@ export class GraphRepository implements IRepository {
     categories: new Map(),
     focusedOverrides: new Map(),
     calendarGroups: new Map(),
-    calendars: new Map(),
     calendarPermissions: new Map(),
     teams: new Map(),
     channels: new Map(),
@@ -183,36 +179,17 @@ export class GraphRepository implements IRepository {
   }
 
   async listFoldersAsync(): Promise<FolderRow[]> {
+    // Rows carry self-encoding fd_ tokens (the mapper mints them) — no cache.
     const folders = await this.client.listMailFolders();
-
-    // Update ID cache
-    for (const folder of folders) {
-      if (folder.id != null) {
-        const numericId = hashStringToNumber(folder.id);
-        this.idCache.folders.set(numericId, folder.id);
-      }
-    }
-
     return folders.map(mapMailFolderToRow);
   }
 
-  getFolder(_id: number): FolderRow | undefined {
+  getFolder(_id: string): FolderRow | undefined {
     throw new Error('Use getFolderAsync() for Graph repository');
   }
 
-  async getFolderAsync(id: number): Promise<FolderRow | undefined> {
-    const graphId = this.idCache.folders.get(id);
-    if (graphId == null) {
-      // Try to find it by listing all folders
-      await this.listFoldersAsync();
-      const refreshedGraphId = this.idCache.folders.get(id);
-      if (refreshedGraphId == null) {
-        return undefined;
-      }
-      const folder = await this.client.getMailFolder(refreshedGraphId);
-      return folder != null ? mapMailFolderToRow(folder) : undefined;
-    }
-
+  async getFolderAsync(id: string): Promise<FolderRow | undefined> {
+    const graphId = this.toGraphId(id, 'folder');
     const folder = await this.client.getMailFolder(graphId);
     return folder != null ? mapMailFolderToRow(folder) : undefined;
   }
@@ -225,18 +202,8 @@ export class GraphRepository implements IRepository {
     throw new Error('Use listEmailsAsync() for Graph repository');
   }
 
-  async listEmailsAsync(folderId: number, limit: number, offset: number): Promise<EmailRow[]> {
-    const graphFolderId = this.idCache.folders.get(folderId);
-    if (graphFolderId == null) {
-      // Refresh folder cache
-      await this.listFoldersAsync();
-      const refreshedId = this.idCache.folders.get(folderId);
-      if (refreshedId == null) {
-        return [];
-      }
-      return this.listEmailsWithGraphId(refreshedId, limit, offset);
-    }
-
+  async listEmailsAsync(folderId: string, limit: number, offset: number): Promise<EmailRow[]> {
+    const graphFolderId = this.toGraphId(folderId, 'folder');
     return this.listEmailsWithGraphId(graphFolderId, limit, offset);
   }
 
@@ -250,17 +217,8 @@ export class GraphRepository implements IRepository {
     throw new Error('Use listUnreadEmailsAsync() for Graph repository');
   }
 
-  async listUnreadEmailsAsync(folderId: number, limit: number, offset: number): Promise<EmailRow[]> {
-    const graphFolderId = this.idCache.folders.get(folderId);
-    if (graphFolderId == null) {
-      await this.listFoldersAsync();
-      const refreshedId = this.idCache.folders.get(folderId);
-      if (refreshedId == null) {
-        return [];
-      }
-      return this.listUnreadEmailsWithGraphId(refreshedId, limit, offset);
-    }
-
+  async listUnreadEmailsAsync(folderId: string, limit: number, offset: number): Promise<EmailRow[]> {
+    const graphFolderId = this.toGraphId(folderId, 'folder');
     return this.listUnreadEmailsWithGraphId(graphFolderId, limit, offset);
   }
 
@@ -282,17 +240,8 @@ export class GraphRepository implements IRepository {
     throw new Error('Use searchEmailsInFolderAsync() for Graph repository');
   }
 
-  async searchEmailsInFolderAsync(folderId: number, query: string, limit: number): Promise<EmailRow[]> {
-    const graphFolderId = this.idCache.folders.get(folderId);
-    if (graphFolderId == null) {
-      await this.listFoldersAsync();
-      const refreshedId = this.idCache.folders.get(folderId);
-      if (refreshedId == null) {
-        return [];
-      }
-      return this.searchEmailsInFolderWithGraphId(refreshedId, query, limit);
-    }
-
+  async searchEmailsInFolderAsync(folderId: string, query: string, limit: number): Promise<EmailRow[]> {
+    const graphFolderId = this.toGraphId(folderId, 'folder');
     return this.searchEmailsInFolderWithGraphId(graphFolderId, query, limit);
   }
 
@@ -325,9 +274,8 @@ export class GraphRepository implements IRepository {
     }
   }
 
-  async checkNewEmailsAsync(folderId: number): Promise<{ emails: EmailRow[]; isInitialSync: boolean }> {
-    const graphFolderId = this.idCache.folders.get(folderId);
-    if (graphFolderId == null) throw new Error(`Folder ID ${folderId} not found in cache. Try searching for or listing the item first to refresh the cache.`);
+  async checkNewEmailsAsync(folderId: string): Promise<{ emails: EmailRow[]; isInitialSync: boolean }> {
+    const graphFolderId = this.toGraphId(folderId, 'folder');
 
     const existingDeltaLink = this.deltaLinks.get(folderId);
     const isInitialSync = existingDeltaLink == null;
@@ -371,18 +319,8 @@ export class GraphRepository implements IRepository {
     throw new Error('Use getUnreadCountByFolderAsync() for Graph repository');
   }
 
-  async getUnreadCountByFolderAsync(folderId: number): Promise<number> {
-    const graphId = this.idCache.folders.get(folderId);
-    if (graphId == null) {
-      await this.listFoldersAsync();
-      const refreshedId = this.idCache.folders.get(folderId);
-      if (refreshedId == null) {
-        return 0;
-      }
-      const folder = await this.client.getMailFolder(refreshedId);
-      return folder?.unreadItemCount ?? 0;
-    }
-
+  async getUnreadCountByFolderAsync(folderId: string): Promise<number> {
+    const graphId = this.toGraphId(folderId, 'folder');
     const folder = await this.client.getMailFolder(graphId);
     return folder?.unreadItemCount ?? 0;
   }
@@ -418,16 +356,8 @@ export class GraphRepository implements IRepository {
   }
 
   async listCalendarsAsync(): Promise<FolderRow[]> {
+    // Rows carry self-encoding fd_ tokens (the mapper mints them) — no cache.
     const calendars = await this.client.listCalendars();
-
-    for (const calendar of calendars) {
-      if (calendar.id != null) {
-        const numericId = hashStringToNumber(calendar.id);
-        this.idCache.folders.set(numericId, calendar.id);
-        this.idCache.calendars.set(numericId, calendar.id);
-      }
-    }
-
     return calendars.map(mapCalendarToFolderRow);
   }
 
@@ -445,12 +375,8 @@ export class GraphRepository implements IRepository {
     throw new Error('Use listEventsByFolderAsync() for Graph repository');
   }
 
-  async listEventsByFolderAsync(folderId: number, limit: number): Promise<EventRow[]> {
-    const graphCalendarId = this.idCache.folders.get(folderId);
-    if (graphCalendarId == null) {
-      return this.listEventsAsync(limit);
-    }
-
+  async listEventsByFolderAsync(folderId: string, limit: number): Promise<EventRow[]> {
+    const graphCalendarId = this.toGraphId(folderId, 'folder');
     const events = await this.client.listEvents(limit, graphCalendarId);
     return events.map((e) => mapEventToEventRow(e, graphCalendarId));
   }
@@ -755,16 +681,6 @@ export class GraphRepository implements IRepository {
   }
 
   /**
-   * Gets the Graph string ID from a numeric folder ID.
-   */
-  getGraphId(type: 'folder', numericId: number): string | undefined {
-    switch (type) {
-      case 'folder':
-        return this.idCache.folders.get(numericId);
-    }
-  }
-
-  /**
    * Gets task info from a numeric ID.
    */
   getTaskInfo(numericId: number): { taskListId: string; taskId: string } | undefined {
@@ -783,7 +699,7 @@ export class GraphRepository implements IRepository {
   // ===========================================================================
 
   // Sync versions throw — use async versions from index.ts handler
-  moveEmail(_emailId: number, _destinationFolderId: number): void {
+  moveEmail(_emailId: number, _destinationFolderId: string): void {
     throw new Error('Use moveEmailAsync() for Graph repository');
   }
   deleteEmail(_emailId: number): void {
@@ -807,28 +723,27 @@ export class GraphRepository implements IRepository {
   setEmailImportance(_emailId: number, _importance: string): void {
     throw new Error('Use setEmailImportanceAsync() for Graph repository');
   }
-  createFolder(_name: string, _parentFolderId?: number): FolderRow {
+  createFolder(_name: string, _parentFolderId?: string): FolderRow {
     throw new Error('Use createFolderAsync() for Graph repository');
   }
-  deleteFolder(_folderId: number): void {
+  deleteFolder(_folderId: string): void {
     throw new Error('Use deleteFolderAsync() for Graph repository');
   }
-  renameFolder(_folderId: number, _newName: string): void {
+  renameFolder(_folderId: string, _newName: string): void {
     throw new Error('Use renameFolderAsync() for Graph repository');
   }
-  moveFolder(_folderId: number, _destinationParentId: number): void {
+  moveFolder(_folderId: string, _destinationParentId: string): void {
     throw new Error('Use moveFolderAsync() for Graph repository');
   }
-  emptyFolder(_folderId: number): void {
+  emptyFolder(_folderId: string): void {
     throw new Error('Use emptyFolderAsync() for Graph repository');
   }
 
   // Async implementations
 
-  async moveEmailAsync(emailId: string | number, destinationFolderId: number): Promise<void> {
+  async moveEmailAsync(emailId: string | number, destinationFolderId: string): Promise<void> {
     const graphMessageId = this.toGraphId(emailId, 'message');
-    const graphFolderId = this.idCache.folders.get(destinationFolderId);
-    if (graphFolderId == null) throw new Error(`Folder ID ${destinationFolderId} not found in cache. Try searching for or listing the item first to refresh the cache.`);
+    const graphFolderId = this.toGraphId(destinationFolderId, 'folder');
     await this.client.moveMessage(graphMessageId, graphFolderId);
   }
 
@@ -874,46 +789,34 @@ export class GraphRepository implements IRepository {
     await this.client.updateMessage(graphId, { importance });
   }
 
-  async createFolderAsync(name: string, parentFolderId?: number): Promise<FolderRow> {
+  async createFolderAsync(name: string, parentFolderId?: string): Promise<FolderRow> {
     const graphParentId = parentFolderId != null
-      ? this.idCache.folders.get(parentFolderId)
+      ? this.toGraphId(parentFolderId, 'folder')
       : undefined;
 
-    const folder = await this.client.createMailFolder(name, graphParentId ?? undefined);
-
-    // Update cache with new folder
-    if (folder.id != null) {
-      const numericId = hashStringToNumber(folder.id);
-      this.idCache.folders.set(numericId, folder.id);
-    }
+    const folder = await this.client.createMailFolder(name, graphParentId);
 
     return mapMailFolderToRow(folder);
   }
 
-  async deleteFolderAsync(folderId: number): Promise<void> {
-    const graphId = this.idCache.folders.get(folderId);
-    if (graphId == null) throw new Error(`Folder ID ${folderId} not found in cache. Try searching for or listing the item first to refresh the cache.`);
+  async deleteFolderAsync(folderId: string): Promise<void> {
+    const graphId = this.toGraphId(folderId, 'folder');
     await this.client.deleteMailFolder(graphId);
-    this.idCache.folders.delete(folderId);
   }
 
-  async renameFolderAsync(folderId: number, newName: string): Promise<void> {
-    const graphId = this.idCache.folders.get(folderId);
-    if (graphId == null) throw new Error(`Folder ID ${folderId} not found in cache. Try searching for or listing the item first to refresh the cache.`);
+  async renameFolderAsync(folderId: string, newName: string): Promise<void> {
+    const graphId = this.toGraphId(folderId, 'folder');
     await this.client.renameMailFolder(graphId, newName);
   }
 
-  async moveFolderAsync(folderId: number, destinationParentId: number): Promise<void> {
-    const graphFolderId = this.idCache.folders.get(folderId);
-    const graphParentId = this.idCache.folders.get(destinationParentId);
-    if (graphFolderId == null) throw new Error(`Folder ID ${folderId} not found in cache. Try searching for or listing the item first to refresh the cache.`);
-    if (graphParentId == null) throw new Error(`Parent folder ID ${destinationParentId} not found in cache. Try searching for or listing the item first to refresh the cache.`);
+  async moveFolderAsync(folderId: string, destinationParentId: string): Promise<void> {
+    const graphFolderId = this.toGraphId(folderId, 'folder');
+    const graphParentId = this.toGraphId(destinationParentId, 'folder');
     await this.client.moveMailFolder(graphFolderId, graphParentId);
   }
 
-  async emptyFolderAsync(folderId: number): Promise<void> {
-    const graphId = this.idCache.folders.get(folderId);
-    if (graphId == null) throw new Error(`Folder ID ${folderId} not found in cache. Try searching for or listing the item first to refresh the cache.`);
+  async emptyFolderAsync(folderId: string): Promise<void> {
+    const graphId = this.toGraphId(folderId, 'folder');
     await this.client.emptyMailFolder(graphId);
   }
 
@@ -1263,7 +1166,7 @@ export class GraphRepository implements IRepository {
         numberOfOccurrences?: number;
       };
     };
-    calendarId?: number;
+    calendarId?: string;
     is_online_meeting?: boolean;
     online_meeting_provider?: string;
   }): Promise<string> {
@@ -1307,7 +1210,7 @@ export class GraphRepository implements IRepository {
     }
 
     const graphCalendarId = params.calendarId != null
-      ? this.idCache.folders.get(params.calendarId)
+      ? this.toGraphId(params.calendarId, 'folder')
       : undefined;
 
     const created = await this.client.createEvent(graphEvent, graphCalendarId);
@@ -2032,11 +1935,8 @@ export class GraphRepository implements IRepository {
   /**
    * Lists all permissions for a calendar.
    */
-  async listCalendarPermissionsAsync(calendarId: number): Promise<Array<{ id: number; emailAddress: string; role: string; isRemovable: boolean; isInsideOrganization: boolean }>> {
-    const graphCalendarId = this.idCache.calendars.get(calendarId);
-    if (graphCalendarId == null) {
-      throw new Error(`Calendar ID ${calendarId} not found in cache. Please call list_calendars first.`);
-    }
+  async listCalendarPermissionsAsync(calendarId: string): Promise<Array<{ id: number; emailAddress: string; role: string; isRemovable: boolean; isInsideOrganization: boolean }>> {
+    const graphCalendarId = this.toGraphId(calendarId, 'folder');
 
     const permissions = await this.client.listCalendarPermissions(graphCalendarId);
     return permissions.map((perm) => {
@@ -2056,11 +1956,8 @@ export class GraphRepository implements IRepository {
   /**
    * Creates a calendar permission (shares a calendar with someone).
    */
-  async createCalendarPermissionAsync(calendarId: number, email: string, role: string): Promise<number> {
-    const graphCalendarId = this.idCache.calendars.get(calendarId);
-    if (graphCalendarId == null) {
-      throw new Error(`Calendar ID ${calendarId} not found in cache. Please call list_calendars first.`);
-    }
+  async createCalendarPermissionAsync(calendarId: string, email: string, role: string): Promise<number> {
+    const graphCalendarId = this.toGraphId(calendarId, 'folder');
 
     const permission = await this.client.createCalendarPermission(graphCalendarId, {
       emailAddress: {
@@ -3350,10 +3247,10 @@ export class GraphRepository implements IRepository {
   }
 
   /**
-   * Gets the Graph string ID for a folder from the cache.
+   * Resolves a folder id (durable `fd_` token or raw Graph id) to its Graph id.
    */
-  getFolderGraphId(folderId: number): string | undefined {
-    return this.idCache.folders.get(folderId);
+  getFolderGraphId(folderId: string): string {
+    return this.toGraphId(folderId, 'folder');
   }
 }
 

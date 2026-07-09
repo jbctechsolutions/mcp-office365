@@ -193,53 +193,47 @@ describe('graph/repository', () => {
         const result = await repository.listFoldersAsync();
 
         expect(result).toHaveLength(2);
-        expect(result[0].id).toBe(hashStringToNumber('folder-1'));
+        // Rows carry self-encoding fd_ tokens (the mapper mints them, U5).
+        expect(result[0].id).toBe(mintSelfEncoded('folder', 'folder-1'));
         expect(result[0].name).toBe('Inbox');
-        expect(result[1].id).toBe(hashStringToNumber('folder-2'));
+        expect(result[1].id).toBe(mintSelfEncoded('folder', 'folder-2'));
       });
 
-      it('caches folder IDs for later retrieval', async () => {
+      it('emits durable fd_ tokens for returned folders (no cache)', async () => {
         mockClient.listMailFolders.mockResolvedValue([
           { id: 'folder-1', displayName: 'Inbox' },
         ]);
 
-        await repository.listFoldersAsync();
+        const result = await repository.listFoldersAsync();
 
-        const graphId = repository.getGraphId('folder', hashStringToNumber('folder-1'));
-        expect(graphId).toBe('folder-1');
+        // Cold resolve via the token itself — no prior list/cache needed.
+        expect(repository.getFolderGraphId(result[0].id)).toBe('folder-1');
       });
     });
 
     describe('getFolder (sync)', () => {
       it('throws error (sync not supported)', () => {
-        expect(() => repository.getFolder(123)).toThrow('Use getFolderAsync()');
+        expect(() => repository.getFolder('folder-1')).toThrow('Use getFolderAsync()');
       });
     });
 
     describe('getFolderAsync', () => {
-      it('returns folder by numeric ID', async () => {
-        mockClient.listMailFolders.mockResolvedValue([
-          { id: 'folder-1', displayName: 'Inbox' },
-        ]);
+      it('returns folder by durable fd_ token', async () => {
         mockClient.getMailFolder.mockResolvedValue({
           id: 'folder-1',
           displayName: 'Inbox',
           totalItemCount: 100,
         });
 
-        // First populate the cache
-        await repository.listFoldersAsync();
-
-        const result = await repository.getFolderAsync(hashStringToNumber('folder-1'));
+        const result = await repository.getFolderAsync(mintSelfEncoded('folder', 'folder-1'));
 
         expect(result?.name).toBe('Inbox');
       });
 
       it('returns undefined when folder not found', async () => {
-        mockClient.listMailFolders.mockResolvedValue([]);
         mockClient.getMailFolder.mockResolvedValue(null);
 
-        const result = await repository.getFolderAsync(99999);
+        const result = await repository.getFolderAsync(mintSelfEncoded('folder', 'nonexistent'));
 
         expect(result).toBeUndefined();
       });
@@ -254,30 +248,18 @@ describe('graph/repository', () => {
     });
 
     describe('listEmailsAsync', () => {
-      beforeEach(async () => {
-        // Set up folder cache
-        mockClient.listMailFolders.mockResolvedValue([
-          { id: 'folder-1', displayName: 'Inbox' },
-        ]);
-        await repository.listFoldersAsync();
-      });
-
-      it('returns mapped email rows', async () => {
+      it('resolves a folder fd_ token to the Graph id — no prior list/cache needed (cold state)', async () => {
         mockClient.listMessages.mockResolvedValue([
           { id: 'msg-1', subject: 'Test Email', isRead: true },
           { id: 'msg-2', subject: 'Another Email', isRead: false },
         ]);
 
-        const result = await repository.listEmailsAsync(hashStringToNumber('folder-1'), 50, 0);
+        const result = await repository.listEmailsAsync(mintSelfEncoded('folder', 'folder-1'), 50, 0);
 
+        expect(mockClient.listMessages).toHaveBeenCalledWith('folder-1', 50, 0);
         expect(result).toHaveLength(2);
         expect(result[0].subject).toBe('Test Email');
         expect(result[1].subject).toBe('Another Email');
-      });
-
-      it('returns empty array when folder not found', async () => {
-        const result = await repository.listEmailsAsync(99999, 50, 0);
-        expect(result).toEqual([]);
       });
     });
 
@@ -374,59 +356,23 @@ describe('graph/repository', () => {
     });
 
     describe('getUnreadCountByFolderAsync', () => {
-      it('returns unread count for cached folder', async () => {
-        // Populate folder cache
-        mockClient.listMailFolders.mockResolvedValue([
-          { id: 'folder-1', displayName: 'Inbox', unreadItemCount: 10 },
-        ]);
-        await repository.listFoldersAsync();
-
+      it('resolves a folder fd_ token — no prior list/cache needed (cold state)', async () => {
         mockClient.getMailFolder.mockResolvedValue({
           id: 'folder-1',
           displayName: 'Inbox',
           unreadItemCount: 10,
         });
 
-        const result = await repository.getUnreadCountByFolderAsync(hashStringToNumber('folder-1'));
+        const result = await repository.getUnreadCountByFolderAsync(mintSelfEncoded('folder', 'folder-1'));
 
         expect(result).toBe(10);
         expect(mockClient.getMailFolder).toHaveBeenCalledWith('folder-1');
       });
 
-      it('refreshes folders if folder not in cache', async () => {
-        // First call doesn't have the folder
-        mockClient.listMailFolders.mockResolvedValue([
-          { id: 'folder-1', displayName: 'Inbox', unreadItemCount: 5 },
-        ]);
-
-        mockClient.getMailFolder.mockResolvedValue({
-          id: 'folder-1',
-          displayName: 'Inbox',
-          unreadItemCount: 5,
-        });
-
-        const result = await repository.getUnreadCountByFolderAsync(hashStringToNumber('folder-1'));
-
-        expect(result).toBe(5);
-      });
-
-      it('returns 0 when folder not found after refresh', async () => {
-        mockClient.listMailFolders.mockResolvedValue([]);
-
-        const result = await repository.getUnreadCountByFolderAsync(99999);
-
-        expect(result).toBe(0);
-      });
-
       it('returns 0 when getMailFolder returns null', async () => {
-        mockClient.listMailFolders.mockResolvedValue([
-          { id: 'folder-1', displayName: 'Inbox' },
-        ]);
-        await repository.listFoldersAsync();
-
         mockClient.getMailFolder.mockResolvedValue(null);
 
-        const result = await repository.getUnreadCountByFolderAsync(hashStringToNumber('folder-1'));
+        const result = await repository.getUnreadCountByFolderAsync(mintSelfEncoded('folder', 'folder-1'));
 
         expect(result).toBe(0);
       });
@@ -439,56 +385,19 @@ describe('graph/repository', () => {
     });
 
     describe('searchEmailsInFolderAsync', () => {
-      beforeEach(async () => {
-        // Set up folder cache
-        mockClient.listMailFolders.mockResolvedValue([
-          { id: 'folder-1', displayName: 'Inbox' },
-        ]);
-        await repository.listFoldersAsync();
-      });
-
-      it('returns search results for cached folder', async () => {
+      it('resolves a folder fd_ token — no prior list/cache needed (cold state)', async () => {
         mockClient.searchMessagesInFolder.mockResolvedValue([
           { id: 'msg-1', subject: 'Match' },
         ]);
 
         const result = await repository.searchEmailsInFolderAsync(
-          hashStringToNumber('folder-1'),
+          mintSelfEncoded('folder', 'folder-1'),
           'Match',
           50
         );
 
         expect(result).toHaveLength(1);
         expect(mockClient.searchMessagesInFolder).toHaveBeenCalledWith('folder-1', 'Match', 50);
-      });
-
-      it('refreshes folders if folder not in cache', async () => {
-        // Create fresh repository
-        const freshRepo = createGraphRepository();
-        const freshClient = (freshRepo as any).client;
-
-        freshClient.listMailFolders.mockResolvedValue([
-          { id: 'folder-new', displayName: 'New Folder' },
-        ]);
-        freshClient.searchMessagesInFolder.mockResolvedValue([
-          { id: 'msg-1', subject: 'Found' },
-        ]);
-
-        const result = await freshRepo.searchEmailsInFolderAsync(
-          hashStringToNumber('folder-new'),
-          'query',
-          50
-        );
-
-        expect(result).toHaveLength(1);
-      });
-
-      it('returns empty array when folder not found', async () => {
-        mockClient.listMailFolders.mockResolvedValue([]);
-
-        const result = await repository.searchEmailsInFolderAsync(99999, 'query', 50);
-
-        expect(result).toEqual([]);
       });
     });
 
@@ -564,11 +473,7 @@ describe('graph/repository', () => {
 
   describe('Delta Sync', () => {
     describe('checkNewEmailsAsync', () => {
-      it('returns isInitialSync true on first call', async () => {
-        // Populate folder cache
-        mockClient.listMailFolders.mockResolvedValue([{ id: 'folder-delta', displayName: 'Inbox' }]);
-        await repository.listFoldersAsync();
-
+      it('returns isInitialSync true on first call — resolves a folder fd_ token cold (no cache)', async () => {
         mockClient.getMessagesDelta = vi.fn().mockResolvedValue({
           messages: [
             { id: 'msg-delta-1', subject: 'New Email', conversationId: 'conv-d1' },
@@ -576,7 +481,7 @@ describe('graph/repository', () => {
           deltaLink: 'https://graph.microsoft.com/v1.0/delta-token',
         });
 
-        const folderId = hashStringToNumber('folder-delta');
+        const folderId = mintSelfEncoded('folder', 'folder-delta');
         const result = await repository.checkNewEmailsAsync(folderId);
 
         expect(result.isInitialSync).toBe(true);
@@ -586,17 +491,13 @@ describe('graph/repository', () => {
       });
 
       it('returns isInitialSync false on subsequent calls and passes delta link', async () => {
-        // Populate folder cache
-        mockClient.listMailFolders.mockResolvedValue([{ id: 'folder-delta2', displayName: 'Inbox' }]);
-        await repository.listFoldersAsync();
-
         const deltaToken = 'https://graph.microsoft.com/v1.0/delta-token-1';
         mockClient.getMessagesDelta = vi.fn().mockResolvedValue({
           messages: [{ id: 'msg-d1', subject: 'First' }],
           deltaLink: deltaToken,
         });
 
-        const folderId = hashStringToNumber('folder-delta2');
+        const folderId = mintSelfEncoded('folder', 'folder-delta2');
         await repository.checkNewEmailsAsync(folderId);
 
         // Second call
@@ -610,15 +511,12 @@ describe('graph/repository', () => {
         expect(mockClient.getMessagesDelta).toHaveBeenCalledWith('folder-delta2', deltaToken);
       });
 
-      it('throws when folder not in cache', async () => {
-        await expect(repository.checkNewEmailsAsync(99999))
-          .rejects.toThrow('Folder ID 99999 not found in cache');
+      it('rejects a legacy numeric folder id on the Graph backend (NUMERIC_ID_UNSUPPORTED, D4)', async () => {
+        await expect(repository.checkNewEmailsAsync(99999 as unknown as string))
+          .rejects.toMatchObject({ code: 'NUMERIC_ID_UNSUPPORTED' });
       });
 
       it('filters out @removed messages', async () => {
-        mockClient.listMailFolders.mockResolvedValue([{ id: 'folder-rm', displayName: 'Inbox' }]);
-        await repository.listFoldersAsync();
-
         mockClient.getMessagesDelta = vi.fn().mockResolvedValue({
           messages: [
             { id: 'msg-active', subject: 'Active' },
@@ -627,16 +525,13 @@ describe('graph/repository', () => {
           deltaLink: 'https://graph.microsoft.com/v1.0/delta-rm',
         });
 
-        const folderId = hashStringToNumber('folder-rm');
+        const folderId = mintSelfEncoded('folder', 'folder-rm');
         const result = await repository.checkNewEmailsAsync(folderId);
         expect(result.emails).toHaveLength(1);
         expect(result.emails[0].subject).toBe('Active');
       });
 
       it('emits durable em_ tokens for returned messages (no cache)', async () => {
-        mockClient.listMailFolders.mockResolvedValue([{ id: 'folder-cache', displayName: 'Inbox' }]);
-        await repository.listFoldersAsync();
-
         mockClient.getMessagesDelta = vi.fn().mockResolvedValue({
           messages: [
             { id: 'msg-cache-1', subject: 'Cached', conversationId: 'conv-cache-1' },
@@ -644,7 +539,7 @@ describe('graph/repository', () => {
           deltaLink: 'https://graph.microsoft.com/v1.0/delta-cache',
         });
 
-        const folderId = hashStringToNumber('folder-cache');
+        const folderId = mintSelfEncoded('folder', 'folder-cache');
         const result = await repository.checkNewEmailsAsync(folderId);
 
         expect(result.emails[0].id).toBe(mintSelfEncoded('message', 'msg-cache-1'));
@@ -766,31 +661,20 @@ describe('graph/repository', () => {
     });
 
     describe('listEventsByFolderAsync', () => {
-      it('returns events for cached calendar ID', async () => {
-        // Populate calendar cache
-        mockClient.listCalendars.mockResolvedValue([
-          { id: 'cal-1', name: 'Work' },
-        ]);
-        await repository.listCalendarsAsync();
-
+      it('resolves a calendar fd_ token — no prior list/cache needed (cold state)', async () => {
         mockClient.listEvents.mockResolvedValue([
           { id: 'evt-1', subject: 'Work Meeting' },
         ]);
 
-        const result = await repository.listEventsByFolderAsync(hashStringToNumber('cal-1'), 50);
+        const result = await repository.listEventsByFolderAsync(mintSelfEncoded('folder', 'cal-1'), 50);
 
         expect(result).toHaveLength(1);
         expect(mockClient.listEvents).toHaveBeenCalledWith(50, 'cal-1');
       });
 
-      it('falls back to all events when calendar not found', async () => {
-        mockClient.listEvents.mockResolvedValue([
-          { id: 'evt-1', subject: 'Meeting' },
-        ]);
-
-        const result = await repository.listEventsByFolderAsync(99999, 50);
-
-        expect(result).toHaveLength(1);
+      it('rejects a legacy numeric calendar id on the Graph backend (NUMERIC_ID_UNSUPPORTED, D4)', async () => {
+        await expect(repository.listEventsByFolderAsync(99999 as unknown as string, 50))
+          .rejects.toMatchObject({ code: 'NUMERIC_ID_UNSUPPORTED' });
       });
     });
 
@@ -1115,42 +999,25 @@ describe('graph/repository', () => {
 
   describe('Write Operations (Async)', () => {
     describe('moveEmailAsync', () => {
-      it('moves message using cached IDs', async () => {
-        // Populate caches
-        mockClient.listMailFolders.mockResolvedValue([
-          { id: 'folder-dest', displayName: 'Archive' },
-        ]);
-        await repository.listFoldersAsync();
-
-        mockClient.searchMessages.mockResolvedValue([
-          { id: 'msg-1', subject: 'Test' },
-        ]);
-        await repository.searchEmailsAsync('Test', 50);
-
+      it('resolves the message and folder tokens — no prior list/cache needed (cold state)', async () => {
         mockClient.moveMessage.mockResolvedValue(undefined);
 
         await repository.moveEmailAsync(
           mintSelfEncoded('message', 'msg-1'),
-          hashStringToNumber('folder-dest')
+          mintSelfEncoded('folder', 'folder-dest')
         );
 
         expect(mockClient.moveMessage).toHaveBeenCalledWith('msg-1', 'folder-dest');
       });
 
       it('throws when message ID not in cache', async () => {
-        await expect(repository.moveEmailAsync(99999, 88888)).rejects.toMatchObject({ code: 'NUMERIC_ID_UNSUPPORTED' });
+        await expect(repository.moveEmailAsync(99999, 'folder-dest')).rejects.toMatchObject({ code: 'NUMERIC_ID_UNSUPPORTED' });
       });
 
-      it('throws when folder ID not in cache', async () => {
-        // Populate message cache only
-        mockClient.searchMessages.mockResolvedValue([
-          { id: 'msg-1', subject: 'Test' },
-        ]);
-        await repository.searchEmailsAsync('Test', 50);
-
+      it('rejects a legacy numeric destination folder id on the Graph backend (NUMERIC_ID_UNSUPPORTED, D4)', async () => {
         await expect(
-          repository.moveEmailAsync(mintSelfEncoded('message', 'msg-1'), 99999)
-        ).rejects.toThrow('Folder ID 99999 not found in cache. Try searching for or listing the item first to refresh the cache.');
+          repository.moveEmailAsync(mintSelfEncoded('message', 'msg-1'), 99999 as unknown as string)
+        ).rejects.toMatchObject({ code: 'NUMERIC_ID_UNSUPPORTED' });
       });
     });
 
@@ -1174,7 +1041,7 @@ describe('graph/repository', () => {
     });
 
     describe('createFolderAsync', () => {
-      it('creates folder and caches the result', async () => {
+      it('creates a folder and returns a row carrying a durable fd_ token', async () => {
         mockClient.createMailFolder.mockResolvedValue({
           id: 'new-folder-id',
           displayName: 'New Folder',
@@ -1186,9 +1053,9 @@ describe('graph/repository', () => {
 
         expect(result.name).toBe('New Folder');
         expect(mockClient.createMailFolder).toHaveBeenCalledWith('New Folder', undefined);
-        // Verify it was cached
-        const graphId = repository.getGraphId('folder', hashStringToNumber('new-folder-id'));
-        expect(graphId).toBe('new-folder-id');
+        // The mapper mints the fd_ token — no cache needed to resolve it (cold state).
+        expect(result.id).toBe(mintSelfEncoded('folder', 'new-folder-id'));
+        expect(repository.getFolderGraphId(result.id)).toBe('new-folder-id');
       });
     });
   });
@@ -1669,7 +1536,7 @@ describe('graph/repository', () => {
 
   describe('Folder Write Operations (Async)', () => {
     describe('createFolderAsync', () => {
-      it('calls createMailFolder and caches the new folder', async () => {
+      it('calls createMailFolder and returns a row carrying a durable fd_ token', async () => {
         mockClient.createMailFolder.mockResolvedValue({
           id: 'folder-new',
           displayName: 'Reports',
@@ -1682,20 +1549,11 @@ describe('graph/repository', () => {
 
         expect(mockClient.createMailFolder).toHaveBeenCalledWith('Reports', undefined);
         expect(result.name).toBe('Reports');
-        expect(result.id).toBe(hashStringToNumber('folder-new'));
-
-        // Verify cache was updated
-        const graphId = repository.getGraphId('folder', result.id);
-        expect(graphId).toBe('folder-new');
+        expect(result.id).toBe(mintSelfEncoded('folder', 'folder-new'));
+        expect(repository.getFolderGraphId(result.id)).toBe('folder-new');
       });
 
-      it('passes parent folder graph ID when parentFolderId provided', async () => {
-        // Populate folder cache
-        mockClient.listMailFolders.mockResolvedValue([
-          { id: 'parent-folder', displayName: 'Parent', totalItemCount: 0, unreadItemCount: 0 },
-        ]);
-        await repository.listFoldersAsync();
-
+      it('passes parent folder graph ID when parentFolderId provided — cold resolve, no cache needed', async () => {
         mockClient.createMailFolder.mockResolvedValue({
           id: 'sub-folder',
           displayName: 'SubFolder',
@@ -1704,115 +1562,82 @@ describe('graph/repository', () => {
           unreadItemCount: 0,
         });
 
-        await repository.createFolderAsync('SubFolder', hashStringToNumber('parent-folder'));
+        await repository.createFolderAsync('SubFolder', mintSelfEncoded('folder', 'parent-folder'));
 
         expect(mockClient.createMailFolder).toHaveBeenCalledWith('SubFolder', 'parent-folder');
       });
     });
 
     describe('deleteFolderAsync', () => {
-      it('calls deleteMailFolder and removes from cache', async () => {
-        // Populate folder cache
-        mockClient.listMailFolders.mockResolvedValue([
-          { id: 'folder-del', displayName: 'ToDelete', totalItemCount: 0, unreadItemCount: 0 },
-        ]);
-        await repository.listFoldersAsync();
-
+      it('calls deleteMailFolder — cold resolve, no cache needed', async () => {
         mockClient.deleteMailFolder.mockResolvedValue(undefined);
 
-        const numericId = hashStringToNumber('folder-del');
-        await repository.deleteFolderAsync(numericId);
+        await repository.deleteFolderAsync(mintSelfEncoded('folder', 'folder-del'));
 
         expect(mockClient.deleteMailFolder).toHaveBeenCalledWith('folder-del');
-        expect(repository.getGraphId('folder', numericId)).toBeUndefined();
       });
 
-      it('throws if folder not in cache', async () => {
+      it('rejects a legacy numeric folder id on the Graph backend (NUMERIC_ID_UNSUPPORTED, D4)', async () => {
         await expect(
-          repository.deleteFolderAsync(99999)
-        ).rejects.toThrow('Folder ID 99999 not found in cache. Try searching for or listing the item first to refresh the cache.');
+          repository.deleteFolderAsync(99999 as unknown as string)
+        ).rejects.toMatchObject({ code: 'NUMERIC_ID_UNSUPPORTED' });
       });
     });
 
     describe('renameFolderAsync', () => {
-      it('calls renameMailFolder with the correct graph ID', async () => {
-        // Populate folder cache
-        mockClient.listMailFolders.mockResolvedValue([
-          { id: 'folder-ren', displayName: 'OldName', totalItemCount: 0, unreadItemCount: 0 },
-        ]);
-        await repository.listFoldersAsync();
-
+      it('calls renameMailFolder with the correct graph ID — cold resolve, no cache needed', async () => {
         mockClient.renameMailFolder.mockResolvedValue(undefined);
 
-        await repository.renameFolderAsync(hashStringToNumber('folder-ren'), 'NewName');
+        await repository.renameFolderAsync(mintSelfEncoded('folder', 'folder-ren'), 'NewName');
 
         expect(mockClient.renameMailFolder).toHaveBeenCalledWith('folder-ren', 'NewName');
       });
 
-      it('throws if folder not in cache', async () => {
+      it('rejects a legacy numeric folder id on the Graph backend (NUMERIC_ID_UNSUPPORTED, D4)', async () => {
         await expect(
-          repository.renameFolderAsync(99999, 'NewName')
-        ).rejects.toThrow('Folder ID 99999 not found in cache. Try searching for or listing the item first to refresh the cache.');
+          repository.renameFolderAsync(99999 as unknown as string, 'NewName')
+        ).rejects.toMatchObject({ code: 'NUMERIC_ID_UNSUPPORTED' });
       });
     });
 
     describe('moveFolderAsync', () => {
-      it('calls moveMailFolder with correct graph IDs', async () => {
-        // Populate folder cache with both folders
-        mockClient.listMailFolders.mockResolvedValue([
-          { id: 'folder-src', displayName: 'Source', totalItemCount: 0, unreadItemCount: 0 },
-          { id: 'folder-dest', displayName: 'Destination', totalItemCount: 0, unreadItemCount: 0 },
-        ]);
-        await repository.listFoldersAsync();
-
+      it('calls moveMailFolder with correct graph IDs — cold resolve, no cache needed', async () => {
         mockClient.moveMailFolder.mockResolvedValue(undefined);
 
         await repository.moveFolderAsync(
-          hashStringToNumber('folder-src'),
-          hashStringToNumber('folder-dest')
+          mintSelfEncoded('folder', 'folder-src'),
+          mintSelfEncoded('folder', 'folder-dest')
         );
 
         expect(mockClient.moveMailFolder).toHaveBeenCalledWith('folder-src', 'folder-dest');
       });
 
-      it('throws if source folder not in cache', async () => {
+      it('rejects a legacy numeric source folder id on the Graph backend (NUMERIC_ID_UNSUPPORTED, D4)', async () => {
         await expect(
-          repository.moveFolderAsync(99999, 88888)
-        ).rejects.toThrow('Folder ID 99999 not found in cache. Try searching for or listing the item first to refresh the cache.');
+          repository.moveFolderAsync(99999 as unknown as string, mintSelfEncoded('folder', 'folder-dest'))
+        ).rejects.toMatchObject({ code: 'NUMERIC_ID_UNSUPPORTED' });
       });
 
-      it('throws if destination folder not in cache', async () => {
-        // Populate only the source folder
-        mockClient.listMailFolders.mockResolvedValue([
-          { id: 'folder-only', displayName: 'Source', totalItemCount: 0, unreadItemCount: 0 },
-        ]);
-        await repository.listFoldersAsync();
-
+      it('rejects a legacy numeric destination folder id on the Graph backend (NUMERIC_ID_UNSUPPORTED, D4)', async () => {
         await expect(
-          repository.moveFolderAsync(hashStringToNumber('folder-only'), 88888)
-        ).rejects.toThrow('Parent folder ID 88888 not found in cache. Try searching for or listing the item first to refresh the cache.');
+          repository.moveFolderAsync(mintSelfEncoded('folder', 'folder-only'), 88888 as unknown as string)
+        ).rejects.toMatchObject({ code: 'NUMERIC_ID_UNSUPPORTED' });
       });
     });
 
     describe('emptyFolderAsync', () => {
-      it('calls emptyMailFolder with the correct graph ID', async () => {
-        // Populate folder cache
-        mockClient.listMailFolders.mockResolvedValue([
-          { id: 'folder-empty', displayName: 'Trash', totalItemCount: 5, unreadItemCount: 0 },
-        ]);
-        await repository.listFoldersAsync();
-
+      it('calls emptyMailFolder with the correct graph ID — cold resolve, no cache needed', async () => {
         mockClient.emptyMailFolder.mockResolvedValue(undefined);
 
-        await repository.emptyFolderAsync(hashStringToNumber('folder-empty'));
+        await repository.emptyFolderAsync(mintSelfEncoded('folder', 'folder-empty'));
 
         expect(mockClient.emptyMailFolder).toHaveBeenCalledWith('folder-empty');
       });
 
-      it('throws if folder not in cache', async () => {
+      it('rejects a legacy numeric folder id on the Graph backend (NUMERIC_ID_UNSUPPORTED, D4)', async () => {
         await expect(
-          repository.emptyFolderAsync(99999)
-        ).rejects.toThrow('Folder ID 99999 not found in cache. Try searching for or listing the item first to refresh the cache.');
+          repository.emptyFolderAsync(99999 as unknown as string)
+        ).rejects.toMatchObject({ code: 'NUMERIC_ID_UNSUPPORTED' });
       });
     });
   });
@@ -2216,13 +2041,7 @@ describe('graph/repository', () => {
         expect(callArgs.recurrence).toEqual(recurrence);
       });
 
-      it('passes calendarId when provided', async () => {
-        // Populate folder cache with a calendar ID
-        mockClient.listCalendars.mockResolvedValue([
-          { id: 'cal-work', name: 'Work Calendar' },
-        ]);
-        await repository.listCalendarsAsync();
-
+      it('passes calendarId when provided — cold resolve, no cache needed', async () => {
         mockClient.createEvent.mockResolvedValue({ id: 'event-cal' });
 
         await repository.createEventAsync({
@@ -2230,7 +2049,7 @@ describe('graph/repository', () => {
           start: '2026-03-01T10:00:00',
           end: '2026-03-01T11:00:00',
           timezone: 'UTC',
-          calendarId: hashStringToNumber('cal-work'),
+          calendarId: mintSelfEncoded('folder', 'cal-work'),
         });
 
         expect(mockClient.createEvent).toHaveBeenCalledWith(
@@ -3027,12 +2846,18 @@ describe('graph/repository', () => {
       });
     });
 
-    describe('getGraphId', () => {
-      it('returns undefined when ID not cached', () => {
-        expect(repository.getGraphId('folder', 99999)).toBeUndefined();
-        // 'message', 'event' and 'contact' were removed from getGraphId in U5b —
-        // they resolve via durable self-encoding tokens through toGraphId, not
-        // the numeric idCache.
+    describe('getFolderGraphId', () => {
+      // getGraphId was removed entirely in U5b-2 — 'folder' (the last remaining
+      // case) now resolves via the durable self-encoding fd_ token through
+      // toGraphId, same as 'message', 'event', and 'contact' before it.
+      it('resolves a folder fd_ token to its Graph id — cold state, no cache needed', () => {
+        expect(repository.getFolderGraphId(mintSelfEncoded('folder', 'folder-1'))).toBe('folder-1');
+      });
+
+      it('rejects a legacy numeric folder id (NUMERIC_ID_UNSUPPORTED, D4)', () => {
+        expect(() => repository.getFolderGraphId(99999 as unknown as string)).toThrowError(
+          expect.objectContaining({ code: 'NUMERIC_ID_UNSUPPORTED' })
+        );
       });
     });
 
@@ -3506,22 +3331,8 @@ describe('graph/repository', () => {
     const numericId = hashStringToNumber(graphMsgId);
     const token = mintSelfEncoded('message', graphMsgId);
 
-    // Helper to populate the message cache by listing emails in a folder
-    async function populateMessageCache(): Promise<void> {
-      const folderId = 'folder-inbox';
-      const folderNumericId = hashStringToNumber(folderId);
-      mockClient.listMailFolders.mockResolvedValue([
-        { id: folderId, displayName: 'Inbox', totalItemCount: 1, unreadItemCount: 0 },
-      ]);
-      mockClient.listMessages.mockResolvedValue([
-        { id: graphMsgId, subject: 'Test', from: { emailAddress: { address: 'a@b.com' } }, receivedDateTime: '2026-01-01T00:00:00Z', isRead: false, hasAttachments: false, importance: 'normal', flag: { flagStatus: 'notFlagged' } },
-      ]);
-      await repository.listEmailsAsync(folderNumericId, 10, 0);
-    }
-
     describe('getMessageHeadersAsync', () => {
-      it('returns internet message headers for a cached email', async () => {
-        await populateMessageCache();
+      it('returns internet message headers — resolves the em_ token cold, no cache needed', async () => {
         const mockHeaders = [
           { name: 'Received', value: 'from mx.example.com' },
           { name: 'Authentication-Results', value: 'spf=pass' },
@@ -3542,8 +3353,7 @@ describe('graph/repository', () => {
     });
 
     describe('getMessageMimeAsync', () => {
-      it('downloads MIME content and returns file path', async () => {
-        await populateMessageCache();
+      it('downloads MIME content and returns file path — resolves the em_ token cold, no cache needed', async () => {
         const mimeContent = 'MIME-Version: 1.0\r\nContent-Type: text/plain\r\n\r\nHello';
         mockClient.getMessageMime.mockResolvedValue(mimeContent);
 

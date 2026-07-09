@@ -19,7 +19,7 @@ import { createHash } from 'node:crypto';
 export function hashEmailForApproval(email: {
   id: string | number;
   subject: string | null;
-  folderId: number;
+  folderId: string;
   timeReceived: number | null;
 }): string {
   return createHash('sha256')
@@ -33,7 +33,7 @@ export function hashEmailForApproval(email: {
  * Used to detect if the folder changed between prepare and confirm.
  */
 export function hashFolderForApproval(folder: {
-  id: number;
+  id: string;
   name: string | null;
   messageCount: number;
 }): string {

@@ -68,7 +68,8 @@ describe('graph/mappers/email-mapper', () => {
 
       const result = mapMessageToEmailRow(message, 'folder-override');
 
-      expect(result.folderId).toBe(hashStringToNumber('folder-override'));
+      // folderId is now a durable self-encoding fd_ token (U5).
+      expect(result.folderId).toBe(mintSelfEncoded('folder', 'folder-override'));
     });
 
     it('uses parentFolderId when folderId not provided', () => {
@@ -79,7 +80,7 @@ describe('graph/mappers/email-mapper', () => {
 
       const result = mapMessageToEmailRow(message);
 
-      expect(result.folderId).toBe(hashStringToNumber('folder-parent'));
+      expect(result.folderId).toBe(mintSelfEncoded('folder', 'folder-parent'));
     });
 
     it('handles message with null id', () => {
@@ -301,7 +302,7 @@ describe('graph/mappers/email-mapper', () => {
       expect(result.categories).toBeNull();
     });
 
-    it('handles folderId 0 when no folder info', () => {
+    it('handles empty folderId when no folder info', () => {
       const message: MicrosoftGraph.Message = {
         id: 'msg-123',
         parentFolderId: undefined,
@@ -309,7 +310,7 @@ describe('graph/mappers/email-mapper', () => {
 
       const result = mapMessageToEmailRow(message);
 
-      expect(result.folderId).toBe(0);
+      expect(result.folderId).toBe('');
     });
   });
 });

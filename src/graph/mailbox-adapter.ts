@@ -19,12 +19,12 @@ export class GraphMailboxAdapter implements IMailboxRepository {
     return this.graph.getEmailAsync(id);
   }
 
-  getFolder(id: number): Promise<FolderRow | undefined> {
+  getFolder(id: string): Promise<FolderRow | undefined> {
     return this.graph.getFolderAsync(id);
   }
 
   // Email organization
-  moveEmail(emailId: string | number, destinationFolderId: number): Promise<void> {
+  moveEmail(emailId: string | number, destinationFolderId: string): Promise<void> {
     return this.graph.moveEmailAsync(emailId, destinationFolderId);
   }
 
@@ -57,23 +57,23 @@ export class GraphMailboxAdapter implements IMailboxRepository {
   }
 
   // Folder management
-  createFolder(name: string, parentFolderId?: number): Promise<FolderRow> {
+  createFolder(name: string, parentFolderId?: string): Promise<FolderRow> {
     return this.graph.createFolderAsync(name, parentFolderId);
   }
 
-  deleteFolder(folderId: number): Promise<void> {
+  deleteFolder(folderId: string): Promise<void> {
     return this.graph.deleteFolderAsync(folderId);
   }
 
-  renameFolder(folderId: number, newName: string): Promise<void> {
+  renameFolder(folderId: string, newName: string): Promise<void> {
     return this.graph.renameFolderAsync(folderId, newName);
   }
 
-  moveFolder(folderId: number, destinationParentId: number): Promise<void> {
+  moveFolder(folderId: string, destinationParentId: string): Promise<void> {
     return this.graph.moveFolderAsync(folderId, destinationParentId);
   }
 
-  emptyFolder(folderId: number): Promise<void> {
+  emptyFolder(folderId: string): Promise<void> {
     return this.graph.emptyFolderAsync(folderId);
   }
 }

@@ -41,7 +41,7 @@ export const CreateMailRuleInput = z.strictObject({
     importance: z.enum(['low', 'normal', 'high']).optional().describe('Match importance level'),
   }).describe('Conditions that trigger the rule'),
   actions: z.strictObject({
-    move_to_folder: z.number().int().positive().optional().describe('Folder ID to move to'),
+    move_to_folder: z.string().min(1).optional().describe('Folder ID to move to'),
     mark_as_read: z.boolean().optional().describe('Mark as read'),
     mark_importance: z.enum(['low', 'normal', 'high']).optional().describe('Set importance'),
     forward_to: z.array(z.string().email()).optional().describe('Forward to these addresses'),
@@ -75,8 +75,8 @@ export interface IMailRulesRepository {
   listMailRulesAsync(): Promise<Array<{ id: number; displayName: string; sequence: number; isEnabled: boolean; conditions: unknown; actions: unknown }>>;
   createMailRuleAsync(rule: Record<string, unknown>): Promise<number>;
   deleteMailRuleAsync(ruleId: number): Promise<void>;
-  /** Resolve a numeric folder ID to the Graph string ID for move_to_folder action. */
-  getFolderGraphId(folderId: number): string | undefined;
+  /** Resolve a folder ID (durable `fd_` token or raw Graph id) for move_to_folder action. */
+  getFolderGraphId(folderId: string): string;
 }
 
 // =============================================================================
@@ -131,9 +131,7 @@ export class MailRulesTools {
     // Build actions
     const actions: Record<string, unknown> = {};
     if (params.actions.move_to_folder != null) {
-      const folderId = this.repo.getFolderGraphId(params.actions.move_to_folder);
-      if (folderId == null) throw new Error(`Folder ID ${params.actions.move_to_folder} not found in cache. Try listing folders first.`);
-      actions['moveToFolder'] = folderId;
+      actions['moveToFolder'] = this.repo.getFolderGraphId(params.actions.move_to_folder);
     }
     if (params.actions.mark_as_read != null) actions['markAsRead'] = params.actions.mark_as_read;
     if (params.actions.mark_importance != null) actions['markImportance'] = params.actions.mark_importance;

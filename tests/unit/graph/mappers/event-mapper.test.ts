@@ -10,7 +10,6 @@
 import { describe, it, expect } from 'vitest';
 import type * as MicrosoftGraph from '@microsoft/microsoft-graph-types';
 import { mapEventToEventRow } from '../../../../src/graph/mappers/event-mapper.js';
-import { hashStringToNumber } from '../../../../src/graph/mappers/utils.js';
 import { mintSelfEncoded, parseToken } from '../../../../src/ids/token.js';
 
 describe('graph/mappers/event-mapper', () => {
@@ -37,7 +36,8 @@ describe('graph/mappers/event-mapper', () => {
       // id is now a durable self-encoding ev_ token carrying the Graph id (U5).
       expect(result.id).toBe(mintSelfEncoded('event', 'event-123'));
       expect(parseToken(result.id as string)?.graphId).toBe('event-123');
-      expect(result.folderId).toBe(hashStringToNumber('calendar-456'));
+      // folderId is now a durable self-encoding fd_ token (U5).
+      expect(result.folderId).toBe(mintSelfEncoded('folder', 'calendar-456'));
       expect(result.isRecurring).toBe(1);
       expect(result.hasReminder).toBe(1);
       expect(result.attendeeCount).toBe(2);
@@ -64,7 +64,7 @@ describe('graph/mappers/event-mapper', () => {
 
       const result = mapEventToEventRow(event);
 
-      expect(result.folderId).toBe(0);
+      expect(result.folderId).toBe('');
     });
 
     it('handles non-recurring event', () => {
