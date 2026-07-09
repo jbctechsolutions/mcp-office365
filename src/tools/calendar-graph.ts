@@ -41,9 +41,9 @@ function jsonResult(data: unknown): ToolResult {
  * backend's `list_calendars` tool.
  */
 function transformFolderRow(row: FolderRow): {
-  id: number;
+  id: string;
   name: string;
-  parentId: number | null;
+  parentId: string | null;
   specialType: number;
   folderType: number;
   accountId: number;
@@ -68,7 +68,7 @@ function transformFolderRow(row: FolderRow): {
  */
 function transformGraphEventRow(row: EventRow): {
   id: string | number;
-  folderId: number | null;
+  folderId: string;
   title: string | null;
   startDate: string | null;
   endDate: string | null;

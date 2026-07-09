@@ -18,9 +18,11 @@ import { isoToAppleTimestamp } from '../utils/dates.js';
 // =============================================================================
 
 export interface FolderRow {
-  readonly id: number;
+  // Durable self-encoding string token (`fd_…`) carrying the immutable Graph
+  // folder/calendar id (U5). Graph-only — string, not a legacy numeric union.
+  readonly id: string;
   readonly name: string | null;
-  readonly parentId: number | null;
+  readonly parentId: string | null;
   readonly specialType: number;
   readonly folderType: number;
   readonly accountId: number;
@@ -32,7 +34,8 @@ export interface EmailRow {
   // Durable string token (`em_…`) on the Graph backend (U5); numeric on the
   // AppleScript/SQLite backend (D4).
   readonly id: string | number;
-  readonly folderId: number;
+  // Durable self-encoding `fd_…` token (U5), Graph-only — string.
+  readonly folderId: string;
   readonly subject: string | null;
   readonly sender: string | null;
   readonly senderAddress: string | null;
@@ -58,7 +61,8 @@ export interface EventRow {
   // Durable string token (`ev_…`) on the Graph backend (U5); numeric on the
   // AppleScript/SQLite backend (D4).
   readonly id: string | number;
-  readonly folderId: number;
+  // Durable self-encoding `fd_…` token (U5), Graph-only — string.
+  readonly folderId: string;
   readonly subject: string | null;
   readonly startDate: number | null;
   readonly endDate: number | null;
@@ -116,7 +120,7 @@ export interface CountRow {
 export interface IRepository {
   // Folders
   listFolders(): FolderRow[];
-  getFolder(id: number): FolderRow | undefined;
+  getFolder(id: string): FolderRow | undefined;
 
   // Emails
   listEmails(folderId: number, limit: number, offset: number): EmailRow[];
@@ -161,7 +165,7 @@ export interface IRepository {
  */
 export interface IWriteableRepository extends IRepository {
   // Email organization
-  moveEmail(emailId: string | number, destinationFolderId: number): void;
+  moveEmail(emailId: string | number, destinationFolderId: string): void;
   deleteEmail(emailId: string | number): void;
   archiveEmail(emailId: string | number): void;
   junkEmail(emailId: string | number): void;
@@ -171,11 +175,11 @@ export interface IWriteableRepository extends IRepository {
   setEmailImportance(emailId: string | number, importance: string): void;
 
   // Folder management
-  createFolder(name: string, parentFolderId?: number): FolderRow;
-  deleteFolder(folderId: number): void;
-  renameFolder(folderId: number, newName: string): void;
-  moveFolder(folderId: number, destinationParentId: number): void;
-  emptyFolder(folderId: number): void;
+  createFolder(name: string, parentFolderId?: string): FolderRow;
+  deleteFolder(folderId: string): void;
+  renameFolder(folderId: string, newName: string): void;
+  moveFolder(folderId: string, destinationParentId: string): void;
+  emptyFolder(folderId: string): void;
 }
 
 // =============================================================================
@@ -197,10 +201,10 @@ export type MaybePromise<T> = T | Promise<T>;
 export interface IMailboxRepository {
   // Read
   getEmail(id: string | number): MaybePromise<EmailRow | undefined>;
-  getFolder(id: number): MaybePromise<FolderRow | undefined>;
+  getFolder(id: string): MaybePromise<FolderRow | undefined>;
 
   // Email organization
-  moveEmail(emailId: string | number, destinationFolderId: number): MaybePromise<void>;
+  moveEmail(emailId: string | number, destinationFolderId: string): MaybePromise<void>;
   deleteEmail(emailId: string | number): MaybePromise<void>;
   archiveEmail(emailId: string | number): MaybePromise<void>;
   junkEmail(emailId: string | number): MaybePromise<void>;
@@ -210,11 +214,11 @@ export interface IMailboxRepository {
   setEmailImportance(emailId: string | number, importance: string): MaybePromise<void>;
 
   // Folder management
-  createFolder(name: string, parentFolderId?: number): MaybePromise<FolderRow>;
-  deleteFolder(folderId: number): MaybePromise<void>;
-  renameFolder(folderId: number, newName: string): MaybePromise<void>;
-  moveFolder(folderId: number, destinationParentId: number): MaybePromise<void>;
-  emptyFolder(folderId: number): MaybePromise<void>;
+  createFolder(name: string, parentFolderId?: string): MaybePromise<FolderRow>;
+  deleteFolder(folderId: string): MaybePromise<void>;
+  renameFolder(folderId: string, newName: string): MaybePromise<void>;
+  moveFolder(folderId: string, destinationParentId: string): MaybePromise<void>;
+  emptyFolder(folderId: string): MaybePromise<void>;
 }
 
 // =============================================================================
@@ -238,7 +242,7 @@ export class OutlookRepository implements IRepository {
     });
   }
 
-  getFolder(id: number): FolderRow | undefined {
+  getFolder(id: string): FolderRow | undefined {
     return this.connection.execute((db) => {
       const stmt = db.prepare(queries.GET_FOLDER);
       return stmt.get(id) as FolderRow | undefined;

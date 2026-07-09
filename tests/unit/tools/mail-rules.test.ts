@@ -87,11 +87,11 @@ describe('MailRulesTools', () => {
         is_enabled: true,
         conditions: {},
         actions: {
-          move_to_folder: 123,
+          move_to_folder: 'fd_Zm9sZGVyLTEyMw',
         },
       });
 
-      expect(repo.getFolderGraphId).toHaveBeenCalledWith(123);
+      expect(repo.getFolderGraphId).toHaveBeenCalledWith('fd_Zm9sZGVyLTEyMw');
       expect(repo.createMailRuleAsync).toHaveBeenCalledWith(
         expect.objectContaining({
           actions: expect.objectContaining({
@@ -101,17 +101,21 @@ describe('MailRulesTools', () => {
       );
     });
 
-    it('throws when move_to_folder ID is not in cache', async () => {
-      vi.mocked(repo.getFolderGraphId).mockReturnValue(undefined);
+    it('propagates the error when move_to_folder cannot be resolved', async () => {
+      // getFolderGraphId now resolves via toGraphId, which throws a typed error
+      // instead of returning undefined on an unresolvable id.
+      vi.mocked(repo.getFolderGraphId).mockImplementation(() => {
+        throw new Error('Folder ID 999 not found.');
+      });
 
       await expect(
         tools.createMailRule({
           display_name: 'Move Rule',
           is_enabled: true,
           conditions: {},
-          actions: { move_to_folder: 999 },
+          actions: { move_to_folder: '999' },
         })
-      ).rejects.toThrow('Folder ID 999 not found in cache');
+      ).rejects.toThrow('Folder ID 999 not found.');
     });
 
     it('handles forward_to addresses', async () => {

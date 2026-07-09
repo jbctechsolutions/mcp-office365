@@ -42,9 +42,9 @@ function jsonResult(data: unknown): ToolResult {
  * `list_folders` tool. Self-contained copy of the legacy graph-mode transform.
  */
 function transformFolderRow(row: FolderRow): {
-  id: number;
+  id: string;
   name: string;
-  parentId: number | null;
+  parentId: string | null;
   specialType: number;
   folderType: number;
   accountId: number;
@@ -70,7 +70,7 @@ function transformFolderRow(row: FolderRow): {
  */
 function transformEmailRow(row: EmailRow): {
   id: string | number;
-  folderId: number | null;
+  folderId: string;
   subject: string | null;
   sender: string | null;
   senderAddress: string | null;

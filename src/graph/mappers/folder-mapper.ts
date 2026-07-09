@@ -10,15 +10,19 @@
 import type * as MicrosoftGraph from '@microsoft/microsoft-graph-types';
 import type { FolderRow } from '../../database/repository.js';
 import { hashStringToNumber } from './utils.js';
+import { mintSelfEncoded } from '../../ids/token.js';
 
 /**
  * Maps a Graph MailFolder to a FolderRow.
  */
 export function mapMailFolderToRow(folder: MicrosoftGraph.MailFolder): FolderRow {
+  const graphId = folder.id ?? '';
+  const parentGraphId = folder.parentFolderId;
   return {
-    id: hashStringToNumber(folder.id ?? ''),
+    // Durable self-encoding fd_ token carrying the immutable Graph folder id (U5).
+    id: graphId.length > 0 ? mintSelfEncoded('folder', graphId) : '',
     name: folder.displayName ?? null,
-    parentId: folder.parentFolderId != null ? hashStringToNumber(folder.parentFolderId) : null,
+    parentId: parentGraphId != null ? mintSelfEncoded('folder', parentGraphId) : null,
     specialType: 0, // Graph doesn't expose special type directly
     folderType: 1, // Mail folder
     accountId: 1, // Default account
@@ -31,8 +35,10 @@ export function mapMailFolderToRow(folder: MicrosoftGraph.MailFolder): FolderRow
  * Maps a Graph Calendar to a FolderRow (calendars use FolderRow structure).
  */
 export function mapCalendarToFolderRow(calendar: MicrosoftGraph.Calendar): FolderRow {
+  const graphId = calendar.id ?? '';
   return {
-    id: hashStringToNumber(calendar.id ?? ''),
+    // Durable self-encoding fd_ token carrying the immutable Graph calendar id (U5).
+    id: graphId.length > 0 ? mintSelfEncoded('folder', graphId) : '',
     name: calendar.name ?? null,
     parentId: null,
     specialType: 0,
@@ -48,7 +54,10 @@ export function mapCalendarToFolderRow(calendar: MicrosoftGraph.Calendar): Folde
  */
 export function mapTaskListToFolderRow(taskList: MicrosoftGraph.TodoTaskList): FolderRow {
   return {
-    id: hashStringToNumber(taskList.id ?? ''),
+    // Task lists are a separate, not-yet-migrated entity (idCache.taskLists) —
+    // still hash-based, not a durable token. Stringified only to satisfy the
+    // now-string-only shared FolderRow.id (folders/calendars migrated, U5).
+    id: String(hashStringToNumber(taskList.id ?? '')),
     name: taskList.displayName ?? null,
     parentId: null,
     specialType: 0,

@@ -47,7 +47,7 @@ export const ListFoldersToolInput = z.strictObject({
 });
 
 export const ListEmailsInput = z.strictObject({
-  folder_id: z.number().int().positive().describe('The folder ID to list emails from'),
+  folder_id: z.string().min(1).describe('The folder ID to list emails from'),
   limit: z
     .number()
     .int()
@@ -62,9 +62,8 @@ export const ListEmailsInput = z.strictObject({
 export const SearchEmailsInput = z.strictObject({
   query: z.string().min(1).describe('Search query (searches subject, sender, and preview)'),
   folder_id: z
-    .number()
-    .int()
-    .positive()
+    .string()
+    .min(1)
     .optional()
     .describe('Optional folder ID to limit search to'),
   limit: z
@@ -116,9 +115,8 @@ export const ListConversationInput = z.strictObject({
 
 export const GetUnreadCountInput = z.strictObject({
   folder_id: z
-    .number()
-    .int()
-    .positive()
+    .string()
+    .min(1)
     .optional()
     .describe('Optional folder ID to get unread count for'),
 });
@@ -134,7 +132,7 @@ export const DownloadAttachmentInput = z.strictObject({
 });
 
 export const CheckNewEmailsInput = z.strictObject({
-  folder_id: z.number().int().positive().describe('Folder ID to check for new emails'),
+  folder_id: z.string().min(1).describe('Folder ID to check for new emails'),
 });
 
 export const GetMessageHeadersInput = z.strictObject({

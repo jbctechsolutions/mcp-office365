@@ -11,7 +11,6 @@ import type * as MicrosoftGraph from '@microsoft/microsoft-graph-types';
 import type { EventRow } from '../../database/repository.js';
 import { mintSelfEncoded } from '../../ids/token.js';
 import {
-  hashStringToNumber,
   dateTimeTimeZoneToTimestamp,
   createGraphContentPath,
 } from './utils.js';
@@ -33,7 +32,8 @@ export function mapEventToEventRow(
   return {
     // Durable self-encoding ev_ token carrying the immutable Graph event id (U5).
     id: eventId.length > 0 ? mintSelfEncoded('event', eventId) : '',
-    folderId: calendarId != null ? hashStringToNumber(calendarId) : 0,
+    // Durable self-encoding fd_ token carrying the immutable Graph calendar id (U5).
+    folderId: calendarId != null ? mintSelfEncoded('folder', calendarId) : '',
     subject: event.subject ?? null,
     startDate: dateTimeTimeZoneToTimestamp(start),
     endDate: dateTimeTimeZoneToTimestamp(end),

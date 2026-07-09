@@ -15,6 +15,7 @@ import {
   mapTaskListToFolderRow,
 } from '../../../../src/graph/mappers/folder-mapper.js';
 import { hashStringToNumber } from '../../../../src/graph/mappers/utils.js';
+import { mintSelfEncoded, parseToken } from '../../../../src/ids/token.js';
 
 describe('graph/mappers/folder-mapper', () => {
   describe('mapMailFolderToRow', () => {
@@ -29,9 +30,11 @@ describe('graph/mappers/folder-mapper', () => {
 
       const result = mapMailFolderToRow(folder);
 
-      expect(result.id).toBe(hashStringToNumber('folder-123'));
+      // id/parentId are now durable self-encoding fd_ tokens (U5).
+      expect(result.id).toBe(mintSelfEncoded('folder', 'folder-123'));
+      expect(parseToken(result.id)?.graphId).toBe('folder-123');
       expect(result.name).toBe('Inbox');
-      expect(result.parentId).toBe(hashStringToNumber('parent-456'));
+      expect(result.parentId).toBe(mintSelfEncoded('folder', 'parent-456'));
       expect(result.messageCount).toBe(100);
       expect(result.unreadCount).toBe(5);
       expect(result.folderType).toBe(1); // Mail folder
@@ -47,7 +50,8 @@ describe('graph/mappers/folder-mapper', () => {
 
       const result = mapMailFolderToRow(folder);
 
-      expect(result.id).toBe(hashStringToNumber(''));
+      // A self-encoding token can't encode an empty id, so it stays empty.
+      expect(result.id).toBe('');
     });
 
     it('handles folder with null displayName', () => {
@@ -114,7 +118,8 @@ describe('graph/mappers/folder-mapper', () => {
 
       const result = mapCalendarToFolderRow(calendar);
 
-      expect(result.id).toBe(hashStringToNumber('calendar-123'));
+      expect(result.id).toBe(mintSelfEncoded('folder', 'calendar-123'));
+      expect(parseToken(result.id)?.graphId).toBe('calendar-123');
       expect(result.name).toBe('My Calendar');
       expect(result.parentId).toBeNull();
       expect(result.folderType).toBe(2); // Calendar folder
@@ -132,7 +137,7 @@ describe('graph/mappers/folder-mapper', () => {
 
       const result = mapCalendarToFolderRow(calendar);
 
-      expect(result.id).toBe(hashStringToNumber(''));
+      expect(result.id).toBe('');
     });
 
     it('handles calendar with null name', () => {
@@ -159,7 +164,9 @@ describe('graph/mappers/folder-mapper', () => {
 
       const result = mapTaskListToFolderRow(taskList);
 
-      expect(result.id).toBe(hashStringToNumber('tasklist-123'));
+      // Task lists are a separate, not-yet-migrated entity — still hash-based,
+      // just stringified to satisfy the now-string-only shared FolderRow.id.
+      expect(result.id).toBe(String(hashStringToNumber('tasklist-123')));
       expect(result.name).toBe('My Tasks');
       expect(result.parentId).toBeNull();
       expect(result.folderType).toBe(3); // Task folder
@@ -177,7 +184,7 @@ describe('graph/mappers/folder-mapper', () => {
 
       const result = mapTaskListToFolderRow(taskList);
 
-      expect(result.id).toBe(hashStringToNumber(''));
+      expect(result.id).toBe(String(hashStringToNumber('')));
     });
 
     it('handles task list with null displayName', () => {

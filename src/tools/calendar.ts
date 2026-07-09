@@ -36,7 +36,7 @@ const EventIdSchema = z.union([z.string().min(1), z.number().int().positive()]);
 export const ListCalendarsInput = z.strictObject({});
 
 export const ListEventsInput = z.strictObject({
-  calendar_id: z.number().int().positive().optional().describe('Optional calendar folder ID'),
+  calendar_id: z.string().min(1).optional().describe('Optional calendar folder ID'),
   start_date: z.string().optional().describe('Start date filter (ISO 8601 format)'),
   end_date: z.string().optional().describe('End date filter (ISO 8601 format)'),
   limit: z
@@ -196,7 +196,7 @@ export const CreateEventGraphInput = z.strictObject({
   title: z.string().min(1),
   start_date: graphIsoDateString,
   end_date: graphIsoDateString,
-  calendar_id: z.number().int().positive().optional(),
+  calendar_id: z.string().min(1).optional(),
   location: z.string().optional(),
   description: z.string().optional(),
   is_all_day: z.boolean().optional().default(false),
@@ -292,7 +292,7 @@ export interface CreateEventResult {
   readonly title: string;
   readonly start_date: string;
   readonly end_date: string;
-  readonly calendar_id: number | null;
+  readonly calendar_id: string | null;
   readonly location: string | null;
   readonly description: string | null;
   readonly is_all_day: boolean;

@@ -60,7 +60,7 @@ export const ConfirmDeleteEmailInput = z.strictObject({
 
 export const PrepareMoveEmailInput = z.strictObject({
   email_id: EmailIdSchema.describe('The email ID to move'),
-  destination_folder_id: z.number().int().positive().describe('The destination folder ID'),
+  destination_folder_id: z.string().min(1).describe('The destination folder ID'),
 });
 
 export const ConfirmMoveEmailInput = z.strictObject({
@@ -87,21 +87,21 @@ export const ConfirmJunkEmailInput = z.strictObject({
 });
 
 export const PrepareDeleteFolderInput = z.strictObject({
-  folder_id: z.number().int().positive().describe('The folder ID to delete'),
+  folder_id: z.string().min(1).describe('The folder ID to delete'),
 });
 
 export const ConfirmDeleteFolderInput = z.strictObject({
   token_id: z.uuid().describe('The approval token from prepare_delete_folder'),
-  folder_id: z.number().int().positive().describe('The folder ID to delete'),
+  folder_id: z.string().min(1).describe('The folder ID to delete'),
 });
 
 export const PrepareEmptyFolderInput = z.strictObject({
-  folder_id: z.number().int().positive().describe('The folder ID to empty'),
+  folder_id: z.string().min(1).describe('The folder ID to empty'),
 });
 
 export const ConfirmEmptyFolderInput = z.strictObject({
   token_id: z.uuid().describe('The approval token from prepare_empty_folder'),
-  folder_id: z.number().int().positive().describe('The folder ID to empty'),
+  folder_id: z.string().min(1).describe('The folder ID to empty'),
 });
 
 export const PrepareBatchDeleteEmailsInput = z.strictObject({
@@ -118,7 +118,7 @@ export const PrepareBatchMoveEmailsInput = z.strictObject({
     .min(1)
     .max(50)
     .describe('The email IDs to move (max 50)'),
-  destination_folder_id: z.number().int().positive().describe('The destination folder ID'),
+  destination_folder_id: z.string().min(1).describe('The destination folder ID'),
 });
 
 export const ConfirmBatchOperationInput = z.strictObject({
@@ -179,24 +179,22 @@ export const SetEmailImportanceInput = z.strictObject({
 export const CreateFolderInput = z.strictObject({
   name: z.string().min(1).max(255).describe('Name for the new folder'),
   parent_folder_id: z
-    .number()
-    .int()
-    .positive()
+    .string()
+    .min(1)
     .optional()
     .describe('Optional parent folder ID (creates top-level if omitted)'),
 });
 
 export const RenameFolderInput = z.strictObject({
-  folder_id: z.number().int().positive().describe('The folder ID to rename'),
+  folder_id: z.string().min(1).describe('The folder ID to rename'),
   new_name: z.string().min(1).max(255).describe('The new folder name'),
 });
 
 export const MoveFolderInput = z.strictObject({
-  folder_id: z.number().int().positive().describe('The folder ID to move'),
+  folder_id: z.string().min(1).describe('The folder ID to move'),
   destination_parent_id: z
-    .number()
-    .int()
-    .positive()
+    .string()
+    .min(1)
     .describe('The destination parent folder ID'),
 });
 
@@ -238,7 +236,7 @@ function emailPreview(row: EmailRow): {
   subject: string | null;
   sender: string | null;
   senderAddress: string | null;
-  folderId: number | null;
+  folderId: string;
   timeReceived: string | null;
 } {
   return {
@@ -252,7 +250,7 @@ function emailPreview(row: EmailRow): {
 }
 
 function folderPreview(row: FolderRow): {
-  id: number;
+  id: string;
   name: string | null;
   messageCount: number;
   unreadCount: number;
@@ -539,7 +537,7 @@ export class MailboxOrganizationTools {
     // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
     const token = await this.consumeAndVerifyEmail(params.token_id, 'move_email', params.email_id);
     // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
-    const destFolderId = token.metadata['destinationFolderId'] as number;
+    const destFolderId = token.metadata['destinationFolderId'] as string;
     await this.repository.moveEmail(params.email_id, destFolderId);
     return { success: true, message: 'Email moved successfully.' };
   }
@@ -601,7 +599,7 @@ export class MailboxOrganizationTools {
           await this.repository.deleteEmail(email_id);
         } else {
           // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
-          const destFolderId = token.metadata['destinationFolderId'] as number;
+          const destFolderId = token.metadata['destinationFolderId'] as string;
           await this.repository.moveEmail(email_id, destFolderId);
         }
 
@@ -694,7 +692,7 @@ export class MailboxOrganizationTools {
     return email;
   }
 
-  private async requireFolder(folderId: number): Promise<FolderRow> {
+  private async requireFolder(folderId: string): Promise<FolderRow> {
     const folder = await this.repository.getFolder(folderId);
     if (folder == null) {
       throw new NotFoundError('Folder', folderId);
@@ -733,7 +731,7 @@ export class MailboxOrganizationTools {
   private async consumeAndVerifyFolder(
     tokenId: string,
     operation: OperationType,
-    folderId: number
+    folderId: string
   ): Promise<void> {
     const result = this.tokenManager.consumeToken(tokenId, operation, folderId);
     if (!result.valid) {
