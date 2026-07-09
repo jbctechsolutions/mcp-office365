@@ -176,14 +176,21 @@ export class GraphMailTools {
   async getEmails(params: GetEmailsParams): Promise<ToolResult> {
     const results = await Promise.all(
       params.email_ids.map(async (id) => {
-        const email = await this.repository.getEmailAsync(id);
-        if (email == null) return { id, error: 'Not found' };
-        let body: string | null = null;
-        if (params.include_body) {
-          body = await this.contentReaders.email.readEmailBodyAsync(email.dataFilePath);
-          if (params.strip_html && body != null) body = stripHtml(body);
+        try {
+          const email = await this.repository.getEmailAsync(id);
+          if (email == null) return { id, error: 'Not found' };
+          let body: string | null = null;
+          if (params.include_body) {
+            body = await this.contentReaders.email.readEmailBodyAsync(email.dataFilePath);
+            if (params.strip_html && body != null) body = stripHtml(body);
+          }
+          return { ...transformEmailRow(email), body };
+        } catch (err) {
+          // Per-id isolation: an unresolvable id (legacy numeric →
+          // NUMERIC_ID_UNSUPPORTED, or a wrong-entity token →
+          // ID_ENTITY_MISMATCH) must not abort the whole batch.
+          return { id, error: err instanceof Error ? err.message : 'Unresolvable id' };
         }
-        return { ...transformEmailRow(email), body };
       })
     );
     return jsonResult({ emails: results });

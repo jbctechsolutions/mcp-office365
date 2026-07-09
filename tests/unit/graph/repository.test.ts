@@ -3031,8 +3031,8 @@ describe('graph/repository', () => {
       it('returns undefined when ID not cached', () => {
         expect(repository.getGraphId('folder', 99999)).toBeUndefined();
         // 'message', 'event' and 'contact' were removed from getGraphId in U5b —
-        // they resolve via durable self-encoding tokens (getMessageGraphId /
-        // getEventGraphId / getContactGraphId), not the numeric idCache.
+        // they resolve via durable self-encoding tokens through toGraphId, not
+        // the numeric idCache.
       });
     });
 

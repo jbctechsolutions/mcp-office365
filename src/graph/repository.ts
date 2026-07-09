@@ -358,11 +358,6 @@ export class GraphRepository implements IRepository {
     return message != null ? mapMessageToEmailRow(message) : undefined;
   }
 
-  /** Resolves a message id (durable `em_` token or raw Graph id) to its Graph id. */
-  getMessageGraphId(id: string | number): string {
-    return this.toGraphId(id, 'message');
-  }
-
   getUnreadCount(): number {
     throw new Error('Use getUnreadCountAsync() for Graph repository');
   }
