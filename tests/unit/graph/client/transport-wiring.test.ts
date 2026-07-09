@@ -9,10 +9,13 @@
  * files stub the handlers as inert no-ops, so a regression that dropped a
  * `setNext`, swapped the chain order, or forgot to pass `shouldRetry` into
  * `RetryHandlerOptions` would pass every one of them. This file records the
- * construction + wiring calls and asserts the chain: auth → retry → redirect → http.
+ * construction + wiring calls and asserts the chain:
+ * auth → immutableId → retry → redirect → http (the immutable-ID middleware,
+ * U5b-3, is inserted right after auth).
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { ImmutableIdMiddleware } from '../../../../src/graph/client/immutable-id-middleware.js';
 
 // `mock`-prefixed so the hoisted vi.mock factory may reference it.
 const mockState: {
@@ -25,7 +28,11 @@ vi.mock('@microsoft/microsoft-graph-client', () => {
   class TaggedHandler {
     constructor(public readonly tag: string) {}
     setNext(next: unknown): void {
-      mockState.setNextCalls.push({ from: this.tag, to: (next as TaggedHandler).tag });
+      // Non-mocked middleware (e.g. the real ImmutableIdMiddleware) has no `tag`;
+      // fall back to its class name so the wiring is still identifiable.
+      const to =
+        (next as { tag?: string }).tag ?? (next as { constructor?: { name?: string } }).constructor?.name ?? 'unknown';
+      mockState.setNextCalls.push({ from: this.tag, to });
     }
   }
   return {
@@ -82,21 +89,30 @@ vi.mock('isomorphic-fetch', () => ({ default: vi.fn() }));
 import { GraphClient } from '../../../../src/graph/client/graph-client.js';
 
 describe('graph transport middleware wiring (U8/D5)', () => {
+  let setNextSpy: ReturnType<typeof vi.spyOn>;
+
   beforeEach(async () => {
     mockState.setNextCalls.length = 0;
     mockState.capturedShouldRetry = null;
     mockState.initMiddlewareArg = null;
+    // Spy on the real immutable-ID middleware's setNext (it isn't a mocked
+    // TaggedHandler, so its forwarding isn't captured by mockState).
+    setNextSpy = vi.spyOn(ImmutableIdMiddleware.prototype, 'setNext');
     // Trigger the private getClient() by making any Graph call.
     const client = new GraphClient();
     await client.listOnlineMeetings(1);
   });
 
-  it('builds the chain in order auth → retry → redirect → http', () => {
+  it('builds the chain in order auth → immutableId → retry → redirect → http', () => {
+    // auth → immutableId, then the downstream mocked handlers.
     expect(mockState.setNextCalls).toEqual([
-      { from: 'auth', to: 'retry' },
+      { from: 'auth', to: 'ImmutableIdMiddleware' },
       { from: 'retry', to: 'redirect' },
       { from: 'redirect', to: 'http' },
     ]);
+    // immutableId → retry (its setNext isn't a mocked handler, so assert directly).
+    expect(setNextSpy).toHaveBeenCalledTimes(1);
+    expect((setNextSpy.mock.calls[0]?.[0] as { tag?: string }).tag).toBe('retry');
   });
 
   it('passes the head of the chain (auth) to initWithMiddleware', () => {

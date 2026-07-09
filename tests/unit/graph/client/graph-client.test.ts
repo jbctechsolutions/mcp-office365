@@ -21,6 +21,9 @@ const createMockRequestBuilder = (mockResponse: any) => {
     search: vi.fn().mockReturnThis(),
     query: vi.fn().mockReturnThis(),
     get: vi.fn().mockResolvedValue(mockResponse),
+    // Default no-op translateExchangeIds response so the $search immutable-ID
+    // upgrade (U5b-3) resolves to an empty translation map and leaves IDs as-is.
+    post: vi.fn().mockResolvedValue({ value: [] }),
   };
   return builder;
 };
@@ -371,6 +374,89 @@ describe('graph/client/graph-client', () => {
 
         expect(result).toBeNull();
       });
+    });
+  });
+
+  describe('translateExchangeIds & $search immutable-ID upgrade (U5b-3)', () => {
+    it('posts restId → restImmutableEntryId and maps sourceId → targetId', async () => {
+      const postBuilder = {
+        post: vi.fn().mockResolvedValue({
+          value: [
+            { sourceId: 'mutable-1', targetId: 'immutable-1' },
+            { sourceId: 'mutable-2', targetId: 'immutable-2' },
+          ],
+        }),
+      };
+      mockApi.mockReturnValue(postBuilder);
+
+      const result = await graphClient.translateExchangeIds(['mutable-1', 'mutable-2']);
+
+      expect(mockApi).toHaveBeenCalledWith('/me/translateExchangeIds');
+      expect(postBuilder.post).toHaveBeenCalledWith({
+        inputIds: ['mutable-1', 'mutable-2'],
+        sourceIdType: 'restId',
+        targetIdType: 'restImmutableEntryId',
+      });
+      expect(result.get('mutable-1')).toBe('immutable-1');
+      expect(result.get('mutable-2')).toBe('immutable-2');
+    });
+
+    it('returns an empty map without calling Graph for an empty input', async () => {
+      const result = await graphClient.translateExchangeIds([]);
+      expect(result.size).toBe(0);
+      expect(mockApi).not.toHaveBeenCalled();
+    });
+
+    it('drops IDs Graph could not translate (partial success)', async () => {
+      const postBuilder = {
+        post: vi.fn().mockResolvedValue({
+          value: [
+            { sourceId: 'mutable-1', targetId: 'immutable-1' },
+            { sourceId: 'mutable-2' }, // no targetId → dropped
+          ],
+        }),
+      };
+      mockApi.mockReturnValue(postBuilder);
+
+      const result = await graphClient.translateExchangeIds(['mutable-1', 'mutable-2']);
+
+      expect(result.get('mutable-1')).toBe('immutable-1');
+      expect(result.has('mutable-2')).toBe(false);
+    });
+
+    it('searchMessages upgrades $search-minted IDs to immutable ones', async () => {
+      const searchBuilder = createMockRequestBuilder({
+        value: [{ id: 'mutable-1', subject: 'A' }, { id: 'mutable-2', subject: 'B' }],
+      });
+      const translateBuilder = {
+        post: vi.fn().mockResolvedValue({
+          value: [{ sourceId: 'mutable-1', targetId: 'immutable-1' }],
+        }),
+      };
+      mockApi
+        .mockReturnValueOnce(searchBuilder) // the $search request
+        .mockReturnValueOnce(translateBuilder); // the translateExchangeIds request
+
+      const result = await graphClient.searchMessages('q', 50);
+
+      expect(mockApi).toHaveBeenNthCalledWith(2, '/me/translateExchangeIds');
+      // mutable-1 translated; mutable-2 left mutable (degraded, still resolvable).
+      expect(result[0].id).toBe('immutable-1');
+      expect(result[1].id).toBe('mutable-2');
+    });
+
+    it('searchMessages leaves IDs untouched when translation throws', async () => {
+      const searchBuilder = createMockRequestBuilder({
+        value: [{ id: 'mutable-1', subject: 'A' }],
+      });
+      const translateBuilder = { post: vi.fn().mockRejectedValue(new Error('throttled')) };
+      mockApi
+        .mockReturnValueOnce(searchBuilder)
+        .mockReturnValueOnce(translateBuilder);
+
+      const result = await graphClient.searchMessages('q', 50);
+
+      expect(result[0].id).toBe('mutable-1');
     });
   });
 
