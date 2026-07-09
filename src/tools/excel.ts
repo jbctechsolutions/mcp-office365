@@ -28,22 +28,22 @@ declare module '../registry/types.js' {
 // =============================================================================
 
 export const ListWorksheetsInput = z.strictObject({
-  file_id: z.number().describe('Numeric ID of the Excel file (from OneDrive or SharePoint)'),
+  file_id: z.string().min(1).describe('Durable ID of the Excel file (dr_ token from list_drive_items/search_drive_items, or a raw Graph item id)'),
 });
 
 export const GetWorksheetRangeInput = z.strictObject({
-  file_id: z.number().describe('Numeric ID of the Excel file (from OneDrive or SharePoint)'),
+  file_id: z.string().min(1).describe('Durable ID of the Excel file (dr_ token from list_drive_items/search_drive_items, or a raw Graph item id)'),
   worksheet_name: z.string().describe('Name of the worksheet'),
   range: z.string().describe('Cell range e.g. "A1:D10"'),
 });
 
 export const GetUsedRangeInput = z.strictObject({
-  file_id: z.number().describe('Numeric ID of the Excel file (from OneDrive or SharePoint)'),
+  file_id: z.string().min(1).describe('Durable ID of the Excel file (dr_ token from list_drive_items/search_drive_items, or a raw Graph item id)'),
   worksheet_name: z.string().describe('Name of the worksheet'),
 });
 
 export const PrepareUpdateRangeInput = z.strictObject({
-  file_id: z.number().describe('Numeric ID of the Excel file (from OneDrive or SharePoint)'),
+  file_id: z.string().min(1).describe('Durable ID of the Excel file (dr_ token from list_drive_items/search_drive_items, or a raw Graph item id)'),
   worksheet_name: z.string().describe('Name of the worksheet'),
   range: z.string().describe('Cell range e.g. "A1:D10"'),
   values: z.array(z.array(z.unknown())).describe('2D array of cell values'),
@@ -54,7 +54,7 @@ export const ConfirmUpdateRangeInput = z.strictObject({
 });
 
 export const GetTableDataInput = z.strictObject({
-  file_id: z.number().describe('Numeric ID of the Excel file (from OneDrive or SharePoint)'),
+  file_id: z.string().min(1).describe('Durable ID of the Excel file (dr_ token from list_drive_items/search_drive_items, or a raw Graph item id)'),
   table_name: z.string().describe('Name of the Excel table'),
 });
 
@@ -74,11 +74,11 @@ export type GetTableDataParams = z.infer<typeof GetTableDataInput>;
 // =============================================================================
 
 export interface IExcelRepository {
-  listWorksheetsAsync(fileId: number): Promise<Record<string, unknown>[]>;
-  getWorksheetRangeAsync(fileId: number, worksheetName: string, range: string): Promise<Record<string, unknown>>;
-  getUsedRangeAsync(fileId: number, worksheetName: string): Promise<Record<string, unknown>>;
-  updateWorksheetRangeAsync(fileId: number, worksheetName: string, range: string, values: unknown[][]): Promise<Record<string, unknown>>;
-  getTableDataAsync(fileId: number, tableName: string): Promise<Record<string, unknown>[]>;
+  listWorksheetsAsync(fileId: string): Promise<Record<string, unknown>[]>;
+  getWorksheetRangeAsync(fileId: string, worksheetName: string, range: string): Promise<Record<string, unknown>>;
+  getUsedRangeAsync(fileId: string, worksheetName: string): Promise<Record<string, unknown>>;
+  updateWorksheetRangeAsync(fileId: string, worksheetName: string, range: string, values: unknown[][]): Promise<Record<string, unknown>>;
+  getTableDataAsync(fileId: string, tableName: string): Promise<Record<string, unknown>[]>;
 }
 
 // =============================================================================
@@ -214,7 +214,7 @@ export class ExcelTools {
     const range = metadata['range'] as string;
     const values = metadata['values'] as unknown[][];
 
-    await this.repo.updateWorksheetRangeAsync((result.token!.targetId as number), worksheetName, range, values);
+    await this.repo.updateWorksheetRangeAsync((result.token!.targetId as string), worksheetName, range, values);
     return {
       content: [{
         type: 'text' as const,

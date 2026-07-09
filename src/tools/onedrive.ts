@@ -27,7 +27,7 @@ declare module '../registry/types.js' {
 // =============================================================================
 
 export const ListDriveItemsInput = z.strictObject({
-  folder_id: z.number().int().positive().optional().describe('Folder ID from a previous list_drive_items call. Omit to list root.'),
+  folder_id: z.string().min(1).optional().describe('Folder ID (dr_ token from a previous list_drive_items call). Omit to list root.'),
 });
 
 export const SearchDriveItemsInput = z.strictObject({
@@ -36,11 +36,11 @@ export const SearchDriveItemsInput = z.strictObject({
 });
 
 export const GetDriveItemInput = z.strictObject({
-  item_id: z.number().int().positive().describe('Drive item ID from list_drive_items or search_drive_items'),
+  item_id: z.string().min(1).describe('Drive item ID (dr_ token from list_drive_items or search_drive_items)'),
 });
 
 export const DownloadFileInput = z.strictObject({
-  item_id: z.number().int().positive().describe('Drive item ID from list_drive_items or search_drive_items'),
+  item_id: z.string().min(1).describe('Drive item ID (dr_ token from list_drive_items or search_drive_items)'),
   output_path: z.string().min(1).describe('Absolute file path where the file should be saved'),
 });
 
@@ -59,13 +59,13 @@ export const ListRecentFilesInput = z.strictObject({});
 export const ListSharedWithMeInput = z.strictObject({});
 
 export const CreateSharingLinkInput = z.strictObject({
-  item_id: z.number().int().positive().describe('Drive item ID from list_drive_items or search_drive_items'),
+  item_id: z.string().min(1).describe('Drive item ID (dr_ token from list_drive_items or search_drive_items)'),
   type: z.enum(['view', 'edit']).describe('Permission type: view (read-only) or edit (read-write)'),
   scope: z.enum(['anonymous', 'organization']).describe('Link scope: anonymous (anyone with link) or organization (org members only)'),
 });
 
 export const PrepareDeleteDriveItemInput = z.strictObject({
-  item_id: z.number().int().positive().describe('Drive item ID from list_drive_items or search_drive_items'),
+  item_id: z.string().min(1).describe('Drive item ID (dr_ token from list_drive_items or search_drive_items)'),
 });
 
 export const ConfirmDeleteDriveItemInput = z.strictObject({
@@ -93,32 +93,32 @@ export type ConfirmDeleteDriveItemParams = z.infer<typeof ConfirmDeleteDriveItem
 // =============================================================================
 
 export interface IOneDriveRepository {
-  listDriveItemsAsync(folderId?: number): Promise<Array<{
-    id: number; name: string; size: number; lastModified: string;
+  listDriveItemsAsync(folderId?: string): Promise<Array<{
+    id: string; name: string; size: number; lastModified: string;
     isFolder: boolean; webUrl: string;
   }>>;
   searchDriveItemsAsync(query: string, limit?: number): Promise<Array<{
-    id: number; name: string; size: number; lastModified: string;
+    id: string; name: string; size: number; lastModified: string;
     isFolder: boolean; webUrl: string;
   }>>;
-  getDriveItemAsync(itemId: number): Promise<{
-    id: number; name: string; size: number; lastModified: string;
+  getDriveItemAsync(itemId: string): Promise<{
+    id: string; name: string; size: number; lastModified: string;
     isFolder: boolean; webUrl: string; mimeType: string; createdBy: string;
   }>;
-  downloadFileAsync(itemId: number, outputPath: string): Promise<{ savedPath: string; size: number }>;
-  uploadFileAsync(parentPath: string, fileName: string, localFilePath: string): Promise<number>;
+  downloadFileAsync(itemId: string, outputPath: string): Promise<{ savedPath: string; size: number }>;
+  uploadFileAsync(parentPath: string, fileName: string, localFilePath: string): Promise<string>;
   listRecentFilesAsync(): Promise<Array<{
-    id: number; name: string; size: number; lastModified: string;
+    id: string; name: string; size: number; lastModified: string;
     isFolder: boolean; webUrl: string;
   }>>;
   listSharedWithMeAsync(): Promise<Array<{
-    id: number; name: string; size: number; lastModified: string;
+    id: string; name: string; size: number; lastModified: string;
     isFolder: boolean; webUrl: string;
   }>>;
-  createSharingLinkAsync(itemId: number, type: string, scope: string): Promise<{
+  createSharingLinkAsync(itemId: string, type: string, scope: string): Promise<{
     webUrl: string; type: string; scope: string;
   }>;
-  deleteDriveItemAsync(itemId: number): Promise<void>;
+  deleteDriveItemAsync(itemId: string): Promise<void>;
 }
 
 // =============================================================================
@@ -357,7 +357,7 @@ export class OneDriveTools {
       };
     }
 
-    await this.repo.deleteDriveItemAsync((result.token!.targetId as number));
+    await this.repo.deleteDriveItemAsync((result.token!.targetId as string));
     return {
       content: [{
         type: 'text' as const,
