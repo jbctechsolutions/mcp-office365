@@ -3117,6 +3117,49 @@ export class GraphRepository implements IRepository {
   }
 
   /**
+   * Creates a folder in a document library (or subfolder), minting a durable li_
+   * token for the new folder.
+   */
+  async createLibraryFolderAsync(libraryId: string, parentFolderId: string | undefined, folderName: string, conflictBehavior: string): Promise<{
+    id: string; name: string; webUrl: string; isFolder: boolean;
+  }> {
+    const { driveId } = this.toGraphParts(libraryId, 'documentLibrary', ['siteId', 'driveId']);
+    const parentItemId = parentFolderId != null
+      ? this.toGraphParts(parentFolderId, 'libraryDriveItem', ['driveId', 'itemId']).itemId
+      : undefined;
+    const created = await this.client.createLibraryFolder(driveId, parentItemId, folderName, conflictBehavior);
+    const itemGraphId = created.id as string;
+    return {
+      id: this.mintAliasComposite('libraryDriveItem', { driveId, itemId: itemGraphId }),
+      name: (created.name as string | undefined) ?? '',
+      webUrl: (created.webUrl as string | undefined) ?? '',
+      isFolder: created.folder != null,
+    };
+  }
+
+  /**
+   * Uploads a local file into a document library (or subfolder), minting a durable
+   * li_ token for the new item.
+   */
+  async uploadLibraryFileAsync(libraryId: string, parentFolderId: string | undefined, fileName: string, localFilePath: string, conflictBehavior: string): Promise<{
+    id: string; name: string; webUrl: string; size: number;
+  }> {
+    const { driveId } = this.toGraphParts(libraryId, 'documentLibrary', ['siteId', 'driveId']);
+    const parentItemId = parentFolderId != null
+      ? this.toGraphParts(parentFolderId, 'libraryDriveItem', ['driveId', 'itemId']).itemId
+      : undefined;
+    const content = fs.readFileSync(localFilePath);
+    const uploaded = await this.client.uploadLibraryFile(driveId, parentItemId, fileName, content, conflictBehavior);
+    const itemGraphId = uploaded.id as string;
+    return {
+      id: this.mintAliasComposite('libraryDriveItem', { driveId, itemId: itemGraphId }),
+      name: (uploaded.name as string | undefined) ?? '',
+      webUrl: (uploaded.webUrl as string | undefined) ?? '',
+      size: (uploaded.size as number | undefined) ?? 0,
+    };
+  }
+
+  /**
    * Resolves a folder id (durable `fd_` token or raw Graph id) to its Graph id.
    */
   getFolderGraphId(folderId: string): string {

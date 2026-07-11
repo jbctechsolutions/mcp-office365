@@ -6,11 +6,13 @@
 /**
  * SharePoint Document Library MCP tools.
  *
- * Provides read-only tools for browsing SharePoint sites, document libraries,
- * and downloading files from team document libraries.
+ * Provides tools for browsing SharePoint sites and document libraries,
+ * downloading files, and writing into team document libraries (creating
+ * folders and uploading files) with two-phase approval for uploads.
  */
 
 import { z } from 'zod';
+import type { ApprovalTokenManager } from '../approval/index.js';
 import { Id } from '../ids/schema.js';
 import { nextActionFor } from '../ids/next-action.js';
 import { defineTool } from '../registry/define-tool.js';
@@ -51,6 +53,25 @@ export const DownloadLibraryFileInput = z.strictObject({
   output_path: z.string().min(1).describe('Local file path to save the downloaded file'),
 });
 
+export const CreateLibraryFolderInput = z.strictObject({
+  library_id: Id.documentLibrary,
+  parent_folder_id: Id.libraryDriveItem.optional().describe('Folder to create inside — a li_ token from list_library_items. Omit to create at the library root.'),
+  folder_name: z.string().min(1).describe('Name for the new folder'),
+  conflict_behavior: z.enum(['fail', 'rename']).default('fail').describe('How to handle a name collision: fail (default) or rename'),
+});
+
+export const PrepareUploadLibraryFileInput = z.strictObject({
+  library_id: Id.documentLibrary,
+  parent_folder_id: Id.libraryDriveItem.optional().describe('Folder to upload into — a li_ token from list_library_items. Omit to upload at the library root.'),
+  file_name: z.string().min(1).describe('Name for the file in the document library'),
+  local_file_path: z.string().min(1).describe('Absolute path to the local file to upload (simple upload, 4 MB limit)'),
+  conflict_behavior: z.enum(['fail', 'replace', 'rename']).default('fail').describe('How to handle a name collision: fail (default), replace, or rename'),
+});
+
+export const ConfirmUploadLibraryFileInput = z.strictObject({
+  approval_token: z.string().describe('Approval token from prepare_upload_library_file'),
+});
+
 // =============================================================================
 // Type Exports
 // =============================================================================
@@ -61,6 +82,9 @@ export type GetSiteParams = z.infer<typeof GetSiteInput>;
 export type ListDocumentLibrariesParams = z.infer<typeof ListDocumentLibrariesInput>;
 export type ListLibraryItemsParams = z.infer<typeof ListLibraryItemsInput>;
 export type DownloadLibraryFileParams = z.infer<typeof DownloadLibraryFileInput>;
+export type CreateLibraryFolderParams = z.infer<typeof CreateLibraryFolderInput>;
+export type PrepareUploadLibraryFileParams = z.infer<typeof PrepareUploadLibraryFileInput>;
+export type ConfirmUploadLibraryFileParams = z.infer<typeof ConfirmUploadLibraryFileInput>;
 
 // =============================================================================
 // Repository Interface
@@ -76,6 +100,12 @@ export interface ISharePointRepository {
     lastModifiedDateTime: string; isFolder: boolean;
   }>>;
   downloadLibraryFileAsync(itemId: string, outputPath: string): Promise<string>;
+  createLibraryFolderAsync(libraryId: string, parentFolderId: string | undefined, folderName: string, conflictBehavior: string): Promise<{
+    id: string; name: string; webUrl: string; isFolder: boolean;
+  }>;
+  uploadLibraryFileAsync(libraryId: string, parentFolderId: string | undefined, fileName: string, localFilePath: string, conflictBehavior: string): Promise<{
+    id: string; name: string; webUrl: string; size: number;
+  }>;
 }
 
 // =============================================================================
@@ -88,6 +118,7 @@ export interface ISharePointRepository {
 export class SharePointTools {
   constructor(
     private readonly repo: ISharePointRepository,
+    private readonly tokenManager: ApprovalTokenManager,
   ) {}
 
   async listSites(): Promise<{
@@ -158,6 +189,121 @@ export class SharePointTools {
       content: [{
         type: 'text' as const,
         text: JSON.stringify({ success: true, path: savedPath, message: 'File downloaded' }, null, 2),
+      }],
+    };
+  }
+
+  async createLibraryFolder(params: CreateLibraryFolderParams): Promise<{
+    content: Array<{ type: 'text'; text: string }>;
+  }> {
+    const folder = await this.repo.createLibraryFolderAsync(
+      params.library_id,
+      params.parent_folder_id,
+      params.folder_name,
+      params.conflict_behavior,
+    );
+    return {
+      content: [{
+        type: 'text' as const,
+        text: JSON.stringify({
+          success: true,
+          folder,
+          message: `Folder "${folder.name}" created`,
+          next: nextActionFor('libraryDriveItem') ?? undefined,
+        }, null, 2),
+      }],
+    };
+  }
+
+  prepareUploadLibraryFile(params: PrepareUploadLibraryFileParams): {
+    content: Array<{ type: 'text'; text: string }>;
+  } {
+    const token = this.tokenManager.generateToken({
+      operation: 'upload_library_file',
+      targetType: 'library_item',
+      targetId: params.library_id,
+      targetHash: `${params.library_id}/${params.parent_folder_id ?? 'root'}/${params.file_name}`,
+      metadata: {
+        library_id: params.library_id,
+        parent_folder_id: params.parent_folder_id,
+        file_name: params.file_name,
+        local_file_path: params.local_file_path,
+        conflict_behavior: params.conflict_behavior,
+      },
+    });
+
+    return {
+      content: [{
+        type: 'text' as const,
+        text: JSON.stringify({
+          approval_token: token.tokenId,
+          expires_at: new Date(token.expiresAt).toISOString(),
+          library_id: params.library_id,
+          parent_folder_id: params.parent_folder_id,
+          file_name: params.file_name,
+          local_file_path: params.local_file_path,
+          conflict_behavior: params.conflict_behavior,
+          action: `To confirm uploading "${params.file_name}" to library ${params.library_id}, call confirm_upload_library_file with the approval_token.`,
+        }, null, 2),
+      }],
+    };
+  }
+
+  async confirmUploadLibraryFile(params: ConfirmUploadLibraryFileParams): Promise<{
+    content: Array<{ type: 'text'; text: string }>;
+  }> {
+    const token = this.tokenManager.lookupToken(params.approval_token);
+    if (token == null) {
+      return {
+        content: [{
+          type: 'text' as const,
+          text: JSON.stringify({
+            success: false,
+            error: 'Token not found or already used',
+          }, null, 2),
+        }],
+      };
+    }
+
+    const result = this.tokenManager.consumeToken(params.approval_token, 'upload_library_file', token.targetId);
+    if (!result.valid) {
+      const errorMessages: Record<string, string> = {
+        NOT_FOUND: 'Token not found or already used',
+        EXPIRED: 'Token has expired. Please call prepare_upload_library_file again.',
+        OPERATION_MISMATCH: 'Token was not generated for upload_library_file',
+        TARGET_MISMATCH: 'Token was generated for a different upload',
+        ALREADY_CONSUMED: 'Token has already been used',
+      };
+      return {
+        content: [{
+          type: 'text' as const,
+          text: JSON.stringify({
+            success: false,
+            error: errorMessages[result.error ?? ''] ?? 'Invalid token',
+          }, null, 2),
+        }],
+      };
+    }
+
+    const metadata = result.token!.metadata as {
+      library_id: string; parent_folder_id?: string; file_name: string;
+      local_file_path: string; conflict_behavior: string;
+    };
+    const uploaded = await this.repo.uploadLibraryFileAsync(
+      metadata.library_id,
+      metadata.parent_folder_id,
+      metadata.file_name,
+      metadata.local_file_path,
+      metadata.conflict_behavior,
+    );
+    return {
+      content: [{
+        type: 'text' as const,
+        text: JSON.stringify({
+          success: true,
+          item: uploaded,
+          message: `File "${uploaded.name}" uploaded to library ${metadata.library_id}`,
+        }, null, 2),
       }],
     };
   }
@@ -234,6 +380,36 @@ export function sharePointToolDefinitions(): ToolDefinition[] {
       presets: ['sharepoint'],
       backends: ['graph'],
       handler: (ctx, params) => tools(ctx).downloadLibraryFile(params),
+    }),
+    defineTool({
+      name: 'create_library_folder',
+      description: 'Create a folder in a SharePoint document library or subfolder. conflict_behavior defaults to "fail". (Graph API)',
+      input: CreateLibraryFolderInput,
+      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+      destructive: false,
+      presets: ['sharepoint'],
+      backends: ['graph'],
+      handler: (ctx, params) => tools(ctx).createLibraryFolder(params),
+    }),
+    defineTool({
+      name: 'prepare_upload_library_file',
+      description: 'Prepare to upload a local file into a SharePoint document library. Returns an approval token. Simple upload (4 MB limit). (Graph API)',
+      input: PrepareUploadLibraryFileInput,
+      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+      destructive: true,
+      presets: ['sharepoint'],
+      backends: ['graph'],
+      handler: (ctx, params) => tools(ctx).prepareUploadLibraryFile(params),
+    }),
+    defineTool({
+      name: 'confirm_upload_library_file',
+      description: 'Confirm uploading a file into a SharePoint document library using the approval token from prepare_upload_library_file. (Graph API)',
+      input: ConfirmUploadLibraryFileInput,
+      annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+      destructive: true,
+      presets: ['sharepoint'],
+      backends: ['graph'],
+      handler: (ctx, params) => tools(ctx).confirmUploadLibraryFile(params),
     }),
   ];
 }

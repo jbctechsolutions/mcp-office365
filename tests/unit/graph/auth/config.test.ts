@@ -31,6 +31,7 @@ describe('graph/auth/config', () => {
   describe('GRAPH_SCOPES', () => {
     it('contains all required scopes', () => {
       expect(GRAPH_SCOPES).toContain('Mail.ReadWrite');
+      expect(GRAPH_SCOPES).toContain('Mail.Send');
       expect(GRAPH_SCOPES).toContain('Calendars.ReadWrite');
       expect(GRAPH_SCOPES).toContain('Contacts.ReadWrite');
       expect(GRAPH_SCOPES).toContain('Tasks.ReadWrite');
@@ -61,8 +62,13 @@ describe('graph/auth/config', () => {
       expect(GRAPH_SCOPES).toContain('Files.Read.All');
     });
 
-    it('has exactly 22 scopes', () => {
-      expect(GRAPH_SCOPES).toHaveLength(22);
+    it('includes the mail-send and SharePoint write scopes (#71/#72)', () => {
+      expect(GRAPH_SCOPES).toContain('Mail.Send');
+      expect(GRAPH_SCOPES).toContain('Sites.ReadWrite.All');
+    });
+
+    it('has exactly 23 scopes', () => {
+      expect(GRAPH_SCOPES).toHaveLength(23);
     });
   });
 

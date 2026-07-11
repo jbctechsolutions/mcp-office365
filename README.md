@@ -629,7 +629,8 @@ These delegated permissions are requested via Microsoft Graph:
 
 | Permission | Purpose |
 |------------|---------|
-| `Mail.ReadWrite` | Read, send, and manage mail |
+| `Mail.ReadWrite` | Read, create, and manage mail and drafts |
+| `Mail.Send` | Send mail as the signed-in user |
 | `Calendars.ReadWrite` | Read and manage calendar events |
 | `Contacts.ReadWrite` | Read and manage contacts |
 | `Tasks.ReadWrite` | Read and manage To Do tasks |
@@ -648,6 +649,15 @@ These delegated permissions are requested via Microsoft Graph:
 | `Mail.Read.Shared` | Read mail in shared/delegated mailboxes |
 | `Calendars.Read.Shared` | Read shared/delegated calendars |
 | `Files.Read.All` | Read another user's OneDrive files (shared/delegate access) |
+| `Sites.ReadWrite.All` | Read and write SharePoint sites and document libraries |
+
+> **Upgrading?** These are delegated scopes, so any change to the list requires
+> you to **re-consent** — re-run `npx @jbctechsolutions/mcp-office365 auth --force`
+> so the refreshed token carries the new permissions. If a send or SharePoint
+> write fails with `GRAPH_PERMISSION_DENIED`, your token predates the `Mail.Send` /
+> `Sites.ReadWrite.All` scopes; re-authenticate to pick them up. (Custom app
+> registrations via `OUTLOOK_MCP_CLIENT_ID` must also add these delegated
+> permissions in Azure AD — `Sites.ReadWrite.All` may require admin consent.)
 
 ## Environment Variables
 

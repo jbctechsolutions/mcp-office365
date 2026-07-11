@@ -33,6 +33,7 @@ const DEFAULT_CLIENT_ID = '8fdcd9d3-8823-48f5-bd59-c3a779053b77';
 export const GRAPH_SCOPES = [
   // Outlook
   'Mail.ReadWrite',
+  'Mail.Send',
   'Calendars.ReadWrite',
   'Contacts.ReadWrite',
   'Tasks.ReadWrite',
@@ -60,7 +61,7 @@ export const GRAPH_SCOPES = [
   // OneDrive
   'Files.ReadWrite',
   // SharePoint
-  'Sites.Read.All',
+  'Sites.ReadWrite.All',
   // OneNote (read/search pages + create pages)
   'Notes.ReadWrite',
 ] as const;

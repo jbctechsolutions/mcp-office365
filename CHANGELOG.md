@@ -5,6 +5,33 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.1.0] - 2026-07-10
+
+### Added
+
+- **SharePoint document-library write support** (#71). New tools for filing documents into a team
+  SharePoint site's document library: `create_library_folder` (create a folder in a library or
+  subfolder) and the confirm-gated `prepare_upload_library_file` / `confirm_upload_library_file`
+  (upload a local file). Both honor `conflict_behavior` (no silent overwrites by default) and mint
+  durable `li_` tokens for the new items, so results flow straight into `list_library_items` /
+  `download_library_file`. Simple upload is limited to 4 MB.
+
+### Fixed
+
+- **Sending mail now works** (#72). `Mail.Send` was missing from the requested Graph scopes, so
+  `Mail.ReadWrite` alone left every send path failing with `GRAPH_PERMISSION_DENIED`. Added
+  `Mail.Send`; corrected the README permissions table (which wrongly claimed `Mail.ReadWrite` could
+  send).
+
+### Changed
+
+- SharePoint scope upgraded from `Sites.Read.All` to `Sites.ReadWrite.All` to support the new
+  document-library write tools (#71).
+- **Re-consent required.** Both scope changes are delegated, so existing users must re-authenticate
+  (`npx @jbctechsolutions/mcp-office365 auth --force`) for the refreshed token to carry `Mail.Send`
+  and `Sites.ReadWrite.All`. Custom `OUTLOOK_MCP_CLIENT_ID` app registrations must also add these
+  delegated permissions in Azure AD.
+
 ## [4.0.1] - 2026-07-09
 
 ### Fixed
