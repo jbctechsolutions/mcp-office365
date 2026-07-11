@@ -11,18 +11,16 @@
  */
 
 /**
- * Default client ID for the Outlook MCP Server Azure AD app.
- *
- * This is a public client application registered in Azure AD by JBC Tech Solutions.
- * Multi-tenant configuration supports both personal and work/school Microsoft accounts.
- *
- * Users can override this with their own app registration by setting:
- * - OUTLOOK_MCP_CLIENT_ID environment variable
- * - OUTLOOK_MCP_TENANT_ID environment variable (default: 'common')
+ * No client ID is embedded. Device-code sign-in requires an Azure AD app that
+ * belongs to the tenant you sign in against, so a single baked-in default cannot
+ * serve everyone — each deployment brings its own registration via:
+ * - OUTLOOK_MCP_CLIENT_ID  (required)
+ * - OUTLOOK_MCP_TENANT_ID  (required for a single-tenant app; defaults to 'common')
  *
  * For setup instructions: https://github.com/jbctechsolutions/mcp-office365#custom-azure-ad-setup
  */
-const DEFAULT_CLIENT_ID = '8fdcd9d3-8823-48f5-bd59-c3a779053b77';
+const CLIENT_ID_SETUP_URL =
+  'https://github.com/jbctechsolutions/mcp-office365#custom-azure-ad-setup';
 
 /**
  * Microsoft Graph API scopes required for Outlook access.
@@ -85,14 +83,16 @@ export interface GraphAuthConfig {
  * for users who want to use their own Azure AD app registration.
  */
 export function loadGraphConfig(): GraphAuthConfig {
-  const clientId = process.env['OUTLOOK_MCP_CLIENT_ID'] ?? DEFAULT_CLIENT_ID;
+  const clientId = process.env['OUTLOOK_MCP_CLIENT_ID'];
   const tenantId = process.env['OUTLOOK_MCP_TENANT_ID'] ?? 'common';
 
-  if (clientId === 'YOUR_AZURE_APP_CLIENT_ID') {
+  if (clientId == null || clientId === '' || clientId === 'YOUR_AZURE_APP_CLIENT_ID') {
     throw new Error(
-      'Azure AD app not configured. Either:\n' +
-        '1. Set OUTLOOK_MCP_CLIENT_ID environment variable, or\n' +
-        '2. The package maintainer needs to embed the client ID in config.ts'
+      'OUTLOOK_MCP_CLIENT_ID is required — no Azure AD app is embedded.\n' +
+        'Register an app (Microsoft Graph delegated permissions, "Allow public client flows" = Yes), then set:\n' +
+        '  OUTLOOK_MCP_CLIENT_ID=<your app (client) ID>\n' +
+        '  OUTLOOK_MCP_TENANT_ID=<your tenant ID>   # required for a single-tenant app; omit for multi-tenant\n' +
+        `Setup: ${CLIENT_ID_SETUP_URL}`
     );
   }
 

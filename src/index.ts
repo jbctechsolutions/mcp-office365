@@ -344,6 +344,30 @@ export function createServer(options: ServerOptions = {}): Server {
   server.setRequestHandler(CallToolRequestSchema, async (request) => {
     const { name, arguments: args } = request.params;
 
+    // An unregistered tool name is a request-validation failure, not a Graph
+    // backend failure — emit VALIDATION_ERROR directly rather than routing
+    // through toErrorEnvelope (which would label it GRAPH_ERROR). Registered
+    // tools filtered out of the current surface (read-only/preset) are NOT
+    // handled here — dispatch() throws their mode-specific envelope instead.
+    const unknownTool = (): CallToolResult => {
+      const envelope: ErrorEnvelope = {
+        code: ErrorCode.VALIDATION_ERROR,
+        message: `Unknown tool: ${name}`,
+        retriable: false,
+        suggestion: 'Call ListTools to inspect the available tools for the current backend.',
+      };
+      return {
+        content: [{ type: 'text', text: JSON.stringify(envelope, null, 2) }],
+        isError: true,
+      };
+    };
+
+    // Reject an unknown tool before initializing (and authenticating) the Graph
+    // backend — no unknown tool name should trigger a device-code sign-in.
+    if (!registry.has(name)) {
+      return unknownTool();
+    }
+
     try {
       await ensureInitialized();
 
@@ -365,19 +389,8 @@ export function createServer(options: ServerOptions = {}): Server {
         return normalizeToolResult(registryResult as CallToolResult);
       }
 
-      // An unregistered/filtered-out tool name is a request-validation failure,
-      // not a Graph backend failure — emit VALIDATION_ERROR directly rather than
-      // routing through toErrorEnvelope (which would label it GRAPH_ERROR).
-      const unknownToolEnvelope: ErrorEnvelope = {
-        code: ErrorCode.VALIDATION_ERROR,
-        message: `Unknown tool: ${name}`,
-        retriable: false,
-        suggestion: 'Call ListTools to inspect the available tools for the current backend.',
-      };
-      return {
-        content: [{ type: 'text', text: JSON.stringify(unknownToolEnvelope, null, 2) }],
-        isError: true,
-      } satisfies CallToolResult;
+      // Defensive: has() gated this path, so dispatch should not return undefined.
+      return unknownTool();
     } catch (error) {
       // D10: every thrown failure surfaces as a stable typed envelope mapped at
       // this single point. Guard against a pathological error whose own

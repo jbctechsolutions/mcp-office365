@@ -100,6 +100,21 @@ export async function acquireTokenInteractive(
   const request: DeviceCodeRequest = {
     scopes: [...config.scopes],
     deviceCodeCallback: (response) => {
+      // MSAL swallows a 400 from the /devicecode endpoint (e.g. AADSTS50059 when a
+      // single-tenant app is requested via `common`/`organizations`, or AADSTS700016
+      // when the app is absent from the tenant) into an EMPTY response object and
+      // invokes this callback anyway. Left alone it prints `undefined` for the code
+      // and URL, then dies polling with a misleading `invalid_grant`. Fail fast with
+      // an actionable diagnosis instead.
+      if (!response.userCode || !response.verificationUri) {
+        throw new Error(
+          `Microsoft returned an empty device-code response for tenant "${config.tenantId}". ` +
+            'This usually means the Azure app registration cannot complete a device-code sign-in ' +
+            'against that tenant — e.g. a single-tenant app requested via "common"/"organizations", ' +
+            'or an app that is not registered in the tenant. Set OUTLOOK_MCP_TENANT_ID to the tenant ' +
+            'where the app is registered (or use an account that belongs to it).'
+        );
+      }
       deviceCodeCallback(response.userCode, response.verificationUri, response.message);
     },
   };
