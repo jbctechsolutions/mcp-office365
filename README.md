@@ -151,13 +151,13 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
 
 Tokens are stored in `~/.outlook-mcp/tokens.json` and refreshed automatically.
 
-### Custom Azure AD App Registration
+### Azure AD App Registration (required)
 
-For production, work accounts with conditional access, or full control over the app lifecycle:
+No app registration is embedded — device-code sign-in needs an app that belongs to the tenant you sign in against, so you must register your own and set `OUTLOOK_MCP_CLIENT_ID` (and `OUTLOOK_MCP_TENANT_ID` for a single-tenant app). The server fails fast with setup guidance if `OUTLOOK_MCP_CLIENT_ID` is unset.
 
 1. **Register** in [Azure Portal](https://portal.azure.com) > Azure Active Directory > App registrations > New registration
    - Name: `Outlook MCP Server`
-   - Supported account types: Multitenant + personal accounts
+   - Supported account types: single-tenant for one org, or multitenant to allow other tenants (multitenant + personal accounts may require Microsoft publisher verification)
    - Redirect URI: leave blank
 2. **Add API permissions** (Microsoft Graph > Delegated): see [Required Graph API Permissions](#required-graph-api-permissions) below
 3. **Enable public client flows**: Authentication > Advanced settings > Allow public client flows > Yes
@@ -663,8 +663,8 @@ These delegated permissions are requested via Microsoft Graph:
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `OUTLOOK_MCP_CLIENT_ID` | Override the embedded Azure AD client ID | (embedded) |
-| `OUTLOOK_MCP_TENANT_ID` | Azure AD tenant ID | `common` |
+| `OUTLOOK_MCP_CLIENT_ID` | Azure AD app (client) ID | **(required)** |
+| `OUTLOOK_MCP_TENANT_ID` | Azure AD tenant ID (required for single-tenant apps) | `common` |
 
 ## Contributing
 

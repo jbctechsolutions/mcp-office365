@@ -139,6 +139,27 @@ describe('graph/auth/device-code-flow', () => {
       );
     });
 
+    it('throws an actionable error when the device code response is empty (tenant/app mismatch)', async () => {
+      // MSAL swallows a 400 from the /devicecode endpoint (e.g. AADSTS50059 on a
+      // single-tenant app requested via `common`, or AADSTS700016 when the app
+      // is absent from the tenant) into an EMPTY response object, then invokes
+      // the callback anyway — which surfaced as `undefined` codes and a
+      // misleading downstream `invalid_grant`. Fail fast with a real diagnosis.
+      mockAcquireTokenByDeviceCode.mockImplementation(async (request: any) => {
+        request.deviceCodeCallback({});
+        return null;
+      });
+
+      const callback = vi.fn();
+      await expect(acquireTokenInteractive(callback)).rejects.toThrow(
+        /empty device[- ]code response/i
+      );
+      // The user-facing callback must NOT be invoked with undefined values.
+      expect(callback).not.toHaveBeenCalled();
+      // The message names the configured tenant so the fix is obvious.
+      await expect(acquireTokenInteractive(callback)).rejects.toThrow(/common/);
+    });
+
     it('uses default callback when none provided', async () => {
       const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 

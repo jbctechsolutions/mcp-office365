@@ -73,13 +73,14 @@ describe('graph/auth/config', () => {
   });
 
   describe('loadGraphConfig', () => {
-    it('loads embedded default client ID', () => {
-      const config = loadGraphConfig();
+    it('requires OUTLOOK_MCP_CLIENT_ID (no app is embedded)', () => {
+      // No client ID env set (cleared in beforeEach) — must fail fast with setup guidance.
+      expect(() => loadGraphConfig()).toThrow(/OUTLOOK_MCP_CLIENT_ID is required/);
+    });
 
-      expect(config.clientId).toBeTruthy();
-      expect(config.clientId).not.toBe('YOUR_AZURE_APP_CLIENT_ID');
-      // Verify it's a valid UUID format
-      expect(config.clientId).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i);
+    it('rejects the placeholder client ID', () => {
+      process.env['OUTLOOK_MCP_CLIENT_ID'] = 'YOUR_AZURE_APP_CLIENT_ID';
+      expect(() => loadGraphConfig()).toThrow(/OUTLOOK_MCP_CLIENT_ID is required/);
     });
 
     it('uses environment variable for client ID', () => {
