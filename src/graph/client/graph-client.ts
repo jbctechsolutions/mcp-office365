@@ -2524,6 +2524,37 @@ export class GraphClient {
     return await client.api(`/drives/${driveId}/items/${itemId}/content`).responseType(ResponseType.ARRAYBUFFER).get() as ArrayBuffer;
   }
 
+  /**
+   * Creates a folder in a document library. Omit parentItemId to create at the
+   * library root. conflictBehavior is `fail` (default) or `rename`.
+   */
+  async createLibraryFolder(driveId: string, parentItemId: string | undefined, folderName: string, conflictBehavior: string): Promise<GraphEntity> {
+    const client = await this.getClient();
+    const apiPath = parentItemId != null ? `/drives/${driveId}/items/${parentItemId}/children` : `/drives/${driveId}/root/children`;
+    return await client.api(apiPath).post({
+      name: folderName,
+      folder: {},
+      '@microsoft.graph.conflictBehavior': conflictBehavior,
+    }) as GraphEntity;
+  }
+
+  /**
+   * Uploads a file into a document library via a simple PUT. Omit parentItemId to
+   * upload at the library root. conflictBehavior is `fail` (default), `replace`,
+   * or `rename`. Simple upload is limited by Microsoft Graph to 4 MB.
+   */
+  async uploadLibraryFile(driveId: string, parentItemId: string | undefined, fileName: string, content: Buffer, conflictBehavior: string): Promise<GraphEntity> {
+    const client = await this.getClient();
+    const encodedName = encodeURIComponent(fileName);
+    const apiPath = parentItemId != null
+      ? `/drives/${driveId}/items/${parentItemId}:/${encodedName}:/content`
+      : `/drives/${driveId}/root:/${encodedName}:/content`;
+    return await client.api(apiPath)
+      .query({ '@microsoft.graph.conflictBehavior': conflictBehavior })
+      .header('Content-Type', 'application/octet-stream')
+      .put(content) as GraphEntity;
+  }
+
   // ===========================================================================
   // SharePoint Lists
   // ===========================================================================
