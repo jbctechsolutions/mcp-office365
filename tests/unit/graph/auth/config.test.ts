@@ -74,12 +74,14 @@ describe('graph/auth/config', () => {
       expect(config.clientId).toBe('test-client-id-123');
     });
 
-    it('uses default tenant ID when not set', () => {
+    it('uses the embedded home tenant ID when not set', () => {
       process.env['OUTLOOK_MCP_CLIENT_ID'] = 'test-client-id';
 
       const config = loadGraphConfig();
 
-      expect(config.tenantId).toBe('common');
+      // Embedded app is single-tenant, so the default authority must be its home
+      // tenant — `common` would fail device-code with AADSTS50059.
+      expect(config.tenantId).toBe('761e2c5f-34bd-4872-b86c-3a9f3b29d63a');
     });
 
     it('uses environment variable for tenant ID', () => {

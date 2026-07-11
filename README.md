@@ -668,7 +668,7 @@ These delegated permissions are requested when using the Graph API backend:
 |----------|-------------|---------|
 | `USE_APPLESCRIPT` | Set to `1` or `true` for legacy AppleScript backend | (unset -- uses Graph API) |
 | `OUTLOOK_MCP_CLIENT_ID` | Override the embedded Azure AD client ID | (embedded) |
-| `OUTLOOK_MCP_TENANT_ID` | Azure AD tenant ID | `common` |
+| `OUTLOOK_MCP_TENANT_ID` | Azure AD tenant ID | (embedded app's home tenant) |
 
 ## Known Limitations
 
