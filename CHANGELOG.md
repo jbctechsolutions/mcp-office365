@@ -5,6 +5,27 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.2.0] - 2026-07-11
+
+### Changed
+
+- **Authentication now requires your own Azure AD app registration** (#75). The previously embedded
+  default client ID no longer exists, and a single embedded app cannot complete device-code sign-in
+  for arbitrary tenants anyway. `OUTLOOK_MCP_CLIENT_ID` is now required — the server fails fast with
+  setup guidance if it is unset. Set `OUTLOOK_MCP_TENANT_ID` as well for a single-tenant app (it
+  still defaults to `common`). Deployments already overriding these env vars are unaffected.
+
+### Fixed
+
+- **Clear error instead of `undefined` + `invalid_grant` on a bad auth config** (#75). A 400 from the
+  Microsoft `/devicecode` endpoint (e.g. `AADSTS50059` for a single-tenant app requested via `common`,
+  or `AADSTS700016` for an app missing from the tenant) is swallowed by msal-node into an empty
+  device-code response. Sign-in now detects this and reports the real tenant/app mismatch instead of
+  printing `undefined` for the code and dying with a misleading `invalid_grant`.
+- **Unknown tool names no longer trigger a sign-in** (#75). Calling a tool that is not registered now
+  returns a validation error before the Graph backend initializes, so a typo can no longer kick off a
+  device-code prompt.
+
 ## [4.1.0] - 2026-07-10
 
 ### Added
