@@ -36,12 +36,15 @@ import type { RemoteIdentity } from './auth/verify.js';
 import { createAuthMiddleware } from './auth/middleware.js';
 import { protectedResourceMetadata, PRM_PATH } from './auth/metadata.js';
 import type { OboClient } from './auth/obo.js';
+import type { EntitlementResolver } from './entitlements.js';
 
-/** Auth bundle for U4/U5 — config, token verifier, deny-list, and OBO client. */
+/** Auth bundle for U4/U5/U6 — config, verifier, deny-list, OBO, entitlements. */
 export interface RemoteAuthBundle {
   readonly config: RemoteAuthConfig;
   readonly verify: (token: string) => Promise<RemoteIdentity>;
   readonly denyList: DenyList;
+  /** Per-user tool-surface resolver (U6). Resolved fresh per request. */
+  readonly entitlements: EntitlementResolver;
   /**
    * On-Behalf-Of client (U5). When present, an authenticated request's tool
    * calls exchange the inbound token for a per-user Graph token. When absent
@@ -158,11 +161,19 @@ export function buildHttpApp(options: HttpServerOptions): Express {
     // account). Attach per-user OBO when the credential is available; without it,
     // tool calls fail closed (remoteMode) rather than fall back.
     const obo = options.auth?.obo;
+    // Resolve this user's entitlement (fresh per request → config edits and
+    // narrowed access take effect on the next call, incl. confirm_*).
+    const surface =
+      options.auth != null && req.remoteIdentity != null
+        ? options.auth.entitlements.resolve(req.remoteIdentity.oid, 'graph')
+        : undefined;
     const perRequestOptions: ServerOptions =
       options.auth != null
         ? {
             ...serverOptions,
             remoteMode: true,
+            ...(surface?.allow != null ? { allow: surface.allow } : {}),
+            ...(surface?.exclude != null ? { exclude: surface.exclude } : {}),
             ...(obo != null && req.remoteIdentity != null && req.auth?.token != null
               ? {
                   remoteAuth: {

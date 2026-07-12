@@ -128,6 +128,9 @@ function normalizeToolResult(result: CallToolResult): CallToolResult {
 export interface ServerOptions {
   readonly presets?: SurfaceOptions['presets'];
   readonly readOnly?: boolean;
+  /** Per-user entitlement allow-list / exclusions (U6). */
+  readonly allow?: SurfaceOptions['allow'];
+  readonly exclude?: SurfaceOptions['exclude'];
   /** Destructive-confirm mode (U11): 'token' (default) or 'elicit'. */
   readonly confirmMode?: ConfirmMode;
   /**
@@ -196,6 +199,8 @@ export function createServer(options: ServerOptions = {}): Server {
     backend: 'graph',
     ...(options.presets != null ? { presets: options.presets } : {}),
     ...(options.readOnly != null ? { readOnly: options.readOnly } : {}),
+    ...(options.allow != null ? { allow: options.allow } : {}),
+    ...(options.exclude != null ? { exclude: options.exclude } : {}),
   };
 
   // Confirmation mode (U11). In 'elicit' mode a destructive prepare asks the
@@ -550,15 +555,20 @@ async function main(): Promise<void> {
         const { createTokenVerifier } = await import('./remote/auth/verify.js');
         const { createStubDenyList } = await import('./remote/auth/deny-list.js');
         const { loadOboCredential, createOboClient } = await import('./remote/auth/obo.js');
+        const { createEntitlementResolver } = await import('./remote/entitlements.js');
         const config = loadRemoteAuthConfig();
         // OBO (U5): available only when the confidential credential is configured.
         // Without it, the handshake works but tool calls fail fast until it lands.
         const cred = loadOboCredential();
         const obo = cred != null ? createOboClient(config, cred) : undefined;
+        // Entitlements (U6): per-user tool surface from an optional config file;
+        // unconfigured users get the pinned default surface.
+        const entitlements = createEntitlementResolver(process.env.OUTLOOK_MCP_ENTITLEMENTS);
         auth = {
           config,
           verify: createTokenVerifier(config),
           denyList: createStubDenyList(),
+          entitlements,
           ...(obo != null ? { obo } : {}),
         };
         if (obo == null) {

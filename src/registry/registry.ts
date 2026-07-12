@@ -31,6 +31,16 @@ export interface SurfaceOptions {
   readonly presets?: readonly Preset[];
   /** When true, only non-destructive tools are exposed. */
   readonly readOnly?: boolean;
+  /**
+   * Explicit allow-list of tool names (U6 entitlements). When set, the surface
+   * is EXACTLY these tools — presets are ignored and the empty-presets
+   * "always-exposed" bypass does not apply (a tool shows iff it is listed). This
+   * is what makes a per-user entitlement pinnable: a server upgrade that adds a
+   * tool cannot widen a user's surface unless the tool is added to their list.
+   */
+  readonly allow?: readonly string[];
+  /** Tool names to remove from the surface — applies in both allow and preset modes. */
+  readonly exclude?: readonly string[];
 }
 
 /**
@@ -219,6 +229,15 @@ export class ToolRegistry {
     }
     if (options.readOnly === true && !isReadOnly(def)) {
       return false;
+    }
+    // Exclusion wins over any inclusion (U6).
+    if (options.exclude != null && options.exclude.includes(def.name)) {
+      return false;
+    }
+    // Explicit allow-list mode (U6): the surface is exactly the listed tools;
+    // presets and the empty-presets bypass do not apply.
+    if (options.allow != null) {
+      return options.allow.includes(def.name);
     }
     const presets = options.presets;
     if (presets != null && presets.length > 0 && def.presets.length > 0) {
