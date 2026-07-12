@@ -11,9 +11,20 @@
  * perf-motivated cache can't reintroduce a staleness window).
  */
 
+import type { StateStore } from '../../state/store.js';
+
 /** Checks whether an Entra object id is revoked. */
 export interface DenyList {
   isDenied(oid: string): boolean;
+}
+
+/**
+ * Store-backed deny-list (U7). Reads the durable deny-list per call — never
+ * process-cached — so a revocation takes effect on the next request and a later
+ * perf cache can't reintroduce a staleness window.
+ */
+export function createStoreDenyList(store: StateStore): DenyList {
+  return { isDenied: (oid: string): boolean => store.isDenied(oid) };
 }
 
 /**

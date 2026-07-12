@@ -512,6 +512,80 @@ export function createServer(options: ServerOptions = {}): Server {
 // Main Entry Point
 // =============================================================================
 
+/**
+ * `revoke` subcommand (U7): offboard a remote user by Entra oid.
+ *   revoke <oid>            — deny-list + purge the user's durable state
+ *   revoke --readmit <oid>  — remove the deny-list entry
+ *   revoke --list           — show revoked identities
+ */
+async function handleRevokeCommand(flags: string[]): Promise<number> {
+  const { loadRemoteAuthConfig } = await import('./remote/config.js');
+  const { revokeUser, readmitUser, listRevoked } = await import('./remote/revocation.js');
+  let tenantId: string;
+  try {
+    tenantId = loadRemoteAuthConfig().tenantId;
+  } catch (error) {
+    process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
+    return 1;
+  }
+  const stateDir = process.env.OUTLOOK_MCP_STATE_DIR;
+  const store = StateStore.open(stateDir != null ? { dir: stateDir } : {});
+  if (store.degraded) {
+    // A degraded (in-memory) store can't durably record the revocation — abort
+    // rather than write to a throwaway db and falsely report success.
+    process.stderr.write(
+      'State store is degraded (in-memory) — cannot durably record revocation. ' +
+        'Fix OUTLOOK_MCP_STATE_DIR / the state volume and retry.\n',
+    );
+    store.close();
+    return 1;
+  }
+  try {
+    if (flags.includes('--list')) {
+      const rows = listRevoked(store);
+      if (rows.length === 0) {
+        process.stdout.write('No revoked users.\n');
+      } else {
+        for (const r of rows) {
+          process.stdout.write(`${r.oid}\t${new Date(r.deniedAt).toISOString()}\t${r.reason ?? ''}\n`);
+        }
+      }
+      return 0;
+    }
+    const readmitIdx = flags.indexOf('--readmit');
+    if (readmitIdx >= 0) {
+      const raw = flags[readmitIdx + 1];
+      if (raw == null || raw.startsWith('--')) {
+        process.stderr.write('revoke --readmit requires an oid.\n');
+        return 1;
+      }
+      const oid = raw.toLowerCase();
+      const removed = readmitUser(store, oid);
+      process.stdout.write(removed ? `Re-admitted ${oid}.\n` : `${oid} was not revoked.\n`);
+      return 0;
+    }
+    const rawOid = flags.find((f) => !f.startsWith('--'));
+    if (rawOid == null) {
+      process.stderr.write('Usage: revoke <oid> | revoke --readmit <oid> | revoke --list\n');
+      return 1;
+    }
+    // Normalize to match the token oid the middleware checks (lowercased).
+    const oid = rawOid.toLowerCase();
+    const result = revokeUser(store, oid, `${oid}.${tenantId}`, Date.now(), 'revoked via CLI');
+    const noState =
+      result.purgedRows === 0
+        ? ' No durable state matched this oid — verify it is the Entra object id (oid) from the audit log.'
+        : '';
+    process.stdout.write(
+      `Revoked ${oid} (deny-listed; purged ${result.purgedRows} durable rows).${noState} ` +
+        `Note: connector removal in claude.ai does not clear server state.\n`,
+    );
+    return 0;
+  } finally {
+    store.close();
+  }
+}
+
 async function main(): Promise<void> {
   const argv = process.argv.slice(2);
 
@@ -519,6 +593,10 @@ async function main(): Promise<void> {
   const cliCommand = parseCliCommand(argv);
   if (cliCommand?.command === 'auth') {
     const exitCode = await handleAuthCommand(cliCommand.flags);
+    process.exit(exitCode);
+  }
+  if (cliCommand?.command === 'revoke') {
+    const exitCode = await handleRevokeCommand(cliCommand.flags);
     process.exit(exitCode);
   }
 
@@ -546,14 +624,29 @@ async function main(): Promise<void> {
       const stateDir = process.env.OUTLOOK_MCP_STATE_DIR;
       const stateStore = StateStore.open(stateDir != null ? { dir: stateDir } : {});
 
-      // Auth (U4) is enabled when the connector URL is configured. Presence of
-      // that var is the signal to require auth; a full-but-partial config
-      // fails fast inside loadRemoteAuthConfig. Absent → loopback-only dev mode.
+      // Auth (U4) is enabled when the connector URL is configured.
+      const remoteAuthEnabled = process.env.OUTLOOK_MCP_CONNECTOR_URL != null;
+      if (remoteAuthEnabled && stateStore.degraded) {
+        // The deny-list (U7) and audit log (U8) are security controls that must be
+        // durable. A degraded (in-memory) store would fail OPEN — silently
+        // re-admitting revoked users — so refuse to serve authenticated remote
+        // traffic on one. (Loopback-dev serve without auth tolerates degraded.)
+        process.stderr.write(
+          'Refusing to serve remote (authenticated) mode with a degraded (in-memory) state ' +
+            'store: the deny-list and audit log require durability. Fix OUTLOOK_MCP_STATE_DIR / ' +
+            'the state volume and retry.\n',
+        );
+        process.exit(1);
+      }
+
+      // Presence of OUTLOOK_MCP_CONNECTOR_URL is the signal to require auth; a
+      // full-but-partial config fails fast inside loadRemoteAuthConfig. Absent →
+      // loopback-only dev mode.
       let auth: import('./remote/http-server.js').RemoteAuthBundle | undefined;
       if (process.env.OUTLOOK_MCP_CONNECTOR_URL != null) {
         const { loadRemoteAuthConfig } = await import('./remote/config.js');
         const { createTokenVerifier } = await import('./remote/auth/verify.js');
-        const { createStubDenyList } = await import('./remote/auth/deny-list.js');
+        const { createStoreDenyList } = await import('./remote/auth/deny-list.js');
         const { loadOboCredential, createOboClient } = await import('./remote/auth/obo.js');
         const { createEntitlementResolver } = await import('./remote/entitlements.js');
         const config = loadRemoteAuthConfig();
@@ -567,7 +660,7 @@ async function main(): Promise<void> {
         auth = {
           config,
           verify: createTokenVerifier(config),
-          denyList: createStubDenyList(),
+          denyList: createStoreDenyList(stateStore),
           entitlements,
           ...(obo != null ? { obo } : {}),
         };

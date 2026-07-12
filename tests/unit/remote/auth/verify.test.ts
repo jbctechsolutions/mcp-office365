@@ -78,6 +78,15 @@ describe('createTokenVerifier (U4)', () => {
     expect(id.scopes).toContain('access_as_user');
   });
 
+  it('lowercases oid/tid so deny-list and account keys match byte-for-byte', async () => {
+    const id = (await verify(await sign(claims({ oid: OID.toUpperCase() })))) as {
+      oid: string;
+      homeAccountId: string;
+    };
+    expect(id.oid).toBe(OID); // lowercased
+    expect(id.homeAccountId).toBe(`${OID}.${TID}`);
+  });
+
   it('accepts the api:// audience form as well as the GUID', async () => {
     await expect(verify(await sign(claims(), { aud: 'api://mcp-office365-connector' }))).resolves
       .toBeDefined();
