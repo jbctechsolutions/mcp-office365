@@ -27,7 +27,7 @@ import type { Backend, SurfaceOptions } from '../registry/index.js';
  * / photo tools. Generated from the registry; update via a reviewed change when
  * the default surface should shift (the contract test flags registry drift).
  */
-export const DEFAULT_TOOL_SURFACE: readonly string[] = [
+export const DEFAULT_TOOL_SURFACE: readonly string[] = Object.freeze([
   'add_draft_attachment', 'add_draft_inline_image', 'check_availability', 'check_new_emails',
   'clear_email_flag', 'confirm_archive_email', 'confirm_batch_operation', 'confirm_delete_bucket',
   'confirm_delete_calendar_permission', 'confirm_delete_category', 'confirm_delete_drive_item',
@@ -63,7 +63,7 @@ export const DEFAULT_TOOL_SURFACE: readonly string[] = [
   'set_signature', 'update_bucket', 'update_draft', 'update_event', 'update_list_item',
   'update_mailbox_settings', 'update_plan', 'update_planner_task', 'update_planner_task_details',
   'what_changed',
-];
+]);
 
 /** A single user's entitlement entry. */
 export interface UserEntitlement {
@@ -107,9 +107,11 @@ export function createEntitlementResolver(configPath?: string): EntitlementResol
       return cached;
     }
     if (mtimeMs !== cachedMtimeMs) {
+      // Advance the mtime marker regardless of outcome, so a persistently-
+      // malformed file is parsed + warned once per edit, not once per request.
+      cachedMtimeMs = mtimeMs;
       try {
         cached = parseConfig(readFileSync(configPath, 'utf-8'));
-        cachedMtimeMs = mtimeMs;
       } catch (e) {
         // Malformed config must not widen access — keep the last-good (or default)
         // and warn; a bad edit fails safe rather than exposing the full surface.
@@ -148,9 +150,12 @@ function parseConfig(raw: string): EntitlementConfig {
   if (obj.users != null) {
     if (typeof obj.users !== 'object') throw new Error('`users` must be an object keyed by oid');
     for (const [oid, value] of Object.entries(obj.users as Record<string, unknown>)) {
+      if (value == null || typeof value !== 'object') {
+        throw new Error(`users.${oid} must be an object`);
+      }
       const v = value as UserEntitlement;
-      if (v.allow != null && !Array.isArray(v.allow)) throw new Error(`users.${oid}.allow must be an array`);
-      if (v.exclude != null && !Array.isArray(v.exclude)) throw new Error(`users.${oid}.exclude must be an array`);
+      if (v.allow != null && !isStringArray(v.allow)) throw new Error(`users.${oid}.allow must be a string[]`);
+      if (v.exclude != null && !isStringArray(v.exclude)) throw new Error(`users.${oid}.exclude must be a string[]`);
       users[oid] = {
         ...(v.fullAccess === true ? { fullAccess: true } : {}),
         ...(v.allow != null ? { allow: v.allow } : {}),
@@ -159,4 +164,8 @@ function parseConfig(raw: string): EntitlementConfig {
     }
   }
   return { ...(typeof obj.version === 'number' ? { version: obj.version } : {}), users };
+}
+
+function isStringArray(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every((v) => typeof v === 'string');
 }

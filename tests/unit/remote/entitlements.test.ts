@@ -74,6 +74,33 @@ describe('createEntitlementResolver (U6)', () => {
     const r = createEntitlementResolver('/no/such/entitlements.json');
     expect(r.resolve('u1', 'graph').allow).toBe(DEFAULT_TOOL_SURFACE);
   });
+
+  it('fails safe (never full surface) on malformed JSON', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'mcp-ent-'));
+    dirs.push(dir);
+    const p = join(dir, 'entitlements.json');
+    writeFileSync(p, '{ not valid json');
+    const s = createEntitlementResolver(p).resolve('u1', 'graph');
+    expect(s.allow).toBe(DEFAULT_TOOL_SURFACE); // default, not undefined/full
+  });
+
+  it('rejects non-string allow/exclude elements (fails safe to default)', () => {
+    const p = tmpConfig({ users: { u1: { allow: ['list_folders', 42] } } });
+    // parse throws → last-good (empty) → default surface, never the bad allow.
+    expect(createEntitlementResolver(p).resolve('u1', 'graph').allow).toBe(DEFAULT_TOOL_SURFACE);
+  });
+
+  it('honors an explicit empty allow-list (deny all), not the default', () => {
+    const p = tmpConfig({ users: { u1: { allow: [] } } });
+    expect(createEntitlementResolver(p).resolve('u1', 'graph').allow).toEqual([]);
+  });
+
+  it('applies exclude even for a fullAccess user', () => {
+    const p = tmpConfig({ users: { joel: { fullAccess: true, exclude: ['send_email'] } } });
+    const s = createEntitlementResolver(p).resolve('joel', 'graph');
+    expect(s.allow).toBeUndefined();
+    expect(s.exclude).toEqual(['send_email']);
+  });
 });
 
 describe('DEFAULT_TOOL_SURFACE registry contract', () => {
@@ -115,5 +142,27 @@ describe('registry allow/exclude filtering (U6)', () => {
       exclude: ['send_email'],
     });
     expect(tools.map((t) => t.name)).toEqual(['list_folders']);
+  });
+
+  it('composes the --preset outer bound with the allow-list (intersection)', () => {
+    // allow spans mail + planner; a process-wide --preset mail cap must exclude
+    // the planner tool even though it is allow-listed.
+    const tools = registry.listTools({
+      backend: 'graph',
+      presets: ['mail'],
+      allow: ['list_folders', 'list_plans'],
+    });
+    const names = tools.map((t) => t.name);
+    expect(names).toContain('list_folders'); // mail-preset tool
+    expect(names).not.toContain('list_plans'); // planner tool, outside the cap
+  });
+
+  it('a tool outside the allow-list is not exposed (dispatch invariant)', () => {
+    expect(registry.isExposed('send_email', { backend: 'graph', allow: ['list_folders'] })).toBe(
+      false,
+    );
+    expect(registry.isExposed('list_folders', { backend: 'graph', allow: ['list_folders'] })).toBe(
+      true,
+    );
   });
 });
