@@ -37,7 +37,18 @@ import { createServerElicitor } from './registry/elicitor.js';
 import { allToolDefinitions } from './registry/all-tools.js';
 import { parseCliCommand, parseServerOptions, handleAuthCommand, createAuthMutex } from './cli.js';
 
-const pkg = createRequire(import.meta.url)('../package.json') as { version: string };
+// Prefer the build-time stamp (sits next to the compiled index.js) so a stale
+// dist reports the version it was built from; package.json is the dev/test
+// fallback where no stamp exists.
+const requireFromHere = createRequire(import.meta.url);
+function loadVersion(): string {
+  try {
+    return (requireFromHere('./build-info.json') as { version: string }).version;
+  } catch {
+    return (requireFromHere('../package.json') as { version: string }).version;
+  }
+}
+const pkg = { version: loadVersion() };
 import { GraphMailTools } from './tools/mail-graph.js';
 import { GraphCalendarTools } from './tools/calendar-graph.js';
 import { GraphContactsTools } from './tools/contacts-graph.js';

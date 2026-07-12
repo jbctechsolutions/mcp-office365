@@ -184,6 +184,22 @@ export class StateStore {
         }
       }
       const reason = error instanceof Error ? error.message : String(error);
+      // The in-memory fallback is backed by the same native module, so a module
+      // that cannot load (Node ABI mismatch, missing build) would just rethrow
+      // the raw dlopen stack from the fallback. Surface remediation instead.
+      if (isNativeLoadFailure(error)) {
+        throw new Error(
+          `better-sqlite3 native module failed to load — it was built for a different Node.js ` +
+            `than the one running (current: ${process.version}), so neither the on-disk state ` +
+            `store nor its in-memory fallback can start.\n` +
+            `Fix one of:\n` +
+            `  - npm rebuild better-sqlite3   # in the directory the server is installed in\n` +
+            `  - rm -rf ~/.npm/_npx           # clear the npx cache so it recompiles on next run\n` +
+            `  - run the server under the Node.js version that installed it\n` +
+            `Original error: ${reason}`,
+          { cause: error },
+        );
+      }
       warn(`[mcp-office365] state store unavailable (${reason}); running in-memory (durability degraded).`);
       const mem = new Database(':memory:');
       configurePragmas(mem);
@@ -425,6 +441,21 @@ export class StateStore {
   close(): void {
     this.db.close();
   }
+}
+
+/**
+ * True when the error means the better-sqlite3 native binding itself cannot be
+ * loaded (as opposed to a bad/locked db file): dlopen ABI rejection, or the
+ * compiled `.node` artifact missing entirely.
+ */
+function isNativeLoadFailure(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  const code = (error as NodeJS.ErrnoException).code;
+  if (code === 'ERR_DLOPEN_FAILED') return true;
+  if (/NODE_MODULE_VERSION|was compiled against a different Node\.js version/.test(error.message)) {
+    return true;
+  }
+  return code === 'MODULE_NOT_FOUND' && error.message.includes('better_sqlite3.node');
 }
 
 function configurePragmas(db: DB): void {
