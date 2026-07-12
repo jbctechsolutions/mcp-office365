@@ -35,7 +35,13 @@ import { ToolRegistry } from './registry/index.js';
 import type { ToolContext, SurfaceOptions, ConfirmMode, Elicitor } from './registry/index.js';
 import { createServerElicitor } from './registry/elicitor.js';
 import { allToolDefinitions } from './registry/all-tools.js';
-import { parseCliCommand, parseServerOptions, handleAuthCommand, createAuthMutex } from './cli.js';
+import {
+  parseCliCommand,
+  parseServerOptions,
+  parseServeOptions,
+  handleAuthCommand,
+  createAuthMutex,
+} from './cli.js';
 
 // Prefer the build-time stamp (sits next to the compiled index.js) so a stale
 // dist reports the version it was built from; package.json is the dev/test
@@ -86,6 +92,7 @@ import {
   toErrorEnvelope,
   ensureErrorEnvelopeText,
   ErrorCode,
+  GraphAuthRequiredError,
   type ErrorEnvelope,
 } from './utils/errors.js';
 
@@ -122,6 +129,31 @@ export interface ServerOptions {
   readonly readOnly?: boolean;
   /** Destructive-confirm mode (U11): 'token' (default) or 'elicit'. */
   readonly confirmMode?: ConfirmMode;
+  /**
+   * Durable state store to back approval tokens and durable-ID aliases. When
+   * omitted (the stdio path), each server opens its own via `StateStore.open()`.
+   * Remote mode (U3) injects one process-scoped store so a per-request server is
+   * cheap to build and does not re-open SQLite / re-run migrations per request.
+   */
+  readonly stateStore?: StateStore;
+  /**
+   * Whether an unauthenticated first tool call may trigger the interactive
+   * device-code flow. True (default) for stdio at a terminal. Remote/serve mode
+   * sets it false: there is no device-code channel over HTTP, so an unauthed
+   * call must fail fast with a typed error rather than hang until MSAL times out
+   * (and, with per-request servers, spawn concurrent device-code flows).
+   */
+  readonly interactiveAuth?: boolean;
+}
+
+/**
+ * Derives the server options for remote/serve mode from the parsed CLI options.
+ * Remote mode has no elicitation channel (force `token` confirm) and no
+ * device-code channel (fail fast on an unauthenticated call rather than hang) —
+ * these overrides are load-bearing and must hold regardless of user flags.
+ */
+export function serveServerOptions(base: ServerOptions): ServerOptions {
+  return { ...base, confirmMode: 'token', interactiveAuth: false };
 }
 
 export function createServer(options: ServerOptions = {}): Server {
@@ -161,8 +193,9 @@ export function createServer(options: ServerOptions = {}): Server {
 
   // The durable state store backs approval tokens (U9b) so a two-phase
   // approval survives a restart / a second window; a corrupt/locked db
-  // degrades to in-memory (StateStore.open handles it).
-  const stateStore = StateStore.open();
+  // degrades to in-memory (StateStore.open handles it). Remote mode injects a
+  // shared, process-scoped store (U3); the stdio path opens its own here.
+  const stateStore = options.stateStore ?? StateStore.open();
   // accountId is a thunk: the signed-in account (homeAccountId) is only known
   // after auth, later than this construction. resolveAccountId() populates it in
   // initializeGraphBackend; currentAccountId() reads the memo at each token op.
@@ -215,6 +248,11 @@ export function createServer(options: ServerOptions = {}): Server {
     // Try to authenticate if needed (triggers device code flow for first-time users)
     const authenticated = await isAuthenticated();
     if (!authenticated) {
+      // Remote/serve mode has no device-code channel: fail fast instead of
+      // hanging on an interactive prompt no one can answer over HTTP.
+      if (options.interactiveAuth === false) {
+        throw new GraphAuthRequiredError('not_authenticated');
+      }
       await getAccessToken();
     }
 
@@ -435,15 +473,17 @@ async function main(): Promise<void> {
 
   // Check for CLI subcommands before starting MCP server
   const cliCommand = parseCliCommand(argv);
-  if (cliCommand != null) {
+  if (cliCommand?.command === 'auth') {
     const exitCode = await handleAuthCommand(cliCommand.flags);
     process.exit(exitCode);
   }
 
-  // Server-mode flags: --preset <names>, --read-only (U10).
+  // Server-mode flags: --preset <names>, --read-only (U10). Under `serve`, these
+  // apply as the process-wide outer bound; per-user surfaces layer inside it (U6).
+  const serverFlags = cliCommand?.command === 'serve' ? cliCommand.flags : argv;
   let options: ServerOptions;
   try {
-    const parsed = parseServerOptions(argv);
+    const parsed = parseServerOptions(serverFlags);
     options = {
       readOnly: parsed.readOnly,
       confirmMode: parsed.confirmMode,
@@ -452,6 +492,33 @@ async function main(): Promise<void> {
   } catch (error) {
     process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
     process.exit(1);
+  }
+
+  // `serve`: remote connector mode over stateless Streamable HTTP (U3).
+  if (cliCommand?.command === 'serve') {
+    try {
+      const { host, port } = parseServeOptions(cliCommand.flags);
+      const { startHttpServer } = await import('./remote/http-server.js');
+      const stateDir = process.env.OUTLOOK_MCP_STATE_DIR;
+      const stateStore = StateStore.open(stateDir != null ? { dir: stateDir } : {});
+      const httpServer = await startHttpServer({
+        host,
+        port,
+        serverOptions: serveServerOptions(options),
+        stateStore,
+      });
+      // Drain in-flight requests on shutdown (Container Apps sends SIGTERM).
+      const shutdown = (): void => {
+        httpServer.close(() => process.exit(0));
+      };
+      process.on('SIGTERM', shutdown);
+      process.on('SIGINT', shutdown);
+      process.stderr.write(`mcp-office365 serve listening on http://${host}:${port}/mcp\n`);
+    } catch (error) {
+      process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
+      process.exit(1);
+    }
+    return;
   }
 
   const server = createServer(options);

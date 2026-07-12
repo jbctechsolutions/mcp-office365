@@ -68,14 +68,16 @@
   "dependencies": {
     "@azure/msal-node": "5.0.3",
     "@microsoft/microsoft-graph-client": "^3.0.7",
-    "@modelcontextprotocol/sdk": "^1.0.0",
+    "@modelcontextprotocol/sdk": "^1.29.0",
     "better-sqlite3": "^12.11.1",
+    "express": "^5.2.1",
     "isomorphic-fetch": "^3.0.0",
     "zod": "4.3.6"
   },
   "devDependencies": {
     "@microsoft/microsoft-graph-types": "^2.40.0",
     "@types/better-sqlite3": "^7.6.11",
+    "@types/express": "^5.0.0",
     "@types/node": "^22.10.2",
     "@typescript-eslint/eslint-plugin": "^7.18.0",
     "@typescript-eslint/parser": "^7.18.0",

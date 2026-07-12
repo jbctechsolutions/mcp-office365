@@ -32,6 +32,7 @@ import {
   handleAuthCommand,
   parseCliCommand,
   parseServerOptions,
+  parseServeOptions,
   VALID_PRESETS,
   createAuthMutex,
 } from '../../src/cli.js';
@@ -131,6 +132,50 @@ describe('parseCliCommand', () => {
 
   it('returns null for unknown commands', () => {
     expect(parseCliCommand(['unknown'])).toBeNull();
+  });
+
+  it('parses serve command with its flags', () => {
+    expect(parseCliCommand(['serve'])).toEqual({ command: 'serve', flags: [] });
+    expect(parseCliCommand(['serve', '--port', '8080'])).toEqual({
+      command: 'serve',
+      flags: ['--port', '8080'],
+    });
+  });
+});
+
+describe('parseServeOptions (U3)', () => {
+  it('defaults to loopback:3000', () => {
+    expect(parseServeOptions([])).toEqual({ host: '127.0.0.1', port: 3000 });
+  });
+
+  it('parses --host and --port (space and = forms)', () => {
+    expect(parseServeOptions(['--host', '0.0.0.0', '--port', '8080'])).toEqual({
+      host: '0.0.0.0',
+      port: 8080,
+    });
+    expect(parseServeOptions(['--host=0.0.0.0', '--port=8080'])).toEqual({
+      host: '0.0.0.0',
+      port: 8080,
+    });
+  });
+
+  it('ignores preset/read-only flags (parsed separately)', () => {
+    expect(parseServeOptions(['--read-only', '--preset', 'mail', '--port', '9000'])).toEqual({
+      host: '127.0.0.1',
+      port: 9000,
+    });
+  });
+
+  it('rejects an invalid or missing port', () => {
+    expect(() => parseServeOptions(['--port', 'abc'])).toThrow(/integer 1-65535/);
+    expect(() => parseServeOptions(['--port', '0'])).toThrow(/integer 1-65535/);
+    expect(() => parseServeOptions(['--port', '70000'])).toThrow(/integer 1-65535/);
+    expect(() => parseServeOptions(['--port'])).toThrow(/integer 1-65535/);
+  });
+
+  it('rejects a missing host value', () => {
+    expect(() => parseServeOptions(['--host'])).toThrow(/--host requires/);
+    expect(() => parseServeOptions(['--host', '--port'])).toThrow(/--host requires/);
   });
 });
 
