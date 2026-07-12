@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.2.1] - 2026-07-11
+
+### Fixed
+
+- **Actionable startup error when the better-sqlite3 native module cannot load** (#77). A Node ABI
+  mismatch (e.g. the npx cache compiled under a different Node.js than the one running) or a missing
+  compiled binding used to crash the server with a raw `dlopen` stack — the in-memory state-store
+  fallback is backed by the same native module, so it just rethrew. The server now fails fast with
+  the running Node.js version and the exact fix commands (`npm rebuild better-sqlite3`, clear the
+  npx cache, or run under the matching Node.js). A no-sqlite graceful degrade is tracked in #76.
+- **`serverInfo.version` now reports the version the build was made from** (#77). It previously read
+  `package.json` at runtime, so a stale `dist/` (e.g. an `npm link` dev setup) misreported the
+  current release version while running old code. `npm run build` now stamps `dist/build-info.json`
+  and the server reports that; `package.json` remains the fallback when running from source.
+- **Checked-in `.mcp.json` server entries work under 4.2.0+** (#77). The repo and plugin MCP configs
+  now pass `OUTLOOK_MCP_CLIENT_ID` / `OUTLOOK_MCP_TENANT_ID` through from the environment (required
+  since #75).
+
 ## [4.2.0] - 2026-07-11
 
 ### Changed
