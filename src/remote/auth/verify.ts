@@ -104,8 +104,11 @@ export function createTokenVerifier(
       throw new AuthForbiddenError('insufficient_scope');
     }
 
-    const oid = typeof payload.oid === 'string' ? payload.oid : '';
-    const tid = typeof payload.tid === 'string' ? payload.tid : '';
+    // Lowercase the identity so the deny-list key (written by the revoke CLI)
+    // and the durable-state account key match byte-for-byte regardless of the
+    // case an operator types; Entra GUIDs are canonically lowercase anyway.
+    const oid = typeof payload.oid === 'string' ? payload.oid.toLowerCase() : '';
+    const tid = typeof payload.tid === 'string' ? payload.tid.toLowerCase() : '';
     if (oid === '' || tid === '') {
       throw new AuthChallengeError('missing_identity');
     }
