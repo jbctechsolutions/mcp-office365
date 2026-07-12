@@ -512,6 +512,63 @@ export function createServer(options: ServerOptions = {}): Server {
 // Main Entry Point
 // =============================================================================
 
+/**
+ * `revoke` subcommand (U7): offboard a remote user by Entra oid.
+ *   revoke <oid>            — deny-list + purge the user's durable state
+ *   revoke --readmit <oid>  — remove the deny-list entry
+ *   revoke --list           — show revoked identities
+ */
+async function handleRevokeCommand(flags: string[]): Promise<number> {
+  const { loadRemoteAuthConfig } = await import('./remote/config.js');
+  const { revokeUser, readmitUser, listRevoked } = await import('./remote/revocation.js');
+  let tenantId: string;
+  try {
+    tenantId = loadRemoteAuthConfig().tenantId;
+  } catch (error) {
+    process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
+    return 1;
+  }
+  const stateDir = process.env.OUTLOOK_MCP_STATE_DIR;
+  const store = StateStore.open(stateDir != null ? { dir: stateDir } : {});
+  try {
+    if (flags.includes('--list')) {
+      const rows = listRevoked(store);
+      if (rows.length === 0) {
+        process.stdout.write('No revoked users.\n');
+      } else {
+        for (const r of rows) {
+          process.stdout.write(`${r.oid}\t${new Date(r.deniedAt).toISOString()}\t${r.reason ?? ''}\n`);
+        }
+      }
+      return 0;
+    }
+    const readmitIdx = flags.indexOf('--readmit');
+    if (readmitIdx >= 0) {
+      const oid = flags[readmitIdx + 1];
+      if (oid == null || oid.startsWith('--')) {
+        process.stderr.write('revoke --readmit requires an oid.\n');
+        return 1;
+      }
+      const removed = readmitUser(store, oid);
+      process.stdout.write(removed ? `Re-admitted ${oid}.\n` : `${oid} was not revoked.\n`);
+      return 0;
+    }
+    const oid = flags.find((f) => !f.startsWith('--'));
+    if (oid == null) {
+      process.stderr.write('Usage: revoke <oid> | revoke --readmit <oid> | revoke --list\n');
+      return 1;
+    }
+    const result = revokeUser(store, oid, `${oid}.${tenantId}`, Date.now(), 'revoked via CLI');
+    process.stdout.write(
+      `Revoked ${oid} (deny-listed; purged ${result.purgedRows} durable rows). ` +
+        `Note: connector removal in claude.ai does not clear server state.\n`,
+    );
+    return 0;
+  } finally {
+    store.close();
+  }
+}
+
 async function main(): Promise<void> {
   const argv = process.argv.slice(2);
 
@@ -519,6 +576,10 @@ async function main(): Promise<void> {
   const cliCommand = parseCliCommand(argv);
   if (cliCommand?.command === 'auth') {
     const exitCode = await handleAuthCommand(cliCommand.flags);
+    process.exit(exitCode);
+  }
+  if (cliCommand?.command === 'revoke') {
+    const exitCode = await handleRevokeCommand(cliCommand.flags);
     process.exit(exitCode);
   }
 
@@ -553,7 +614,7 @@ async function main(): Promise<void> {
       if (process.env.OUTLOOK_MCP_CONNECTOR_URL != null) {
         const { loadRemoteAuthConfig } = await import('./remote/config.js');
         const { createTokenVerifier } = await import('./remote/auth/verify.js');
-        const { createStubDenyList } = await import('./remote/auth/deny-list.js');
+        const { createStoreDenyList } = await import('./remote/auth/deny-list.js');
         const { loadOboCredential, createOboClient } = await import('./remote/auth/obo.js');
         const { createEntitlementResolver } = await import('./remote/entitlements.js');
         const config = loadRemoteAuthConfig();
@@ -567,7 +628,7 @@ async function main(): Promise<void> {
         auth = {
           config,
           verify: createTokenVerifier(config),
-          denyList: createStubDenyList(),
+          denyList: createStoreDenyList(stateStore),
           entitlements,
           ...(obo != null ? { obo } : {}),
         };

@@ -425,6 +425,53 @@ export class StateStore {
     return { status: 'expired' };
   }
 
+  // ---- Revocation deny-list (U7) ------------------------------------------
+
+  /** True when the Entra oid has been revoked. Read per request (never cached). */
+  isDenied(oid: string): boolean {
+    return this.db.prepare('SELECT 1 FROM deny_list WHERE oid = ?').get(oid) != null;
+  }
+
+  /** Adds (or refreshes) a deny-list entry for an oid. */
+  denyUser(oid: string, reason: string | null, now: number): void {
+    this.db
+      .prepare(
+        `INSERT INTO deny_list (oid, reason, denied_at) VALUES (?, ?, ?)
+         ON CONFLICT(oid) DO UPDATE SET reason = excluded.reason, denied_at = excluded.denied_at`,
+      )
+      .run(oid, reason, now);
+  }
+
+  /** Removes a deny-list entry (re-admit). Returns true when a row was removed. */
+  readmitUser(oid: string): boolean {
+    return this.db.prepare('DELETE FROM deny_list WHERE oid = ?').run(oid).changes > 0;
+  }
+
+  /** All deny-list entries, newest first. */
+  listDenied(): Array<{ oid: string; reason: string | null; deniedAt: number }> {
+    const rows = this.db
+      .prepare('SELECT oid, reason, denied_at FROM deny_list ORDER BY denied_at DESC')
+      .all() as Array<{ oid: string; reason: string | null; denied_at: number }>;
+    return rows.map((r) => ({ oid: r.oid, reason: r.reason, deniedAt: r.denied_at }));
+  }
+
+  /**
+   * Deletes all per-user durable state for an account (homeAccountId): approval
+   * tokens, durable-ID aliases, and delta cursors/items. Used by offboarding
+   * (U7) so no credentials or resolvable tokens remain for a revoked user.
+   * Returns the total rows removed.
+   */
+  purgeAccount(accountId: string): number {
+    const purge = this.db.transaction((id: string): number => {
+      let n = 0;
+      for (const table of ['approval_tokens', 'aliases', 'delta_links', 'delta_items']) {
+        n += this.db.prepare(`DELETE FROM ${table} WHERE account_id = ?`).run(id).changes;
+      }
+      return n;
+    });
+    return purge(accountId);
+  }
+
   // ---- Maintenance ---------------------------------------------------------
 
   /**

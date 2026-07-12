@@ -68,6 +68,16 @@ export const MIGRATIONS: readonly string[] = [
     PRIMARY KEY (account_id, resource, graph_id)
   );
   `,
+  // v2 → v3: remote-mode revocation deny-list (U7). Keyed by Entra oid; a
+  // denied oid is rejected in the auth middleware before OBO, so a still-valid
+  // claude.ai token can't silently re-onboard a revoked user.
+  `
+  CREATE TABLE IF NOT EXISTS deny_list (
+    oid        TEXT PRIMARY KEY,
+    reason     TEXT,
+    denied_at  INTEGER NOT NULL
+  );
+  `,
 ];
 
 /** The schema version this build expects (equals the migration count). */

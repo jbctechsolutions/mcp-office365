@@ -29,7 +29,7 @@ import {
 import type { Preset } from './registry/types.js';
 
 export interface CliCommand {
-  command: 'auth' | 'serve';
+  command: 'auth' | 'serve' | 'revoke';
   flags: string[];
 }
 
@@ -217,6 +217,9 @@ export function parseCliCommand(args: string[]): CliCommand | null {
   }
   if (command === 'serve') {
     return { command: 'serve', flags: args.slice(1) };
+  }
+  if (command === 'revoke') {
+    return { command: 'revoke', flags: args.slice(1) };
   }
 
   return null;
