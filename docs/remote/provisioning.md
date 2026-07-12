@@ -113,6 +113,15 @@ Confirm the two residual unknowns the plan flagged, before U4/U5 build on them:
 3. **Conditional Access.** Sign in once from claude.ai under JP's CA policies and
    record the outcome. If a policy blocks the browser-based client, note the
    `AADSTS` code and add the required exemption before inviting pilot users.
+4. **`acct` claim present in the ACCESS token (highest-priority check).** Member
+   enforcement is fail-closed on the `acct` claim (0 = member). The API app
+   registration adds `acct` + `idtyp` as optional access-token claims (via
+   Terraform), but Entra sometimes emits optional claims only in ID tokens —
+   decode a real member's access token (jwt.ms) and confirm `acct: 0` is present.
+   If it's absent, every member is rejected (`403 not_member`) until the optional
+   claim is corrected. Also confirm `OUTLOOK_MCP_CONNECTOR_URL` is the full
+   canonical `/mcp` URL (not the bare host) so the PRM `resource` matches what
+   claude.ai derives.
 
 ---
 
