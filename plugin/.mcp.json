@@ -2,8 +2,15 @@
   "mcpServers": {
     "office365": {
       "command": "npx",
-      "args": ["-y", "@jbctechsolutions/mcp-office365"],
-      "description": "Access Microsoft 365 data - emails, calendar, contacts, and tasks"
+      "args": [
+        "-y",
+        "@jbctechsolutions/mcp-office365"
+      ],
+      "description": "Access Microsoft 365 data - emails, calendar, contacts, and tasks",
+      "env": {
+        "OUTLOOK_MCP_CLIENT_ID": "${OUTLOOK_MCP_CLIENT_ID:-}",
+        "OUTLOOK_MCP_TENANT_ID": "${OUTLOOK_MCP_TENANT_ID:-common}"
+      }
     }
   }
 }
