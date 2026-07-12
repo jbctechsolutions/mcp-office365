@@ -14,19 +14,24 @@
  */
 
 import { afterEach, describe, expect, it } from 'vitest';
-import { mkdtempSync } from 'node:fs';
+import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { AddressInfo } from 'node:net';
-import type { Server as HttpServer } from 'node:http';
+import http, { type Server as HttpServer } from 'node:http';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import { startHttpServer } from '../../../src/remote/http-server.js';
+import { serveServerOptions } from '../../../src/index.js';
 import { StateStore } from '../../../src/state/store.js';
+
+const tempDirs: string[] = [];
 
 function tempStore(): StateStore {
   // A throwaway temp-dir store is sufficient for transport-level tests.
-  return StateStore.open({ dir: mkdtempSync(join(tmpdir(), 'mcp-u3-')) });
+  const dir = mkdtempSync(join(tmpdir(), 'mcp-u3-'));
+  tempDirs.push(dir);
+  return StateStore.open({ dir });
 }
 
 async function startTestServer(): Promise<{ server: HttpServer; url: string }> {
@@ -47,6 +52,10 @@ describe('remote HTTP server (U3)', () => {
     if (running != null) {
       await new Promise<void>((resolve) => running?.close(() => resolve()));
       running = undefined;
+    }
+    while (tempDirs.length > 0) {
+      const dir = tempDirs.pop();
+      if (dir != null) rmSync(dir, { recursive: true, force: true });
     }
   });
 
@@ -118,5 +127,71 @@ describe('remote HTTP server (U3)', () => {
         stateStore: tempStore(),
       }),
     ).toThrow(/require the authentication layer/i);
+  });
+
+  it('rejects a POST /mcp with a spoofed Host header (DNS-rebinding protection)', async () => {
+    const { server } = await startTestServer();
+    running = server;
+    const { port } = server.address() as AddressInfo;
+
+    // Raw http.request — undici's fetch forbids overriding the Host header, so a
+    // real spoof needs the low-level client.
+    const status = await new Promise<number>((resolve, reject) => {
+      const req = http.request(
+        {
+          host: '127.0.0.1',
+          port,
+          path: '/mcp',
+          method: 'POST',
+          headers: {
+            'content-type': 'application/json',
+            accept: 'application/json, text/event-stream',
+            host: 'evil.example.com',
+          },
+        },
+        (res) => {
+          res.resume();
+          resolve(res.statusCode ?? 0);
+        },
+      );
+      req.on('error', reject);
+      req.end(JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'initialize', params: {} }));
+    });
+    // The SDK's Host validation rejects an unlisted Host before dispatching.
+    expect(status).toBeGreaterThanOrEqual(400);
+    expect(status).toBeLessThan(500);
+  });
+
+  it('returns a JSON-RPC error (not HTML) for a malformed JSON body', async () => {
+    const { server } = await startTestServer();
+    running = server;
+    const { port } = server.address() as AddressInfo;
+
+    const res = await fetch(`http://127.0.0.1:${port}/mcp`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: '{ not valid json',
+    });
+    expect(res.status).toBe(400);
+    expect(res.headers.get('content-type')).toMatch(/application\/json/);
+    const body = (await res.json()) as { jsonrpc?: string; error?: { code?: number } };
+    expect(body.jsonrpc).toBe('2.0');
+    expect(body.error?.code).toBe(-32700);
+  });
+});
+
+describe('serveServerOptions (U3 remote overrides)', () => {
+  it('forces token confirm and non-interactive auth regardless of input', () => {
+    // The load-bearing guarantee: remote mode can never fall back to elicitation
+    // (no channel) or interactive device-code (would hang the HTTP request).
+    expect(serveServerOptions({ confirmMode: 'elicit', readOnly: true })).toMatchObject({
+      confirmMode: 'token',
+      interactiveAuth: false,
+      readOnly: true,
+    });
+    expect(serveServerOptions({})).toMatchObject({
+      confirmMode: 'token',
+      interactiveAuth: false,
+    });
   });
 });

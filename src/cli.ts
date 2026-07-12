@@ -11,6 +11,12 @@
  *   npx @jbctechsolutions/mcp-office365 auth --status   # Check status
  *   npx @jbctechsolutions/mcp-office365 auth --force    # Re-authenticate (clears existing tokens)
  *   npx @jbctechsolutions/mcp-office365 auth --logout   # Sign out
+ *   npx @jbctechsolutions/mcp-office365 serve           # Remote connector mode over
+ *                                                       # stateless Streamable HTTP (loopback
+ *                                                       # only until the auth layer lands).
+ *                                                       # Flags: --host <addr> (default 127.0.0.1),
+ *                                                       # --port <n> (default 3000). Endpoints:
+ *                                                       # POST /mcp, GET /healthz.
  */
 
 import {

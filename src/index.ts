@@ -79,6 +79,7 @@ import {
   toErrorEnvelope,
   ensureErrorEnvelopeText,
   ErrorCode,
+  GraphAuthRequiredError,
   type ErrorEnvelope,
 } from './utils/errors.js';
 
@@ -122,6 +123,24 @@ export interface ServerOptions {
    * cheap to build and does not re-open SQLite / re-run migrations per request.
    */
   readonly stateStore?: StateStore;
+  /**
+   * Whether an unauthenticated first tool call may trigger the interactive
+   * device-code flow. True (default) for stdio at a terminal. Remote/serve mode
+   * sets it false: there is no device-code channel over HTTP, so an unauthed
+   * call must fail fast with a typed error rather than hang until MSAL times out
+   * (and, with per-request servers, spawn concurrent device-code flows).
+   */
+  readonly interactiveAuth?: boolean;
+}
+
+/**
+ * Derives the server options for remote/serve mode from the parsed CLI options.
+ * Remote mode has no elicitation channel (force `token` confirm) and no
+ * device-code channel (fail fast on an unauthenticated call rather than hang) —
+ * these overrides are load-bearing and must hold regardless of user flags.
+ */
+export function serveServerOptions(base: ServerOptions): ServerOptions {
+  return { ...base, confirmMode: 'token', interactiveAuth: false };
 }
 
 export function createServer(options: ServerOptions = {}): Server {
@@ -216,6 +235,11 @@ export function createServer(options: ServerOptions = {}): Server {
     // Try to authenticate if needed (triggers device code flow for first-time users)
     const authenticated = await isAuthenticated();
     if (!authenticated) {
+      // Remote/serve mode has no device-code channel: fail fast instead of
+      // hanging on an interactive prompt no one can answer over HTTP.
+      if (options.interactiveAuth === false) {
+        throw new GraphAuthRequiredError('not_authenticated');
+      }
       await getAccessToken();
     }
 
@@ -464,13 +488,18 @@ async function main(): Promise<void> {
       const { startHttpServer } = await import('./remote/http-server.js');
       const stateDir = process.env.OUTLOOK_MCP_STATE_DIR;
       const stateStore = StateStore.open(stateDir != null ? { dir: stateDir } : {});
-      await startHttpServer({
+      const httpServer = await startHttpServer({
         host,
         port,
-        // Remote mode has no elicitation channel — force the two-phase token flow.
-        serverOptions: { ...options, confirmMode: 'token' },
+        serverOptions: serveServerOptions(options),
         stateStore,
       });
+      // Drain in-flight requests on shutdown (Container Apps sends SIGTERM).
+      const shutdown = (): void => {
+        httpServer.close(() => process.exit(0));
+      };
+      process.on('SIGTERM', shutdown);
+      process.on('SIGINT', shutdown);
       process.stderr.write(`mcp-office365 serve listening on http://${host}:${port}/mcp\n`);
     } catch (error) {
       process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
