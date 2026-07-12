@@ -31,6 +31,16 @@ export interface SurfaceOptions {
   readonly presets?: readonly Preset[];
   /** When true, only non-destructive tools are exposed. */
   readonly readOnly?: boolean;
+  /**
+   * Explicit allow-list of tool names (U6 entitlements). When set, the surface
+   * is EXACTLY these tools — presets are ignored and the empty-presets
+   * "always-exposed" bypass does not apply (a tool shows iff it is listed). This
+   * is what makes a per-user entitlement pinnable: a server upgrade that adds a
+   * tool cannot widen a user's surface unless the tool is added to their list.
+   */
+  readonly allow?: readonly string[];
+  /** Tool names to remove from the surface — applies in both allow and preset modes. */
+  readonly exclude?: readonly string[];
 }
 
 /**
@@ -144,7 +154,7 @@ export class ToolRegistry {
     // (onElicit), when the server is in elicit mode and the client can elicit.
     // Everything else runs the handler directly — an unchanged fast path.
     if (def.onElicit != null && ctx.confirmMode === 'elicit' && ctx.elicit != null) {
-      return this.dispatchWithElicitation(def, params, ctx, def.onElicit, ctx.elicit);
+      return this.dispatchWithElicitation(def, params, ctx, def.onElicit, ctx.elicit, options);
     }
     return def.handler(ctx, params);
   }
@@ -165,6 +175,7 @@ export class ToolRegistry {
     ctx: ToolContext,
     link: ElicitLink,
     elicit: Elicitor,
+    options: SurfaceOptions,
   ): Promise<ToolResult> {
     const prepareResult = await def.handler(ctx, prepareParams);
     const tokenIds = link.collectTokenIds(prepareResult);
@@ -181,6 +192,12 @@ export class ToolRegistry {
       // A misconfigured link must not silently execute nor lose the approval —
       // degrade to the token response so the two-phase path still works.
       if (confirmDef == null) {
+        return prepareResult;
+      }
+      // Re-check the confirm tool against the surface (U6): a user whose
+      // entitlement excludes confirm_* must not execute it via inline accept.
+      // Degrade to the token flow (which dispatch() also blocks) rather than run.
+      if (!this.matches(confirmDef, options)) {
         return prepareResult;
       }
       // Only the param mapping/validation is guarded: a bad buildParams must
@@ -220,11 +237,26 @@ export class ToolRegistry {
     if (options.readOnly === true && !isReadOnly(def)) {
       return false;
     }
-    const presets = options.presets;
-    if (presets != null && presets.length > 0 && def.presets.length > 0) {
-      return def.presets.some((p) => presets.includes(p));
+    // Exclusion wins over any inclusion (U6).
+    if (options.exclude != null && options.exclude.includes(def.name)) {
+      return false;
     }
-    return true;
+    // Preset filter — the process-wide outer bound (`serve --preset`). A
+    // domain-less (empty-presets) tool is not subject to a domain cap. This
+    // composes with the per-user allow-list below, so an entitlement can only
+    // narrow within the preset cap, never exceed it.
+    const presets = options.presets;
+    const presetOk =
+      presets == null || presets.length === 0 || def.presets.length === 0
+        ? true
+        : def.presets.some((p) => presets.includes(p));
+    // Explicit allow-list mode (U6): exactly the listed tools (still capped by
+    // presets and read-only above); the empty-presets always-exposed bypass
+    // does not apply — a tool shows iff it is listed.
+    if (options.allow != null) {
+      return options.allow.includes(def.name) && presetOk;
+    }
+    return presetOk;
   }
 }
 

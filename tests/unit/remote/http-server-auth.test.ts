@@ -21,6 +21,7 @@ import {
 } from '../../../src/remote/http-server.js';
 import { loadRemoteAuthConfig } from '../../../src/remote/config.js';
 import { AuthChallengeError } from '../../../src/remote/auth/verify.js';
+import { createEntitlementResolver } from '../../../src/remote/entitlements.js';
 import { StateStore } from '../../../src/state/store.js';
 
 const config = loadRemoteAuthConfig({
@@ -52,6 +53,7 @@ const authBundle: RemoteAuthBundle = {
     throw new AuthChallengeError('bad_token');
   },
   denyList: { isDenied: (oid: string) => oid === 'revoked-oid' },
+  entitlements: createEntitlementResolver(),
 };
 
 async function startAuthServer(): Promise<{ server: HttpServer; port: number }> {
