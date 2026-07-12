@@ -93,6 +93,7 @@ import {
   ensureErrorEnvelopeText,
   ErrorCode,
   GraphAuthRequiredError,
+  GraphError,
   type ErrorEnvelope,
 } from './utils/errors.js';
 
@@ -155,6 +156,15 @@ export interface ServerOptions {
     readonly userToken: string;
     readonly obo: { acquireGraphToken(userAssertion: string): Promise<string> };
   };
+  /**
+   * True for an authenticated remote request (serve + auth configured). It
+   * forbids the device-code / process-global identity path entirely: with
+   * `remoteAuth` the request uses OBO; without it (OBO credential not yet
+   * provisioned) tool calls fail closed rather than fall back to a shared
+   * cached account — which would bind every user to one identity. Absent for
+   * stdio and for unauthenticated loopback-dev serve (device-code allowed there).
+   */
+  readonly remoteMode?: boolean;
 }
 
 /**
@@ -266,9 +276,17 @@ export function createServer(options: ServerOptions = {}): Server {
     if (options.remoteAuth != null) {
       const { obo, userToken } = options.remoteAuth;
       tokenProvider = (): Promise<string> => obo.acquireGraphToken(userToken);
+    } else if (options.remoteMode === true) {
+      // Authenticated remote request but OBO isn't provisioned. Fail closed —
+      // NEVER fall through to the device-code / process-global identity, which
+      // would serve one shared cached account to every authenticated user.
+      throw new GraphError(
+        'On-Behalf-Of credential not configured — tool calls are unavailable until ' +
+          'it is provisioned (see docs/remote/provisioning.md).',
+      );
     } else {
-      // Stdio: device-code flow for first-time users; fail fast in a non-
-      // interactive context rather than hang on a prompt no one can answer.
+      // Stdio / unauthenticated loopback-dev serve: device-code flow for first-
+      // time users; fail fast in a non-interactive context rather than hang.
       const authenticated = await isAuthenticated();
       if (!authenticated) {
         if (options.interactiveAuth === false) {

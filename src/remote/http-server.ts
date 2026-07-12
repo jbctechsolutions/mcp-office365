@@ -153,18 +153,25 @@ export function buildHttpApp(options: HttpServerOptions): Express {
   // Stateless Streamable HTTP: one MCP server + transport per POST, sharing the
   // process-scoped store. GET/DELETE carry no stateless semantics → 405.
   app.post('/mcp', ...mcpChain, async (req: Request, res: Response): Promise<void> => {
-    // Per-request: when authenticated and OBO is available, bind this user's
-    // identity + inbound token so the Graph backend authenticates as them.
+    // Authenticated remote request: mark remoteMode so the backend NEVER uses
+    // the device-code / process-global identity (would bind all users to one
+    // account). Attach per-user OBO when the credential is available; without it,
+    // tool calls fail closed (remoteMode) rather than fall back.
     const obo = options.auth?.obo;
     const perRequestOptions: ServerOptions =
-      obo != null && req.remoteIdentity != null && req.auth?.token != null
+      options.auth != null
         ? {
             ...serverOptions,
-            remoteAuth: {
-              homeAccountId: req.remoteIdentity.homeAccountId,
-              userToken: req.auth.token,
-              obo,
-            },
+            remoteMode: true,
+            ...(obo != null && req.remoteIdentity != null && req.auth?.token != null
+              ? {
+                  remoteAuth: {
+                    homeAccountId: req.remoteIdentity.homeAccountId,
+                    userToken: req.auth.token,
+                    obo,
+                  },
+                }
+              : {}),
           }
         : serverOptions;
     const server: McpServer = createServer(perRequestOptions);

@@ -95,8 +95,9 @@ export function createOboClient(config: RemoteAuthConfig, credential: OboCredent
  * diagnosable — MSAL otherwise swallows 4xx detail.
  */
 export function mapOboError(error: unknown): OutlookMcpError {
-  const code = extractAadsts(error);
-  const message = error instanceof Error ? error.message : String(error);
+  // MSAL spreads detail across message / errorCode / errorMessage — search all.
+  const message = errorText(error);
+  const code = /AADSTS\d+/.exec(message)?.[0];
 
   // Missing consent for a scope — needs admin consent (see provisioning runbook).
   if (code === 'AADSTS65001') {
@@ -119,8 +120,14 @@ export function mapOboError(error: unknown): OutlookMcpError {
   return new GraphError(`On-Behalf-Of exchange failed${code != null ? ` (${code})` : ''}.`);
 }
 
-/** Pulls the first AADSTSxxxxx code from an MSAL error, if present. */
-function extractAadsts(error: unknown): string | undefined {
-  const text = error instanceof Error ? `${error.message}` : String(error);
-  return /AADSTS\d+/.exec(text)?.[0];
+/** Combined error text across MSAL's message / errorCode / errorMessage fields. */
+function errorText(error: unknown): string {
+  const parts: string[] = [];
+  if (error instanceof Error) parts.push(error.message);
+  if (error != null && typeof error === 'object') {
+    const e = error as { errorCode?: unknown; errorMessage?: unknown };
+    if (typeof e.errorCode === 'string') parts.push(e.errorCode);
+    if (typeof e.errorMessage === 'string') parts.push(e.errorMessage);
+  }
+  return parts.length > 0 ? parts.join(' ') : String(error);
 }
