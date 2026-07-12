@@ -47,8 +47,10 @@ function requireEnv(name: string, value: string | undefined): string {
  * fast) on any missing or invalid value.
  */
 export function loadRemoteAuthConfig(env: NodeJS.ProcessEnv = process.env): RemoteAuthConfig {
-  const tenantId = requireEnv('OUTLOOK_MCP_TENANT_ID', env.OUTLOOK_MCP_TENANT_ID);
-  if (TENANT_PLACEHOLDERS.has(tenantId.toLowerCase())) {
+  // Entra issues `iss`/`tid` with a lowercase GUID; normalize so an uppercase
+  // env value can't silently break the issuer-string match (fail-closed denial).
+  const tenantId = requireEnv('OUTLOOK_MCP_TENANT_ID', env.OUTLOOK_MCP_TENANT_ID).toLowerCase();
+  if (TENANT_PLACEHOLDERS.has(tenantId)) {
     throw new Error(
       `OUTLOOK_MCP_TENANT_ID must be a specific tenant GUID for remote mode, not ` +
         `'${tenantId}'. Member-vs-guest enforcement requires a single directory.`,
@@ -62,7 +64,10 @@ export function loadRemoteAuthConfig(env: NodeJS.ProcessEnv = process.env): Remo
   const publicUrl = normalizeResourceUrl(
     requireEnv('OUTLOOK_MCP_CONNECTOR_URL', env.OUTLOOK_MCP_CONNECTOR_URL),
   );
-  const appIdUri = (env.OUTLOOK_MCP_CONNECTOR_APP_ID_URI ?? DEFAULT_APP_ID_URI).trim();
+  // An empty (whitespace-only) override must NOT become an accepted `''`
+  // audience — treat empty as unset and fall back to the app's identifier URI.
+  const appIdUriRaw = env.OUTLOOK_MCP_CONNECTOR_APP_ID_URI?.trim();
+  const appIdUri = appIdUriRaw != null && appIdUriRaw !== '' ? appIdUriRaw : DEFAULT_APP_ID_URI;
 
   return {
     tenantId,

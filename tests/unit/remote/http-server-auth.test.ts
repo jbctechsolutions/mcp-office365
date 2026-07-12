@@ -97,12 +97,33 @@ describe('remote HTTP server auth (U4)', () => {
     expect(body.authorization_servers).toEqual([config.issuer]);
   });
 
-  it('challenges an unauthenticated /mcp with 401 + WWW-Authenticate', async () => {
+  it('serves the PRM at the /mcp path-suffixed variant too', async () => {
     const { server, port } = await startAuthServer();
     running = server;
-    const res = await post(port, {});
+    const res = await fetch(
+      `http://127.0.0.1:${port}/.well-known/oauth-protected-resource/mcp`,
+    );
+    expect(res.status).toBe(200);
+    expect(((await res.json()) as Record<string, unknown>).resource).toBe(
+      'https://mcp.example.com/mcp',
+    );
+  });
+
+  it('challenges an unauthenticated /mcp with 401 + WWW-Authenticate, leaking no token material', async () => {
+    const { server, port } = await startAuthServer();
+    running = server;
+    const res = await post(port, { authorization: 'Bearer supersecrettokenvalue' });
     expect(res.status).toBe(401);
     expect(res.headers.get('www-authenticate')).toMatch(/resource_metadata=/);
+    const body = await res.text();
+    expect(body).not.toContain('supersecrettokenvalue');
+  });
+
+  it('accepts a case-insensitive bearer scheme', async () => {
+    const { server, port } = await startAuthServer();
+    running = server;
+    const res = await post(port, { authorization: 'bearer good' });
+    expect(res.status).toBe(200);
   });
 
   it('rejects an invalid token with 401', async () => {

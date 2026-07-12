@@ -56,6 +56,17 @@ describe('loadRemoteAuthConfig (U4)', () => {
     expect(() => loadRemoteAuthConfig(env({ OUTLOOK_MCP_CONNECTOR_URL: 'http://evil.example/mcp' })))
       .toThrow(/must be https/);
   });
+
+  it('never puts an empty string into allowedAudiences (empty override → default URI)', () => {
+    const c = loadRemoteAuthConfig(env({ OUTLOOK_MCP_CONNECTOR_APP_ID_URI: '   ' }));
+    expect(c.allowedAudiences).toEqual(['api-guid', 'api://mcp-office365-connector']);
+    expect(c.allowedAudiences).not.toContain('');
+  });
+
+  it('lowercases an uppercase tenant GUID (issuer-match robustness)', () => {
+    const c = loadRemoteAuthConfig(env({ OUTLOOK_MCP_TENANT_ID: TID.toUpperCase() }));
+    expect(c.issuer).toBe(`https://login.microsoftonline.com/${TID}/v2.0`);
+  });
 });
 
 describe('normalizeResourceUrl', () => {

@@ -62,44 +62,52 @@ export function createAuthMiddleware(
   denyList: DenyList,
 ) {
   return async (req: Request, res: Response, next: NextFunction): Promise<void> => {
-    const header = req.headers.authorization;
-    const token =
-      header != null && header.startsWith('Bearer ') ? header.slice('Bearer '.length) : undefined;
-    if (token == null || token === '') {
-      challenge(res, config, 'missing_token');
-      return;
-    }
-
-    let identity: RemoteIdentity;
+    // Whole-body guard: any unexpected throw (incl. a future store-backed
+    // deny-list in U7) fails closed to 401 rather than becoming an uncaught
+    // rejection that hangs the request.
     try {
-      identity = await verify(token);
-    } catch (error) {
-      if (error instanceof AuthForbiddenError) {
-        forbidden(res, error.reason);
-      } else if (error instanceof AuthChallengeError) {
-        challenge(res, config, error.reason);
-      } else {
-        challenge(res, config, 'verification_error');
+      const header = req.headers.authorization;
+      // RFC 6750 auth-scheme is case-insensitive; trim the token.
+      const match = header != null ? /^Bearer[ ]+(.+)$/i.exec(header) : null;
+      const token = match?.[1]?.trim();
+      if (token == null || token === '') {
+        challenge(res, config, 'missing_token');
+        return;
       }
-      return;
-    }
 
-    // Deny-list is read per request from the store (U7) — never process-cached.
-    if (denyList.isDenied(identity.oid)) {
-      forbidden(res, 'deny_listed', identity.oid);
-      return;
-    }
+      let identity: RemoteIdentity;
+      try {
+        identity = await verify(token);
+      } catch (error) {
+        if (error instanceof AuthForbiddenError) {
+          forbidden(res, error.reason);
+        } else if (error instanceof AuthChallengeError) {
+          challenge(res, config, error.reason);
+        } else {
+          challenge(res, config, 'verification_error');
+        }
+        return;
+      }
 
-    req.remoteIdentity = identity;
-    // AuthInfo-compatible shape the SDK exposes to tool handlers as extra.authInfo.
-    req.auth = {
-      token,
-      clientId: '',
-      scopes: [...identity.scopes],
-      ...(identity.expiresAt != null ? { expiresAt: identity.expiresAt } : {}),
-      resource: new URL(config.publicUrl),
-      extra: { oid: identity.oid, tid: identity.tid, homeAccountId: identity.homeAccountId },
-    };
-    next();
+      // Deny-list is read per request from the store (U7) — never process-cached.
+      if (denyList.isDenied(identity.oid)) {
+        forbidden(res, 'deny_listed', identity.oid);
+        return;
+      }
+
+      req.remoteIdentity = identity;
+      // AuthInfo-compatible shape the SDK exposes to tool handlers as extra.authInfo.
+      req.auth = {
+        token,
+        clientId: '',
+        scopes: [...identity.scopes],
+        ...(identity.expiresAt != null ? { expiresAt: identity.expiresAt } : {}),
+        resource: new URL(config.publicUrl),
+        extra: { oid: identity.oid, tid: identity.tid, homeAccountId: identity.homeAccountId },
+      };
+      next();
+    } catch {
+      challenge(res, config, 'auth_error');
+    }
   };
 }

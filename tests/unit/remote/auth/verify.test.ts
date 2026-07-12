@@ -140,4 +140,22 @@ describe('createTokenVerifier (U4)', () => {
       verify(await sign(claims(), { alg: 'HS256', key: hmacKey })),
     ).rejects.toBeInstanceOf(AuthChallengeError);
   });
+
+  it('rejects an alg=none (unsigned) token', async () => {
+    const b64 = (o: unknown): string => Buffer.from(JSON.stringify(o)).toString('base64url');
+    const none = `${b64({ alg: 'none', typ: 'JWT' })}.${b64(claims())}.`;
+    await expect(verify(none)).rejects.toBeInstanceOf(AuthChallengeError);
+  });
+
+  it('rejects a token minted for Microsoft Graph (audience confusion)', async () => {
+    await expect(
+      verify(await sign(claims(), { aud: '00000003-0000-0000-c000-000000000000' })),
+    ).rejects.toBeInstanceOf(AuthChallengeError);
+  });
+
+  it('rejects acct as the string "0" (fail closed — only integer 0 is a member)', async () => {
+    await expect(verify(await sign(claims({ acct: '0' })))).rejects.toMatchObject({
+      reason: 'not_member',
+    });
+  });
 });

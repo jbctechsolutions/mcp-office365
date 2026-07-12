@@ -13,8 +13,8 @@
 import { createRemoteJWKSet, jwtVerify } from 'jose';
 import type { RemoteAuthConfig } from '../config.js';
 
-/** Clock skew tolerance for exp/nbf/iat (seconds). */
-const CLOCK_TOLERANCE_S = 300;
+/** Clock skew tolerance for exp/nbf/iat (seconds) — tight on synced cloud clocks. */
+const CLOCK_TOLERANCE_S = 120;
 
 /** Validated caller identity attached to the request for downstream units. */
 export interface RemoteIdentity {
