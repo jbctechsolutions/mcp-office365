@@ -26,12 +26,15 @@ import { serveServerOptions } from '../../../src/index.js';
 import { StateStore } from '../../../src/state/store.js';
 
 const tempDirs: string[] = [];
+const tempStores: StateStore[] = [];
 
 function tempStore(): StateStore {
   // A throwaway temp-dir store is sufficient for transport-level tests.
   const dir = mkdtempSync(join(tmpdir(), 'mcp-u3-'));
   tempDirs.push(dir);
-  return StateStore.open({ dir });
+  const store = StateStore.open({ dir });
+  tempStores.push(store);
+  return store;
 }
 
 async function startTestServer(): Promise<{ server: HttpServer; url: string }> {
@@ -53,9 +56,20 @@ describe('remote HTTP server (U3)', () => {
       await new Promise<void>((resolve) => running?.close(() => resolve()));
       running = undefined;
     }
+    // Close the SQLite handles before removing their dirs — Windows won't unlink
+    // an open file (EBUSY), unlike POSIX.
+    while (tempStores.length > 0) {
+      tempStores.pop()?.close();
+    }
     while (tempDirs.length > 0) {
       const dir = tempDirs.pop();
-      if (dir != null) rmSync(dir, { recursive: true, force: true });
+      if (dir != null) {
+        try {
+          rmSync(dir, { recursive: true, force: true });
+        } catch {
+          /* leftover temp dir is harmless; OS reaps it */
+        }
+      }
     }
   });
 
