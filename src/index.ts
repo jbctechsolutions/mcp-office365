@@ -43,10 +43,12 @@ import { parseCliCommand, parseServerOptions, handleAuthCommand, createAuthMutex
 const requireFromHere = createRequire(import.meta.url);
 function loadVersion(): string {
   try {
-    return (requireFromHere('./build-info.json') as { version: string }).version;
+    const stamped = (requireFromHere('./build-info.json') as { version?: unknown }).version;
+    if (typeof stamped === 'string' && stamped !== '') return stamped;
   } catch {
-    return (requireFromHere('../package.json') as { version: string }).version;
+    /* no stamp — running from src (dev/tests) */
   }
+  return (requireFromHere('../package.json') as { version: string }).version;
 }
 const pkg = { version: loadVersion() };
 import { GraphMailTools } from './tools/mail-graph.js';

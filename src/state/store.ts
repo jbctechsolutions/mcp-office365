@@ -189,8 +189,8 @@ export class StateStore {
       // the raw dlopen stack from the fallback. Surface remediation instead.
       if (isNativeLoadFailure(error)) {
         throw new Error(
-          `better-sqlite3 native module failed to load — it was built for a different Node.js ` +
-            `than the one running (current: ${process.version}), so neither the on-disk state ` +
+          `better-sqlite3 native module failed to load — ABI mismatch or missing compiled ` +
+            `binding (running Node.js ${process.version}), so neither the on-disk state ` +
             `store nor its in-memory fallback can start.\n` +
             `Fix one of:\n` +
             `  - npm rebuild better-sqlite3   # in the directory the server is installed in\n` +
@@ -455,6 +455,9 @@ function isNativeLoadFailure(error: unknown): boolean {
   if (/NODE_MODULE_VERSION|was compiled against a different Node\.js version/.test(error.message)) {
     return true;
   }
+  // The `bindings` package throws a code-less plain Error when the compiled
+  // artifact is missing entirely (never built / pruned).
+  if (/Could not locate the bindings file/.test(error.message)) return true;
   return code === 'MODULE_NOT_FOUND' && error.message.includes('better_sqlite3.node');
 }
 

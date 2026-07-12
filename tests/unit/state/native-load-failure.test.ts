@@ -23,10 +23,18 @@ const dlopenError = Object.assign(
   { code: 'ERR_DLOPEN_FAILED' },
 );
 
+// The `bindings` package throws a code-less plain Error when the compiled
+// artifact is missing entirely (never built / pruned).
+const missingBindingError = new Error(
+  'Could not locate the bindings file. Tried:\n → /x/build/better_sqlite3.node',
+);
+
+let constructorError: Error = dlopenError;
+
 vi.mock('better-sqlite3', () => ({
   default: class {
     constructor() {
-      throw dlopenError;
+      throw constructorError;
     }
   },
 }));
@@ -38,6 +46,7 @@ describe('StateStore.open with an unloadable native module', () => {
   beforeEach(() => {
     dir = mkdtempSync(join(tmpdir(), 'mcp-state-'));
     legacyDir = mkdtempSync(join(tmpdir(), 'mcp-legacy-'));
+    constructorError = dlopenError;
   });
 
   afterEach(() => {
@@ -68,5 +77,16 @@ describe('StateStore.open with an unloadable native module', () => {
     expect(thrown).toBeInstanceOf(Error);
     expect((thrown as Error).message).toContain(process.version);
     expect((thrown as Error).cause).toBe(dlopenError);
+  });
+
+  it('treats a code-less "Could not locate the bindings file" error the same way', async () => {
+    const { StateStore } = await import('../../../src/state/store.js');
+    constructorError = missingBindingError;
+    const warnings: string[] = [];
+
+    expect(() => StateStore.open({ dir, legacyDir, warn: (m) => warnings.push(m) })).toThrowError(
+      /better-sqlite3 native module failed to load[\s\S]*npm rebuild better-sqlite3/,
+    );
+    expect(warnings.some((w) => w.includes('running in-memory'))).toBe(false);
   });
 });
