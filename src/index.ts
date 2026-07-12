@@ -35,7 +35,13 @@ import { ToolRegistry } from './registry/index.js';
 import type { ToolContext, SurfaceOptions, ConfirmMode, Elicitor } from './registry/index.js';
 import { createServerElicitor } from './registry/elicitor.js';
 import { allToolDefinitions } from './registry/all-tools.js';
-import { parseCliCommand, parseServerOptions, handleAuthCommand, createAuthMutex } from './cli.js';
+import {
+  parseCliCommand,
+  parseServerOptions,
+  parseServeOptions,
+  handleAuthCommand,
+  createAuthMutex,
+} from './cli.js';
 
 const pkg = createRequire(import.meta.url)('../package.json') as { version: string };
 import { GraphMailTools } from './tools/mail-graph.js';
@@ -109,6 +115,13 @@ export interface ServerOptions {
   readonly readOnly?: boolean;
   /** Destructive-confirm mode (U11): 'token' (default) or 'elicit'. */
   readonly confirmMode?: ConfirmMode;
+  /**
+   * Durable state store to back approval tokens and durable-ID aliases. When
+   * omitted (the stdio path), each server opens its own via `StateStore.open()`.
+   * Remote mode (U3) injects one process-scoped store so a per-request server is
+   * cheap to build and does not re-open SQLite / re-run migrations per request.
+   */
+  readonly stateStore?: StateStore;
 }
 
 export function createServer(options: ServerOptions = {}): Server {
@@ -148,8 +161,9 @@ export function createServer(options: ServerOptions = {}): Server {
 
   // The durable state store backs approval tokens (U9b) so a two-phase
   // approval survives a restart / a second window; a corrupt/locked db
-  // degrades to in-memory (StateStore.open handles it).
-  const stateStore = StateStore.open();
+  // degrades to in-memory (StateStore.open handles it). Remote mode injects a
+  // shared, process-scoped store (U3); the stdio path opens its own here.
+  const stateStore = options.stateStore ?? StateStore.open();
   // accountId is a thunk: the signed-in account (homeAccountId) is only known
   // after auth, later than this construction. resolveAccountId() populates it in
   // initializeGraphBackend; currentAccountId() reads the memo at each token op.
@@ -422,15 +436,17 @@ async function main(): Promise<void> {
 
   // Check for CLI subcommands before starting MCP server
   const cliCommand = parseCliCommand(argv);
-  if (cliCommand != null) {
+  if (cliCommand?.command === 'auth') {
     const exitCode = await handleAuthCommand(cliCommand.flags);
     process.exit(exitCode);
   }
 
-  // Server-mode flags: --preset <names>, --read-only (U10).
+  // Server-mode flags: --preset <names>, --read-only (U10). Under `serve`, these
+  // apply as the process-wide outer bound; per-user surfaces layer inside it (U6).
+  const serverFlags = cliCommand?.command === 'serve' ? cliCommand.flags : argv;
   let options: ServerOptions;
   try {
-    const parsed = parseServerOptions(argv);
+    const parsed = parseServerOptions(serverFlags);
     options = {
       readOnly: parsed.readOnly,
       confirmMode: parsed.confirmMode,
@@ -439,6 +455,28 @@ async function main(): Promise<void> {
   } catch (error) {
     process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
     process.exit(1);
+  }
+
+  // `serve`: remote connector mode over stateless Streamable HTTP (U3).
+  if (cliCommand?.command === 'serve') {
+    try {
+      const { host, port } = parseServeOptions(cliCommand.flags);
+      const { startHttpServer } = await import('./remote/http-server.js');
+      const stateDir = process.env.OUTLOOK_MCP_STATE_DIR;
+      const stateStore = StateStore.open(stateDir != null ? { dir: stateDir } : {});
+      await startHttpServer({
+        host,
+        port,
+        // Remote mode has no elicitation channel — force the two-phase token flow.
+        serverOptions: { ...options, confirmMode: 'token' },
+        stateStore,
+      });
+      process.stderr.write(`mcp-office365 serve listening on http://${host}:${port}/mcp\n`);
+    } catch (error) {
+      process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
+      process.exit(1);
+    }
+    return;
   }
 
   const server = createServer(options);

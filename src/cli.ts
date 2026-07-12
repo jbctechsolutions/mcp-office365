@@ -23,8 +23,60 @@ import {
 import type { Preset } from './registry/types.js';
 
 export interface CliCommand {
-  command: 'auth';
+  command: 'auth' | 'serve';
   flags: string[];
+}
+
+/** Options for the `serve` subcommand (remote connector mode, U3). */
+export interface ServeCliOptions {
+  /** Interface to bind. Defaults to loopback (`127.0.0.1`). */
+  readonly host: string;
+  /** TCP port to listen on. Defaults to `3000`. */
+  readonly port: number;
+}
+
+const DEFAULT_SERVE_HOST = '127.0.0.1';
+const DEFAULT_SERVE_PORT = 3000;
+
+/**
+ * Parses `serve`-subcommand flags (`--host <addr>`, `--port <n>`). Preset and
+ * read-only flags are parsed separately by {@link parseServerOptions}; unknown
+ * flags here are ignored the same way. An invalid port fails loudly.
+ */
+export function parseServeOptions(args: string[]): ServeCliOptions {
+  let host = DEFAULT_SERVE_HOST;
+  let port = DEFAULT_SERVE_PORT;
+
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i];
+    if (arg == null) continue;
+    if (arg === '--port') {
+      port = requirePort(args[i + 1]);
+      i++;
+    } else if (arg.startsWith('--port=')) {
+      port = requirePort(arg.slice('--port='.length));
+    } else if (arg === '--host') {
+      const value = args[i + 1];
+      if (value == null || value.startsWith('--')) {
+        throw new Error('--host requires an address (e.g. 127.0.0.1 or 0.0.0.0).');
+      }
+      host = value;
+      i++;
+    } else if (arg.startsWith('--host=')) {
+      host = arg.slice('--host='.length);
+    }
+    // Unknown args ignored — preset/read-only handled by parseServerOptions.
+  }
+
+  return { host, port };
+}
+
+function requirePort(value: string | undefined): number {
+  const port = Number(value);
+  if (!Number.isInteger(port) || port < 1 || port > 65535) {
+    throw new Error(`--port requires an integer 1-65535. Got: ${value ?? '(missing)'}.`);
+  }
+  return port;
 }
 
 /** Valid `--preset` names, mirroring the domain modules. */
@@ -156,6 +208,9 @@ export function parseCliCommand(args: string[]): CliCommand | null {
   const command = args[0];
   if (command === 'auth') {
     return { command: 'auth', flags: args.slice(1) };
+  }
+  if (command === 'serve') {
+    return { command: 'serve', flags: args.slice(1) };
   }
 
   return null;
