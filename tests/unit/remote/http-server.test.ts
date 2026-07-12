@@ -140,7 +140,7 @@ describe('remote HTTP server (U3)', () => {
         serverOptions: {},
         stateStore: tempStore(),
       }),
-    ).toThrow(/require the authentication layer/i);
+    ).toThrow(/requires the authentication layer/i);
   });
 
   it('rejects a POST /mcp with a spoofed Host header (DNS-rebinding protection)', async () => {

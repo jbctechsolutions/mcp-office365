@@ -4,25 +4,44 @@
  */
 
 /**
- * Remote connector mode (U3): serves the MCP tool surface over stateless
+ * Remote connector mode (U3/U4): serves the MCP tool surface over stateless
  * Streamable HTTP so the server can be added as a claude.ai custom connector.
  *
  * Stateless by design: a fresh MCP Server + transport is built per request over
  * a shared, process-scoped StateStore (injected into `createServer`), so there
- * is no session map and no per-request SQLite open. Authentication is NOT part
- * of this unit — the endpoint binds to loopback only until the resource-server
- * auth layer (U4) lands; a non-localhost bind is refused here as a fail-closed
- * invariant so the endpoint can never be exposed unauthenticated.
+ * is no session map and no per-request SQLite open. When an `auth` bundle is
+ * provided (U4), the endpoint serves the RFC 9728 discovery handshake and
+ * requires a valid Entra JWT on every `/mcp` request; without it, the endpoint
+ * binds loopback only (a non-loopback bind is refused) so it can never be
+ * exposed unauthenticated.
  */
 
 import type { Server as McpServer } from '@modelcontextprotocol/sdk/server/index.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
-import express, { type Express, type NextFunction, type Request, type Response } from 'express';
+import express, {
+  type Express,
+  type NextFunction,
+  type Request,
+  type RequestHandler,
+  type Response,
+} from 'express';
 import type { AddressInfo } from 'node:net';
 import type { Server as HttpServer } from 'node:http';
 import { createServer, type ServerOptions } from '../index.js';
 import type { StateStore } from '../state/store.js';
+import type { RemoteAuthConfig } from './config.js';
+import type { DenyList } from './auth/deny-list.js';
+import type { RemoteIdentity } from './auth/verify.js';
+import { createAuthMiddleware } from './auth/middleware.js';
+import { protectedResourceMetadata, PRM_PATH } from './auth/metadata.js';
+
+/** Auth bundle for U4 — config, a token verifier, and the revocation deny-list. */
+export interface RemoteAuthBundle {
+  readonly config: RemoteAuthConfig;
+  readonly verify: (token: string) => Promise<RemoteIdentity>;
+  readonly denyList: DenyList;
+}
 
 /** Maximum accepted request body size — a coarse DoS guard on the public endpoint. */
 const MAX_BODY_SIZE = '4mb';
@@ -38,10 +57,11 @@ export interface HttpServerOptions {
   /** Shared, process-scoped durable store backing approvals and aliases. */
   readonly stateStore: StateStore;
   /**
-   * Whether the resource-server auth layer (U4) is mounted. Until it is, only a
-   * loopback bind is permitted. Defaults to false.
+   * Resource-server auth (U4). When present, `/mcp` requires a valid Entra JWT
+   * and the RFC 9728 discovery routes are served; a non-loopback bind is then
+   * permitted. When absent, the endpoint is loopback-only (unauthenticated).
    */
-  readonly authConfigured?: boolean;
+  readonly auth?: RemoteAuthBundle;
   /**
    * Returns the actually-bound port. Set by {@link startHttpServer} after listen
    * so DNS-rebinding `allowedHosts` are correct even when binding port 0
@@ -64,12 +84,22 @@ function isLoopbackHost(host: string): boolean {
  */
 function allowedHostsFor(options: HttpServerOptions): string[] {
   const port = options.getBoundPort?.() ?? options.port;
-  return [
+  const hosts = [
     `${options.host}:${port}`,
     `127.0.0.1:${port}`,
     `localhost:${port}`,
     `[::1]:${port}`,
   ];
+  // With auth (a real deployment behind ingress), requests carry the public
+  // host — allow it so DNS-rebinding Host validation doesn't reject legit traffic.
+  if (options.auth != null) {
+    try {
+      hosts.push(new URL(options.auth.config.publicUrl).host);
+    } catch {
+      /* config validated the URL at load; ignore */
+    }
+  }
+  return hosts;
 }
 
 /**
@@ -93,9 +123,28 @@ export function buildHttpApp(options: HttpServerOptions): Express {
     res.status(200).json({ status: 'ok' });
   });
 
+  // RFC 9728 discovery (U4): unauthenticated. Serve the PRM document at the
+  // well-known path and the path-suffixed variant claude.ai also probes. Values
+  // come only from config — never from request headers.
+  if (options.auth != null) {
+    const { config } = options.auth;
+    const prm = (_req: Request, res: Response): void => {
+      res.status(200).json(protectedResourceMetadata(config));
+    };
+    app.get(PRM_PATH, prm);
+    app.get(`${PRM_PATH}/mcp`, prm);
+  }
+
+  // Bearer-auth gate on /mcp when configured; loopback-only + unauthenticated
+  // otherwise (U3).
+  const mcpChain: RequestHandler[] =
+    options.auth != null
+      ? [createAuthMiddleware(options.auth.config, options.auth.verify, options.auth.denyList)]
+      : [];
+
   // Stateless Streamable HTTP: one MCP server + transport per POST, sharing the
   // process-scoped store. GET/DELETE carry no stateless semantics → 405.
-  app.post('/mcp', async (req: Request, res: Response): Promise<void> => {
+  app.post('/mcp', ...mcpChain, async (req: Request, res: Response): Promise<void> => {
     const server: McpServer = createServer(serverOptions);
     // Stateless mode: the SDK signals it by an absent sessionIdGenerator (an
     // explicit `undefined` is rejected under exactOptionalPropertyTypes).
@@ -178,10 +227,10 @@ export function buildHttpApp(options: HttpServerOptions): Express {
  *   the endpoint must never be reachable off-host without authentication.
  */
 export function startHttpServer(options: HttpServerOptions): Promise<HttpServer> {
-  if (!isLoopbackHost(options.host) && options.authConfigured !== true) {
+  if (!isLoopbackHost(options.host) && options.auth == null) {
     throw new Error(
-      `Refusing to bind ${options.host}: remote (non-loopback) binds require the ` +
-        `authentication layer, which is not yet available. Bind 127.0.0.1 for local use.`,
+      `Refusing to bind ${options.host}: a remote (non-loopback) bind requires the ` +
+        `authentication layer (an auth bundle). Bind 127.0.0.1 for unauthenticated local use.`,
     );
   }
 

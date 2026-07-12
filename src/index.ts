@@ -494,18 +494,32 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
-  // `serve`: remote connector mode over stateless Streamable HTTP (U3).
+  // `serve`: remote connector mode over stateless Streamable HTTP (U3/U4).
   if (cliCommand?.command === 'serve') {
     try {
       const { host, port } = parseServeOptions(cliCommand.flags);
       const { startHttpServer } = await import('./remote/http-server.js');
       const stateDir = process.env.OUTLOOK_MCP_STATE_DIR;
       const stateStore = StateStore.open(stateDir != null ? { dir: stateDir } : {});
+
+      // Auth (U4) is enabled when the connector URL is configured. Presence of
+      // that var is the signal to require auth; a full-but-partial config
+      // fails fast inside loadRemoteAuthConfig. Absent → loopback-only dev mode.
+      let auth: import('./remote/http-server.js').RemoteAuthBundle | undefined;
+      if (process.env.OUTLOOK_MCP_CONNECTOR_URL != null) {
+        const { loadRemoteAuthConfig } = await import('./remote/config.js');
+        const { createTokenVerifier } = await import('./remote/auth/verify.js');
+        const { createStubDenyList } = await import('./remote/auth/deny-list.js');
+        const config = loadRemoteAuthConfig();
+        auth = { config, verify: createTokenVerifier(config), denyList: createStubDenyList() };
+      }
+
       const httpServer = await startHttpServer({
         host,
         port,
         serverOptions: serveServerOptions(options),
         stateStore,
+        ...(auth != null ? { auth } : {}),
       });
       // Drain in-flight requests on shutdown (Container Apps sends SIGTERM).
       const shutdown = (): void => {
@@ -513,7 +527,10 @@ async function main(): Promise<void> {
       };
       process.on('SIGTERM', shutdown);
       process.on('SIGINT', shutdown);
-      process.stderr.write(`mcp-office365 serve listening on http://${host}:${port}/mcp\n`);
+      process.stderr.write(
+        `mcp-office365 serve listening on http://${host}:${port}/mcp ` +
+          `(auth ${auth != null ? 'enabled' : 'disabled — loopback only'})\n`,
+      );
     } catch (error) {
       process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
       process.exit(1);
