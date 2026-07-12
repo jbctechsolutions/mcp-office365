@@ -99,9 +99,17 @@ export class GraphClient {
   private client: Client | null = null;
   private readonly cache = new ResponseCache();
   private readonly deviceCodeCallback: DeviceCodeCallback | undefined;
+  private readonly tokenProvider: (() => Promise<string>) | undefined;
 
-  constructor(deviceCodeCallback?: DeviceCodeCallback) {
+  /**
+   * @param deviceCodeCallback stdio device-code flow (default backend).
+   * @param tokenProvider remote mode (U5): supplies a per-user Graph token
+   *   (e.g. via On-Behalf-Of). When set, it replaces the process-global
+   *   device-code token acquisition for this client instance.
+   */
+  constructor(deviceCodeCallback?: DeviceCodeCallback, tokenProvider?: () => Promise<string>) {
     this.deviceCodeCallback = deviceCodeCallback;
+    this.tokenProvider = tokenProvider;
   }
 
   /**
@@ -111,7 +119,10 @@ export class GraphClient {
   private async getClient(): Promise<Client> {
     if (this.client == null) {
       const authProvider: AuthenticationProvider = {
-        getAccessToken: () => getAccessToken(this.deviceCodeCallback),
+        getAccessToken: () =>
+          this.tokenProvider != null
+            ? this.tokenProvider()
+            : getAccessToken(this.deviceCodeCallback),
       };
 
       const shouldRetry: ShouldRetry = (_delay, _attempt, request, options, response) => {
