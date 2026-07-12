@@ -35,12 +35,20 @@ import type { DenyList } from './auth/deny-list.js';
 import type { RemoteIdentity } from './auth/verify.js';
 import { createAuthMiddleware } from './auth/middleware.js';
 import { protectedResourceMetadata, PRM_PATH } from './auth/metadata.js';
+import type { OboClient } from './auth/obo.js';
 
-/** Auth bundle for U4 — config, a token verifier, and the revocation deny-list. */
+/** Auth bundle for U4/U5 — config, token verifier, deny-list, and OBO client. */
 export interface RemoteAuthBundle {
   readonly config: RemoteAuthConfig;
   readonly verify: (token: string) => Promise<RemoteIdentity>;
   readonly denyList: DenyList;
+  /**
+   * On-Behalf-Of client (U5). When present, an authenticated request's tool
+   * calls exchange the inbound token for a per-user Graph token. When absent
+   * (OBO credential not yet provisioned), the handshake still works but tool
+   * calls fail fast until the credential lands.
+   */
+  readonly obo?: OboClient;
 }
 
 /** Maximum accepted request body size — a coarse DoS guard on the public endpoint. */
@@ -145,7 +153,28 @@ export function buildHttpApp(options: HttpServerOptions): Express {
   // Stateless Streamable HTTP: one MCP server + transport per POST, sharing the
   // process-scoped store. GET/DELETE carry no stateless semantics → 405.
   app.post('/mcp', ...mcpChain, async (req: Request, res: Response): Promise<void> => {
-    const server: McpServer = createServer(serverOptions);
+    // Authenticated remote request: mark remoteMode so the backend NEVER uses
+    // the device-code / process-global identity (would bind all users to one
+    // account). Attach per-user OBO when the credential is available; without it,
+    // tool calls fail closed (remoteMode) rather than fall back.
+    const obo = options.auth?.obo;
+    const perRequestOptions: ServerOptions =
+      options.auth != null
+        ? {
+            ...serverOptions,
+            remoteMode: true,
+            ...(obo != null && req.remoteIdentity != null && req.auth?.token != null
+              ? {
+                  remoteAuth: {
+                    homeAccountId: req.remoteIdentity.homeAccountId,
+                    userToken: req.auth.token,
+                    obo,
+                  },
+                }
+              : {}),
+          }
+        : serverOptions;
+    const server: McpServer = createServer(perRequestOptions);
     // Stateless mode: the SDK signals it by an absent sessionIdGenerator (an
     // explicit `undefined` is rejected under exactOptionalPropertyTypes).
     // DNS-rebinding protection validates the Host header (no auth yet).

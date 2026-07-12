@@ -20,6 +20,8 @@ const DEFAULT_APP_ID_URI = 'api://mcp-office365-connector';
 export interface RemoteAuthConfig {
   /** JP tenant GUID — sign-in is single-tenant to this directory. */
   readonly tenantId: string;
+  /** The connector API app's client (GUID) — audience, and the OBO client id (U5). */
+  readonly apiClientId: string;
   /** v2 token issuer that JWTs must carry. */
   readonly issuer: string;
   /** Tenant JWKS endpoint (signing keys). */
@@ -71,6 +73,7 @@ export function loadRemoteAuthConfig(env: NodeJS.ProcessEnv = process.env): Remo
 
   return {
     tenantId,
+    apiClientId,
     issuer: `https://login.microsoftonline.com/${tenantId}/v2.0`,
     jwksUri: `https://login.microsoftonline.com/${tenantId}/discovery/v2.0/keys`,
     // Accept both the bare GUID and the api:// identifier form (tokens may carry

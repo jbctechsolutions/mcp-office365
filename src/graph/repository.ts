@@ -58,8 +58,9 @@ export class GraphRepository implements IRepository {
     deviceCodeCallback?: DeviceCodeCallback,
     store?: StateStore,
     accountId: () => string = currentAccountId,
+    tokenProvider?: () => Promise<string>,
   ) {
-    this.client = new GraphClient(deviceCodeCallback);
+    this.client = new GraphClient(deviceCodeCallback, tokenProvider);
     this.store = store;
     this.accountId = accountId;
   }
@@ -3354,6 +3355,7 @@ export function createGraphRepository(
   deviceCodeCallback?: DeviceCodeCallback,
   store?: StateStore,
   accountId?: () => string,
+  tokenProvider?: () => Promise<string>,
 ): GraphRepository {
-  return new GraphRepository(deviceCodeCallback, store, accountId);
+  return new GraphRepository(deviceCodeCallback, store, accountId, tokenProvider);
 }

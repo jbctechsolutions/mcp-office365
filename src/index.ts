@@ -93,6 +93,7 @@ import {
   ensureErrorEnvelopeText,
   ErrorCode,
   GraphAuthRequiredError,
+  GraphError,
   type ErrorEnvelope,
 } from './utils/errors.js';
 
@@ -144,6 +145,26 @@ export interface ServerOptions {
    * (and, with per-request servers, spawn concurrent device-code flows).
    */
   readonly interactiveAuth?: boolean;
+  /**
+   * Per-request remote identity + On-Behalf-Of client (U5). When present, the
+   * Graph backend authenticates as this specific user via OBO (not device-code),
+   * and all per-user state (approval tokens, durable-ID aliases, delta links)
+   * scopes to their `homeAccountId` — the isolation boundary between users.
+   */
+  readonly remoteAuth?: {
+    readonly homeAccountId: string;
+    readonly userToken: string;
+    readonly obo: { acquireGraphToken(userAssertion: string): Promise<string> };
+  };
+  /**
+   * True for an authenticated remote request (serve + auth configured). It
+   * forbids the device-code / process-global identity path entirely: with
+   * `remoteAuth` the request uses OBO; without it (OBO credential not yet
+   * provisioned) tool calls fail closed rather than fall back to a shared
+   * cached account — which would bind every user to one identity. Absent for
+   * stdio and for unauthenticated loopback-dev serve (device-code allowed there).
+   */
+  readonly remoteMode?: boolean;
 }
 
 /**
@@ -196,12 +217,15 @@ export function createServer(options: ServerOptions = {}): Server {
   // degrades to in-memory (StateStore.open handles it). Remote mode injects a
   // shared, process-scoped store (U3); the stdio path opens its own here.
   const stateStore = options.stateStore ?? StateStore.open();
-  // accountId is a thunk: the signed-in account (homeAccountId) is only known
-  // after auth, later than this construction. resolveAccountId() populates it in
-  // initializeGraphBackend; currentAccountId() reads the memo at each token op.
+  // Per-server account identity. Stdio reads the process-global memo (populated
+  // by resolveAccountId after device-code sign-in). Remote (U5) pins it to this
+  // request's authenticated user so approval tokens, aliases, and delta links
+  // scope to them — the isolation boundary between concurrent users.
+  const accountIdFn: () => string =
+    options.remoteAuth != null ? (): string => options.remoteAuth!.homeAccountId : currentAccountId;
   const tokenManager = new ApprovalTokenManager({
     store: stateStore,
-    accountId: currentAccountId,
+    accountId: accountIdFn,
   });
 
   // Tools and backend state
@@ -245,23 +269,38 @@ export function createServer(options: ServerOptions = {}): Server {
    * If not authenticated, triggers the device code flow inline.
    */
   const initializeGraphBackend = createAuthMutex(async (): Promise<void> => {
-    // Try to authenticate if needed (triggers device code flow for first-time users)
-    const authenticated = await isAuthenticated();
-    if (!authenticated) {
-      // Remote/serve mode has no device-code channel: fail fast instead of
-      // hanging on an interactive prompt no one can answer over HTTP.
-      if (options.interactiveAuth === false) {
-        throw new GraphAuthRequiredError('not_authenticated');
+    // Remote mode (U5): authenticate as this request's user via On-Behalf-Of.
+    // The token provider exchanges the inbound assertion for a Graph token; the
+    // account is already known (homeAccountId), so no device-code / resolve step.
+    let tokenProvider: (() => Promise<string>) | undefined;
+    if (options.remoteAuth != null) {
+      const { obo, userToken } = options.remoteAuth;
+      tokenProvider = (): Promise<string> => obo.acquireGraphToken(userToken);
+    } else if (options.remoteMode === true) {
+      // Authenticated remote request but OBO isn't provisioned. Fail closed —
+      // NEVER fall through to the device-code / process-global identity, which
+      // would serve one shared cached account to every authenticated user.
+      throw new GraphError(
+        'On-Behalf-Of credential not configured — tool calls are unavailable until ' +
+          'it is provisioned (see docs/remote/provisioning.md).',
+      );
+    } else {
+      // Stdio / unauthenticated loopback-dev serve: device-code flow for first-
+      // time users; fail fast in a non-interactive context rather than hang.
+      const authenticated = await isAuthenticated();
+      if (!authenticated) {
+        if (options.interactiveAuth === false) {
+          throw new GraphAuthRequiredError('not_authenticated');
+        }
+        await getAccessToken();
       }
-      await getAccessToken();
+      // Capture the signed-in account (homeAccountId) so approval tokens (D8)
+      // and the durable-ID alias table (D3) scope to this user, not the
+      // 'default' fallback. Best-effort — an unresolved account keeps the fallback.
+      await resolveAccountId();
     }
 
-    // Capture the signed-in account (homeAccountId) so approval tokens (D8) and
-    // the durable-ID alias table (D3) scope to this user, not the 'default'
-    // fallback. Best-effort — an unresolved account leaves the fallback in place.
-    await resolveAccountId();
-
-    graphRepository = createGraphRepository(undefined, stateStore, currentAccountId);
+    graphRepository = createGraphRepository(undefined, stateStore, accountIdFn, tokenProvider);
     graphContentReaders = createGraphContentReadersWithClient(graphRepository.getClient());
     graphContactsTools = new GraphContactsTools(graphRepository, graphContentReaders, tokenManager);
     graphContactFoldersTools = new GraphContactFoldersTools(graphRepository, tokenManager);
@@ -293,7 +332,7 @@ export function createServer(options: ServerOptions = {}): Server {
     sharePointTools = new SharePointTools(graphRepository, tokenManager);
     sharePointListsTools = new SharePointListsTools(graphRepository, tokenManager);
     excelTools = new ExcelTools(graphRepository, tokenManager);
-    deltaTools = new DeltaTools(graphRepository.getClient(), stateStore, currentAccountId);
+    deltaTools = new DeltaTools(graphRepository.getClient(), stateStore, accountIdFn);
 
     initialized = true;
   });
@@ -422,13 +461,13 @@ export function createServer(options: ServerOptions = {}): Server {
     try {
       await ensureInitialized();
 
-      // Self-heal the account identity: initializeGraphBackend resolves it once,
-      // but if getAccount() transiently returned null there (it swallows errors)
-      // the fallback would otherwise be pinned for the process lifetime — a token
-      // minted under 'default' is then NOT_FOUND in a sibling window/restart that
-      // resolves the real id. Retry until the real homeAccountId is memoized;
-      // once resolved this is a cheap sync no-op.
-      if (currentAccountId() === DEFAULT_ACCOUNT_ID) {
+      // Self-heal the account identity (device-code/stdio only): initializeGraph-
+      // Backend resolves it once, but if getAccount() transiently returned null
+      // the fallback would be pinned for the process lifetime — a token minted
+      // under 'default' is then NOT_FOUND in a sibling window/restart. Retry until
+      // the real homeAccountId is memoized. Remote mode pins the account to the
+      // request's user, so this global self-heal must not run there.
+      if (options.remoteAuth == null && currentAccountId() === DEFAULT_ACCOUNT_ID) {
         await resolveAccountId();
       }
 
@@ -510,8 +549,24 @@ async function main(): Promise<void> {
         const { loadRemoteAuthConfig } = await import('./remote/config.js');
         const { createTokenVerifier } = await import('./remote/auth/verify.js');
         const { createStubDenyList } = await import('./remote/auth/deny-list.js');
+        const { loadOboCredential, createOboClient } = await import('./remote/auth/obo.js');
         const config = loadRemoteAuthConfig();
-        auth = { config, verify: createTokenVerifier(config), denyList: createStubDenyList() };
+        // OBO (U5): available only when the confidential credential is configured.
+        // Without it, the handshake works but tool calls fail fast until it lands.
+        const cred = loadOboCredential();
+        const obo = cred != null ? createOboClient(config, cred) : undefined;
+        auth = {
+          config,
+          verify: createTokenVerifier(config),
+          denyList: createStubDenyList(),
+          ...(obo != null ? { obo } : {}),
+        };
+        if (obo == null) {
+          process.stderr.write(
+            '[mcp-office365] OBO credential not configured — tool calls will fail until ' +
+              'OUTLOOK_MCP_CONNECTOR_CLIENT_SECRET or the cert env is set (see provisioning).\n',
+          );
+        }
       }
 
       const httpServer = await startHttpServer({
