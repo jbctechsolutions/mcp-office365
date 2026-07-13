@@ -38,6 +38,7 @@ import { IdUnknownError, isGraphSdkError } from '../utils/errors.js';
 import type { StateStore } from '../state/store.js';
 import type { CompiledSearch } from '../search/compiler.js';
 import { downloadAttachment, getDownloadDir } from './attachments.js';
+import { buildPlannerTaskMessagePayload } from './planner-task-message-payload.js';
 import type { PlanVisualizationData } from '../visualization/types.js';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -2664,6 +2665,145 @@ export class GraphRepository implements IRepository {
       async () => this.extractEtag(await this.client.getPlannerTaskDetails(gTaskId)),
       (etag) => this.client.updatePlannerTaskDetails(gTaskId, graphUpdates, etag),
     );
+  }
+
+  // ===========================================================================
+  // Planner Task Chat Messages (beta)
+  // ===========================================================================
+
+  /**
+   * Resolves user ids or email addresses to Entra user ids for @mentions.
+   */
+  private async resolveMentionUserIdsAsync(idsOrEmails: readonly string[]): Promise<string[]> {
+    const resolved: string[] = [];
+    for (const value of idsOrEmails) {
+      if (value.includes('@')) {
+        const user = await this.client.getUserProfile(value);
+        if (user.id == null || user.id.length === 0) {
+          throw new Error(`Could not resolve user for mention: ${value}`);
+        }
+        resolved.push(user.id);
+      } else {
+        resolved.push(value);
+      }
+    }
+    return resolved;
+  }
+
+  private mapPlannerTaskMessage(
+    gTaskId: string,
+    msg: Record<string, unknown>,
+  ): {
+    id: string;
+    content: string;
+    messageType: string;
+    createdDateTime: string;
+    editedTime: string | null;
+    deletedTime: string | null;
+    createdByUserId: string;
+    mentions: unknown[];
+  } {
+    const graphMessageId = String(msg['id'] ?? '');
+    const createdBy = msg['createdBy'] as { user?: { id?: string } } | undefined;
+    return {
+      id: this.mintAliasComposite('plannerTaskMessage', { taskId: gTaskId, messageId: graphMessageId }),
+      content: String(msg['content'] ?? ''),
+      messageType: String(msg['messageType'] ?? ''),
+      createdDateTime: String(msg['createdDateTime'] ?? ''),
+      editedTime: (msg['editedTime'] as string | null | undefined) ?? null,
+      deletedTime: (msg['deletedTime'] as string | null | undefined) ?? null,
+      createdByUserId: createdBy?.user?.id ?? '',
+      mentions: (msg['mentions'] as unknown[] | undefined) ?? [],
+    };
+  }
+
+  /**
+   * Lists chat messages (Comments tab) on a Planner task. Beta API; delegated only.
+   */
+  async listPlannerTaskMessagesAsync(
+    taskId: string,
+    skipToken?: string,
+  ): Promise<{
+    messages: Array<{
+      id: string;
+      content: string;
+      messageType: string;
+      createdDateTime: string;
+      editedTime: string | null;
+      deletedTime: string | null;
+      createdByUserId: string;
+      mentions: unknown[];
+    }>;
+    nextSkipToken?: string;
+  }> {
+    const gTaskId = this.toGraphId(taskId, 'plannerTask');
+    const { messages, nextSkipToken } = await this.client.listPlannerTaskMessages(gTaskId, skipToken);
+    return nextSkipToken != null
+      ? {
+          messages: messages.map((msg) => this.mapPlannerTaskMessage(gTaskId, msg)),
+          nextSkipToken,
+        }
+      : {
+          messages: messages.map((msg) => this.mapPlannerTaskMessage(gTaskId, msg)),
+        };
+  }
+
+  /**
+   * Posts a comment on a Planner task. Beta API; delegated only.
+   */
+  async createPlannerTaskMessageAsync(
+    taskId: string,
+    content: string,
+    mentionUserIds?: string[],
+  ): Promise<string> {
+    const gTaskId = this.toGraphId(taskId, 'plannerTask');
+    const resolvedMentions = mentionUserIds != null && mentionUserIds.length > 0
+      ? await this.resolveMentionUserIdsAsync(mentionUserIds)
+      : [];
+    const payload = buildPlannerTaskMessagePayload(content, resolvedMentions);
+    const body: Record<string, unknown> = { content: payload.content };
+    if (payload.mentions.length > 0) {
+      body['mentions'] = payload.mentions;
+    }
+    const created = await this.client.createPlannerTaskMessage(gTaskId, body);
+    const graphMessageId = String(created['id'] ?? '');
+    return this.mintAliasComposite('plannerTaskMessage', { taskId: gTaskId, messageId: graphMessageId });
+  }
+
+  /**
+   * Updates a Planner task comment. Beta API; delegated only.
+   */
+  async updatePlannerTaskMessageAsync(
+    messageId: string,
+    content: string,
+    mentionUserIds?: string[],
+  ): Promise<void> {
+    const { taskId: gTaskId, messageId: gMessageId } = this.toGraphParts(
+      messageId,
+      'plannerTaskMessage',
+      ['taskId', 'messageId'],
+    );
+    const resolvedMentions = mentionUserIds != null && mentionUserIds.length > 0
+      ? await this.resolveMentionUserIdsAsync(mentionUserIds)
+      : [];
+    const payload = buildPlannerTaskMessagePayload(content, resolvedMentions);
+    const body: Record<string, unknown> = { content: payload.content };
+    if (payload.mentions.length > 0) {
+      body['mentions'] = payload.mentions;
+    }
+    await this.client.updatePlannerTaskMessage(gTaskId, gMessageId, body);
+  }
+
+  /**
+   * Deletes a Planner task comment. Beta API; delegated only.
+   */
+  async deletePlannerTaskMessageAsync(messageId: string): Promise<void> {
+    const { taskId: gTaskId, messageId: gMessageId } = this.toGraphParts(
+      messageId,
+      'plannerTaskMessage',
+      ['taskId', 'messageId'],
+    );
+    await this.client.deletePlannerTaskMessage(gTaskId, gMessageId);
   }
 
   // ===========================================================================

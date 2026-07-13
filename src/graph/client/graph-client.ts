@@ -2115,6 +2115,56 @@ export class GraphClient {
     return await client.api(`/planner/tasks/${taskId}/details`).header('If-Match', etag).patch(updates) as MicrosoftGraph.PlannerTaskDetails;
   }
 
+  // Planner Task Chat Messages (beta — delegated only)
+  // https://learn.microsoft.com/en-us/graph/api/resources/plannertaskchatmessage
+
+  async listPlannerTaskMessages(
+    taskId: string,
+    skipToken?: string,
+  ): Promise<{ messages: GraphEntity[]; nextSkipToken?: string }> {
+    const client = await this.getClient();
+    let request = client.api(`/planner/tasks/${taskId}/messages`).version('beta');
+    if (skipToken != null && skipToken.length > 0) {
+      request = request.query({ $skipToken: skipToken });
+    }
+    const response = await request.get() as PageCollection & { '@odata.nextLink'?: string };
+    const messages = (response.value ?? []) as GraphEntity[];
+    let nextSkipToken: string | undefined;
+    const nextLink = response['@odata.nextLink'];
+    if (nextLink != null) {
+      try {
+        nextSkipToken = new URL(nextLink).searchParams.get('$skipToken') ?? undefined;
+      } catch {
+        nextSkipToken = undefined;
+      }
+    }
+    return nextSkipToken != null
+      ? { messages, nextSkipToken }
+      : { messages };
+  }
+
+  async createPlannerTaskMessage(
+    taskId: string,
+    body: Record<string, unknown>,
+  ): Promise<GraphEntity> {
+    const client = await this.getClient();
+    return await client.api(`/planner/tasks/${taskId}/messages`).version('beta').post(body) as GraphEntity;
+  }
+
+  async updatePlannerTaskMessage(
+    taskId: string,
+    messageId: string,
+    body: Record<string, unknown>,
+  ): Promise<GraphEntity> {
+    const client = await this.getClient();
+    return await client.api(`/planner/tasks/${taskId}/messages/${messageId}`).version('beta').patch(body) as GraphEntity;
+  }
+
+  async deletePlannerTaskMessage(taskId: string, messageId: string): Promise<void> {
+    const client = await this.getClient();
+    await client.api(`/planner/tasks/${taskId}/messages/${messageId}`).version('beta').delete();
+  }
+
   // ===========================================================================
   // People & Presence
   // ===========================================================================

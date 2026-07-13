@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **Planner task chat messages** (#86) — five tools on the `planner` preset for the Comments tab:
+  `list_planner_task_messages`, `create_planner_task_message`, `update_planner_task_message`,
+  `prepare_delete_planner_task_message`, and `confirm_delete_planner_task_message`. Uses Microsoft
+  Graph **beta** (`/planner/tasks/{id}/messages`); delegated permissions only (`Tasks.Read` to list,
+  `Tasks.ReadWrite` to write). Comments mint durable `pm_` tokens (composite task + message id).
+  `mention_user_ids` accepts Entra user ids or emails and builds Skype mention HTML automatically.
+
 ## [4.2.1] - 2026-07-11
 
 ### Fixed

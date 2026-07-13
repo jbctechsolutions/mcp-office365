@@ -34,6 +34,10 @@ describe('PlannerTools', () => {
       deletePlannerTaskAsync: vi.fn(),
       getPlannerTaskDetailsAsync: vi.fn(),
       updatePlannerTaskDetailsAsync: vi.fn(),
+      listPlannerTaskMessagesAsync: vi.fn(),
+      createPlannerTaskMessageAsync: vi.fn(),
+      updatePlannerTaskMessageAsync: vi.fn(),
+      deletePlannerTaskMessageAsync: vi.fn(),
     };
     tokenManager = new ApprovalTokenManager();
     tools = new PlannerTools(repo, tokenManager);
@@ -467,6 +471,98 @@ describe('PlannerTools', () => {
       await tools.updatePlannerTaskDetails({ task_id: 'pt_3' });
 
       expect(repo.updatePlannerTaskDetailsAsync).toHaveBeenCalledWith('pt_3', {});
+    });
+  });
+
+  // ===========================================================================
+  // Planner Task Messages
+  // ===========================================================================
+
+  describe('listPlannerTaskMessages', () => {
+    it('returns messages and optional paging token', async () => {
+      const mockMessages = [{
+        id: 'pm_abc',
+        content: 'Looks good',
+        messageType: 'richTextHtml',
+        createdDateTime: '2026-07-13T00:00:00Z',
+        editedTime: null,
+        deletedTime: null,
+        createdByUserId: 'user-1',
+        mentions: [],
+      }];
+      vi.mocked(repo.listPlannerTaskMessagesAsync).mockResolvedValue({
+        messages: mockMessages,
+        nextSkipToken: 'token-xyz',
+      });
+
+      const result = await tools.listPlannerTaskMessages({ task_id: 'pt_1', skip_token: 'prev' });
+
+      expect(repo.listPlannerTaskMessagesAsync).toHaveBeenCalledWith('pt_1', 'prev');
+      const parsed = JSON.parse(result.content[0].text);
+      expect(parsed.messages).toEqual(mockMessages);
+      expect(parsed.next_skip_token).toBe('token-xyz');
+    });
+  });
+
+  describe('createPlannerTaskMessage', () => {
+    it('posts a comment and returns the message id', async () => {
+      vi.mocked(repo.createPlannerTaskMessageAsync).mockResolvedValue('pm_new');
+
+      const result = await tools.createPlannerTaskMessage({
+        task_id: 'pt_1',
+        content: 'Preview ready: https://example.com',
+        mention_user_ids: ['ben@example.com', 'user-2'],
+      });
+
+      expect(repo.createPlannerTaskMessageAsync).toHaveBeenCalledWith(
+        'pt_1',
+        'Preview ready: https://example.com',
+        ['ben@example.com', 'user-2'],
+      );
+      const parsed = JSON.parse(result.content[0].text);
+      expect(parsed.success).toBe(true);
+      expect(parsed.message_id).toBe('pm_new');
+    });
+  });
+
+  describe('updatePlannerTaskMessage', () => {
+    it('updates a comment', async () => {
+      vi.mocked(repo.updatePlannerTaskMessageAsync).mockResolvedValue();
+
+      const result = await tools.updatePlannerTaskMessage({
+        message_id: 'pm_abc',
+        content: 'Updated text',
+      });
+
+      expect(repo.updatePlannerTaskMessageAsync).toHaveBeenCalledWith('pm_abc', 'Updated text', undefined);
+      const parsed = JSON.parse(result.content[0].text);
+      expect(parsed.success).toBe(true);
+    });
+  });
+
+  describe('prepareDeletePlannerTaskMessage', () => {
+    it('generates an approval token', () => {
+      const result = tools.prepareDeletePlannerTaskMessage({ message_id: 'pm_abc' });
+
+      const parsed = JSON.parse(result.content[0].text);
+      expect(parsed.approval_token).toBeDefined();
+      expect(parsed.message_id).toBe('pm_abc');
+      expect(parsed.action).toContain('confirm_delete_planner_task_message');
+    });
+  });
+
+  describe('confirmDeletePlannerTaskMessage', () => {
+    it('deletes the comment with a valid token', async () => {
+      vi.mocked(repo.deletePlannerTaskMessageAsync).mockResolvedValue();
+
+      const prepareResult = tools.prepareDeletePlannerTaskMessage({ message_id: 'pm_abc' });
+      const { approval_token } = JSON.parse(prepareResult.content[0].text);
+
+      const result = await tools.confirmDeletePlannerTaskMessage({ approval_token });
+
+      const parsed = JSON.parse(result.content[0].text);
+      expect(parsed.success).toBe(true);
+      expect(repo.deletePlannerTaskMessageAsync).toHaveBeenCalledWith('pm_abc');
     });
   });
 });
