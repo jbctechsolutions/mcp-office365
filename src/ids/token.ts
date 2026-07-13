@@ -40,6 +40,7 @@ export type EntityType =
   | 'plan'
   | 'plannerBucket'
   | 'plannerTask'
+  | 'plannerTaskMessage'
   | 'chat'
   | 'team'
   | 'attachment'
@@ -99,6 +100,7 @@ export const ALIAS_PREFIXES: Readonly<Record<string, EntityType>> = Object.assig
     pl: 'plan',
     pb: 'plannerBucket',
     pt: 'plannerTask',
+    pm: 'plannerTaskMessage',
     ch: 'chat',
     tm: 'team',
     at: 'attachment',

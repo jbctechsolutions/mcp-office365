@@ -6,7 +6,7 @@
 
 MCP server for Microsoft 365 -- mail, calendar, contacts, tasks, teams, people, and planner.
 
-A [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) server that provides **229 tools** for full read/write access to Microsoft 365 via the Microsoft Graph API. Manage your emails, calendar events, contacts, tasks, OneNote notes, Teams channels and chats, people directory, and Planner boards directly through MCP.
+A [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) server that provides **249 tools** for full read/write access to Microsoft 365 via the Microsoft Graph API. Manage your emails, calendar events, contacts, tasks, OneNote notes, Teams channels and chats, people directory, and Planner boards directly through MCP.
 
 ## Features Overview
 
@@ -182,7 +182,7 @@ No app registration is embedded — device-code sign-in needs an app that belong
 
 ## Tool Reference
 
-All 229 tools listed below.
+All 249 tools listed below.
 
 <details>
 <summary><strong>Mail -- Reading (9)</strong></summary>
@@ -551,7 +551,7 @@ All 229 tools listed below.
 </details>
 
 <details>
-<summary><strong>Planner (18)</strong> <em>(Graph API)</em></summary>
+<summary><strong>Planner (23)</strong> <em>(Graph API; task comments use Graph beta, delegated only)</em></summary>
 
 | Tool | Description |
 |------|-------------|
@@ -573,6 +573,11 @@ All 229 tools listed below.
 | `confirm_delete_planner_task` | Confirm Planner task deletion |
 | `get_planner_task_details` | Get task details (description, checklist, references) |
 | `update_planner_task_details` | Update task details (requires ETag from get_planner_task_details) |
+| `list_planner_task_messages` | List chat comments on a task (Comments tab) *(Graph API beta)* |
+| `create_planner_task_message` | Post a task comment with optional @mentions *(Graph API beta; Tasks.ReadWrite)* |
+| `update_planner_task_message` | Update a task comment *(Graph API beta; Tasks.ReadWrite)* |
+| `prepare_delete_planner_task_message` | Prepare to delete a task comment (two-phase) *(Graph API beta)* |
+| `confirm_delete_planner_task_message` | Confirm task comment deletion *(Graph API beta)* |
 
 </details>
 
@@ -596,7 +601,7 @@ Read another user's mailbox, calendar, or OneDrive via `/users/{upn}/...`, relyi
 
 ## Architecture
 
-The server connects to Microsoft 365 cloud services via the **Microsoft Graph API**. Full read/write access across all 229 tools. No Outlook installation required. Works on macOS, Windows, and Linux.
+The server connects to Microsoft 365 cloud services via the **Microsoft Graph API**. Full read/write access across all 249 tools. No Outlook installation required. Works on macOS, Windows, and Linux.
 
 ### Two-Phase Approval
 

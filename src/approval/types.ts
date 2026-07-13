@@ -48,6 +48,7 @@ export type OperationType =
   | 'delete_task_attachment'
   | 'delete_bucket'
   | 'delete_planner_task'
+  | 'delete_planner_task_message'
   | 'add_message_reaction'
   | 'update_excel_range'
   | 'upload_file'
@@ -58,7 +59,7 @@ export type OperationType =
 /**
  * Target resource types.
  */
-export type TargetType = 'email' | 'folder' | 'event' | 'contact' | 'task' | 'task_list' | 'rule' | 'contact_folder' | 'category' | 'focused_override' | 'calendar_permission' | 'channel' | 'channel_message' | 'chat_message' | 'checklist_item' | 'linked_resource' | 'task_attachment' | 'bucket' | 'planner_task' | 'message_reaction' | 'excel_range' | 'drive_item' | 'list_item' | 'library_item';
+export type TargetType = 'email' | 'folder' | 'event' | 'contact' | 'task' | 'task_list' | 'rule' | 'contact_folder' | 'category' | 'focused_override' | 'calendar_permission' | 'channel' | 'channel_message' | 'chat_message' | 'checklist_item' | 'linked_resource' | 'task_attachment' | 'bucket' | 'planner_task' | 'planner_task_message' | 'message_reaction' | 'excel_range' | 'drive_item' | 'list_item' | 'library_item';
 
 // =============================================================================
 // Token Types

@@ -118,6 +118,31 @@ export const UpdatePlannerTaskDetailsInput = z.strictObject({
   references: z.record(z.string(), z.object({}).passthrough()).optional().describe('Reference links. Keys are encoded URLs, values have alias (string) and type (string)'),
 });
 
+export const ListPlannerTaskMessagesInput = z.strictObject({
+  task_id: Id.plannerTask,
+  skip_token: z.string().optional().describe('Paging token from a previous list_planner_task_messages response (`next_skip_token`)'),
+});
+
+export const CreatePlannerTaskMessageInput = z.strictObject({
+  task_id: Id.plannerTask,
+  content: z.string().min(1).describe('Comment text (plain text or sanitized HTML)'),
+  mention_user_ids: z.array(z.string().min(1)).optional().describe('Entra user ids or email addresses to @mention. Mention HTML is built automatically for plain-text content.'),
+});
+
+export const UpdatePlannerTaskMessageInput = z.strictObject({
+  message_id: Id.plannerTaskMessage,
+  content: z.string().min(1).describe('Updated comment text (plain text or sanitized HTML)'),
+  mention_user_ids: z.array(z.string().min(1)).optional().describe('Entra user ids or email addresses to @mention'),
+});
+
+export const PrepareDeletePlannerTaskMessageInput = z.strictObject({
+  message_id: Id.plannerTaskMessage,
+});
+
+export const ConfirmDeletePlannerTaskMessageInput = z.strictObject({
+  approval_token: z.string().describe('Approval token from prepare_delete_planner_task_message'),
+});
+
 // =============================================================================
 // Type Exports
 // =============================================================================
@@ -140,6 +165,11 @@ export type PrepareDeletePlannerTaskParams = z.infer<typeof PrepareDeletePlanner
 export type ConfirmDeletePlannerTaskParams = z.infer<typeof ConfirmDeletePlannerTaskInput>;
 export type GetPlannerTaskDetailsParams = z.infer<typeof GetPlannerTaskDetailsInput>;
 export type UpdatePlannerTaskDetailsParams = z.infer<typeof UpdatePlannerTaskDetailsInput>;
+export type ListPlannerTaskMessagesParams = z.infer<typeof ListPlannerTaskMessagesInput>;
+export type CreatePlannerTaskMessageParams = z.infer<typeof CreatePlannerTaskMessageInput>;
+export type UpdatePlannerTaskMessageParams = z.infer<typeof UpdatePlannerTaskMessageInput>;
+export type PrepareDeletePlannerTaskMessageParams = z.infer<typeof PrepareDeletePlannerTaskMessageInput>;
+export type ConfirmDeletePlannerTaskMessageParams = z.infer<typeof ConfirmDeletePlannerTaskMessageInput>;
 
 // =============================================================================
 // Repository Interface
@@ -189,6 +219,17 @@ export interface IPlannerRepository {
     description?: string; checklist?: Record<string, object>;
     references?: Record<string, object>;
   }): Promise<void>;
+  listPlannerTaskMessagesAsync(taskId: string, skipToken?: string): Promise<{
+    messages: Array<{
+      id: string; content: string; messageType: string; createdDateTime: string;
+      editedTime: string | null; deletedTime: string | null; createdByUserId: string;
+      mentions: unknown[];
+    }>;
+    nextSkipToken?: string;
+  }>;
+  createPlannerTaskMessageAsync(taskId: string, content: string, mentionUserIds?: string[]): Promise<string>;
+  updatePlannerTaskMessageAsync(messageId: string, content: string, mentionUserIds?: string[]): Promise<void>;
+  deletePlannerTaskMessageAsync(messageId: string): Promise<void>;
 }
 
 // =============================================================================
@@ -547,6 +588,134 @@ export class PlannerTools {
       }],
     };
   }
+
+  // ===========================================================================
+  // Planner Task Chat Messages (beta)
+  // ===========================================================================
+
+  async listPlannerTaskMessages(params: ListPlannerTaskMessagesParams): Promise<{
+    content: Array<{ type: 'text'; text: string }>;
+  }> {
+    const { messages, nextSkipToken } = await this.repo.listPlannerTaskMessagesAsync(
+      params.task_id,
+      params.skip_token,
+    );
+    return {
+      content: [{
+        type: 'text' as const,
+        text: JSON.stringify({
+          messages,
+          next_skip_token: nextSkipToken,
+          next: nextActionFor('plannerTaskMessage') ?? undefined,
+        }, null, 2),
+      }],
+    };
+  }
+
+  async createPlannerTaskMessage(params: CreatePlannerTaskMessageParams): Promise<{
+    content: Array<{ type: 'text'; text: string }>;
+  }> {
+    const messageId = await this.repo.createPlannerTaskMessageAsync(
+      params.task_id,
+      params.content,
+      params.mention_user_ids,
+    );
+    return {
+      content: [{
+        type: 'text' as const,
+        text: JSON.stringify({
+          success: true,
+          message_id: messageId,
+          message: 'Planner task comment posted',
+          next: nextActionFor('plannerTaskMessage') ?? undefined,
+        }, null, 2),
+      }],
+    };
+  }
+
+  async updatePlannerTaskMessage(params: UpdatePlannerTaskMessageParams): Promise<{
+    content: Array<{ type: 'text'; text: string }>;
+  }> {
+    await this.repo.updatePlannerTaskMessageAsync(
+      params.message_id,
+      params.content,
+      params.mention_user_ids,
+    );
+    return {
+      content: [{
+        type: 'text' as const,
+        text: JSON.stringify({ success: true, message: 'Planner task comment updated' }, null, 2),
+      }],
+    };
+  }
+
+  prepareDeletePlannerTaskMessage(params: PrepareDeletePlannerTaskMessageParams): {
+    content: Array<{ type: 'text'; text: string }>;
+  } {
+    const token = this.tokenManager.generateToken({
+      operation: 'delete_planner_task_message',
+      targetType: 'planner_task_message',
+      targetId: params.message_id,
+      targetHash: String(params.message_id),
+    });
+
+    return {
+      content: [{
+        type: 'text' as const,
+        text: JSON.stringify({
+          approval_token: token.tokenId,
+          expires_at: new Date(token.expiresAt).toISOString(),
+          message_id: params.message_id,
+          action: `To confirm deleting planner task comment ${params.message_id}, call confirm_delete_planner_task_message with the approval_token.`,
+        }, null, 2),
+      }],
+    };
+  }
+
+  async confirmDeletePlannerTaskMessage(params: ConfirmDeletePlannerTaskMessageParams): Promise<{
+    content: Array<{ type: 'text'; text: string }>;
+  }> {
+    const token = this.tokenManager.lookupToken(params.approval_token);
+    if (token == null) {
+      return {
+        content: [{
+          type: 'text' as const,
+          text: JSON.stringify({
+            success: false,
+            error: 'Token not found or already used',
+          }, null, 2),
+        }],
+      };
+    }
+
+    const result = this.tokenManager.consumeToken(params.approval_token, 'delete_planner_task_message', token.targetId);
+    if (!result.valid) {
+      const errorMessages: Record<string, string> = {
+        NOT_FOUND: 'Token not found or already used',
+        EXPIRED: 'Token has expired. Please call prepare_delete_planner_task_message again.',
+        OPERATION_MISMATCH: 'Token was not generated for delete_planner_task_message',
+        TARGET_MISMATCH: 'Token was generated for a different comment',
+        ALREADY_CONSUMED: 'Token has already been used',
+      };
+      return {
+        content: [{
+          type: 'text' as const,
+          text: JSON.stringify({
+            success: false,
+            error: errorMessages[result.error ?? ''] ?? 'Invalid token',
+          }, null, 2),
+        }],
+      };
+    }
+
+    await this.repo.deletePlannerTaskMessageAsync(result.token!.targetId);
+    return {
+      content: [{
+        type: 'text' as const,
+        text: JSON.stringify({ success: true, message: 'Planner task comment deleted' }, null, 2),
+      }],
+    };
+  }
 }
 
 // =============================================================================
@@ -741,6 +910,57 @@ export function plannerToolDefinitions(): ToolDefinition[] {
       presets: ['planner'],
       backends: ['graph'],
       handler: (ctx, params) => tools(ctx).updatePlannerTaskDetails(params),
+    }),
+    defineTool({
+      name: 'list_planner_task_messages',
+      description: 'List chat comments on a Planner task (Comments tab). Uses Graph beta; delegated permissions only. (Graph API beta)',
+      input: ListPlannerTaskMessagesInput,
+      annotations: { readOnlyHint: true, openWorldHint: true },
+      destructive: false,
+      presets: ['planner'],
+      backends: ['graph'],
+      handler: (ctx, params) => tools(ctx).listPlannerTaskMessages(params),
+    }),
+    defineTool({
+      name: 'create_planner_task_message',
+      description: 'Post a comment on a Planner task with optional @mentions (user ids or emails). Uses Graph beta; delegated permissions only. Requires Tasks.ReadWrite. (Graph API beta)',
+      input: CreatePlannerTaskMessageInput,
+      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+      destructive: false,
+      presets: ['planner'],
+      backends: ['graph'],
+      handler: (ctx, params) => tools(ctx).createPlannerTaskMessage(params),
+    }),
+    defineTool({
+      name: 'update_planner_task_message',
+      description: 'Update a Planner task comment. Uses Graph beta; delegated permissions only. Requires Tasks.ReadWrite. (Graph API beta)',
+      input: UpdatePlannerTaskMessageInput,
+      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+      destructive: false,
+      presets: ['planner'],
+      backends: ['graph'],
+      handler: (ctx, params) => tools(ctx).updatePlannerTaskMessage(params),
+    }),
+    defineTool({
+      name: 'prepare_delete_planner_task_message',
+      description: 'Prepare to delete a Planner task comment. Returns an approval token. Uses Graph beta. (Graph API beta)',
+      input: PrepareDeletePlannerTaskMessageInput,
+      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+      destructive: true,
+      presets: ['planner'],
+      backends: ['graph'],
+      handler: (ctx, params) => tools(ctx).prepareDeletePlannerTaskMessage(params),
+      onElicit: approvalTokenLink('confirm_delete_planner_task_message'),
+    }),
+    defineTool({
+      name: 'confirm_delete_planner_task_message',
+      description: 'Confirm deletion of a Planner task comment using the approval token from prepare_delete_planner_task_message. (Graph API beta)',
+      input: ConfirmDeletePlannerTaskMessageInput,
+      annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+      destructive: true,
+      presets: ['planner'],
+      backends: ['graph'],
+      handler: (ctx, params) => tools(ctx).confirmDeletePlannerTaskMessage(params),
     }),
   ];
 }
