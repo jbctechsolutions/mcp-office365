@@ -1,10 +1,10 @@
 # Remote Connector — Continuation Handoff (for Cursor / next agent)
 
-**Status as of 2026-07-12:** 7 of 9 units merged to `main`. The entire
-security-critical core (auth, per-user Graph, entitlements, revocation) is done
-and covered by ~2023 passing tests. **U8 (audit log)** and **U9 (deployment +
-docs + cost estimate)** remain. This doc is the cold-start brief: read it, read
-the plan, then continue.
+**Status as of 2026-07-16:** 8 of 9 units merged to `main`. The entire
+security-critical core (auth, per-user Graph, entitlements, revocation, audit) is
+done and covered by ~2049 passing tests. Only **U9 (deployment docs + cost
+estimate)** remains — and it needs Joel's infra, not more server code. This doc
+is the cold-start brief: read it, read the plan, then continue.
 
 > This file is a durable pointer for whoever picks the work up next. It is not
 > itself part of the feature. If you are that agent — start at "Start here".
@@ -21,7 +21,9 @@ the plan, then continue.
 3. Read the provisioning runbook: `docs/remote/provisioning.md` — the Entra apps,
    the concrete IDs, admin-consent commands, and the "add to claude.ai" steps.
 4. `npm ci && npm run build && npm test` — confirm green before you touch anything
-   (~2023 tests). Lint/typecheck: `npm run lint && npm run typecheck`.
+   (~2049 tests). Lint/typecheck: `npm run lint && npm run typecheck`. **On Node 26**
+   (the pinned toolchain since #88) you may need `npm rebuild better-sqlite3` once —
+   a stale prebuild throws `NODE_MODULE_VERSION` mismatch at first `StateStore.open`.
 5. This is a JBC repo (**not** a client-deliverable org), so **keep** the
    `Co-Authored-By` trailer on commits.
 
@@ -37,6 +39,7 @@ the plan, then continue.
 | U5 | On-Behalf-Of per-user Graph (MSAL CCA, `homeAccountId` state key) | `src/remote/auth/obo.ts`, `src/graph/client/graph-client.ts`, `src/graph/repository.ts` |
 | U6 | Per-user entitlements (pinned tool surface, mtime hot-reload) | `src/remote/entitlements.ts`, `src/registry/registry.ts` |
 | U7 | Revocation deny-list + `revoke` CLI subcommand | `src/remote/revocation.ts`, `src/state/{schema,store}.ts`, `src/cli.ts` |
+| U8 | Write/destructive audit log + `audit` CLI (R16) | `src/remote/audit.ts`, `src/state/{schema,store}.ts`, `src/index.ts` chokepoint |
 
 Infra (separate repo `jbctechsolutions`/`jp-infrastructure`, applied to the JP
 tenant): `stacks/azure/entra/mcp-office365-connector/` — two Entra app
@@ -108,40 +111,17 @@ of these was a live defect found and fixed:
 
 ## Remaining work
 
-### U8 — Audit log (fully autonomous; do this first)
+### U8 — Audit log ✅ DONE (merged, PR #89)
 
-**Goal (R16):** every write/destructive tool call in remote mode is durably
-logged — oid, tool name, target, timestamp, prepare/confirm outcome — readable
-for the pilot-exit review.
-
-- **Create** `src/remote/audit.ts` (writer + query); add an `audit` subcommand to
-  `src/cli.ts` (filter by user/time, human-readable output).
-- **Modify** `src/state/store.ts` + `src/state/schema.ts` (new `audit` table,
-  additive **v3→v4** migration — mirror the U7 `deny_list` migration exactly).
-  Log at the **CallTool chokepoint** — it lives in `createServer`'s handler in
-  `src/index.ts` (shared with stdio), *not* in `http-server.ts`. Thread an audit
-  sink through `buildToolContext`/`ToolContext`; it is **null for stdio** so
-  auditing keys off the injected sink, not a separate code path.
-- **Record non-read tools only** — key off the existing `destructive` /
-  `readOnlyHint` tool annotations. Extract the target from the durable-ID param
-  when present. Link prepare→confirm rows.
-- **Fail-closed rule:** if the audit insert fails, **all `confirm_*` operations
-  abort** with a retriable error (a `confirm_send_email` sends mail from a client
-  tenant — it must not proceed unaudited). Fail-open-with-warning is reserved for
-  non-two-phase writes only.
-- **Retention:** keep everything through the pilot (no pruning at v1).
-- **Test** `tests/unit/remote/audit.test.ts`: (a) prepare/confirm send_email →
-  two linked rows w/ identity+outcome; (b) read-only tool → no row; (c) audit
-  table unavailable → confirm_delete AND confirm_send_email abort, non-two-phase
-  write proceeds with warning; (d) rows stay readable after an additive upgrade.
-- **Verify:** after a scripted mixed read/write session,
-  `audit --user <oid>` reconstructs exactly the writes with correct attribution.
-
-**New error classes** (401 challenge, OBO failure, entitlement-denied,
-deny-listed, audit-fail-closed) should be typed `OutlookMcpError` codes so the
-`{code, retriable, suggestion}` envelope holds for remote clients. Note
-`OutlookMcpError` is **abstract** — extend a concrete subclass (`GraphError`,
-`GraphAuthRequiredError`).
+Shipped: `audit_log` table (v3→v4 migration) + `StateStore.recordAudit`/
+`updateAuditOutcome`/`listAudit`; the `src/remote/audit.ts` recorder wired at the
+`createServer` CallTool chokepoint (`src/index.ts`) and injected per-request in
+`http-server.ts` with the caller's identity; the `audit` CLI subcommand
+(`--user`/`--since`/`--limit`); `AuditUnavailableError`. Fail-closed for
+`confirm_*` (row reserved before the mutation; a failed write aborts with a
+retriable `AUDIT_UNAVAILABLE`), fail-open for prepares/non-two-phase writes.
+Passed the adversarial gate (one P1 on the batch shapes, fixed). Nothing left
+here — this section is kept only so the plan's unit list stays legible.
 
 ### U9 — Deployment hand-off, docs, cost estimate (needs Joel's infra)
 
@@ -191,9 +171,12 @@ deny-listed, audit-fail-closed) should be typed `OutlookMcpError` codes so the
 
 ## Housekeeping / known issues
 
-- **windows-latest 20.x CI is a flaky native build** (`better-sqlite3` prebuild).
-  It has been admin-bypassed on each merge. Real fix (a chore, not part of this
-  feature): pin/cache the `better-sqlite3` prebuild for Windows 20.x.
+- **windows-latest 20.x CI fails at `npm ci`** — `prebuild-install` finds no
+  `better-sqlite3` prebuilt binary for node 20 on win32 and the `node-gyp` fallback
+  build fails; windows 22/24/26 pass, so it's a node-20-on-windows toolchain gap,
+  not a code fault. Admin-bypassed on each merge (incl. U8/#89). Real fix (a chore,
+  not part of this feature): drop node 20 from the Windows matrix, or cache/pin the
+  prebuild. Now that #88 pinned Node 26, dropping 20.x from the matrix is cleanest.
 - **A few fix commits are unsigned** — the 1Password signing agent was down during
   the session. Re-sign if branch protection requires signed commits.
 - Repo specifics: ESM, strict TS with `exactOptionalPropertyTypes: true`, eslint
