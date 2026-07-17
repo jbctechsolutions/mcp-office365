@@ -141,6 +141,18 @@ describe('parseCliCommand', () => {
       flags: ['--port', '8080'],
     });
   });
+
+  it('parses revoke and audit commands with their flags (U7/U8)', () => {
+    expect(parseCliCommand(['revoke', '--list'])).toEqual({
+      command: 'revoke',
+      flags: ['--list'],
+    });
+    expect(parseCliCommand(['audit'])).toEqual({ command: 'audit', flags: [] });
+    expect(parseCliCommand(['audit', '--user', 'oid-1', '--limit', '50'])).toEqual({
+      command: 'audit',
+      flags: ['--user', 'oid-1', '--limit', '50'],
+    });
+  });
 });
 
 describe('parseServeOptions (U3)', () => {

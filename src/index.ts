@@ -87,7 +87,9 @@ import { SharePointTools } from './tools/sharepoint.js';
 import { DeltaTools } from './tools/what-changed.js';
 import { SharePointListsTools } from './tools/sharepoint-lists.js';
 import { ApprovalTokenManager } from './approval/index.js';
-import { StateStore } from './state/store.js';
+import { StateStore, type AuditStore, type AuditQuery } from './state/store.js';
+import { createAuditRecorder, type PendingAudit } from './remote/audit.js';
+import type { ToolResult } from './registry/types.js';
 import {
   toErrorEnvelope,
   ensureErrorEnvelopeText,
@@ -119,6 +121,33 @@ function normalizeToolResult(result: CallToolResult): CallToolResult {
     return result;
   }
   return { ...result, content: [{ type: 'text', text: normalized }] };
+}
+
+/**
+ * Finalizes a reserved audit row (U8) from a tool's returned result. A result
+ * carrying `isError` records an `error` outcome with the envelope's code (when
+ * parseable); otherwise `ok`. The result is passed through so a prepare row can
+ * recover its minted approval-token id for prepare↔confirm linkage.
+ */
+function finishAudit(pending: PendingAudit | null, result: ToolResult): void {
+  if (pending == null) {
+    return;
+  }
+  if (result.isError !== true) {
+    pending.finish({ ok: true, result });
+    return;
+  }
+  let errorCode: string | null = null;
+  try {
+    const parsed: unknown = JSON.parse(result.content[0]?.text ?? '{}');
+    const code = (parsed as { code?: unknown }).code;
+    if (typeof code === 'string') {
+      errorCode = code;
+    }
+  } catch {
+    /* result text isn't an envelope — leave errorCode null */
+  }
+  pending.finish({ ok: false, errorCode, result });
 }
 
 /**
@@ -168,6 +197,18 @@ export interface ServerOptions {
    * stdio and for unauthenticated loopback-dev serve (device-code allowed there).
    */
   readonly remoteMode?: boolean;
+  /**
+   * Audit sink + acting identity for the write/destructive audit trail (U8, R16).
+   * Present only for authenticated remote requests; absent for stdio and
+   * unauthenticated loopback, where the CallTool chokepoint records nothing. The
+   * recorder is fail-closed for `confirm_*` (a client-tenant mutation must not
+   * proceed unrecorded) and fail-open for other writes.
+   */
+  readonly audit?: {
+    readonly store: AuditStore;
+    readonly oid: string;
+    readonly tid: string;
+  };
 }
 
 /**
@@ -232,6 +273,16 @@ export function createServer(options: ServerOptions = {}): Server {
     store: stateStore,
     accountId: accountIdFn,
   });
+
+  // Audit recorder (U8): present only for authenticated remote requests. Null in
+  // stdio / unauthenticated loopback, so the CallTool chokepoint records nothing.
+  const auditRecorder =
+    options.audit != null
+      ? createAuditRecorder(options.audit.store, {
+          oid: options.audit.oid,
+          tid: options.audit.tid,
+        })
+      : null;
 
   // Tools and backend state
   let initialized = false;
@@ -463,7 +514,30 @@ export function createServer(options: ServerOptions = {}): Server {
       return unknownTool();
     }
 
+    // Audit (U8): reserved before the mutation runs so a confirm_* action is
+    // recorded even if it later fails. Declared outside the try so the catch can
+    // finalize the outcome on a thrown failure.
+    let pendingAudit: PendingAudit | null = null;
     try {
+      // Reserve the audit row before backend init + dispatch (U8), so an attempt
+      // that fails at auth/init is still recorded (R16). For a confirm_* tool this
+      // is fail-closed: begin() throws AuditUnavailableError if the row can't be
+      // written, and the catch below maps it to a retriable envelope — the tool
+      // never runs. buildToolContext isn't needed for auditing (chokepoint-level).
+      if (auditRecorder != null) {
+        const def = registry.get(name);
+        if (def != null) {
+          pendingAudit = auditRecorder.begin(
+            {
+              name: def.name,
+              readOnly: def.annotations.readOnlyHint === true,
+              ...(def.onElicit != null ? { collectTokenIds: def.onElicit.collectTokenIds } : {}),
+            },
+            args,
+          );
+        }
+      }
+
       await ensureInitialized();
 
       // Self-heal the account identity (device-code/stdio only): initializeGraph-
@@ -481,10 +555,12 @@ export function createServer(options: ServerOptions = {}): Server {
         // D10: handlers that return an error result directly (not-found,
         // approval-token mismatches, …) are normalized to the envelope shape
         // here so every failure path — thrown or returned — has one contract.
+        finishAudit(pendingAudit, registryResult);
         return normalizeToolResult(registryResult as CallToolResult);
       }
 
       // Defensive: has() gated this path, so dispatch should not return undefined.
+      pendingAudit?.finish({ ok: false, errorCode: ErrorCode.VALIDATION_ERROR });
       return unknownTool();
     } catch (error) {
       // D10: every thrown failure surfaces as a stable typed envelope mapped at
@@ -496,6 +572,10 @@ export function createServer(options: ServerOptions = {}): Server {
       } catch {
         envelope = { code: ErrorCode.GRAPH_ERROR, message: 'An unknown error occurred.', retriable: false };
       }
+
+      // Finalize the reserved audit row with the failure (U8). When begin() itself
+      // threw (fail-closed confirm), pendingAudit is null — nothing to finalize.
+      pendingAudit?.finish({ ok: false, errorCode: envelope.code });
 
       return {
         content: [{ type: 'text', text: JSON.stringify(envelope, null, 2) }],
@@ -586,6 +666,85 @@ async function handleRevokeCommand(flags: string[]): Promise<number> {
   }
 }
 
+/**
+ * `audit` subcommand (U8): read the write/destructive audit trail (R16), for the
+ * pilot-exit review.
+ *   audit                       — all rows, newest first
+ *   audit --user <oid>          — restrict to one Entra oid
+ *   audit --since <iso|epochms> — rows at/after this time
+ *   audit --limit <n>           — cap the number of rows
+ */
+function handleAuditCommand(flags: string[]): number {
+  const stateDir = process.env.OUTLOOK_MCP_STATE_DIR;
+  const store = StateStore.open(stateDir != null ? { dir: stateDir } : {});
+  if (store.degraded) {
+    process.stderr.write(
+      'State store is degraded (in-memory) — no durable audit log to read. ' +
+        'Fix OUTLOOK_MCP_STATE_DIR / the state volume and retry.\n',
+    );
+    store.close();
+    return 1;
+  }
+  try {
+    const query: AuditQuery = {};
+    const userIdx = flags.indexOf('--user');
+    if (userIdx >= 0) {
+      const raw = flags[userIdx + 1];
+      if (raw == null || raw.startsWith('--')) {
+        process.stderr.write('audit --user requires an oid.\n');
+        return 1;
+      }
+      query.oid = raw.toLowerCase();
+    }
+    const sinceIdx = flags.indexOf('--since');
+    if (sinceIdx >= 0) {
+      const parsed = parseTimestamp(flags[sinceIdx + 1]);
+      if (parsed == null) {
+        process.stderr.write('audit --since requires an ISO date or epoch-ms value.\n');
+        return 1;
+      }
+      query.since = parsed;
+    }
+    const limitIdx = flags.indexOf('--limit');
+    if (limitIdx >= 0) {
+      const n = Number(flags[limitIdx + 1]);
+      if (!Number.isInteger(n) || n < 1) {
+        process.stderr.write('audit --limit requires a positive integer.\n');
+        return 1;
+      }
+      query.limit = n;
+    }
+
+    const rows = store.listAudit(query);
+    if (rows.length === 0) {
+      process.stdout.write('No audit entries.\n');
+      return 0;
+    }
+    for (const r of rows) {
+      const when = new Date(r.createdAt).toISOString();
+      const outcome = r.outcome === 'error' && r.errorCode != null ? `error:${r.errorCode}` : r.outcome;
+      process.stdout.write(
+        `${when}\t${r.oid}\t${r.tool}\t${r.phase}\t${outcome}\t${r.target ?? ''}\t${r.linkKey ?? ''}\n`,
+      );
+    }
+    return 0;
+  } finally {
+    store.close();
+  }
+}
+
+/** Parses an ISO date or epoch-ms string into epoch-ms, or null when invalid. */
+function parseTimestamp(raw: string | undefined): number | null {
+  if (raw == null || raw.startsWith('--')) {
+    return null;
+  }
+  if (/^\d+$/.test(raw)) {
+    return Number(raw);
+  }
+  const ms = Date.parse(raw);
+  return Number.isNaN(ms) ? null : ms;
+}
+
 async function main(): Promise<void> {
   const argv = process.argv.slice(2);
 
@@ -597,6 +756,10 @@ async function main(): Promise<void> {
   }
   if (cliCommand?.command === 'revoke') {
     const exitCode = await handleRevokeCommand(cliCommand.flags);
+    process.exit(exitCode);
+  }
+  if (cliCommand?.command === 'audit') {
+    const exitCode = handleAuditCommand(cliCommand.flags);
     process.exit(exitCode);
   }
 

@@ -72,6 +72,69 @@ export interface ApprovalTokenRow {
   createdAt: number;
 }
 
+/** Audit phase: which half of a two-phase flow, or a single-call write (U8). */
+export type AuditPhase = 'prepare' | 'confirm' | 'write';
+
+/** Terminal outcome of an audited call; 'pending' is a pre-write reservation. */
+export type AuditOutcome = 'pending' | 'ok' | 'error';
+
+/** Input for recording an audit entry (U8). Never carries token/content material. */
+export interface AuditEntryInput {
+  /** Entra object id of the acting user. */
+  oid: string;
+  /** Entra tenant id. */
+  tid?: string | null;
+  /** MCP tool name invoked. */
+  tool: string;
+  /** prepare / confirm / write. */
+  phase: AuditPhase;
+  /** Best-effort target resource (durable IDs only), or null. */
+  target?: string | null;
+  /** Approval-token id linking a prepare row to its confirm row, or null. */
+  linkKey?: string | null;
+  /** Outcome; defaults to a caller-supplied terminal value. */
+  outcome: AuditOutcome;
+  /** Error envelope code when outcome is 'error', or null. */
+  errorCode?: string | null;
+  createdAt?: number;
+}
+
+/** A stored audit row (read view). */
+export interface AuditEntryRow {
+  id: number;
+  oid: string;
+  tid: string | null;
+  tool: string;
+  phase: AuditPhase;
+  target: string | null;
+  linkKey: string | null;
+  outcome: AuditOutcome;
+  errorCode: string | null;
+  createdAt: number;
+}
+
+/** Filter for {@link StateStore.listAudit}. */
+export interface AuditQuery {
+  /** Restrict to a single Entra oid. */
+  oid?: string;
+  /** Inclusive lower bound on createdAt (ms since epoch). */
+  since?: number;
+  /** Inclusive upper bound on createdAt (ms since epoch). */
+  until?: number;
+  /** Max rows to return (newest first). */
+  limit?: number;
+}
+
+/**
+ * The minimal audit surface the remote audit recorder (U8) depends on. Kept
+ * narrow so tests can inject a throwing stub to exercise the fail-closed path
+ * without a real database.
+ */
+export interface AuditStore {
+  recordAudit(input: AuditEntryInput): number;
+  updateAuditOutcome(id: number, outcome: AuditOutcome, errorCode?: string | null): void;
+}
+
 /** Outcome of an atomic approval-token consume. */
 export type ConsumeResult =
   | { status: 'consumed'; receiptJson: string | null }
@@ -101,7 +164,7 @@ interface RawAliasRow {
   created_at: number;
 }
 
-export class StateStore {
+export class StateStore implements AuditStore {
   /** True when running from an in-memory fallback (durability degraded). */
   readonly degraded: boolean;
   /** The db path, or ':memory:' when degraded. */
@@ -470,6 +533,93 @@ export class StateStore {
       return n;
     });
     return purge(accountId);
+  }
+
+  // ---- Audit log (U8) ------------------------------------------------------
+
+  /**
+   * Records a write/destructive audit entry (R16) and returns its row id. The
+   * id lets the recorder finalize the outcome after the tool runs (a confirm
+   * reserves a 'pending' row before executing, then updates it). Identity is
+   * oid/tid only — no token or content material is ever written here.
+   */
+  recordAudit(input: AuditEntryInput): number {
+    const result = this.db
+      .prepare(
+        `INSERT INTO audit_log (oid, tid, tool, phase, target, link_key, outcome, error_code, created_at)
+         VALUES (@oid, @tid, @tool, @phase, @target, @linkKey, @outcome, @errorCode, @createdAt)`,
+      )
+      .run({
+        oid: input.oid,
+        tid: input.tid ?? null,
+        tool: input.tool,
+        phase: input.phase,
+        target: input.target ?? null,
+        linkKey: input.linkKey ?? null,
+        outcome: input.outcome,
+        errorCode: input.errorCode ?? null,
+        createdAt: input.createdAt ?? this.now(),
+      });
+    return Number(result.lastInsertRowid);
+  }
+
+  /** Finalizes a reserved audit row's outcome (the post-execution update). */
+  updateAuditOutcome(id: number, outcome: AuditOutcome, errorCode?: string | null): void {
+    this.db
+      .prepare('UPDATE audit_log SET outcome = ?, error_code = ? WHERE id = ?')
+      .run(outcome, errorCode ?? null, id);
+  }
+
+  /** Audit rows matching the filter, newest first. */
+  listAudit(query: AuditQuery = {}): AuditEntryRow[] {
+    const clauses: string[] = [];
+    const params: unknown[] = [];
+    if (query.oid != null) {
+      clauses.push('oid = ?');
+      params.push(query.oid);
+    }
+    if (query.since != null) {
+      clauses.push('created_at >= ?');
+      params.push(query.since);
+    }
+    if (query.until != null) {
+      clauses.push('created_at <= ?');
+      params.push(query.until);
+    }
+    const where = clauses.length > 0 ? ` WHERE ${clauses.join(' AND ')}` : '';
+    const limit = query.limit != null ? ' LIMIT ?' : '';
+    if (query.limit != null) {
+      params.push(query.limit);
+    }
+    const rows = this.db
+      .prepare(
+        `SELECT id, oid, tid, tool, phase, target, link_key, outcome, error_code, created_at
+         FROM audit_log${where} ORDER BY created_at DESC, id DESC${limit}`,
+      )
+      .all(...params) as Array<{
+        id: number;
+        oid: string;
+        tid: string | null;
+        tool: string;
+        phase: string;
+        target: string | null;
+        link_key: string | null;
+        outcome: string;
+        error_code: string | null;
+        created_at: number;
+      }>;
+    return rows.map((r) => ({
+      id: r.id,
+      oid: r.oid,
+      tid: r.tid,
+      tool: r.tool,
+      phase: r.phase as AuditPhase,
+      target: r.target,
+      linkKey: r.link_key,
+      outcome: r.outcome as AuditOutcome,
+      errorCode: r.error_code,
+      createdAt: r.created_at,
+    }));
   }
 
   // ---- Maintenance ---------------------------------------------------------

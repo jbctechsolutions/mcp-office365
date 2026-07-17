@@ -17,6 +17,11 @@
  *                                                       # Flags: --host <addr> (default 127.0.0.1),
  *                                                       # --port <n> (default 3000). Endpoints:
  *                                                       # POST /mcp, GET /healthz.
+ *   npx @jbctechsolutions/mcp-office365 revoke <oid>    # Offboard a remote user (U7)
+ *   npx @jbctechsolutions/mcp-office365 audit           # Read the write/destructive
+ *                                                       # audit trail (U8). Flags:
+ *                                                       # --user <oid>, --since <iso|ms>,
+ *                                                       # --limit <n>.
  */
 
 import {
@@ -29,7 +34,7 @@ import {
 import type { Preset } from './registry/types.js';
 
 export interface CliCommand {
-  command: 'auth' | 'serve' | 'revoke';
+  command: 'auth' | 'serve' | 'revoke' | 'audit';
   flags: string[];
 }
 
@@ -220,6 +225,9 @@ export function parseCliCommand(args: string[]): CliCommand | null {
   }
   if (command === 'revoke') {
     return { command: 'revoke', flags: args.slice(1) };
+  }
+  if (command === 'audit') {
+    return { command: 'audit', flags: args.slice(1) };
   }
 
   return null;

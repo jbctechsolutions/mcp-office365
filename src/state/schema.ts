@@ -14,6 +14,8 @@
  * - `meta`             — schema version + one-shot migration markers.
  * - `delta_links`      — per-resource Graph delta cursors (U12 mirror).
  * - `delta_items`      — local mirror of seen items, to classify add/update/delete.
+ * - `deny_list`        — remote-mode revocation deny-list, keyed by Entra oid (U7).
+ * - `audit_log`        — remote-mode write/destructive audit trail (U8).
  */
 
 /** Ordered forward migrations. Index i migrates schema version i → i+1. */
@@ -77,6 +79,27 @@ export const MIGRATIONS: readonly string[] = [
     reason     TEXT,
     denied_at  INTEGER NOT NULL
   );
+  `,
+  // v3 → v4: remote-mode write/destructive audit log (U8, R16). One row per
+  // non-read tool call in authenticated remote mode: who (Entra oid/tid), which
+  // tool, what target, prepare/confirm phase + linkage, outcome. No token or
+  // content material is ever stored (identity is oid/tid only). Additive DDL, so
+  // rows written by an earlier build stay readable across this upgrade.
+  `
+  CREATE TABLE IF NOT EXISTS audit_log (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    oid         TEXT NOT NULL,
+    tid         TEXT,
+    tool        TEXT NOT NULL,
+    phase       TEXT NOT NULL,
+    target      TEXT,
+    link_key    TEXT,
+    outcome     TEXT NOT NULL,
+    error_code  TEXT,
+    created_at  INTEGER NOT NULL
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_audit_log_oid ON audit_log (oid, created_at);
   `,
 ];
 
