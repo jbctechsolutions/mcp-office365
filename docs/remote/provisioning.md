@@ -134,8 +134,11 @@ the API app via the `obo_certificate_pem` variable in the Terraform stack.
 
 The certificate is **not** required for the Step 4 auth-code/PKCE handshake test —
 OBO to Graph is exercised only once the server is deployed and serving requests
-(U5/U9). Rotation runbook and the total-outage symptom on expiry
-(`AADSTS7000222`) are captured with the deployment work.
+(U5/U9). The **cert lifecycle + zero-downtime rotation runbook** and the
+total-outage symptom on expiry (`AADSTS7000222`) live in
+[`deployment.md` §6](./deployment.md#6-obo-certificate--lifecycle--rotation-runbook).
+Set a calendar reminder ~30 days before expiry — an expired credential fails
+**every** user's tool calls at once.
 
 ---
 
@@ -145,8 +148,11 @@ OBO to Graph is exercised only once the server is deployed and serving requests
   (Step 2, in reverse), or disable their Entra account. Either stops new
   sign-ins.
 - **Server-side token purge + deny-list** (so a still-valid claude.ai token can't
-  silently re-onboard) is the `revoke` subcommand landing in U7 — see the plan.
-- Removing the connector in claude.ai does **not** clear any server-side state.
+  silently re-onboard): run `node dist/index.js revoke <oid>` on the deployment
+  host. It deny-lists the oid and purges their durable state. `revoke --readmit
+  <oid>` reverses it; `revoke --list` shows revoked users.
+- Removing the connector in claude.ai does **not** clear any server-side state —
+  always `revoke`.
 
 ---
 
@@ -156,6 +162,6 @@ OBO to Graph is exercised only once the server is deployed and serving requests
 | --- | --- | --- |
 | `AADSTS65001` | Consent not granted for a scope | Run Step 1 (admin consent). |
 | `AADSTS50105` | User not assigned to the app | Assign the user (Step 2). |
-| `AADSTS7000222` | API app credential expired | Rotate the OBO certificate (U9 runbook). |
+| `AADSTS7000222` | API app credential expired | Rotate the OBO certificate ([deployment.md §6](./deployment.md#6-obo-certificate--lifecycle--rotation-runbook)). |
 | `AADSTS53003` / sign-in loop | Conditional Access blocked the client | Add a CA exemption for the connector (Step 4.3). |
 | Connector "failed" after a successful Microsoft sign-in | Guest/non-member reached the server and was rejected | Expected — only assigned JP members are authorized. |

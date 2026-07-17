@@ -180,6 +180,44 @@ No app registration is embedded — device-code sign-in needs an app that belong
 
 **Tenant options:** `common` (all accounts), `organizations` (work/school only), `consumers` (personal only), or a specific tenant ID.
 
+## Remote connector mode (claude.ai)
+
+Besides the local stdio mode above, the server can run as a **remote HTTP
+connector** so it can be added to claude.ai (web/desktop) as a custom connector —
+multi-user, each caller authenticated with their own Entra ID and acting on their
+own Microsoft 365 data via On-Behalf-Of.
+
+```bash
+# Local dev (loopback only, unauthenticated):
+npx @jbctechsolutions/mcp-office365 serve --port 3000
+
+# Deployed (auth required): set OUTLOOK_MCP_CONNECTOR_URL and the Entra env vars.
+node dist/index.js serve --host 0.0.0.0 --port 8080
+```
+
+It serves stateless Streamable HTTP at `POST /mcp`, a health check at
+`GET /healthz`, and the RFC 9728 discovery document at
+`/.well-known/oauth-protected-resource`. Auth turns on automatically when
+`OUTLOOK_MCP_CONNECTOR_URL` is set; without it, the server refuses any
+non-loopback bind so it can never be exposed unauthenticated.
+
+Operational subcommands (run on the deployment host):
+
+| Command | Purpose |
+| --- | --- |
+| `serve` | Run the remote connector (flags: `--host`, `--port`, plus the `--preset`/`--read-only`/`--confirm` surface flags above as a process-wide bound). |
+| `revoke <oid>` | Offboard a user: deny-list their Entra oid + purge their durable state. `--readmit <oid>`, `--list`. |
+| `audit` | Read the write/destructive audit trail. `--user <oid>`, `--since <iso\|ms>`, `--limit <n>`. |
+
+Remote mode adds **per-user entitlements** (a pinned tool surface, widenable per
+user), **revocation**, and a durable **audit log** of every write. Full setup,
+the environment contract, deployment requirements, cost estimate, and the
+end-user guide live in [`docs/remote/`](./docs/remote/):
+[deployment](./docs/remote/deployment.md) ·
+[provisioning](./docs/remote/provisioning.md) ·
+[user guide](./docs/remote/user-guide.md) ·
+[pilot runbook](./docs/remote/pilot-runbook.md).
+
 ## Tool Reference
 
 All 249 tools listed below.
