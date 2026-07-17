@@ -1,0 +1,113 @@
+name: Deploy Remote Connector
+
+# Builds the connector container image and publishes it to the JP Azure Container
+# Registry, then rolls the staging Container App to the new image and health-gates
+# it. Mirrors the JP deploy pattern (OIDC to Azure, no stored credentials;
+# SHA-tagged immutable images).
+#
+# Prerequisites (one-time):
+#   - Repo variables: AZURE_CLIENT_ID, AZURE_TENANT_ID, AZURE_SUBSCRIPTION_ID
+#     (a workload-identity federation to a service principal with AcrPush on
+#     jpcontainerregistry and Contributor on the connector resource group).
+#   - The Container App exists (jp-infrastructure stack
+#     stacks/staging/apps/mcp-office365-connector applied). Until then the
+#     build-and-push job still publishes the image; the deploy job self-skips.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "src/**"
+      - "package.json"
+      - "package-lock.json"
+      - "Dockerfile"
+      - ".dockerignore"
+      - ".github/workflows/deploy-connector.yml"
+  workflow_dispatch:
+
+env:
+  ACR_NAME: jpcontainerregistry
+  IMAGE_REPO: jpcontainerregistry.azurecr.io/mcp-office365-connector
+  RESOURCE_GROUP: rg-jp-mcp-office365-staging
+  CONTAINER_APP_NAME: jp-mcp-office365-staging
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    environment: staging
+    outputs:
+      image: ${{ steps.meta.outputs.image }}
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      - name: Resolve image tag
+        id: meta
+        run: echo "image=${IMAGE_REPO}:${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
+
+      - name: Log in to Azure
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Log in to ACR
+        run: az acr login --name "${ACR_NAME}"
+
+      - name: Build image
+        run: docker build --platform linux/amd64 -t "${{ steps.meta.outputs.image }}" -t "${IMAGE_REPO}:latest" .
+
+      - name: Push image (sha + latest)
+        run: |
+          docker push "${{ steps.meta.outputs.image }}"
+          docker push "${IMAGE_REPO}:latest"
+
+  deploy:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - name: Log in to Azure
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Roll the Container App to the new image
+        id: roll
+        run: |
+          set -euo pipefail
+          if ! az containerapp show -n "${CONTAINER_APP_NAME}" -g "${RESOURCE_GROUP}" >/dev/null 2>&1; then
+            echo "::notice::Container App ${CONTAINER_APP_NAME} not found — image published, skipping roll. Apply the jp-infrastructure stack first."
+            echo "skipped=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          az containerapp update \
+            --name "${CONTAINER_APP_NAME}" \
+            --resource-group "${RESOURCE_GROUP}" \
+            --image "${{ needs.build-and-push.outputs.image }}"
+          echo "skipped=false" >> "$GITHUB_OUTPUT"
+
+      - name: Health-gate the new revision
+        if: steps.roll.outputs.skipped == 'false'
+        run: |
+          set -euo pipefail
+          FQDN=$(az containerapp show -n "${CONTAINER_APP_NAME}" -g "${RESOURCE_GROUP}" \
+            --query properties.configuration.ingress.fqdn -o tsv)
+          echo "Health-checking https://${FQDN}/healthz"
+          for attempt in $(seq 1 30); do
+            if curl -fsS "https://${FQDN}/healthz" | grep -q '"status":"ok"'; then
+              echo "Container App is healthy."
+              exit 0
+            fi
+            echo "Not ready yet (attempt ${attempt}/30)..."
+            sleep 10
+          done
+          echo "Container App did not become healthy within 5 minutes."
+          exit 1
