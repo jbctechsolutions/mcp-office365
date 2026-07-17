@@ -1,10 +1,9 @@
 # Remote Connector — Continuation Handoff (for Cursor / next agent)
 
-**Status as of 2026-07-16:** 8 of 9 units merged to `main`. The entire
-security-critical core (auth, per-user Graph, entitlements, revocation, audit) is
-done and covered by ~2049 passing tests. Only **U9 (deployment docs + cost
-estimate)** remains — and it needs Joel's infra, not more server code. This doc
-is the cold-start brief: read it, read the plan, then continue.
+**Status as of 2026-07-17:** all 9 units merged to `main` — the remote-connector
+feature is **code-complete** (~2049 passing tests). What's left is **not code**:
+Joel's Azure deployment + the OBO certificate, and the U1 live handshake test.
+This doc is the cold-start brief for that last mile.
 
 > This file is a durable pointer for whoever picks the work up next. It is not
 > itself part of the feature. If you are that agent — start at "Start here".
@@ -40,6 +39,7 @@ is the cold-start brief: read it, read the plan, then continue.
 | U6 | Per-user entitlements (pinned tool surface, mtime hot-reload) | `src/remote/entitlements.ts`, `src/registry/registry.ts` |
 | U7 | Revocation deny-list + `revoke` CLI subcommand | `src/remote/revocation.ts`, `src/state/{schema,store}.ts`, `src/cli.ts` |
 | U8 | Write/destructive audit log + `audit` CLI (R16) | `src/remote/audit.ts`, `src/state/{schema,store}.ts`, `src/index.ts` chokepoint |
+| U9 | Deployment docs + cost estimate | `docs/remote/{deployment,user-guide,pilot-runbook}.md`, `README.md` remote section |
 
 Infra (separate repo `jbctechsolutions`/`jp-infrastructure`, applied to the JP
 tenant): `stacks/azure/entra/mcp-office365-connector/` — two Entra app
@@ -123,30 +123,14 @@ retriable `AUDIT_UNAVAILABLE`), fail-open for prepares/non-two-phase writes.
 Passed the adversarial gate (one P1 on the batch shapes, fixed). Nothing left
 here — this section is kept only so the plan's unit list stays legible.
 
-### U9 — Deployment hand-off, docs, cost estimate (needs Joel's infra)
+### U9 — Deployment docs + cost estimate ✅ DONE (merged)
 
-- **Create** `docs/remote/user-guide.md` (R13, for MCP-unfamiliar JP staff: add
-  connector, sign in, what errors mean — guest rejection, reconnect on expiry, CA
-  symptoms, keep per-tool approval prompts ON for confirm tools).
-- **Create** `docs/remote/deployment.md` (requirements hand-off for
-  jp-infrastructure): container image, env contract (above), **SQLite volume
-  constraint — NFS or `nobrl`+non-WAL, single replica**, health endpoint, log
-  expectations, Anthropic egress allowlist `160.79.104.0/21` if WAF'd, IPv4
-  A-record requirement, entitlement config mounted read-only and isolated from the
-  state volume, TLS-terminating ingress assumed. **SQLite file + volume snapshots
-  are credential material.**
-- **Create** `docs/remote/pilot-runbook.md` (R11 exit criteria + observation
-  checklist: throttling under one shared app registration, 300s-timeout-prone
-  tools, keepalive regression, 401-spike watch, security-denial review, audit
-  review step).
-- **Add to `provisioning.md`:** OBO credential lifecycle — Entra secrets ≤24mo
-  (often 6), the create-new→swap→delete rotation (MSAL CCA takes one credential),
-  a calendar expiry reminder, and the AADSTS7000222 total-outage symptom.
-- **Cost estimate (R10, in deployment.md):** Azure Container Apps single
-  always-on replica (~0.25–0.5 vCPU) + premium file share (NFS) + Log Analytics;
-  pilot (~3 users) and full-JP projections, flagged provisional (precedes real
-  usage data).
-- **Modify `README.md`:** remote mode section; close the `--preset` doc debt.
+Shipped: `docs/remote/deployment.md` (env contract, SQLite volume constraints,
+network posture, OBO cert rotation runbook, provisional cost estimate R10),
+`docs/remote/user-guide.md` (R13, JP staff), `docs/remote/pilot-runbook.md` (R11
+exit criteria + observation checklist), plus `provisioning.md` cross-links and a
+README remote-mode section. This is the infra team's starting point — the Azure
+build in `jp-infrastructure` consumes `deployment.md`.
 
 ---
 
