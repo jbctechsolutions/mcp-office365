@@ -158,6 +158,50 @@ describe('audit recorder — fail-closed vs fail-open (U8)', () => {
   });
 });
 
+describe('audit recorder — batch shapes (U8)', () => {
+  const confirmBatch: AuditToolInfo = { name: 'confirm_batch_operation', readOnly: false };
+  const prepareBatchDelete: AuditToolInfo = { name: 'prepare_batch_delete_emails', readOnly: false };
+
+  it('records every token id and email id in a batch confirm (not just the last)', () => {
+    const s = store();
+    const rec = createAuditRecorder(s, IDENTITY);
+    // Real confirm_batch_operation shape: tokens: [{ token_id, email_id }, …].
+    rec.begin(confirmBatch, {
+      tokens: [
+        { token_id: 't1', email_id: 'em_1' },
+        { token_id: 't2', email_id: 'em_2' },
+        { token_id: 't3', email_id: 'em_3' },
+      ],
+    })!.finish({ ok: true });
+
+    const row = s.listAudit()[0];
+    expect(row?.phase).toBe('confirm');
+    // All three token ids linked (deduped, comma-joined).
+    expect(row?.linkKey).toBe('t1,t2,t3');
+    // All three email ids present in the target — no overwrite collapse.
+    const target = row?.target ?? '';
+    for (const id of ['em_1', 'em_2', 'em_3']) expect(target).toContain(id);
+  });
+
+  it('records every email id in a batch prepare (email_ids: string[])', () => {
+    const s = store();
+    const rec = createAuditRecorder(s, IDENTITY);
+    // Real prepare_batch_delete_emails shape: email_ids: [str, …].
+    rec.begin(prepareBatchDelete, { email_ids: ['em_a', 'em_b', 'em_c'] })!.finish({ ok: true });
+    const target = s.listAudit()[0]?.target ?? '';
+    for (const id of ['em_a', 'em_b', 'em_c']) expect(target).toContain(id);
+  });
+
+  it('never stores batch token ids in the target (they are the link key)', () => {
+    const s = store();
+    const rec = createAuditRecorder(s, IDENTITY);
+    rec.begin(confirmBatch, { tokens: [{ token_id: 'tok_secret', email_id: 'em_1' }] })!.finish({
+      ok: true,
+    });
+    expect(s.listAudit()[0]?.target ?? '').not.toContain('tok_secret');
+  });
+});
+
 describe('audit recorder — no content material stored (U8)', () => {
   it('records only id-shaped params, never subject/body content', () => {
     const s = store();

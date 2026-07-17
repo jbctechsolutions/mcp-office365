@@ -71,13 +71,21 @@ export interface AuditRecorder {
   begin(tool: AuditToolInfo, args: unknown): PendingAudit | null;
 }
 
-/** Maximum stored target length — a coarse cap; targets are id-shaped, so small. */
-const MAX_TARGET_LEN = 500;
+/**
+ * Caps for stored strings. Args reach the recorder BEFORE Zod validation, so a
+ * caller could send arrays far larger than a tool's schema allows (batch tools
+ * cap at 50) — these bound what a single row can write regardless.
+ */
+const MAX_TARGET_LEN = 4000;
+const MAX_LINK_LEN = 2000;
 
-/** Matches id-shaped param keys (`id`, `email_id`, `channel_id`, …). */
+/** Matches scalar id-shaped param keys (`id`, `email_id`, `channel_id`, …). */
 const ID_KEY = /(?:^|_)id$/i;
 
-/** Link-key param names carried by `confirm_*` tools. */
+/** Matches plural id-array param keys (`email_ids`, `message_ids`, …). */
+const ID_ARRAY_KEY = /(?:^|_)ids$/i;
+
+/** Scalar link-key param names carried by `confirm_*` tools. */
 const LINK_KEYS = ['approval_token', 'token_id'] as const;
 
 function classifyPhase(name: string): AuditPhase {
@@ -98,57 +106,78 @@ function scalarId(v: unknown): string | null {
 }
 
 /**
- * Extracts the approval-token id linking a confirm (or batch confirm) back to
- * its prepare, from the call arguments. Content-free by construction.
+ * Extracts the approval-token id(s) linking a confirm back to its prepare, from
+ * the call arguments. Handles both the single confirm (`token_id` /
+ * `approval_token` scalar) and the batch confirm (`tokens: [{ token_id, … }]`).
+ * Content-free by construction; deduped and length-capped.
  */
 function extractLinkKeyFromArgs(args: unknown): string | null {
   if (!isRecord(args)) return null;
+  const ids: string[] = [];
   for (const key of LINK_KEYS) {
     const v = scalarId(args[key]);
-    if (v != null) return v;
+    if (v != null) ids.push(v);
   }
-  // Batch confirm: an array of { token_id, ... } pairs.
-  const arr = args['confirmations'];
-  if (Array.isArray(arr)) {
-    const ids = arr
-      .map((e) => (isRecord(e) ? scalarId(e['token_id']) : null))
-      .filter((v): v is string => v != null);
-    if (ids.length > 0) return ids.join(',');
+  // Batch confirm: any array of objects carrying a token_id (the only batch tool
+  // is confirm_batch_operation with `tokens: [{ token_id, email_id }]`).
+  for (const value of Object.values(args)) {
+    if (Array.isArray(value)) {
+      for (const el of value) {
+        if (isRecord(el)) {
+          const t = scalarId(el['token_id']);
+          if (t != null) ids.push(t);
+        }
+      }
+    }
   }
-  return null;
+  if (ids.length === 0) return null;
+  const joined = [...new Set(ids)].join(',');
+  return joined.length > MAX_LINK_LEN ? `${joined.slice(0, MAX_LINK_LEN)}…` : joined;
 }
 
 /**
- * Builds a best-effort target string from id-shaped params only. Never reads
- * content fields (subject/body/message/…) — they simply aren't id-shaped, so the
- * allow-by-key-shape rule excludes them by construction. Approval/token link
- * fields are excluded (they're recorded as the link key, not the target).
+ * Builds a best-effort target from id-shaped params only. Never reads content
+ * fields (subject/body/message/…) — they aren't id-shaped, so the allow-by-key-
+ * shape rule excludes them by construction. Link-key fields (token_id/
+ * approval_token) are excluded (recorded as the link key, not the target).
+ *
+ * Aggregates every id under its key so a batch operation records ALL of its
+ * targets (not just the last): plural string arrays (`email_ids: [str, …]`) and
+ * arrays of objects (`tokens: [{ email_id }, …]`) both contribute every value.
  */
 function extractTarget(args: unknown): string | null {
   try {
-    const ids: Record<string, string> = {};
+    const acc: Record<string, string[]> = {};
+    const add = (key: string, value: unknown): void => {
+      const scalar = scalarId(value);
+      if (scalar != null) (acc[key] ??= []).push(scalar);
+    };
     const collect = (obj: Record<string, unknown>): void => {
       for (const [key, value] of Object.entries(obj)) {
         if ((LINK_KEYS as readonly string[]).includes(key)) continue;
-        if (!ID_KEY.test(key)) continue;
-        const scalar = scalarId(value);
-        if (scalar != null) ids[key] = scalar;
-      }
-    };
-    if (isRecord(args)) {
-      collect(args);
-      // One level into arrays of objects (e.g. batch confirmations' email ids).
-      for (const value of Object.values(args)) {
-        if (Array.isArray(value)) {
+        if (ID_KEY.test(key)) {
+          add(key, value);
+        } else if (ID_ARRAY_KEY.test(key) && Array.isArray(value)) {
+          // Plural id array of scalars, e.g. email_ids: [str, …].
+          for (const el of value) add(key, el);
+        } else if (Array.isArray(value)) {
+          // Array of objects, e.g. tokens: [{ token_id, email_id }, …].
           for (const el of value) {
             if (isRecord(el)) collect(el);
           }
         }
       }
-    }
-    const keys = Object.keys(ids);
+    };
+    if (isRecord(args)) collect(args);
+
+    const keys = Object.keys(acc);
     if (keys.length === 0) return null;
-    const text = JSON.stringify(ids);
+    const out: Record<string, string | string[]> = {};
+    for (const key of keys) {
+      const uniq = [...new Set(acc[key])];
+      out[key] = uniq.length === 1 ? (uniq[0] as string) : uniq;
+    }
+    const text = JSON.stringify(out);
     return text.length > MAX_TARGET_LEN ? `${text.slice(0, MAX_TARGET_LEN)}…` : text;
   } catch {
     return null;
