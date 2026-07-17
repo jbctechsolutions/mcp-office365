@@ -17,6 +17,21 @@ import type { RemoteAuthConfig } from '../config.js';
 /** RFC 9728 metadata path, and the path-suffixed variant claude.ai also probes. */
 export const PRM_PATH = '/.well-known/oauth-protected-resource';
 
+/**
+ * RFC 9728 §3.1 metadata URL for the resource: `/.well-known/oauth-protected-
+ * resource` is inserted between the host and the resource's path, NOT appended
+ * to the full resource URL. For `https://host/mcp` the metadata lives at
+ * `https://host/.well-known/oauth-protected-resource/mcp` — which is exactly the
+ * path-suffixed route the server serves. (Appending to the full URL instead —
+ * `https://host/mcp/.well-known/oauth-protected-resource` — 404s, so a client
+ * following the WWW-Authenticate hint can't discover the AS.)
+ */
+export function resourceMetadataUrl(config: RemoteAuthConfig): string {
+  const url = new URL(config.publicUrl);
+  const path = url.pathname === '/' ? '' : url.pathname;
+  return `${url.origin}${PRM_PATH}${path}`;
+}
+
 /** The Protected Resource Metadata document (RFC 9728). */
 export function protectedResourceMetadata(config: RemoteAuthConfig): Record<string, unknown> {
   return {
@@ -33,7 +48,7 @@ export function protectedResourceMetadata(config: RemoteAuthConfig): Record<stri
  * client can discover the authorization server (RFC 9728 §5.1).
  */
 export function wwwAuthenticate(config: RemoteAuthConfig, error?: string): string {
-  const params = [`resource_metadata="${config.publicUrl}${PRM_PATH}"`];
+  const params = [`resource_metadata="${resourceMetadataUrl(config)}"`];
   if (error != null) {
     params.unshift(`error="${error}"`);
   }
