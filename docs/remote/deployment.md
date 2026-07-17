@@ -21,6 +21,14 @@ Related: [`provisioning.md`](./provisioning.md) (Entra apps + admin consent, don
 
 One long-lived process: `node dist/index.js serve --host 0.0.0.0 --port 8080`.
 
+The container image is built from the repo's [`Dockerfile`](../../Dockerfile)
+(multi-stage, Node 26, non-root `node` user, the native `better-sqlite3` addon
+compiled into the image, `/healthz` HEALTHCHECK, `serve` as the entrypoint). CI
+([`.github/workflows/deploy-connector.yml`](../../.github/workflows/deploy-connector.yml))
+builds it, pushes a SHA-tagged image to the JP registry `jpcontainerregistry`
+over Azure OIDC (no stored credentials), then rolls the staging Container App and
+health-gates the new revision.
+
 - **Transport:** stateless Streamable HTTP. A fresh MCP server is built per
   request over one process-scoped SQLite store — there is no session affinity to
   preserve, but see the single-replica constraint below (the store is the shared

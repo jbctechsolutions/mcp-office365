@@ -1,0 +1,16 @@
+node_modules
+dist
+.git
+.github
+.dmux
+coverage
+tests
+docs
+*.md
+!README.md
+.env
+.env.*
+npm-debug.log
+.DS_Store
+.vscode
+.idea
