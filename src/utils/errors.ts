@@ -34,6 +34,9 @@ export const ErrorCode = {
   APPROVAL_INVALID: 'APPROVAL_INVALID',
   TARGET_CHANGED: 'TARGET_CHANGED',
   READ_ONLY_MODE: 'READ_ONLY_MODE',
+  // Remote-mode audit fail-closed (U8): a two-phase confirm refuses to execute
+  // when its action cannot be durably recorded.
+  AUDIT_UNAVAILABLE: 'AUDIT_UNAVAILABLE',
   // Durable-ID resolution vocabulary (U5 / D1, D2, D4, D7).
   ID_UNKNOWN: 'ID_UNKNOWN',
   ID_STALE: 'ID_STALE',
@@ -367,6 +370,28 @@ export class ReadOnlyModeError extends OutlookMcpError {
     super(
       `Tool "${toolName}" is not available in read-only mode.`,
       { retriable: false, suggestion: 'Restart the server without --read-only to use write tools.' },
+    );
+  }
+}
+
+/**
+ * Thrown when a two-phase `confirm_*` operation cannot be durably audited in
+ * remote mode (U8, R16). Because a confirm executes a client-tenant mutation
+ * (send/delete), it must not proceed unrecorded — so the audit write is
+ * fail-closed and this aborts before the action runs. Retriable: once the audit
+ * store recovers (e.g. the state volume is fixed), the same confirm succeeds.
+ */
+export class AuditUnavailableError extends OutlookMcpError {
+  readonly code = ErrorCode.AUDIT_UNAVAILABLE;
+
+  constructor() {
+    super(
+      'This action was not performed: it could not be durably recorded in the audit log. ' +
+        'No change was made.',
+      {
+        retriable: true,
+        suggestion: 'Retry shortly; if it persists, the server audit store needs attention.',
+      },
     );
   }
 }
