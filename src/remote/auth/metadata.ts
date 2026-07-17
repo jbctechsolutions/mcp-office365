@@ -38,7 +38,14 @@ export function protectedResourceMetadata(config: RemoteAuthConfig): Record<stri
     resource: config.publicUrl,
     // claude.ai uses only the first entry; pin it to the JP tenant issuer.
     authorization_servers: [config.issuer],
-    scopes_supported: [config.requiredScope],
+    // Advertise the FULLY-QUALIFIED scope (`<resource>/<scope>`), not the bare
+    // name. claude.ai sends `resource=<MCP URL>` AND `scope=<scopes_supported>`;
+    // Entra v2 rejects the pair (AADSTS9010010) unless the scope references an
+    // app whose identifier URI equals the resource. With the MCP URL registered
+    // as an API-app identifier URI, `<MCP URL>/access_as_user` is that scope. The
+    // token's `scp` claim still comes back as the bare `access_as_user`, so
+    // verification (which checks `requiredScope`) is unaffected.
+    scopes_supported: [`${config.publicUrl}/${config.requiredScope}`],
     bearer_methods_supported: ['header'],
   };
 }

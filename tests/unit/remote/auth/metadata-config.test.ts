@@ -33,7 +33,7 @@ describe('loadRemoteAuthConfig (U4)', () => {
     const c = loadRemoteAuthConfig(env());
     expect(c.issuer).toBe(`https://login.microsoftonline.com/${TID}/v2.0`);
     expect(c.jwksUri).toBe(`https://login.microsoftonline.com/${TID}/discovery/v2.0/keys`);
-    expect(c.allowedAudiences).toEqual(['api-guid', 'api://mcp-office365-connector']);
+    expect(c.allowedAudiences).toEqual(['api-guid', 'api://mcp-office365-connector', 'https://mcp.example.com/mcp']);
     expect(c.requiredScope).toBe('access_as_user');
   });
 
@@ -59,7 +59,7 @@ describe('loadRemoteAuthConfig (U4)', () => {
 
   it('never puts an empty string into allowedAudiences (empty override → default URI)', () => {
     const c = loadRemoteAuthConfig(env({ OUTLOOK_MCP_CONNECTOR_APP_ID_URI: '   ' }));
-    expect(c.allowedAudiences).toEqual(['api-guid', 'api://mcp-office365-connector']);
+    expect(c.allowedAudiences).toEqual(['api-guid', 'api://mcp-office365-connector', 'https://mcp.example.com/mcp']);
     expect(c.allowedAudiences).not.toContain('');
   });
 
@@ -86,7 +86,7 @@ describe('PRM + WWW-Authenticate (U4)', () => {
     const prm = protectedResourceMetadata(config);
     expect(prm.resource).toBe('https://mcp.example.com/mcp');
     expect(prm.authorization_servers).toEqual([config.issuer]);
-    expect(prm.scopes_supported).toEqual(['access_as_user']);
+    expect(prm.scopes_supported).toEqual(['https://mcp.example.com/mcp/access_as_user']);
     expect(prm.bearer_methods_supported).toEqual(['header']);
   });
 
