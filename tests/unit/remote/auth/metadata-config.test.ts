@@ -90,10 +90,14 @@ describe('PRM + WWW-Authenticate (U4)', () => {
     expect(prm.bearer_methods_supported).toEqual(['header']);
   });
 
-  it('builds a WWW-Authenticate header pointing at the PRM URL', () => {
+  it('builds a WWW-Authenticate header pointing at the RFC 9728 PRM URL', () => {
     const header = wwwAuthenticate(config, 'invalid_token');
     expect(header).toContain('Bearer ');
-    expect(header).toContain(`resource_metadata="https://mcp.example.com/mcp${PRM_PATH}"`);
+    // RFC 9728 §3.1: /.well-known/... is inserted between host and path, so for
+    // https://mcp.example.com/mcp the PRM is at .../.well-known/.../mcp — the
+    // served location, NOT https://mcp.example.com/mcp/.well-known/... (a 404).
+    expect(header).toContain(`resource_metadata="https://mcp.example.com${PRM_PATH}/mcp"`);
+    expect(header).not.toContain(`/mcp${PRM_PATH}`);
     expect(header).toContain('error="invalid_token"');
   });
 });
