@@ -37,6 +37,11 @@ permissions:
 
 jobs:
   build-and-push:
+    # This deploys to the Joshua Project Azure estate, whose OIDC federation
+    # trusts joshua-project/* repos only. The file is kept identical in the
+    # canonical jbctechsolutions repo (so `gh repo sync` to the fork stays a
+    # clean fast-forward) but only executes in the joshua-project fork.
+    if: github.repository_owner == 'joshua-project'
     runs-on: ubuntu-latest
     environment: staging
     outputs:
@@ -68,6 +73,7 @@ jobs:
           docker push "${IMAGE_REPO}:latest"
 
   deploy:
+    if: github.repository_owner == 'joshua-project'
     needs: build-and-push
     runs-on: ubuntu-latest
     environment: staging
