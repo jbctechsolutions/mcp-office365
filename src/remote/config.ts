@@ -76,9 +76,12 @@ export function loadRemoteAuthConfig(env: NodeJS.ProcessEnv = process.env): Remo
     apiClientId,
     issuer: `https://login.microsoftonline.com/${tenantId}/v2.0`,
     jwksUri: `https://login.microsoftonline.com/${tenantId}/discovery/v2.0/keys`,
-    // Accept both the bare GUID and the api:// identifier form (tokens may carry
-    // either); reject anything else (anti-token-passthrough).
-    allowedAudiences: [apiClientId, appIdUri],
+    // Accept the bare GUID, the api:// identifier form, AND the public MCP URL:
+    // claude.ai sends the MCP URL as the RFC 8707 `resource`, so when that URL is
+    // also registered as an API-app identifier URI (required to satisfy Entra's
+    // resource/scope match, avoiding AADSTS9010010) the issued token's `aud` is
+    // the MCP URL. Reject anything else (anti-token-passthrough).
+    allowedAudiences: [apiClientId, appIdUri, publicUrl],
     publicUrl,
     requiredScope: 'access_as_user',
   };
