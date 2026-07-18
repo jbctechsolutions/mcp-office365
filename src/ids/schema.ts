@@ -55,7 +55,7 @@ export const ENTITY_META: Partial<Record<EntityType, EntityMeta>> = {
   checklistItem: { label: 'task checklist item', from: 'list_checklist_items' },
   linkedResource: { label: 'task linked resource', from: 'list_linked_resources' },
   taskAttachment: { label: 'task attachment', from: 'list_task_attachments' },
-  chat: { label: 'Teams chat', from: 'list_chats' },
+  chat: { label: 'Teams chat', from: 'list_chats / find_chat' },
   team: { label: 'team', from: 'list_teams' },
   channel: { label: 'Teams channel', from: 'list_channels' },
   chatMessage: { label: 'chat message', from: 'list_chat_messages' },

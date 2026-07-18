@@ -142,6 +142,7 @@ vi.mock('../../../src/graph/client/index.js', () => ({
       replyToChannelMessage: vi.fn(),
       // Teams chat operations
       listChats: vi.fn(),
+      createChat: vi.fn(),
       getChat: vi.fn(),
       listChatMessages: vi.fn(),
       sendChatMessage: vi.fn(),
@@ -4780,6 +4781,164 @@ describe('graph/repository', () => {
         expect(result[0].id).not.toBe(result[1].id);
         expect(result[0].topic).toBe('Project Chat');
         expect(result[1].chatType).toBe('oneOnOne');
+        expect(mockClient.listChats).toHaveBeenCalledWith(25, { expandMembers: false });
+      });
+
+      it('includes members when expandMembers is true', async () => {
+        mockClient.listChats.mockResolvedValue([
+          {
+            id: 'chat-abc',
+            topic: '',
+            chatType: 'oneOnOne',
+            createdDateTime: '2026-01-01T00:00:00Z',
+            members: [
+              { displayName: 'Alice', email: 'alice@example.com', userId: 'u1', roles: ['owner'] },
+            ],
+          },
+        ]);
+
+        const result = await repository.listChatsAsync(10, true);
+
+        expect(mockClient.listChats).toHaveBeenCalledWith(10, { expandMembers: true });
+        expect(result[0].members).toEqual([
+          { displayName: 'Alice', email: 'alice@example.com', userId: 'u1', roles: ['owner'] },
+        ]);
+      });
+    });
+
+    describe('findChatsAsync', () => {
+      it('uses get-or-create for a single email 1:1 lookup', async () => {
+        mockClient.createChat.mockResolvedValue({
+          id: 'chat-1to1',
+          topic: '',
+          chatType: 'oneOnOne',
+          createdDateTime: '2026-01-01T00:00:00Z',
+          members: [
+            { displayName: 'Me', email: 'me@example.com', userId: 'me', roles: ['owner'] },
+            { displayName: 'Alice', email: 'alice@example.com', userId: 'u1', roles: ['owner'] },
+          ],
+        });
+
+        const result = await repository.findChatsAsync({ participants: ['alice@example.com'] });
+
+        expect(mockClient.createChat).toHaveBeenCalledWith('oneOnOne', ['alice@example.com']);
+        expect(mockClient.listChats).not.toHaveBeenCalled();
+        expect(result).toHaveLength(1);
+        expect(result[0].id).toMatch(/^ch_/);
+        expect(result[0].members[1].email).toBe('alice@example.com');
+      });
+
+      it('matches email exactly (case-insensitive) and returns all candidates', async () => {
+        mockClient.listChats.mockResolvedValue([
+          {
+            id: 'chat-a',
+            topic: 'A',
+            chatType: 'group',
+            createdDateTime: '',
+            members: [
+              { displayName: 'Alice', email: 'alice@example.com', userId: 'u1', roles: [] },
+              { displayName: 'Bob', email: 'bob@example.com', userId: 'u2', roles: [] },
+            ],
+          },
+          {
+            id: 'chat-b',
+            topic: 'B',
+            chatType: 'group',
+            createdDateTime: '',
+            members: [
+              { displayName: 'Alice', email: 'Alice@Example.com', userId: 'u1', roles: [] },
+              { displayName: 'Carol', email: 'carol@example.com', userId: 'u3', roles: [] },
+            ],
+          },
+          {
+            id: 'chat-c',
+            topic: 'C',
+            chatType: 'group',
+            createdDateTime: '',
+            members: [
+              { displayName: 'Dave', email: 'dave@example.com', userId: 'u4', roles: [] },
+            ],
+          },
+        ]);
+
+        const result = await repository.findChatsAsync({
+          participants: ['alice@example.com'],
+          chatType: 'group',
+        });
+
+        expect(mockClient.createChat).not.toHaveBeenCalled();
+        expect(result.map((c) => c.topic).sort()).toEqual(['A', 'B']);
+      });
+
+      it('falls back to case-insensitive displayName and returns all matches', async () => {
+        mockClient.listChats.mockResolvedValue([
+          {
+            id: 'chat-1',
+            topic: 'One',
+            chatType: 'group',
+            createdDateTime: '',
+            members: [{ displayName: 'Alice Smith', email: '', userId: 'u1', roles: [] }],
+          },
+          {
+            id: 'chat-2',
+            topic: 'Two',
+            chatType: 'group',
+            createdDateTime: '',
+            members: [{ displayName: 'alice smith', email: '', userId: 'u2', roles: [] }],
+          },
+        ]);
+
+        const result = await repository.findChatsAsync({ participants: ['Alice Smith'] });
+
+        expect(result).toHaveLength(2);
+      });
+    });
+
+    describe('resolveOrCreateChatAsync', () => {
+      it('resolves a 1:1 chat from a single email', async () => {
+        mockClient.createChat.mockResolvedValue({
+          id: 'chat-1to1',
+          topic: '',
+          chatType: 'oneOnOne',
+          createdDateTime: '',
+          members: [{ displayName: 'Alice', email: 'alice@example.com', userId: 'u1', roles: [] }],
+        });
+
+        const result = await repository.resolveOrCreateChatAsync(['alice@example.com']);
+
+        expect(result).toEqual({ chatId: expect.stringMatching(/^ch_/) });
+      });
+
+      it('returns an error with candidates when multiple group chats match', async () => {
+        mockClient.listChats.mockResolvedValue([
+          {
+            id: 'chat-a',
+            topic: 'A',
+            chatType: 'group',
+            createdDateTime: '',
+            members: [
+              { displayName: 'Alice', email: 'alice@example.com', userId: 'u1', roles: [] },
+              { displayName: 'Bob', email: 'bob@example.com', userId: 'u2', roles: [] },
+            ],
+          },
+          {
+            id: 'chat-b',
+            topic: 'B',
+            chatType: 'group',
+            createdDateTime: '',
+            members: [
+              { displayName: 'Alice', email: 'alice@example.com', userId: 'u1', roles: [] },
+              { displayName: 'Bob', email: 'bob@example.com', userId: 'u2', roles: [] },
+            ],
+          },
+        ]);
+
+        const result = await repository.resolveOrCreateChatAsync(['alice@example.com', 'bob@example.com']);
+
+        expect('error' in result).toBe(true);
+        if ('error' in result) {
+          expect(result.chats).toHaveLength(2);
+        }
       });
     });
 
