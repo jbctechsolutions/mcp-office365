@@ -8,7 +8,11 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { TeamsTools, type ITeamsRepository } from '../../../src/tools/teams.js';
+import {
+  TeamsTools,
+  PrepareSendChatMessageInput,
+  type ITeamsRepository,
+} from '../../../src/tools/teams.js';
 import { ApprovalTokenManager } from '../../../src/approval/index.js';
 
 describe('TeamsTools', () => {
@@ -502,6 +506,17 @@ describe('TeamsTools', () => {
       await tools.listChatMessages({ chat_id: 'ch_chat1', limit: 5 });
 
       expect(repo.listChatMessagesAsync).toHaveBeenCalledWith('ch_chat1', 5);
+    });
+  });
+
+  describe('PrepareSendChatMessageInput', () => {
+    it('accepts chat_id or to but not both or neither', () => {
+      expect(PrepareSendChatMessageInput.safeParse({ chat_id: 'ch_x', body: 'hi' }).success).toBe(true);
+      expect(PrepareSendChatMessageInput.safeParse({ to: ['a@b.com'], body: 'hi' }).success).toBe(true);
+      expect(PrepareSendChatMessageInput.safeParse({ body: 'hi' }).success).toBe(false);
+      expect(PrepareSendChatMessageInput.safeParse({
+        chat_id: 'ch_x', to: ['a@b.com'], body: 'hi',
+      }).success).toBe(false);
     });
   });
 

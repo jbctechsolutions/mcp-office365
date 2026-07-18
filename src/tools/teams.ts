@@ -115,17 +115,23 @@ export const FindChatInput = z.strictObject({
   chat_type: z.enum(['oneOnOne', 'group']).optional().describe('Optional chat type filter'),
 });
 
-export const PrepareSendChatMessageInput = z.strictObject({
-  chat_id: Id.chat.optional().describe('Chat ID (ch_ token) to send the message to. Omit when using `to`.'),
-  to: z.array(z.string().trim().min(1)).min(1).optional().describe(
-    'Participant emails/UPNs as an alternative to chat_id. Resolves or creates the chat server-side (1:1 uses Graph get-or-create).',
-  ),
+const PrepareSendChatMessageShared = {
   body: z.string().min(1).describe('Message body'),
   content_type: z.enum(['text', 'html']).optional().describe('Content type (default: html)'),
-}).refine(
-  (data) => (data.chat_id != null) !== (data.to != null),
-  { message: 'Provide exactly one of chat_id or to' },
-);
+};
+
+export const PrepareSendChatMessageInput = z.union([
+  z.strictObject({
+    chat_id: Id.chat.describe('Chat ID (ch_ token) to send the message to.'),
+    ...PrepareSendChatMessageShared,
+  }),
+  z.strictObject({
+    to: z.array(z.string().trim().min(1)).min(1).describe(
+      'Participant emails/UPNs (not display names). Resolves or creates the chat server-side (1:1 uses Graph get-or-create). For names, call find_chat first and pass chat_id.',
+    ),
+    ...PrepareSendChatMessageShared,
+  }),
+]);
 
 export const ConfirmSendChatMessageInput = z.strictObject({
   approval_token: z.string().describe('Approval token from prepare_send_chat_message'),
@@ -607,26 +613,26 @@ export class TeamsTools {
   async prepareSendChatMessage(params: PrepareSendChatMessageParams): Promise<{
     content: Array<{ type: 'text'; text: string }>;
   }> {
-    let chatId = params.chat_id;
-    if (params.to != null) {
+    let chatId: string;
+    if ('to' in params) {
       const resolved = await this.repo.resolveOrCreateChatAsync(params.to);
       if ('error' in resolved) {
         return {
           content: [{
             type: 'text' as const,
-            text: JSON.stringify({ success: false, ...resolved }, null, 2),
+            text: JSON.stringify({
+              success: false,
+              ...resolved,
+              action: resolved.chats.length > 0
+                ? 'Retry prepare_send_chat_message with chat_id from chats[].id'
+                : 'Use emails/UPNs in to, or call find_chat / list_chats first',
+            }, null, 2),
           }],
         };
       }
       chatId = resolved.chatId;
-    }
-    if (chatId == null) {
-      return {
-        content: [{
-          type: 'text' as const,
-          text: JSON.stringify({ success: false, error: 'Provide exactly one of chat_id or to' }, null, 2),
-        }],
-      };
+    } else {
+      chatId = params.chat_id;
     }
 
     const contentType = params.content_type ?? 'html';

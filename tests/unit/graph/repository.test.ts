@@ -4917,6 +4917,7 @@ describe('graph/repository', () => {
             chatType: 'group',
             createdDateTime: '',
             members: [
+              { displayName: 'Me', email: 'me@example.com', userId: 'me', roles: [] },
               { displayName: 'Alice', email: 'alice@example.com', userId: 'u1', roles: [] },
               { displayName: 'Bob', email: 'bob@example.com', userId: 'u2', roles: [] },
             ],
@@ -4927,6 +4928,7 @@ describe('graph/repository', () => {
             chatType: 'group',
             createdDateTime: '',
             members: [
+              { displayName: 'Me', email: 'me@example.com', userId: 'me', roles: [] },
               { displayName: 'Alice', email: 'alice@example.com', userId: 'u1', roles: [] },
               { displayName: 'Bob', email: 'bob@example.com', userId: 'u2', roles: [] },
             ],
@@ -4939,6 +4941,63 @@ describe('graph/repository', () => {
         if ('error' in result) {
           expect(result.chats).toHaveLength(2);
         }
+      });
+
+      it('does not auto-bind a unique superset group chat', async () => {
+        mockClient.listChats.mockResolvedValue([
+          {
+            id: 'chat-super',
+            topic: 'Superset',
+            chatType: 'group',
+            createdDateTime: '',
+            members: [
+              { displayName: 'Me', email: 'me@example.com', userId: 'me', roles: [] },
+              { displayName: 'Alice', email: 'alice@example.com', userId: 'u1', roles: [] },
+              { displayName: 'Bob', email: 'bob@example.com', userId: 'u2', roles: [] },
+              { displayName: 'Carol', email: 'carol@example.com', userId: 'u3', roles: [] },
+            ],
+          },
+        ]);
+
+        const result = await repository.resolveOrCreateChatAsync(['alice@example.com', 'bob@example.com']);
+
+        expect('error' in result).toBe(true);
+        expect(mockClient.createChat).not.toHaveBeenCalled();
+      });
+
+      it('rejects display-name-only to and returns find candidates', async () => {
+        mockClient.listChats.mockResolvedValue([
+          {
+            id: 'chat-1',
+            topic: 'One',
+            chatType: 'group',
+            createdDateTime: '',
+            members: [{ displayName: 'Alice Smith', email: '', userId: 'u1', roles: [] }],
+          },
+        ]);
+
+        const result = await repository.resolveOrCreateChatAsync(['Alice Smith']);
+
+        expect('error' in result).toBe(true);
+        if ('error' in result) {
+          expect(result.error).toContain('emails/UPNs');
+          expect(result.chats).toHaveLength(1);
+        }
+      });
+
+      it('creates a group chat when no email roster matches', async () => {
+        mockClient.listChats.mockResolvedValue([]);
+        mockClient.createChat.mockResolvedValue({
+          id: 'chat-new-group',
+          topic: '',
+          chatType: 'group',
+          createdDateTime: '',
+        });
+
+        const result = await repository.resolveOrCreateChatAsync(['alice@example.com', 'bob@example.com']);
+
+        expect(result).toEqual({ chatId: expect.stringMatching(/^ch_/) });
+        expect(mockClient.createChat).toHaveBeenCalledWith('group', ['alice@example.com', 'bob@example.com']);
       });
     });
 

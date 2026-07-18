@@ -1930,13 +1930,24 @@ export class GraphClient {
   ): Promise<MicrosoftGraph.Chat> {
     const client = await this.getClient();
     const me = await client.api('/me').select('id').get() as { id: string };
-    const identifiers = [me.id, ...memberIdentifiers];
+    const seen = new Set<string>([me.id.toLowerCase()]);
+    const identifiers = [me.id];
+    for (const raw of memberIdentifiers) {
+      const key = raw.trim().toLowerCase();
+      if (key === '' || seen.has(key)) continue;
+      seen.add(key);
+      identifiers.push(raw.trim());
+    }
 
-    const members = identifiers.map((identifier) => ({
-      '@odata.type': '#microsoft.graph.aadUserConversationMember',
-      roles: ['owner'],
-      'user@odata.bind': `https://graph.microsoft.com/v1.0/users('${identifier}')`,
-    }));
+    const members = identifiers.map((identifier) => {
+      // OData string literals escape ' as ''; guest UPNs often contain #.
+      const escaped = identifier.replace(/'/g, "''").replace(/#/g, '%23');
+      return {
+        '@odata.type': '#microsoft.graph.aadUserConversationMember',
+        roles: ['owner'],
+        'user@odata.bind': `https://graph.microsoft.com/v1.0/users('${escaped}')`,
+      };
+    });
 
     const body: Record<string, unknown> = { chatType, members };
     if (topic != null && chatType === 'group') {
