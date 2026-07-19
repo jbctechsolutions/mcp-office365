@@ -6,7 +6,7 @@
 
 MCP server for Microsoft 365 -- mail, calendar, contacts, tasks, teams, people, and planner.
 
-A [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) server that provides **249 tools** for full read/write access to Microsoft 365 via the Microsoft Graph API. Manage your emails, calendar events, contacts, tasks, OneNote notes, Teams channels and chats, people directory, and Planner boards directly through MCP.
+A [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) server that provides **250 tools** for full read/write access to Microsoft 365 via the Microsoft Graph API. Manage your emails, calendar events, contacts, tasks, OneNote notes, Teams channels and chats, people directory, and Planner boards directly through MCP.
 
 ## Features Overview
 
@@ -39,7 +39,7 @@ A [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) server that p
 | People & Presence | 8 | People search, org chart, presence status |
 | Planner | 18 | Plans, buckets, tasks, task details with ETag |
 | Shared Mailbox | 8 | Read another user's mailbox, calendar, and OneDrive via delegate/shared access |
-| **Total** | **230** | |
+| **Total** | **250** | |
 
 ## Quick Start
 
@@ -220,7 +220,7 @@ end-user guide live in [`docs/remote/`](./docs/remote/):
 
 ## Tool Reference
 
-All 249 tools listed below.
+All 250 tools listed below.
 
 <details>
 <summary><strong>Mail -- Reading (9)</strong></summary>
@@ -640,7 +640,7 @@ Read another user's mailbox, calendar, or OneDrive via `/users/{upn}/...`, relyi
 
 ## Architecture
 
-The server connects to Microsoft 365 cloud services via the **Microsoft Graph API**. Full read/write access across all 249 tools. No Outlook installation required. Works on macOS, Windows, and Linux.
+The server connects to Microsoft 365 cloud services via the **Microsoft Graph API**. Full read/write access across all 250 tools. No Outlook installation required. Works on macOS, Windows, and Linux.
 
 ### Two-Phase Approval
 
