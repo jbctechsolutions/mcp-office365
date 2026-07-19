@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Resolve/send Teams chat by participant** (#97) — eliminates the N+1
+  `list_chats` → `list_chat_members` walk before sending:
+  - `prepare_send_chat_message` accepts optional `to` (emails/UPNs) as an
+    alternative to `chat_id`; 1:1 uses Graph get-or-create (`POST /chats`)
+  - new `find_chat` tool matches by email/UPN (exact) or display name
+    (case-insensitive; returns all candidates when ambiguous)
+  - `list_chats` gains `expand_members` to inline member identities in one call
+
 ## [4.3.0] - 2026-07-13
 
 ### Added

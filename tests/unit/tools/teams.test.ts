@@ -8,7 +8,11 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { TeamsTools, type ITeamsRepository } from '../../../src/tools/teams.js';
+import {
+  TeamsTools,
+  PrepareSendChatMessageInput,
+  type ITeamsRepository,
+} from '../../../src/tools/teams.js';
 import { ApprovalTokenManager } from '../../../src/approval/index.js';
 
 describe('TeamsTools', () => {
@@ -30,6 +34,8 @@ describe('TeamsTools', () => {
       sendChannelMessageAsync: vi.fn(),
       replyToChannelMessageAsync: vi.fn(),
       listChatsAsync: vi.fn(),
+      findChatsAsync: vi.fn(),
+      resolveOrCreateChatAsync: vi.fn(),
       getChatAsync: vi.fn(),
       listChatMessagesAsync: vi.fn(),
       sendChatMessageAsync: vi.fn(),
@@ -404,7 +410,7 @@ describe('TeamsTools', () => {
 
       const result = await tools.listChats({});
 
-      expect(repo.listChatsAsync).toHaveBeenCalledWith(undefined);
+      expect(repo.listChatsAsync).toHaveBeenCalledWith(undefined, false);
       const parsed = JSON.parse(result.content[0].text);
       expect(parsed.chats).toEqual(mockChats);
     });
@@ -414,7 +420,50 @@ describe('TeamsTools', () => {
 
       await tools.listChats({ limit: 10 });
 
-      expect(repo.listChatsAsync).toHaveBeenCalledWith(10);
+      expect(repo.listChatsAsync).toHaveBeenCalledWith(10, false);
+    });
+
+    it('passes expand_members parameter', async () => {
+      vi.mocked(repo.listChatsAsync).mockResolvedValue([]);
+
+      await tools.listChats({ expand_members: true });
+
+      expect(repo.listChatsAsync).toHaveBeenCalledWith(undefined, true);
+    });
+  });
+
+  describe('findChat', () => {
+    it('returns matching chats from the repository', async () => {
+      const mockChats = [{
+        id: 'ch_chat1',
+        topic: '',
+        chatType: 'oneOnOne',
+        lastMessagePreview: '',
+        createdDateTime: '2026-01-01T00:00:00Z',
+        members: [
+          { displayName: 'Alice', email: 'alice@example.com', userId: 'u1', roles: ['owner'] },
+        ],
+      }];
+      vi.mocked(repo.findChatsAsync).mockResolvedValue(mockChats);
+
+      const result = await tools.findChat({ participants: ['alice@example.com'] });
+
+      expect(repo.findChatsAsync).toHaveBeenCalledWith({
+        participants: ['alice@example.com'],
+      });
+      const parsed = JSON.parse(result.content[0].text);
+      expect(parsed.chats).toEqual(mockChats);
+    });
+
+    it('passes chat_type filter', async () => {
+      vi.mocked(repo.findChatsAsync).mockResolvedValue([]);
+
+      await tools.findChat({ participants: ['Alice'], chat_type: 'group' });
+
+      expect(repo.findChatsAsync).toHaveBeenCalledWith({
+        participants: ['Alice'],
+        chatType: 'group',
+      });
     });
   });
 
@@ -460,9 +509,20 @@ describe('TeamsTools', () => {
     });
   });
 
+  describe('PrepareSendChatMessageInput', () => {
+    it('accepts chat_id or to but not both or neither', () => {
+      expect(PrepareSendChatMessageInput.safeParse({ chat_id: 'ch_x', body: 'hi' }).success).toBe(true);
+      expect(PrepareSendChatMessageInput.safeParse({ to: ['a@b.com'], body: 'hi' }).success).toBe(true);
+      expect(PrepareSendChatMessageInput.safeParse({ body: 'hi' }).success).toBe(false);
+      expect(PrepareSendChatMessageInput.safeParse({
+        chat_id: 'ch_x', to: ['a@b.com'], body: 'hi',
+      }).success).toBe(false);
+    });
+  });
+
   describe('prepareSendChatMessage', () => {
-    it('generates an approval token with preview', () => {
-      const result = tools.prepareSendChatMessage({
+    it('generates an approval token with preview', async () => {
+      const result = await tools.prepareSendChatMessage({
         chat_id: 'ch_chat1', body: 'Hello chat!', content_type: 'text',
       });
 
@@ -476,13 +536,45 @@ describe('TeamsTools', () => {
       expect(parsed.action).toContain('confirm_send_chat_message');
     });
 
-    it('defaults content_type to html', () => {
-      const result = tools.prepareSendChatMessage({
+    it('defaults content_type to html', async () => {
+      const result = await tools.prepareSendChatMessage({
         chat_id: 'ch_chat1', body: '<p>Hello</p>',
       });
 
       const parsed = JSON.parse(result.content[0].text);
       expect(parsed.content_type).toBe('html');
+    });
+
+    it('resolves chat from to participants without prior chat_id', async () => {
+      vi.mocked(repo.resolveOrCreateChatAsync).mockResolvedValue({ chatId: 'ch_resolved' });
+
+      const result = await tools.prepareSendChatMessage({
+        to: ['alice@example.com'], body: 'Hi Alice',
+      });
+
+      expect(repo.resolveOrCreateChatAsync).toHaveBeenCalledWith(['alice@example.com']);
+      const parsed = JSON.parse(result.content[0].text);
+      expect(parsed.chat_id).toBe('ch_resolved');
+      expect(parsed.approval_token).toBeDefined();
+    });
+
+    it('returns candidates when participant resolution is ambiguous', async () => {
+      vi.mocked(repo.resolveOrCreateChatAsync).mockResolvedValue({
+        error: 'Multiple chats match the given participants. Pass chat_id to disambiguate.',
+        chats: [
+          { id: 'ch_a', topic: 'A', chatType: 'group', members: [{ displayName: 'Alice', email: 'alice@example.com' }] },
+          { id: 'ch_b', topic: 'B', chatType: 'group', members: [{ displayName: 'Alice', email: 'alice@example.com' }] },
+        ],
+      });
+
+      const result = await tools.prepareSendChatMessage({
+        to: ['alice@example.com', 'bob@example.com'], body: 'Hi',
+      });
+
+      const parsed = JSON.parse(result.content[0].text);
+      expect(parsed.success).toBe(false);
+      expect(parsed.chats).toHaveLength(2);
+      expect(parsed.approval_token).toBeUndefined();
     });
   });
 
@@ -490,7 +582,7 @@ describe('TeamsTools', () => {
     it('sends message with valid token', async () => {
       vi.mocked(repo.sendChatMessageAsync).mockResolvedValue('cm_999');
 
-      const prepareResult = tools.prepareSendChatMessage({
+      const prepareResult = await tools.prepareSendChatMessage({
         chat_id: 'ch_chat1', body: 'Hello!', content_type: 'text',
       });
       const { approval_token } = JSON.parse(prepareResult.content[0].text);
@@ -515,7 +607,7 @@ describe('TeamsTools', () => {
     it('returns error for already consumed token', async () => {
       vi.mocked(repo.sendChatMessageAsync).mockResolvedValue('cm_999');
 
-      const prepareResult = tools.prepareSendChatMessage({
+      const prepareResult = await tools.prepareSendChatMessage({
         chat_id: 'ch_chat1', body: 'Hello!',
       });
       const { approval_token } = JSON.parse(prepareResult.content[0].text);

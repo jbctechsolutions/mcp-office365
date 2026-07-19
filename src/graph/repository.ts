@@ -2175,24 +2175,287 @@ export class GraphRepository implements IRepository {
   // Chats
   // ===========================================================================
 
-  async listChatsAsync(limit: number = 25): Promise<Array<{
-    id: string; topic: string; chatType: string; lastMessagePreview: string; createdDateTime: string;
+  private mapChatMember(member: {
+    displayName?: string | null;
+    roles?: string[] | null;
+  } & Record<string, unknown>): { displayName: string; email: string; userId: string; roles: string[] } {
+    return {
+      displayName: member.displayName ?? '',
+      email: (member.email as string | undefined) ?? '',
+      userId: (member.userId as string | undefined) ?? '',
+      roles: member.roles ?? [],
+    };
+  }
+
+  private mapChatSummary(
+    chat: { id?: string | null; topic?: string | null; chatType?: string | null; createdDateTime?: string | null },
+    options: { includeMembers?: boolean } = {},
+  ): {
+    id: string;
+    topic: string;
+    chatType: string;
+    lastMessagePreview: string;
+    createdDateTime: string;
+    members?: Array<{ displayName: string; email: string; userId: string; roles: string[] }>;
+  } {
+    const graphId = chat.id!;
+    const chatRecord = chat as unknown as Record<string, unknown>;
+    const preview = chatRecord.lastMessagePreview as Record<string, unknown> | undefined;
+    const previewBody = preview?.body as Record<string, unknown> | undefined;
+    const previewContent = (previewBody?.content as string | undefined)?.substring(0, 200) ?? '';
+    const mapped: {
+      id: string;
+      topic: string;
+      chatType: string;
+      lastMessagePreview: string;
+      createdDateTime: string;
+      members?: Array<{ displayName: string; email: string; userId: string; roles: string[] }>;
+    } = {
+      id: this.mintAlias('chat', graphId),
+      topic: chat.topic ?? '',
+      chatType: chat.chatType ?? 'oneOnOne',
+      lastMessagePreview: previewContent,
+      createdDateTime: chat.createdDateTime ?? '',
+    };
+    if (options.includeMembers === true) {
+      const rawMembers = (chatRecord.members as Array<Record<string, unknown>> | undefined) ?? [];
+      mapped.members = rawMembers.map((m) => this.mapChatMember(m as Parameters<typeof this.mapChatMember>[0]));
+    }
+    return mapped;
+  }
+
+  /**
+   * Match strength for a participant query against a chat member.
+   * Email / UPN / user id are exact (case-insensitive for email/UPN).
+   * Display name is case-insensitive and weaker — used only as a fallback.
+   */
+  private matchParticipant(
+    query: string,
+    member: { displayName: string; email: string; userId: string },
+  ): 'exact' | 'name' | null {
+    const q = query.trim();
+    if (q === '') return null;
+    const qLower = q.toLowerCase();
+    const email = member.email.trim().toLowerCase();
+    const userId = member.userId.trim();
+    if (email !== '' && email === qLower) return 'exact';
+    if (userId !== '' && (userId === q || userId.toLowerCase() === qLower)) return 'exact';
+    if (member.displayName.trim().toLowerCase() === qLower) return 'name';
+    return null;
+  }
+
+  private chatMatchesParticipants(
+    members: Array<{ displayName: string; email: string; userId: string }>,
+    participants: string[],
+    mode: 'exact' | 'any',
+  ): boolean {
+    return participants.every((participant) =>
+      members.some((member) => {
+        const match = this.matchParticipant(participant, member);
+        if (match == null) return false;
+        return mode === 'any' || match === 'exact';
+      }),
+    );
+  }
+
+  private looksLikeEmailOrUpn(value: string): boolean {
+    return value.includes('@');
+  }
+
+  async listChatsAsync(
+    limit: number = 25,
+    expandMembers: boolean = false,
+  ): Promise<Array<{
+    id: string;
+    topic: string;
+    chatType: string;
+    lastMessagePreview: string;
+    createdDateTime: string;
+    members?: Array<{ displayName: string; email: string; userId: string; roles: string[] }>;
   }>> {
-    const chats = await this.client.listChats(limit);
-    return chats.map((chat) => {
-      const graphId = chat.id!;
-      const chatRecord = chat as unknown as Record<string, unknown>;
-      const preview = chatRecord.lastMessagePreview as Record<string, unknown> | undefined;
-      const previewBody = preview?.body as Record<string, unknown> | undefined;
-      const previewContent = (previewBody?.content as string | undefined)?.substring(0, 200) ?? '';
+    const chats = await this.client.listChats(limit, { expandMembers });
+    return chats.map((chat) => this.mapChatSummary(chat, { includeMembers: expandMembers }));
+  }
+
+  /**
+   * Finds chats whose members match the given participants.
+   *
+   * For a single email/UPN 1:1 lookup, uses Graph get-or-create (`POST /chats`)
+   * so the existing chat is returned without enumerating. Otherwise lists chats
+   * with `$expand=members`, matches email/id first, then case-insensitive
+   * displayName, and returns **all** candidates when ambiguous.
+   */
+  async findChatsAsync(params: {
+    participants: string[];
+    chatType?: 'oneOnOne' | 'group';
+  }): Promise<Array<{
+    id: string;
+    topic: string;
+    chatType: string;
+    lastMessagePreview: string;
+    createdDateTime: string;
+    members: Array<{ displayName: string; email: string; userId: string; roles: string[] }>;
+  }>> {
+    const participants = params.participants.map((p) => p.trim()).filter((p) => p !== '');
+    if (participants.length === 0) {
+      throw new Error('At least one participant is required');
+    }
+
+    const preferOneOnOne =
+      participants.length === 1
+      && this.looksLikeEmailOrUpn(participants[0]!)
+      && (params.chatType == null || params.chatType === 'oneOnOne');
+
+    if (preferOneOnOne) {
+      const chat = await this.client.createChat('oneOnOne', [participants[0]!]);
+      const mapped = this.mapChatSummary(chat, { includeMembers: true });
+      if (mapped.members == null || mapped.members.length === 0) {
+        const members = await this.client.listChatMembers(chat.id!);
+        mapped.members = members.map((m) =>
+          this.mapChatMember(m as unknown as Parameters<typeof this.mapChatMember>[0]),
+        );
+      }
+      return [{
+        id: mapped.id,
+        topic: mapped.topic,
+        chatType: mapped.chatType,
+        lastMessagePreview: mapped.lastMessagePreview,
+        createdDateTime: mapped.createdDateTime,
+        members: mapped.members ?? [],
+      }];
+    }
+
+    const chats = await this.client.listChats(50, {
+      expandMembers: true,
+      pageAll: true,
+      ...(params.chatType != null ? { chatType: params.chatType } : {}),
+    });
+
+    const mapped = chats.map((chat) => {
+      const summary = this.mapChatSummary(chat, { includeMembers: true });
       return {
-        id: this.mintAlias('chat', graphId),
-        topic: chat.topic ?? '',
-        chatType: chat.chatType ?? 'oneOnOne',
-        lastMessagePreview: previewContent,
-        createdDateTime: chat.createdDateTime ?? '',
+        id: summary.id,
+        topic: summary.topic,
+        chatType: summary.chatType,
+        lastMessagePreview: summary.lastMessagePreview,
+        createdDateTime: summary.createdDateTime,
+        members: summary.members ?? [],
       };
     });
+
+    const exactMatches = mapped.filter((chat) =>
+      this.chatMatchesParticipants(chat.members, participants, 'exact'),
+    );
+    if (exactMatches.length > 0) {
+      return exactMatches;
+    }
+
+    return mapped.filter((chat) =>
+      this.chatMatchesParticipants(chat.members, participants, 'any'),
+    );
+  }
+
+  /**
+   * True when every requested participant matches a distinct member by exact
+   * email/id and the non-self roster size equals the participant count.
+   * Without a cached /me identity, treat "self" as the single unmatched member
+   * when members.length === participants.length + 1.
+   */
+  private exactNonSelfRosterMatch(
+    members: Array<{ displayName: string; email: string; userId: string }>,
+    participants: string[],
+  ): boolean {
+    const exactAgainst = (pool: typeof members): boolean => {
+      if (pool.length !== participants.length) return false;
+      const used = new Set<number>();
+      return participants.every((participant) => {
+        const idx = pool.findIndex((member, i) =>
+          !used.has(i) && this.matchParticipant(participant, member) === 'exact',
+        );
+        if (idx < 0) return false;
+        used.add(idx);
+        return true;
+      });
+    };
+    if (exactAgainst(members)) return true;
+    if (members.length === participants.length + 1) {
+      for (let skip = 0; skip < members.length; skip += 1) {
+        const pool = members.filter((_, i) => i !== skip);
+        if (exactAgainst(pool)) return true;
+      }
+    }
+    return false;
+  }
+
+  /**
+   * Resolves a chat for send: get-or-create 1:1 for a single email/UPN, or find
+   * (and if needed create) a group chat for multiple participants.
+   *
+   * `to` is email/UPN oriented: display-name-only inputs are not auto-bound.
+   * Multi-participant resolve requires an exact non-self roster match (not a
+   * unique superset) before selecting a chat.
+   */
+  async resolveOrCreateChatAsync(participants: string[]): Promise<
+    | { chatId: string }
+    | { error: string; chats: Array<{ id: string; topic: string; chatType: string; members: Array<{ displayName: string; email: string }> }> }
+  > {
+    const cleaned = participants.map((p) => p.trim()).filter((p) => p !== '');
+    if (cleaned.length === 0) {
+      return { error: 'At least one participant is required in `to`', chats: [] };
+    }
+
+    if (!cleaned.every((p) => this.looksLikeEmailOrUpn(p))) {
+      const found = await this.findChatsAsync({ participants: cleaned });
+      return {
+        error: 'prepare_send_chat_message `to` requires emails/UPNs. Use find_chat for display names, then pass chat_id.',
+        chats: found.map((c) => ({
+          id: c.id,
+          topic: c.topic,
+          chatType: c.chatType,
+          members: c.members.map((m) => ({ displayName: m.displayName, email: m.email })),
+        })),
+      };
+    }
+
+    if (cleaned.length === 1) {
+      const chats = await this.findChatsAsync({ participants: cleaned, chatType: 'oneOnOne' });
+      if (chats.length === 0) {
+        return { error: 'Could not resolve or create a 1:1 chat for the given participant.', chats: [] };
+      }
+      return { chatId: chats[0]!.id };
+    }
+
+    const found = await this.findChatsAsync({ participants: cleaned, chatType: 'group' });
+    const exact = found.filter((c) => this.exactNonSelfRosterMatch(c.members, cleaned));
+
+    if (exact.length === 1) {
+      return { chatId: exact[0]!.id };
+    }
+    if (exact.length > 1) {
+      return {
+        error: 'Multiple chats match the given participants. Pass chat_id to disambiguate.',
+        chats: exact.map((c) => ({
+          id: c.id,
+          topic: c.topic,
+          chatType: c.chatType,
+          members: c.members.map((m) => ({ displayName: m.displayName, email: m.email })),
+        })),
+      };
+    }
+    if (found.length > 0) {
+      return {
+        error: 'No chat with an exact participant roster matched. Pass chat_id from chats[] to disambiguate, or call find_chat.',
+        chats: found.map((c) => ({
+          id: c.id,
+          topic: c.topic,
+          chatType: c.chatType,
+          members: c.members.map((m) => ({ displayName: m.displayName, email: m.email })),
+        })),
+      };
+    }
+
+    const chat = await this.client.createChat('group', cleaned);
+    return { chatId: this.mintAlias('chat', chat.id!) };
   }
 
   async getChatAsync(chatId: string): Promise<{

@@ -43,11 +43,11 @@ describe('MCP Client E2E', () => {
       // List tools
       const result = await client.listTools();
 
-      // Verify tools were returned (249 tools — Graph API is the only backend)
+      // Verify tools were returned (250 tools — Graph API is the only backend)
       expect(result.tools).toBeDefined();
       expect(Array.isArray(result.tools)).toBe(true);
       const count = result.tools.length;
-      expect(count).toBe(249);
+      expect(count).toBe(250);
 
       // Verify core tools exist
       const toolNames = result.tools.map((t) => t.name);
@@ -103,7 +103,7 @@ describe('MCP Client E2E', () => {
 
         const result = await client.listTools();
         // Still the full Graph surface, not a (nonexistent) AppleScript one.
-        expect(result.tools.length).toBe(249);
+        expect(result.tools.length).toBe(250);
         expect(result.tools.map((t) => t.name)).toContain('list_folders');
 
         await client.close();
@@ -128,10 +128,10 @@ describe('MCP Client E2E', () => {
 
       // No duplicate tool names across the registry + legacy union.
       expect(new Set(names).size).toBe(names.length);
-      // Graph-only surface count (249) — the AppleScript backend and its
+      // Graph-only surface count (250) — the AppleScript backend and its
       // Apple-Notes-only tools (list_notes/get_note/search_notes) and the
       // AppleScript-backed list_accounts tool were removed with it.
-      expect(names.length).toBe(249);
+      expect(names.length).toBe(250);
 
       // The 4 migrated mail-rules tools each appear exactly once.
       for (const name of ['list_mail_rules', 'create_mail_rule', 'prepare_delete_mail_rule', 'confirm_delete_mail_rule']) {

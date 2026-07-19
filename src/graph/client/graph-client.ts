@@ -1872,14 +1872,89 @@ export class GraphClient {
   // Chats
   // ===========================================================================
 
-  async listChats(top: number = 25): Promise<MicrosoftGraph.Chat[]> {
+  /**
+   * Lists the signed-in user's chats.
+   *
+   * @param top - Page size (default 25)
+   * @param options.expandMembers - Also `$expand=members` (displayName + email inline)
+   * @param options.chatType - Optional `$filter` on chatType
+   * @param options.pageAll - Follow `@odata.nextLink` (capped) for full enumeration
+   */
+  async listChats(
+    top: number = 25,
+    options: {
+      expandMembers?: boolean;
+      chatType?: 'oneOnOne' | 'group';
+      pageAll?: boolean;
+    } = {},
+  ): Promise<MicrosoftGraph.Chat[]> {
     const client = await this.getClient();
-    const response = await client.api('/me/chats')
+    const expand = options.expandMembers === true
+      ? 'lastMessagePreview,members'
+      : 'lastMessagePreview';
+
+    let request = client.api('/me/chats')
       .top(top)
       .orderby('lastMessagePreview/createdDateTime desc')
-      .expand('lastMessagePreview')
-      .get() as PageCollection;
-    return response.value as MicrosoftGraph.Chat[];
+      .expand(expand);
+    if (options.chatType != null) {
+      request = request.filter(`chatType eq '${options.chatType}'`);
+    }
+
+    let response = await request.get() as PageCollection;
+    const result = [...(response.value as MicrosoftGraph.Chat[])];
+
+    if (options.pageAll === true) {
+      let pages = 1;
+      while (response['@odata.nextLink'] != null && pages < 20) {
+        response = await client.api(response['@odata.nextLink']).get() as PageCollection;
+        result.push(...(response.value as MicrosoftGraph.Chat[]));
+        pages += 1;
+      }
+    }
+
+    return result;
+  }
+
+  /**
+   * Creates a chat, or for oneOnOne returns the existing chat if one already
+   * exists between the same two members (Graph get-or-create semantics).
+   *
+   * Every participant — including the signed-in user — must be listed. This
+   * method always adds `/me` and the given member identifiers (email, UPN, or id).
+   */
+  async createChat(
+    chatType: 'oneOnOne' | 'group',
+    memberIdentifiers: string[],
+    topic?: string,
+  ): Promise<MicrosoftGraph.Chat> {
+    const client = await this.getClient();
+    const me = await client.api('/me').select('id').get() as { id: string };
+    const seen = new Set<string>([me.id.toLowerCase()]);
+    const identifiers = [me.id];
+    for (const raw of memberIdentifiers) {
+      const key = raw.trim().toLowerCase();
+      if (key === '' || seen.has(key)) continue;
+      seen.add(key);
+      identifiers.push(raw.trim());
+    }
+
+    const members = identifiers.map((identifier) => {
+      // OData string literals escape ' as ''; guest UPNs often contain #.
+      const escaped = identifier.replace(/'/g, "''").replace(/#/g, '%23');
+      return {
+        '@odata.type': '#microsoft.graph.aadUserConversationMember',
+        roles: ['owner'],
+        'user@odata.bind': `https://graph.microsoft.com/v1.0/users('${escaped}')`,
+      };
+    });
+
+    const body: Record<string, unknown> = { chatType, members };
+    if (topic != null && chatType === 'group') {
+      body['topic'] = topic;
+    }
+
+    return await client.api('/chats').post(body) as MicrosoftGraph.Chat;
   }
 
   async getChat(chatId: string): Promise<MicrosoftGraph.Chat> {

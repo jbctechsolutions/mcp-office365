@@ -6,7 +6,7 @@
 
 MCP server for Microsoft 365 -- mail, calendar, contacts, tasks, teams, people, and planner.
 
-A [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) server that provides **249 tools** for full read/write access to Microsoft 365 via the Microsoft Graph API. Manage your emails, calendar events, contacts, tasks, OneNote notes, Teams channels and chats, people directory, and Planner boards directly through MCP.
+A [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) server that provides **250 tools** for full read/write access to Microsoft 365 via the Microsoft Graph API. Manage your emails, calendar events, contacts, tasks, OneNote notes, Teams channels and chats, people directory, and Planner boards directly through MCP.
 
 ## Features Overview
 
@@ -35,11 +35,11 @@ A [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) server that p
 | Scheduling | 2 | Free/busy availability, meeting time suggestions |
 | Teams -- Channels | 8 | Channel CRUD, team members |
 | Teams -- Channel Messages | 6 | Read and send channel messages with replies |
-| Teams -- Chats | 6 | 1:1 and group chats, send messages |
+| Teams -- Chats | 7 | 1:1 and group chats, find by participant, send messages |
 | People & Presence | 8 | People search, org chart, presence status |
 | Planner | 18 | Plans, buckets, tasks, task details with ETag |
 | Shared Mailbox | 8 | Read another user's mailbox, calendar, and OneDrive via delegate/shared access |
-| **Total** | **229** | |
+| **Total** | **250** | |
 
 ## Quick Start
 
@@ -220,7 +220,7 @@ end-user guide live in [`docs/remote/`](./docs/remote/):
 
 ## Tool Reference
 
-All 249 tools listed below.
+All 250 tools listed below.
 
 <details>
 <summary><strong>Mail -- Reading (9)</strong></summary>
@@ -559,14 +559,15 @@ All 249 tools listed below.
 </details>
 
 <details>
-<summary><strong>Teams -- Chats (6)</strong> <em>(Graph API)</em></summary>
+<summary><strong>Teams -- Chats (7)</strong> <em>(Graph API)</em></summary>
 
 | Tool | Description |
 |------|-------------|
-| `list_chats` | List recent 1:1 and group chats |
+| `list_chats` | List recent 1:1 and group chats (`expand_members` for inline identities) |
+| `find_chat` | Find chats by participant email/UPN/display name (1:1 email uses get-or-create) |
 | `get_chat` | Get details of a specific chat |
 | `list_chat_messages` | List recent messages in a chat |
-| `prepare_send_chat_message` | Prepare to send a message in a chat (two-phase) |
+| `prepare_send_chat_message` | Prepare to send a chat message via `chat_id` or `to` participants (two-phase) |
 | `confirm_send_chat_message` | Confirm sending a chat message |
 | `list_chat_members` | List members of a chat |
 
@@ -639,7 +640,7 @@ Read another user's mailbox, calendar, or OneDrive via `/users/{upn}/...`, relyi
 
 ## Architecture
 
-The server connects to Microsoft 365 cloud services via the **Microsoft Graph API**. Full read/write access across all 249 tools. No Outlook installation required. Works on macOS, Windows, and Linux.
+The server connects to Microsoft 365 cloud services via the **Microsoft Graph API**. Full read/write access across all 250 tools. No Outlook installation required. Works on macOS, Windows, and Linux.
 
 ### Two-Phase Approval
 

@@ -94,6 +94,9 @@ export const ConfirmReplyChannelMessageInput = z.strictObject({
 
 export const ListChatsInput = z.strictObject({
   limit: z.number().int().min(1).max(50).optional().describe('Max chats to return (default 25, max 50)'),
+  expand_members: z.boolean().optional().describe(
+    'When true, include members (displayName + email) inline via Graph $expand=members',
+  ),
 });
 
 export const GetChatInput = z.strictObject({
@@ -105,11 +108,30 @@ export const ListChatMessagesInput = z.strictObject({
   limit: z.number().int().min(1).max(50).optional().describe('Max messages to return (default 25, max 50)'),
 });
 
-export const PrepareSendChatMessageInput = z.strictObject({
-  chat_id: Id.chat.describe('Chat ID (ch_ token) to send the message to.'),
+export const FindChatInput = z.strictObject({
+  participants: z.array(z.string().trim().min(1)).min(1).describe(
+    'Emails, UPNs, or display names to match. Email/UPN match is exact; display-name match is case-insensitive and returns all candidates when ambiguous.',
+  ),
+  chat_type: z.enum(['oneOnOne', 'group']).optional().describe('Optional chat type filter'),
+});
+
+const PrepareSendChatMessageShared = {
   body: z.string().min(1).describe('Message body'),
   content_type: z.enum(['text', 'html']).optional().describe('Content type (default: html)'),
-});
+};
+
+export const PrepareSendChatMessageInput = z.union([
+  z.strictObject({
+    chat_id: Id.chat.describe('Chat ID (ch_ token) to send the message to.'),
+    ...PrepareSendChatMessageShared,
+  }),
+  z.strictObject({
+    to: z.array(z.string().trim().min(1)).min(1).describe(
+      'Participant emails/UPNs (not display names). Resolves or creates the chat server-side (1:1 uses Graph get-or-create). For names, call find_chat first and pass chat_id.',
+    ),
+    ...PrepareSendChatMessageShared,
+  }),
+]);
 
 export const ConfirmSendChatMessageInput = z.strictObject({
   approval_token: z.string().describe('Approval token from prepare_send_chat_message'),
@@ -160,6 +182,7 @@ export type ConfirmReplyChannelMessageParams = z.infer<typeof ConfirmReplyChanne
 export type ListChatsParams = z.infer<typeof ListChatsInput>;
 export type GetChatParams = z.infer<typeof GetChatInput>;
 export type ListChatMessagesParams = z.infer<typeof ListChatMessagesInput>;
+export type FindChatParams = z.infer<typeof FindChatInput>;
 export type PrepareSendChatMessageParams = z.infer<typeof PrepareSendChatMessageInput>;
 export type ConfirmSendChatMessageParams = z.infer<typeof ConfirmSendChatMessageInput>;
 export type ListChatMembersParams = z.infer<typeof ListChatMembersInput>;
@@ -191,7 +214,21 @@ export interface ITeamsRepository {
   }>;
   sendChannelMessageAsync(channelId: string, body: string, contentType?: string): Promise<string>;
   replyToChannelMessageAsync(messageId: string, body: string, contentType?: string): Promise<string>;
-  listChatsAsync(limit?: number): Promise<Array<{ id: string; topic: string; chatType: string; lastMessagePreview: string; createdDateTime: string }>>;
+  listChatsAsync(limit?: number, expandMembers?: boolean): Promise<Array<{
+    id: string; topic: string; chatType: string; lastMessagePreview: string; createdDateTime: string;
+    members?: Array<{ displayName: string; email: string; userId: string; roles: string[] }>;
+  }>>;
+  findChatsAsync(params: {
+    participants: string[];
+    chatType?: 'oneOnOne' | 'group';
+  }): Promise<Array<{
+    id: string; topic: string; chatType: string; lastMessagePreview: string; createdDateTime: string;
+    members: Array<{ displayName: string; email: string; userId: string; roles: string[] }>;
+  }>>;
+  resolveOrCreateChatAsync(participants: string[]): Promise<
+    | { chatId: string }
+    | { error: string; chats: Array<{ id: string; topic: string; chatType: string; members: Array<{ displayName: string; email: string }> }> }
+  >;
   getChatAsync(chatId: string): Promise<{ id: string; topic: string; chatType: string; createdDateTime: string; webUrl: string }>;
   listChatMessagesAsync(chatId: string, limit?: number): Promise<Array<{
     id: string; senderName: string; senderEmail: string; bodyPreview: string;
@@ -524,7 +561,23 @@ export class TeamsTools {
   async listChats(params: ListChatsParams): Promise<{
     content: Array<{ type: 'text'; text: string }>;
   }> {
-    const chats = await this.repo.listChatsAsync(params.limit);
+    const chats = await this.repo.listChatsAsync(params.limit, params.expand_members ?? false);
+    return {
+      content: [{
+        type: 'text' as const,
+        text: JSON.stringify({ chats, next: nextActionFor('chat') ?? undefined }, null, 2),
+      }],
+    };
+  }
+
+  async findChat(params: FindChatParams): Promise<{
+    content: Array<{ type: 'text'; text: string }>;
+  }> {
+    const chats = await this.repo.findChatsAsync(
+      params.chat_type != null
+        ? { participants: params.participants, chatType: params.chat_type }
+        : { participants: params.participants },
+    );
     return {
       content: [{
         type: 'text' as const,
@@ -557,15 +610,37 @@ export class TeamsTools {
     };
   }
 
-  prepareSendChatMessage(params: PrepareSendChatMessageParams): {
+  async prepareSendChatMessage(params: PrepareSendChatMessageParams): Promise<{
     content: Array<{ type: 'text'; text: string }>;
-  } {
+  }> {
+    let chatId: string;
+    if ('to' in params) {
+      const resolved = await this.repo.resolveOrCreateChatAsync(params.to);
+      if ('error' in resolved) {
+        return {
+          content: [{
+            type: 'text' as const,
+            text: JSON.stringify({
+              success: false,
+              ...resolved,
+              action: resolved.chats.length > 0
+                ? 'Retry prepare_send_chat_message with chat_id from chats[].id'
+                : 'Use emails/UPNs in to, or call find_chat / list_chats first',
+            }, null, 2),
+          }],
+        };
+      }
+      chatId = resolved.chatId;
+    } else {
+      chatId = params.chat_id;
+    }
+
     const contentType = params.content_type ?? 'html';
     const token = this.tokenManager.generateToken({
       operation: 'send_chat_message',
       targetType: 'chat_message',
-      targetId: params.chat_id,
-      targetHash: String(params.chat_id),
+      targetId: chatId,
+      targetHash: String(chatId),
       metadata: { body: params.body, contentType },
     });
     return {
@@ -574,7 +649,7 @@ export class TeamsTools {
         text: JSON.stringify({
           approval_token: token.tokenId,
           expires_at: new Date(token.expiresAt).toISOString(),
-          chat_id: params.chat_id,
+          chat_id: chatId,
           body_preview: params.body.substring(0, 200),
           content_type: contentType,
           action: 'Call confirm_send_chat_message with the approval_token to send.',
@@ -881,13 +956,23 @@ export function teamsToolDefinitions(): ToolDefinition[] {
     }),
     defineTool({
       name: 'list_chats',
-      description: 'List recent 1:1 and group chats (Graph API)',
+      description: 'List recent 1:1 and group chats. Set expand_members to include member identities inline. (Graph API)',
       input: ListChatsInput,
       annotations: { readOnlyHint: true, openWorldHint: true },
       destructive: false,
       presets: ['teams'],
       backends: ['graph'],
       handler: (ctx, params) => tools(ctx).listChats(params),
+    }),
+    defineTool({
+      name: 'find_chat',
+      description: 'Find chats by participant email, UPN, or display name. For a 1:1 email lookup uses Graph get-or-create (may create if missing; returns existing when present). Returns all candidates when a display-name match is ambiguous. (Graph API)',
+      input: FindChatInput,
+      annotations: { readOnlyHint: false, openWorldHint: true },
+      destructive: false,
+      presets: ['teams'],
+      backends: ['graph'],
+      handler: (ctx, params) => tools(ctx).findChat(params),
     }),
     defineTool({
       name: 'get_chat',
@@ -911,7 +996,7 @@ export function teamsToolDefinitions(): ToolDefinition[] {
     }),
     defineTool({
       name: 'prepare_send_chat_message',
-      description: 'Prepare to send a message in a chat. Returns an approval token. Call confirm_send_chat_message to execute. (Graph API)',
+      description: 'Prepare to send a message in a chat. Pass chat_id or to (participant emails/UPNs). Returns an approval token. Call confirm_send_chat_message to execute. (Graph API)',
       input: PrepareSendChatMessageInput,
       annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
       destructive: true,
