@@ -62,6 +62,28 @@ describe('StateStore.open', () => {
     expect(store.busyTimeout).toBe(5000);
   });
 
+  it('degrades (not crashes) with a state-dir remedy when the db schema is newer than supported (#99)', () => {
+    // Seed a healthy db, then forge a forward schema_version on it.
+    const seed = StateStore.open({ dir, legacyDir, warn: () => {} });
+    seed.close();
+    const dbPath = join(dir, 'state.db');
+    const raw = new Database(dbPath);
+    raw
+      .prepare(
+        "INSERT INTO meta (key, value) VALUES ('schema_version', ?) " +
+          'ON CONFLICT(key) DO UPDATE SET value = excluded.value',
+      )
+      .run(String(SCHEMA_VERSION + 1));
+    raw.close();
+
+    const warnings: string[] = [];
+    const store = StateStore.open({ dir, legacyDir, warn: (m) => warnings.push(m) });
+    open.add(store);
+    expect(store.degraded).toBe(true);
+    expect(warnings.some((w) => w.includes('newer build migrated this state.db'))).toBe(true);
+    expect(warnings.some((w) => w.includes('--state-dir'))).toBe(true);
+  });
+
   it('creates the db with the current schema version and expected tables', () => {
     openStore();
     const raw = new Database(join(dir, 'state.db'));

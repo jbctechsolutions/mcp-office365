@@ -65,6 +65,18 @@ describe('StateStore.open with an unloadable native module', () => {
     expect(warnings.some((w) => w.includes('running in-memory'))).toBe(false);
   });
 
+  it('names the offending binding path in the remediation', async () => {
+    const { StateStore } = await import('../../../src/state/store.js');
+
+    let thrown: unknown;
+    try {
+      StateStore.open({ dir, legacyDir, warn: () => {} });
+    } catch (e) {
+      thrown = e;
+    }
+    expect((thrown as Error).message).toContain('Offending binding: /x/better_sqlite3.node');
+  });
+
   it('names the running Node version and preserves the original error as cause', async () => {
     const { StateStore } = await import('../../../src/state/store.js');
 

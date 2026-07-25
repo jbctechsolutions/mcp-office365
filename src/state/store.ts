@@ -251,10 +251,12 @@ export class StateStore implements AuditStore {
       // that cannot load (Node ABI mismatch, missing build) would just rethrow
       // the raw dlopen stack from the fallback. Surface remediation instead.
       if (isNativeLoadFailure(error)) {
+        const bindingPath = extractBindingPath(reason);
         throw new Error(
           `better-sqlite3 native module failed to load — ABI mismatch or missing compiled ` +
             `binding (running Node.js ${process.version}), so neither the on-disk state ` +
             `store nor its in-memory fallback can start.\n` +
+            (bindingPath != null ? `Offending binding: ${bindingPath}\n` : '') +
             `Fix one of:\n` +
             `  - npm rebuild better-sqlite3   # in the directory the server is installed in\n` +
             `  - rm -rf ~/.npm/_npx           # clear the npx cache so it recompiles on next run\n` +
@@ -262,6 +264,21 @@ export class StateStore implements AuditStore {
             `Original error: ${reason}`,
           { cause: error },
         );
+      }
+      // A db migrated by a newer build (forward-schema) can't be opened by this
+      // one. Degrading silently loses durability; point the operator at the
+      // isolation remedy so the newer/dev build stops sharing this build's db.
+      if (isForwardSchemaFailure(error)) {
+        warn(
+          `[mcp-office365] state store unavailable (${reason}); running in-memory ` +
+            `(durability degraded). A newer build migrated this state.db — give the ` +
+            `newer/dev build its own dir via --state-dir or OUTLOOK_MCP_STATE_DIR, ` +
+            `or upgrade this build.`,
+        );
+        const memFwd = new Database(':memory:');
+        configurePragmas(memFwd);
+        runMigrations(memFwd);
+        return new StateStore(memFwd, ':memory:', true, now);
       }
       warn(`[mcp-office365] state store unavailable (${reason}); running in-memory (durability degraded).`);
       const mem = new Database(':memory:');
@@ -656,6 +673,29 @@ function isNativeLoadFailure(error: unknown): boolean {
   // artifact is missing entirely (never built / pruned).
   if (/Could not locate the bindings file/.test(error.message)) return true;
   return code === 'MODULE_NOT_FOUND' && error.message.includes('better_sqlite3.node');
+}
+
+/**
+ * True when the on-disk db was migrated by a newer build than this one supports
+ * (see runMigrations' downgrade guard). This degrades to in-memory but warrants
+ * a distinct, actionable message pointing at state-dir isolation.
+ */
+function isForwardSchemaFailure(error: unknown): boolean {
+  return (
+    error instanceof Error &&
+    /schema version \d+ is newer than this build supports/.test(error.message)
+  );
+}
+
+/**
+ * Pulls the offending `.node` binding path out of a native-load error message
+ * so the remediation can name it exactly. Handles both the dlopen form
+ * (`The module '/path/better_sqlite3.node' was compiled…`) and the `bindings`
+ * "Could not locate the bindings file" form. Returns undefined when no path is
+ * present in the message.
+ */
+function extractBindingPath(message: string): string | undefined {
+  return /([^\s'"]+\.node)/.exec(message)?.[1];
 }
 
 function configurePragmas(db: DB): void {
