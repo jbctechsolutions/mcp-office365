@@ -685,7 +685,7 @@ async function handleRevokeCommand(flags: string[]): Promise<number> {
  *   audit --limit <n>           — cap the number of rows
  */
 function handleAuditCommand(flags: string[]): number {
-  const stateDir = process.env.OUTLOOK_MCP_STATE_DIR;
+  const stateDir = resolveStateDir(flags);
   const store = StateStore.open(stateDir != null ? { dir: stateDir } : {});
   if (store.degraded) {
     process.stderr.write(
