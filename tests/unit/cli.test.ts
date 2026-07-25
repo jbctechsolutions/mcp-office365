@@ -33,6 +33,8 @@ import {
   parseCliCommand,
   parseServerOptions,
   parseServeOptions,
+  parseStateDir,
+  resolveStateDir,
   VALID_PRESETS,
   createAuthMutex,
 } from '../../src/cli.js';
@@ -188,6 +190,49 @@ describe('parseServeOptions (U3)', () => {
   it('rejects a missing host value', () => {
     expect(() => parseServeOptions(['--host'])).toThrow(/--host requires/);
     expect(() => parseServeOptions(['--host', '--port'])).toThrow(/--host requires/);
+  });
+});
+
+describe('parseStateDir (#99)', () => {
+  it('returns undefined when no flag is present', () => {
+    expect(parseStateDir([])).toBeUndefined();
+    expect(parseStateDir(['--read-only', '--port', '9000'])).toBeUndefined();
+  });
+
+  it('parses --state-dir (space and = forms)', () => {
+    expect(parseStateDir(['--state-dir', '/tmp/x'])).toBe('/tmp/x');
+    expect(parseStateDir(['--state-dir=/tmp/x'])).toBe('/tmp/x');
+  });
+
+  it('ignores unknown sibling flags', () => {
+    expect(parseStateDir(['--read-only', '--state-dir', '/tmp/x', '--port', '9000'])).toBe(
+      '/tmp/x',
+    );
+  });
+
+  it('rejects a missing value', () => {
+    expect(() => parseStateDir(['--state-dir'])).toThrow(/--state-dir requires/);
+    expect(() => parseStateDir(['--state-dir', '--port'])).toThrow(/--state-dir requires/);
+  });
+});
+
+describe('resolveStateDir (#99)', () => {
+  it('returns the flag value when present', () => {
+    expect(resolveStateDir(['--state-dir', '/tmp/flag'], {})).toBe('/tmp/flag');
+  });
+
+  it('falls back to OUTLOOK_MCP_STATE_DIR when no flag', () => {
+    expect(resolveStateDir([], { OUTLOOK_MCP_STATE_DIR: '/tmp/env' })).toBe('/tmp/env');
+  });
+
+  it('returns undefined when neither flag nor env is set', () => {
+    expect(resolveStateDir([], {})).toBeUndefined();
+  });
+
+  it('prefers the flag over the env var', () => {
+    expect(resolveStateDir(['--state-dir', '/tmp/flag'], { OUTLOOK_MCP_STATE_DIR: '/tmp/env' })).toBe(
+      '/tmp/flag',
+    );
   });
 });
 

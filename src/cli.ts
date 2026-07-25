@@ -82,6 +82,44 @@ export function parseServeOptions(args: string[]): ServeCliOptions {
   return { host, port };
 }
 
+/**
+ * Parses the `--state-dir <path>` flag (or `--state-dir=<path>`) from any argv
+ * tail, mirroring the `--host` idiom. Returns the value, or undefined when the
+ * flag is absent. A present flag with no value fails loudly. Unknown args are
+ * ignored so this can scan the same argv other parsers read.
+ */
+export function parseStateDir(args: string[]): string | undefined {
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i];
+    if (arg == null) continue;
+    if (arg === '--state-dir') {
+      const value = args[i + 1];
+      if (value == null || value.startsWith('--')) {
+        throw new Error('--state-dir requires a directory path.');
+      }
+      return value;
+    }
+    if (arg.startsWith('--state-dir=')) {
+      return arg.slice('--state-dir='.length);
+    }
+  }
+  return undefined;
+}
+
+/**
+ * Resolves the state directory with precedence `--state-dir` flag > the
+ * `OUTLOOK_MCP_STATE_DIR` env var > undefined (StateStore.open then falls back
+ * to its default `~/.mcp-office365`). Keeping resolution here means every
+ * store-open site agrees, and a set env var is honored even on the default
+ * stdio launch (which previously ignored it). `env` is injectable for testing.
+ */
+export function resolveStateDir(
+  args: string[],
+  env: NodeJS.ProcessEnv = process.env,
+): string | undefined {
+  return parseStateDir(args) ?? env.OUTLOOK_MCP_STATE_DIR;
+}
+
 function requirePort(value: string | undefined): number {
   const port = Number(value);
   if (!Number.isInteger(port) || port < 1 || port > 65535) {
