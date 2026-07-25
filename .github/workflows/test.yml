@@ -39,11 +39,11 @@ jobs:
         run: npm test
 
       - name: Generate coverage report
-        if: matrix.os == 'ubuntu-latest' && matrix.node-version == '26.x'
+        if: matrix.os == 'ubuntu-latest' && matrix.node-version == '24.x'
         run: npm run test:coverage
 
       - name: Upload coverage to artifacts
-        if: matrix.os == 'ubuntu-latest' && matrix.node-version == '26.x'
+        if: matrix.os == 'ubuntu-latest' && matrix.node-version == '24.x'
         uses: actions/upload-artifact@v4
         with:
           name: coverage-report
