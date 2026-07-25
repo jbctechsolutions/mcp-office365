@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [4.4.0] - 2026-07-25
+
 ### Added
 
 - **Resolve/send Teams chat by participant** (#97) — eliminates the N+1
@@ -649,7 +651,8 @@ for v4). Notes tools continue to work.
 
 ---
 
-[Unreleased]: https://github.com/jbctechsolutions/mcp-office365/compare/v2.4.0...HEAD
+[Unreleased]: https://github.com/jbctechsolutions/mcp-office365/compare/v4.4.0...HEAD
+[4.4.0]: https://github.com/jbctechsolutions/mcp-office365/compare/v4.3.0...v4.4.0
 [v2.5.0]: https://github.com/jbctechsolutions/mcp-office365/compare/v2.4.0...v2.5.0
 [v2.4.0]: https://github.com/jbctechsolutions/mcp-office365/compare/v2.3.0...v2.4.0
 [v2.3.0]: https://github.com/jbctechsolutions/mcp-office365/compare/v2.2.0...v2.3.0
