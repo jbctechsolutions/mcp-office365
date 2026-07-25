@@ -22,6 +22,7 @@
   "scripts": {
     "build": "tsc && node scripts/write-build-info.mjs && chmod +x dist/index.js",
     "start": "node dist/index.js",
+    "start:dev": "node dist/index.js --state-dir \"${HOME}/.mcp-office365-dev\"",
     "dev": "tsc --watch",
     "test": "vitest run",
     "test:watch": "vitest",
