@@ -39,6 +39,8 @@ import {
   parseCliCommand,
   parseServerOptions,
   parseServeOptions,
+  resolveStateDir,
+  firstPositionalArg,
   handleAuthCommand,
   createAuthMutex,
 } from './cli.js';
@@ -170,6 +172,13 @@ export interface ServerOptions {
    */
   readonly stateStore?: StateStore;
   /**
+   * Directory for the durable state store when this server opens its own (i.e.
+   * `stateStore` is omitted). Resolved from `--state-dir` / `OUTLOOK_MCP_STATE_DIR`
+   * on the stdio path; when omitted, `StateStore.open` uses its default
+   * (`~/.mcp-office365`). Ignored when `stateStore` is injected.
+   */
+  readonly stateDir?: string;
+  /**
    * Whether an unauthenticated first tool call may trigger the interactive
    * device-code flow. True (default) for stdio at a terminal. Remote/serve mode
    * sets it false: there is no device-code channel over HTTP, so an unauthed
@@ -262,7 +271,9 @@ export function createServer(options: ServerOptions = {}): Server {
   // approval survives a restart / a second window; a corrupt/locked db
   // degrades to in-memory (StateStore.open handles it). Remote mode injects a
   // shared, process-scoped store (U3); the stdio path opens its own here.
-  const stateStore = options.stateStore ?? StateStore.open();
+  const stateStore =
+    options.stateStore ??
+    StateStore.open(options.stateDir != null ? { dir: options.stateDir } : {});
   // Per-server account identity. Stdio reads the process-global memo (populated
   // by resolveAccountId after device-code sign-in). Remote (U5) pins it to this
   // request's authenticated user so approval tokens, aliases, and delta links
@@ -608,7 +619,7 @@ async function handleRevokeCommand(flags: string[]): Promise<number> {
     process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
     return 1;
   }
-  const stateDir = process.env.OUTLOOK_MCP_STATE_DIR;
+  const stateDir = resolveStateDir(flags);
   const store = StateStore.open(stateDir != null ? { dir: stateDir } : {});
   if (store.degraded) {
     // A degraded (in-memory) store can't durably record the revocation — abort
@@ -644,7 +655,7 @@ async function handleRevokeCommand(flags: string[]): Promise<number> {
       process.stdout.write(removed ? `Re-admitted ${oid}.\n` : `${oid} was not revoked.\n`);
       return 0;
     }
-    const rawOid = flags.find((f) => !f.startsWith('--'));
+    const rawOid = firstPositionalArg(flags);
     if (rawOid == null) {
       process.stderr.write('Usage: revoke <oid> | revoke --readmit <oid> | revoke --list\n');
       return 1;
@@ -675,7 +686,7 @@ async function handleRevokeCommand(flags: string[]): Promise<number> {
  *   audit --limit <n>           — cap the number of rows
  */
 function handleAuditCommand(flags: string[]): number {
-  const stateDir = process.env.OUTLOOK_MCP_STATE_DIR;
+  const stateDir = resolveStateDir(flags);
   const store = StateStore.open(stateDir != null ? { dir: stateDir } : {});
   if (store.degraded) {
     process.stderr.write(
@@ -769,10 +780,12 @@ async function main(): Promise<void> {
   let options: ServerOptions;
   try {
     const parsed = parseServerOptions(serverFlags);
+    const stateDir = resolveStateDir(serverFlags);
     options = {
       readOnly: parsed.readOnly,
       confirmMode: parsed.confirmMode,
       ...(parsed.presets != null ? { presets: parsed.presets } : {}),
+      ...(stateDir != null ? { stateDir } : {}),
     };
   } catch (error) {
     process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
@@ -784,7 +797,7 @@ async function main(): Promise<void> {
     try {
       const { host, port } = parseServeOptions(cliCommand.flags);
       const { startHttpServer } = await import('./remote/http-server.js');
-      const stateDir = process.env.OUTLOOK_MCP_STATE_DIR;
+      const stateDir = resolveStateDir(cliCommand.flags);
       const stateStore = StateStore.open(stateDir != null ? { dir: stateDir } : {});
 
       // Auth (U4) is enabled when the connector URL is configured.

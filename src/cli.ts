@@ -82,6 +82,71 @@ export function parseServeOptions(args: string[]): ServeCliOptions {
   return { host, port };
 }
 
+/**
+ * Parses the `--state-dir <path>` flag (or `--state-dir=<path>`) from any argv
+ * tail, mirroring the `--host` idiom. Returns the value, or undefined when the
+ * flag is absent. A present flag with no value fails loudly. Unknown args are
+ * ignored so this can scan the same argv other parsers read.
+ */
+export function parseStateDir(args: string[]): string | undefined {
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i];
+    if (arg == null) continue;
+    if (arg === '--state-dir') {
+      const value = args[i + 1];
+      if (value == null || value.startsWith('--')) {
+        throw new Error('--state-dir requires a directory path.');
+      }
+      return value;
+    }
+    if (arg.startsWith('--state-dir=')) {
+      const value = arg.slice('--state-dir='.length);
+      if (value === '') {
+        throw new Error('--state-dir requires a directory path.');
+      }
+      return value;
+    }
+  }
+  return undefined;
+}
+
+/** Flags that consume the following token as their value (not a positional). */
+const VALUE_FLAGS = new Set(['--state-dir']);
+
+/**
+ * Returns the first positional (non-flag) argument, skipping value-flag operands
+ * so e.g. `revoke --state-dir <dir> <oid>` returns `<oid>`, not `<dir>`. Without
+ * this, a value-flag operand that doesn't start with `--` is mistaken for the
+ * positional (e.g. an oid), which for `revoke` would act on the wrong identity.
+ */
+export function firstPositionalArg(args: string[]): string | undefined {
+  for (let i = 0; i < args.length; i++) {
+    const a = args[i];
+    if (a == null) continue;
+    if (VALUE_FLAGS.has(a)) {
+      i++; // skip this flag's operand
+      continue;
+    }
+    if (a.startsWith('--')) continue; // any other flag (incl. `--state-dir=…`)
+    return a;
+  }
+  return undefined;
+}
+
+/**
+ * Resolves the state directory with precedence `--state-dir` flag > the
+ * `OUTLOOK_MCP_STATE_DIR` env var > undefined (StateStore.open then falls back
+ * to its default `~/.mcp-office365`). Keeping resolution here means every
+ * store-open site agrees, and a set env var is honored even on the default
+ * stdio launch (which previously ignored it). `env` is injectable for testing.
+ */
+export function resolveStateDir(
+  args: string[],
+  env: NodeJS.ProcessEnv = process.env,
+): string | undefined {
+  return parseStateDir(args) ?? env.OUTLOOK_MCP_STATE_DIR;
+}
+
 function requirePort(value: string | undefined): number {
   const port = Number(value);
   if (!Number.isInteger(port) || port < 1 || port > 65535) {

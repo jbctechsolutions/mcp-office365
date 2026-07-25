@@ -69,6 +69,7 @@ tool surface:
 | `--preset <names>` | Expose only the listed domains (comma-separated). Repeatable. Default (or `all`) exposes the full surface. |
 | `--read-only` | Expose only read tools (`readOnlyHint: true`). All writes, `prepare_*`/`confirm_*`, and destructive tools are hidden; calling one returns a `READ_ONLY_MODE` error. Note: `download_*` and `get_*_photo` tools are excluded too — they write fetched bytes to local disk and so are not read-only. |
 | `--confirm <mode>` | How a destructive `prepare_*` seeks confirmation. `token` (default) returns an approval token to pass to the matching `confirm_*` tool. `elicit` asks the user inline (MCP elicitation, ~60s) and, on approval, executes immediately; if the client can't elicit, the user cancels, or it times out, it falls back to the token flow. An explicit decline cancels and invalidates the token. |
+| `--state-dir <path>` | Directory for the durable state store (`state.db`). Overrides `OUTLOOK_MCP_STATE_DIR`; both default to `~/.mcp-office365`. Point a second build (e.g. a local dev build) at its own dir so it can't migrate the shared store. See [State storage & the npx cache](#state-storage--the-npx-cache). |
 
 Valid presets: `mail`, `calendar`, `contacts`, `tasks`, `notes`, `teams`,
 `planner`, `files`, `sharepoint`, `excel`, `people`, `meetings`, `shared` (plus `all`).
@@ -709,6 +710,32 @@ These delegated permissions are requested via Microsoft Graph:
 |----------|-------------|---------|
 | `OUTLOOK_MCP_CLIENT_ID` | Azure AD app (client) ID | **(required)** |
 | `OUTLOOK_MCP_TENANT_ID` | Azure AD tenant ID (required for single-tenant apps) | `common` |
+| `OUTLOOK_MCP_STATE_DIR` | Directory for the durable state store (`state.db`). The `--state-dir` flag overrides it. | `~/.mcp-office365` |
+
+## State storage & the npx cache
+
+The server keeps a small SQLite store (`state.db`) in `~/.mcp-office365` for
+approval tokens and durable IDs. Its schema is versioned and migrated forward on
+open; a build only opens a `state.db` at a schema it understands, and degrades to
+an in-memory store (durability lost for the run) otherwise.
+
+**Running more than one build?** A newer/dev build can migrate the shared
+`state.db` past what a released build understands, and — separately — a native
+module (`better-sqlite3`) compiled under one Node.js version can't load under
+another (an ABI mismatch crashes startup). Two guardrails:
+
+- **Give each build its own state dir.** Point a dev build elsewhere with
+  `--state-dir` or `OUTLOOK_MCP_STATE_DIR` (the `start:dev` script uses
+  `~/.mcp-office365-dev`) so it never migrates an installed build's store.
+- **Prefer a direct-path install over `npx` for a pinned setup.** `npx` reuses a
+  shared cache (`~/.npm/_npx`) whose native binding is compiled under whatever
+  Node.js last populated it — launch under a different Node.js and it fails to
+  load. Installing into a fixed location and pointing your client at
+  `.../node_modules/@jbctechsolutions/mcp-office365/dist/index.js` (run under the
+  Node.js it was installed with) avoids the shared-cache trap. If you do hit an
+  ABI error, the message names the offending binding and the fix
+  (`npm rebuild better-sqlite3`, clear `~/.npm/_npx`, or match the Node.js
+  version).
 
 ## Contributing
 

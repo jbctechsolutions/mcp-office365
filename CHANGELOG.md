@@ -16,6 +16,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - new `find_chat` tool matches by email/UPN (exact) or display name
     (case-insensitive; returns all candidates when ambiguous)
   - `list_chats` gains `expand_members` to inline member identities in one call
+- **`--state-dir <path>` flag** (#99) to set the durable state-store directory,
+  resolving `--state-dir` > `OUTLOOK_MCP_STATE_DIR` > default `~/.mcp-office365`.
+  It is now honored at every store-open path (stdio, `serve`, `revoke`, `audit`) —
+  the default stdio launch previously ignored even the env var. A `start:dev`
+  script launches against an isolated `~/.mcp-office365-dev` so a dev build can't
+  migrate an installed build's `state.db`.
+
+### Changed
+
+- **Pinned the toolchain to Node 24 LTS** (#99), reversing the Node-26 pin from
+  #88 for the dev/release/integration legs. Publishing/building under a non-LTS
+  (Current) Node ships a native ABI that LTS consumers can't load; the CI test
+  matrix still exercises 20/22/24/26.
+
+### Fixed
+
+- **Clearer state-store failure messages** (#99): a native-load (ABI) failure now
+  names the offending binding path alongside the remediation, and a forward-schema
+  open (a `state.db` migrated by a newer build) degrades with an actionable message
+  pointing at `--state-dir` isolation instead of a bare "unavailable" warning.
 
 ## [4.3.0] - 2026-07-13
 
