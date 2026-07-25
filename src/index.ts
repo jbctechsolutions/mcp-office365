@@ -40,6 +40,7 @@ import {
   parseServerOptions,
   parseServeOptions,
   resolveStateDir,
+  firstPositionalArg,
   handleAuthCommand,
   createAuthMutex,
 } from './cli.js';
@@ -654,7 +655,7 @@ async function handleRevokeCommand(flags: string[]): Promise<number> {
       process.stdout.write(removed ? `Re-admitted ${oid}.\n` : `${oid} was not revoked.\n`);
       return 0;
     }
-    const rawOid = flags.find((f) => !f.startsWith('--'));
+    const rawOid = firstPositionalArg(flags);
     if (rawOid == null) {
       process.stderr.write('Usage: revoke <oid> | revoke --readmit <oid> | revoke --list\n');
       return 1;

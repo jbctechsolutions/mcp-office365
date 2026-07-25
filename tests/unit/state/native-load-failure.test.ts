@@ -77,6 +77,27 @@ describe('StateStore.open with an unloadable native module', () => {
     expect((thrown as Error).message).toContain('Offending binding: /x/better_sqlite3.node');
   });
 
+  it('preserves spaces in the reported binding path', async () => {
+    const { StateStore } = await import('../../../src/state/store.js');
+    constructorError = Object.assign(
+      new Error(
+        "The module '/Users/me/My App/node_modules/better-sqlite3/build/Release/better_sqlite3.node' " +
+          'was compiled against a different Node.js version using NODE_MODULE_VERSION 127.',
+      ),
+      { code: 'ERR_DLOPEN_FAILED' },
+    );
+
+    let thrown: unknown;
+    try {
+      StateStore.open({ dir, legacyDir, warn: () => {} });
+    } catch (e) {
+      thrown = e;
+    }
+    expect((thrown as Error).message).toContain(
+      'Offending binding: /Users/me/My App/node_modules/better-sqlite3/build/Release/better_sqlite3.node',
+    );
+  });
+
   it('names the running Node version and preserves the original error as cause', async () => {
     const { StateStore } = await import('../../../src/state/store.js');
 

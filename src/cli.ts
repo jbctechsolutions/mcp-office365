@@ -100,8 +100,35 @@ export function parseStateDir(args: string[]): string | undefined {
       return value;
     }
     if (arg.startsWith('--state-dir=')) {
-      return arg.slice('--state-dir='.length);
+      const value = arg.slice('--state-dir='.length);
+      if (value === '') {
+        throw new Error('--state-dir requires a directory path.');
+      }
+      return value;
     }
+  }
+  return undefined;
+}
+
+/** Flags that consume the following token as their value (not a positional). */
+const VALUE_FLAGS = new Set(['--state-dir']);
+
+/**
+ * Returns the first positional (non-flag) argument, skipping value-flag operands
+ * so e.g. `revoke --state-dir <dir> <oid>` returns `<oid>`, not `<dir>`. Without
+ * this, a value-flag operand that doesn't start with `--` is mistaken for the
+ * positional (e.g. an oid), which for `revoke` would act on the wrong identity.
+ */
+export function firstPositionalArg(args: string[]): string | undefined {
+  for (let i = 0; i < args.length; i++) {
+    const a = args[i];
+    if (a == null) continue;
+    if (VALUE_FLAGS.has(a)) {
+      i++; // skip this flag's operand
+      continue;
+    }
+    if (a.startsWith('--')) continue; // any other flag (incl. `--state-dir=…`)
+    return a;
   }
   return undefined;
 }

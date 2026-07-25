@@ -35,6 +35,7 @@ import {
   parseServeOptions,
   parseStateDir,
   resolveStateDir,
+  firstPositionalArg,
   VALID_PRESETS,
   createAuthMutex,
 } from '../../src/cli.js';
@@ -213,6 +214,28 @@ describe('parseStateDir (#99)', () => {
   it('rejects a missing value', () => {
     expect(() => parseStateDir(['--state-dir'])).toThrow(/--state-dir requires/);
     expect(() => parseStateDir(['--state-dir', '--port'])).toThrow(/--state-dir requires/);
+  });
+
+  it('rejects an empty equals-form value', () => {
+    expect(() => parseStateDir(['--state-dir='])).toThrow(/--state-dir requires/);
+  });
+});
+
+describe('firstPositionalArg (#99)', () => {
+  it('returns the first non-flag argument', () => {
+    expect(firstPositionalArg(['oid-123'])).toBe('oid-123');
+    expect(firstPositionalArg(['--list', 'oid-123'])).toBe('oid-123');
+  });
+
+  it('does not treat a --state-dir operand as the positional', () => {
+    expect(firstPositionalArg(['--state-dir', '/srv/mcp', 'oid-123'])).toBe('oid-123');
+    expect(firstPositionalArg(['--state-dir=/srv/mcp', 'oid-123'])).toBe('oid-123');
+  });
+
+  it('returns undefined when there is no positional', () => {
+    expect(firstPositionalArg([])).toBeUndefined();
+    expect(firstPositionalArg(['--list'])).toBeUndefined();
+    expect(firstPositionalArg(['--state-dir', '/srv/mcp'])).toBeUndefined();
   });
 });
 

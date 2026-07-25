@@ -692,10 +692,14 @@ function isForwardSchemaFailure(error: unknown): boolean {
  * so the remediation can name it exactly. Handles both the dlopen form
  * (`The module '/path/better_sqlite3.node' was compiled…`) and the `bindings`
  * "Could not locate the bindings file" form. Returns undefined when no path is
- * present in the message.
+ * present in the message. Prefers a quoted path (the dlopen form) so paths
+ * containing spaces (e.g. macOS `/Users/me/My App/...`) aren't truncated, then
+ * falls back to the `bindings` arrow-listing form.
  */
 function extractBindingPath(message: string): string | undefined {
-  return /([^\s'"]+\.node)/.exec(message)?.[1];
+  const quoted = /['"]([^'"]+\.node)['"]/.exec(message)?.[1];
+  if (quoted != null) return quoted;
+  return /(?:^|\n)\s*(?:→|->)\s*([^\r\n]+?\.node)\s*$/m.exec(message)?.[1];
 }
 
 function configurePragmas(db: DB): void {
