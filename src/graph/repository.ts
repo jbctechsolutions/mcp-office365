@@ -2847,7 +2847,7 @@ export class GraphRepository implements IRepository {
       startDate?: string; dueDate?: string;
       appliedCategories?: Record<string, boolean>; orderHint?: string;
       percentComplete?: number; description?: string;
-      checklist?: Record<string, object>;
+      checklist?: Record<string, object | null>;
     } = {},
   ): Promise<{ taskId: string; detailsError?: string }> {
     const graphPlanId = await this.resolvePlanId(planId);
@@ -2871,7 +2871,7 @@ export class GraphRepository implements IRepository {
     // failure must not fail the create (the task exists); the raw reason is
     // returned for the tool layer to compose caller-facing guidance.
     if (options.description != null || options.checklist != null) {
-      const detailsUpdates: { description?: string; checklist?: Record<string, object> } = {};
+      const detailsUpdates: { description?: string; checklist?: Record<string, object | null> } = {};
       if (options.description != null) detailsUpdates.description = options.description;
       if (options.checklist != null) detailsUpdates.checklist = options.checklist;
       try {
@@ -3024,7 +3024,7 @@ export class GraphRepository implements IRepository {
     taskId: string,
     updates: {
       description?: string;
-      checklist?: Record<string, object>;
+      checklist?: Record<string, object | null>;
       references?: Record<string, object>;
     },
   ): Promise<void> {

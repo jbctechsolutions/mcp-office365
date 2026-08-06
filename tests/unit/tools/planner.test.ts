@@ -554,6 +554,13 @@ describe('PlannerTools', () => {
         plan_id: 'pl_a1', title: 'T', percent_complete: 101,
       })).toThrow();
     });
+
+    it('checklist accepts null values (removal semantics promised by the description)', () => {
+      const parsed = CreatePlannerTaskInput.parse({
+        plan_id: 'pl_a1', title: 'T', checklist: { 'guid-1': null },
+      });
+      expect(parsed.checklist).toEqual({ 'guid-1': null });
+    });
   });
 
   describe('CreatePlannerTaskInput applied_categories validation', () => {

@@ -192,7 +192,7 @@ The original remote-connector requirements (R7/A2 in `docs/brainstorms/2026-07-1
 - `update_plan_details` accepts `category_descriptions` only (record `category1`–`25` → string|null, null resets to default).
 - `update_plan_sharing` accepts `shared_with` (record user-GUID → boolean; `true` adds, `false` removes). Its description must state that removal may revoke a user's plan access and that group members retain access via group membership. Kept out of the remote pinned surface (see Assumptions).
 - Both update tools converge on the same client PATCH (`updatePlanDetails`); the split exists purely at the tool/entitlement layer.
-- Annotations: get = read-only; both updates = non-destructive write. All `presets: ['planner']`, `backends: ['graph']`, description suffix `(Graph API)`.
+- Annotations: get = read-only; `update_plan_details` = non-destructive write; `update_plan_sharing` = `destructive: true`/`destructiveHint: true` (access revocation, per code-review finding — standalone destructive follows the `delete_event` precedent). All `presets: ['planner']`, `backends: ['graph']`, description suffix `(Graph API)`.
 
 **Patterns to follow:**
 - `getPlannerTaskDetailsAsync`/`updatePlannerTaskDetailsAsync` in `src/graph/repository.ts` (~2836/2915).

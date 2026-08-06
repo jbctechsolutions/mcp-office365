@@ -39,7 +39,7 @@ const AppliedCategories = z.record(CategoryKey, z.boolean())
 const OrderHint = z.string().min(1)
   .describe('Planner order hint: "<previous> <next>!" positions between neighbors (empty string for a missing neighbor); " !" appends. Never resend a service-returned hint verbatim (Graph 400).');
 
-const ChecklistItems = z.record(z.string(), z.object({}).passthrough())
+const ChecklistItems = z.record(z.string(), z.object({}).passthrough().nullable())
   .describe('Checklist items. Keys are GUIDs; values need { "@odata.type": "#microsoft.graph.plannerChecklistItem", "title": string, "isChecked": boolean }. Update semantics merge: omitted keys are preserved, set a key to null to remove it.');
 
 /** Entra user object-id (GUID) — the only key shape Graph accepts in sharedWith. */
@@ -275,7 +275,7 @@ export interface IPlannerRepository {
     startDate?: string; dueDate?: string;
     appliedCategories?: Record<string, boolean>; orderHint?: string;
     percentComplete?: number; description?: string;
-    checklist?: Record<string, object>;
+    checklist?: Record<string, object | null>;
   }): Promise<{ taskId: string; detailsError?: string }>;
   updatePlannerTaskAsync(taskId: string, updates: {
     title?: string; bucketId?: string; percentComplete?: number;
@@ -289,7 +289,7 @@ export interface IPlannerRepository {
     references: Record<string, unknown>; etag: string;
   }>;
   updatePlannerTaskDetailsAsync(taskId: string, updates: {
-    description?: string; checklist?: Record<string, object>;
+    description?: string; checklist?: Record<string, object | null>;
     references?: Record<string, object>;
   }): Promise<void>;
   listPlannerTaskMessagesAsync(taskId: string, skipToken?: string): Promise<{
@@ -784,7 +784,7 @@ export class PlannerTools {
   }> {
     const updates: {
       description?: string;
-      checklist?: Record<string, object>;
+      checklist?: Record<string, object | null>;
       references?: Record<string, object>;
     } = {};
     if (params.description != null) updates.description = params.description;
