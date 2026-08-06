@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [4.5.0] - 2026-08-06
+
+### Added
+
+- **Full Planner support** (#102) — 255 tools (Planner 28), closing the
+  2026-08-06 Planner audit gaps:
+  - Labels: `applied_categories` (category1..category25) on task create/update
+    and all task reads; label names via new `get_plan_details` /
+    `update_plan_details`
+  - Plan sharing: new `update_plan_sharing` (sharedWith GUIDs; destructive,
+    excluded from the remote default surface)
+  - Plan deletion: two-phase `prepare_delete_plan` / `confirm_delete_plan`
+    (cascades to buckets and tasks)
+  - Ordering: writable `order_hint` on bucket/task create+update; current hints
+    now returned by both task list reads
+  - Creation ergonomics: `percent_complete`, `description`, `checklist` at
+    `create_planner_task` with an explicit `details_warning` recovery contract
+    (auth failures rethrow)
+
+### Fixed
+
+- `update_planner_task_details` description no longer claims a manual ETag
+  prerequisite; README ETag section now describes the actual
+  fetch-fresh-before-write behavior
+
 ## [4.4.0] - 2026-07-25
 
 ### Added
