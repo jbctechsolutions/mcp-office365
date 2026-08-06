@@ -39,7 +39,14 @@ const AppliedCategories = z.record(CategoryKey, z.boolean())
 const OrderHint = z.string().min(1)
   .describe('Planner order hint: "<previous> <next>!" positions between neighbors (empty string for a missing neighbor); " !" appends. Never resend a service-returned hint verbatim (Graph 400).');
 
-const ChecklistItems = z.record(z.string(), z.object({}).passthrough());
+const ChecklistItems = z.record(z.string(), z.object({}).passthrough())
+  .describe('Checklist items. Keys are GUIDs; values need { "@odata.type": "#microsoft.graph.plannerChecklistItem", "title": string, "isChecked": boolean }. Update semantics merge: omitted keys are preserved, set a key to null to remove it.');
+
+/** Entra user object-id (GUID) — the only key shape Graph accepts in sharedWith. */
+const UserGuid = z.string().regex(
+  /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/,
+  'Keys must be Entra user GUIDs',
+);
 
 export const ListPlansInput = z.strictObject({});
 
@@ -77,7 +84,7 @@ export const UpdatePlanDetailsInput = z.strictObject({
 
 export const UpdatePlanSharingInput = z.strictObject({
   plan_id: Id.plan,
-  shared_with: z.record(z.string().min(1), z.boolean())
+  shared_with: z.record(UserGuid, z.boolean())
     .describe('Plan sharing map. Keys are Entra user GUIDs; true shares the plan with the user, false removes them — removal may revoke their plan access. Members of the owning M365 group keep access via group membership.'),
 });
 
@@ -249,13 +256,13 @@ export interface IPlannerRepository {
     id: string; title: string; bucketId: string | null; assignees: string[];
     percentComplete: number; priority: number; startDateTime: string;
     dueDateTime: string; createdDateTime: string;
-    appliedCategories: Record<string, boolean>;
+    appliedCategories: Record<string, boolean>; orderHint: string;
   }>>;
   listMyPlannerTasksAsync(): Promise<Array<{
     id: string; title: string; planId: string; bucketId: string | null;
     assignees: string[]; percentComplete: number; priority: number;
     startDateTime: string; dueDateTime: string; createdDateTime: string;
-    appliedCategories: Record<string, boolean>;
+    appliedCategories: Record<string, boolean>; orderHint: string;
   }>>;
   getPlannerTaskAsync(taskId: string): Promise<{
     id: string; title: string; bucketId: string | null; assignees: string[];
@@ -444,9 +451,15 @@ export class PlannerTools {
   async updatePlanDetails(params: UpdatePlanDetailsParams): Promise<{
     content: Array<{ type: 'text'; text: string }>;
   }> {
-    const updates: { categoryDescriptions?: Record<string, string | null> } = {};
-    if (params.category_descriptions != null) updates.categoryDescriptions = params.category_descriptions;
-    await this.repo.updatePlanDetailsAsync(params.plan_id, updates);
+    if (params.category_descriptions == null || Object.keys(params.category_descriptions).length === 0) {
+      return {
+        content: [{
+          type: 'text' as const,
+          text: JSON.stringify({ success: true, message: 'No updates provided' }, null, 2),
+        }],
+      };
+    }
+    await this.repo.updatePlanDetailsAsync(params.plan_id, { categoryDescriptions: params.category_descriptions });
     return {
       content: [{
         type: 'text' as const,
@@ -458,6 +471,14 @@ export class PlannerTools {
   async updatePlanSharing(params: UpdatePlanSharingParams): Promise<{
     content: Array<{ type: 'text'; text: string }>;
   }> {
+    if (Object.keys(params.shared_with).length === 0) {
+      return {
+        content: [{
+          type: 'text' as const,
+          text: JSON.stringify({ success: true, message: 'No updates provided' }, null, 2),
+        }],
+      };
+    }
     await this.repo.updatePlanSharingAsync(params.plan_id, params.shared_with);
     return {
       content: [{
@@ -1003,8 +1024,8 @@ export function plannerToolDefinitions(): ToolDefinition[] {
       name: 'update_plan_sharing',
       description: 'Share or unshare a Planner plan (sharedWith user GUIDs; true adds, false removes — removal may revoke plan access; owning-group members keep access via membership) (Graph API)',
       input: UpdatePlanSharingInput,
-      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
-      destructive: false,
+      annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+      destructive: true,
       presets: ['planner'],
       backends: ['graph'],
       handler: (ctx, params) => tools(ctx).updatePlanSharing(params),
@@ -1021,7 +1042,7 @@ export function plannerToolDefinitions(): ToolDefinition[] {
     }),
     defineTool({
       name: 'create_bucket',
-      description: 'Create a new bucket in a Planner plan (Graph API)',
+      description: 'Create a new bucket in a Planner plan, optionally positioned via order_hint (Graph API)',
       input: CreateBucketInput,
       annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
       destructive: false,
@@ -1031,7 +1052,7 @@ export function plannerToolDefinitions(): ToolDefinition[] {
     }),
     defineTool({
       name: 'update_bucket',
-      description: 'Update a Planner bucket name (Graph API)',
+      description: 'Update a Planner bucket name and/or board position (order_hint) (Graph API)',
       input: UpdateBucketInput,
       annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
       destructive: false,
@@ -1143,7 +1164,7 @@ export function plannerToolDefinitions(): ToolDefinition[] {
     }),
     defineTool({
       name: 'update_planner_task_details',
-      description: 'Update details for a Planner task (description, checklist, references). Requires get_planner_task_details first for ETag. (Graph API)',
+      description: 'Update details for a Planner task (description, checklist, references). (Graph API)',
       input: UpdatePlannerTaskDetailsInput,
       annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
       destructive: false,

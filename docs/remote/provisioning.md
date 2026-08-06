@@ -45,7 +45,7 @@ portal edit.
 ## Step 1 — Grant admin consent for the API app's Graph scopes
 
 The API app requests delegated Microsoft Graph scopes (mail, calendar,
-files/SharePoint, Planner-read) but they are **not yet consented**. Grant
+files/SharePoint, Planner read/write via `Tasks.ReadWrite`) but they are **not yet consented**. Grant
 tenant-wide admin consent so pilot users are not each prompted (and so
 `Sites.ReadWrite.All`, which requires admin consent, works).
 

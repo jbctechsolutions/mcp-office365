@@ -5704,13 +5704,14 @@ describe('graph/repository', () => {
         expect(result.detailsError).toContain('details not ready');
       });
 
-      it('updatePlanDetailsAsync with empty updates makes no Graph calls', async () => {
+      it('createPlannerTaskAsync rethrows auth failures from the details follow-up instead of degrading to a warning', async () => {
         const planTok = await planToken('graph-plan-1');
+        mockClient.createPlannerTask.mockResolvedValue({ id: 'graph-task-new', '@odata.etag': 'W/"etag"' });
+        mockClient.getPlannerTaskDetails.mockRejectedValue({ statusCode: 401, message: 'InvalidAuthenticationToken' });
 
-        await repository.updatePlanDetailsAsync(planTok, {});
-
-        expect(mockClient.getPlanDetails).not.toHaveBeenCalled();
-        expect(mockClient.updatePlanDetails).not.toHaveBeenCalled();
+        await expect(
+          repository.createPlannerTaskAsync(planTok, 'Partial', { description: 'x' }),
+        ).rejects.toMatchObject({ statusCode: 401 });
       });
 
       it('createPlannerTaskAsync passes appliedCategories in the POST body', async () => {
@@ -5783,17 +5784,29 @@ describe('graph/repository', () => {
         expect(bare.appliedCategories).toEqual({});
       });
 
-      it('listPlannerTasksAsync surfaces appliedCategories per task', async () => {
+      it('listPlannerTasksAsync surfaces appliedCategories and orderHint per task', async () => {
         const planTok = await planToken('graph-plan-1');
         mockClient.listPlannerTasks.mockResolvedValue([
-          { id: 'graph-task-1', title: 'A', appliedCategories: { category1: true } },
+          { id: 'graph-task-1', title: 'A', appliedCategories: { category1: true }, orderHint: '8585269' },
           { id: 'graph-task-2', title: 'B' },
         ]);
 
         const tasks = await repository.listPlannerTasksAsync(planTok);
 
         expect(tasks[0].appliedCategories).toEqual({ category1: true });
+        expect(tasks[0].orderHint).toBe('8585269');
         expect(tasks[1].appliedCategories).toEqual({});
+        expect(tasks[1].orderHint).toBe('');
+      });
+
+      it('listMyPlannerTasksAsync surfaces orderHint per task', async () => {
+        mockClient.listMyPlannerTasks.mockResolvedValue([
+          { id: 'graph-task-1', title: 'Mine', planId: 'graph-plan-1', orderHint: '8585270' },
+        ]);
+
+        const tasks = await repository.listMyPlannerTasksAsync();
+
+        expect(tasks[0].orderHint).toBe('8585270');
       });
 
       it('updatePlannerTaskAsync fetches a fresh etag immediately before the write (U5b-5)', async () => {

@@ -2661,7 +2661,8 @@ export class GraphRepository implements IRepository {
    * the DETAILS resource's own fresh etag immediately before the write — never
    * the plan's etag). The labels-vs-sharing split exists only at the tool layer
    * (remote entitlements expose labels without sharing writes); both tools
-   * converge here. Empty updates short-circuit before any Graph I/O.
+   * converge here. (No-op guarding lives at the tool layer; this method keeps the
+   * always-fetch/always-write shape of its sibling update methods.)
    */
   async updatePlanDetailsAsync(
     planId: string,
@@ -2673,7 +2674,6 @@ export class GraphRepository implements IRepository {
     const graphUpdates: Record<string, unknown> = {};
     if (updates.categoryDescriptions != null) graphUpdates['categoryDescriptions'] = updates.categoryDescriptions;
     if (updates.sharedWith != null) graphUpdates['sharedWith'] = updates.sharedWith;
-    if (Object.keys(graphUpdates).length === 0) return;
     const graphPlanId = await this.resolvePlanId(planId);
     await this.withFreshEtag(
       async () => this.extractEtag(await this.client.getPlanDetails(graphPlanId)),
@@ -2754,7 +2754,7 @@ export class GraphRepository implements IRepository {
     id: string; title: string; bucketId: string | null; assignees: string[];
     percentComplete: number; priority: number; startDateTime: string;
     dueDateTime: string; createdDateTime: string;
-    appliedCategories: Record<string, boolean>;
+    appliedCategories: Record<string, boolean>; orderHint: string;
   }>> {
     const graphPlanId = await this.resolvePlanId(planId);
     const tasks = await this.client.listPlannerTasks(graphPlanId);
@@ -2771,6 +2771,7 @@ export class GraphRepository implements IRepository {
         dueDateTime: task.dueDateTime ?? '',
         createdDateTime: task.createdDateTime ?? '',
         appliedCategories: (task.appliedCategories ?? {}) as Record<string, boolean>,
+        orderHint: task.orderHint ?? '',
       };
     });
   }
@@ -2785,7 +2786,7 @@ export class GraphRepository implements IRepository {
     id: string; title: string; planId: string; bucketId: string | null;
     assignees: string[]; percentComplete: number; priority: number;
     startDateTime: string; dueDateTime: string; createdDateTime: string;
-    appliedCategories: Record<string, boolean>;
+    appliedCategories: Record<string, boolean>; orderHint: string;
   }>> {
     const tasks = await this.client.listMyPlannerTasks();
     return tasks.map((task) => {
@@ -2802,6 +2803,7 @@ export class GraphRepository implements IRepository {
         dueDateTime: task.dueDateTime ?? '',
         createdDateTime: task.createdDateTime ?? '',
         appliedCategories: (task.appliedCategories ?? {}) as Record<string, boolean>,
+        orderHint: task.orderHint ?? '',
       };
     });
   }
@@ -2875,6 +2877,11 @@ export class GraphRepository implements IRepository {
       try {
         await this.updatePlannerTaskDetailsAsync(taskId, detailsUpdates);
       } catch (e) {
+        // Session-wide auth failures must fail loudly — a "retry the details"
+        // warning would mislead when every subsequent call will also 401.
+        const status = (e as { statusCode?: unknown }).statusCode;
+        const code = (e as { code?: unknown }).code;
+        if (status === 401 || code === 'AUTH_EXPIRED') throw e;
         return { taskId, detailsError: e instanceof Error ? e.message : String(e) };
       }
     }

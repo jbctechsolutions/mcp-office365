@@ -230,6 +230,15 @@ describe('PlannerTools', () => {
       })).toThrow();
     });
 
+    it('returns a distinct no-op message without any repository call when nothing to update', async () => {
+      const noField = await tools.updatePlanDetails({ plan_id: 'pl_a1' });
+      const emptyMap = await tools.updatePlanDetails({ plan_id: 'pl_a1', category_descriptions: {} });
+
+      expect(repo.updatePlanDetailsAsync).not.toHaveBeenCalled();
+      expect(JSON.parse(noField.content[0].text).message).toBe('No updates provided');
+      expect(JSON.parse(emptyMap.content[0].text).message).toBe('No updates provided');
+    });
+
     it('schema rejects category26 label keys', () => {
       expect(() => UpdatePlanDetailsInput.parse({
         plan_id: 'pl_a1', category_descriptions: { category26: 'Nope' },
@@ -255,6 +264,23 @@ describe('PlannerTools', () => {
 
     it('schema requires shared_with', () => {
       expect(() => UpdatePlanSharingInput.parse({ plan_id: 'pl_a1' })).toThrow();
+    });
+
+    it('schema rejects non-GUID shared_with keys and accepts GUIDs', () => {
+      expect(() => UpdatePlanSharingInput.parse({
+        plan_id: 'pl_a1', shared_with: { 'bob@contoso.com': true },
+      })).toThrow();
+      const ok = UpdatePlanSharingInput.parse({
+        plan_id: 'pl_a1', shared_with: { 'fae7c692-c24a-4ec2-8f95-d5ca6d6b79de': true },
+      });
+      expect(ok.shared_with).toEqual({ 'fae7c692-c24a-4ec2-8f95-d5ca6d6b79de': true });
+    });
+
+    it('returns a distinct no-op message without any repository call for an empty shared_with map', async () => {
+      const result = await tools.updatePlanSharing({ plan_id: 'pl_a1', shared_with: {} });
+
+      expect(repo.updatePlanSharingAsync).not.toHaveBeenCalled();
+      expect(JSON.parse(result.content[0].text).message).toBe('No updates provided');
     });
   });
 
