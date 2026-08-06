@@ -2775,8 +2775,10 @@ export class GraphRepository implements IRepository {
       bucketId?: string; assignments?: Record<string, object>; priority?: number;
       startDate?: string; dueDate?: string;
       appliedCategories?: Record<string, boolean>; orderHint?: string;
+      percentComplete?: number; description?: string;
+      checklist?: Record<string, object>;
     } = {},
-  ): Promise<string> {
+  ): Promise<{ taskId: string; detailsWarning?: string }> {
     const graphPlanId = await this.resolvePlanId(planId);
     const body: Record<string, unknown> = { planId: graphPlanId, title };
     if (options.bucketId != null) {
@@ -2788,8 +2790,35 @@ export class GraphRepository implements IRepository {
     if (options.dueDate != null) body.dueDateTime = options.dueDate;
     if (options.appliedCategories != null) body.appliedCategories = options.appliedCategories;
     if (options.orderHint != null) body.orderHint = options.orderHint;
+    if (options.percentComplete != null) body.percentComplete = options.percentComplete;
     const task = await this.client.createPlannerTask(body);
-    return this.mintAlias('plannerTask', task.id!);
+    const gTaskId = task.id!;
+    const taskId = this.mintAlias('plannerTask', gTaskId);
+
+    // Description/checklist live on the auto-created details sub-resource and
+    // cannot be set on POST /planner/tasks — apply them via a follow-up PATCH
+    // against the details resource's OWN etag. A details failure must not fail
+    // the create (the task exists); it degrades to an explicit warning.
+    if (options.description != null || options.checklist != null) {
+      const detailsUpdates: Record<string, unknown> = {};
+      if (options.description != null) detailsUpdates.description = options.description;
+      if (options.checklist != null) detailsUpdates.checklist = options.checklist;
+      try {
+        await this.withFreshEtag(
+          async () => this.extractEtag(await this.client.getPlannerTaskDetails(gTaskId)),
+          (etag) => this.client.updatePlannerTaskDetails(gTaskId, detailsUpdates, etag),
+        );
+      } catch (e) {
+        const reason = e instanceof Error ? e.message : String(e);
+        return {
+          taskId,
+          detailsWarning:
+            `Task created, but the description/checklist could not be applied (${reason}). ` +
+            `Retry via update_planner_task_details with task_id ${taskId}.`,
+        };
+      }
+    }
+    return { taskId };
   }
 
   /**

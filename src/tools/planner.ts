@@ -109,6 +109,9 @@ export const CreatePlannerTaskInput = z.strictObject({
   due_date: z.string().optional().describe('Due date in ISO format'),
   applied_categories: AppliedCategories.optional(),
   order_hint: OrderHint.optional(),
+  percent_complete: z.number().int().min(0).max(100).optional().describe('Percent complete (0-100)'),
+  description: z.string().optional().describe('Task description/notes — applied via a follow-up details write after creation'),
+  checklist: z.record(z.string(), z.object({}).passthrough()).optional().describe('Checklist items, applied via a follow-up details write. Keys are GUIDs, values have title (string) and isChecked (boolean)'),
 });
 
 export const UpdatePlannerTaskInput = z.strictObject({
@@ -231,7 +234,9 @@ export interface IPlannerRepository {
     bucketId?: string; assignments?: Record<string, object>; priority?: number;
     startDate?: string; dueDate?: string;
     appliedCategories?: Record<string, boolean>; orderHint?: string;
-  }): Promise<string>;
+    percentComplete?: number; description?: string;
+    checklist?: Record<string, object>;
+  }): Promise<{ taskId: string; detailsWarning?: string }>;
   updatePlannerTaskAsync(taskId: string, updates: {
     title?: string; bucketId?: string; percentComplete?: number;
     priority?: number; startDate?: string; dueDate?: string;
@@ -481,11 +486,20 @@ export class PlannerTools {
     if (params.due_date != null) options.dueDate = params.due_date;
     if (params.applied_categories != null) options.appliedCategories = params.applied_categories;
     if (params.order_hint != null) options.orderHint = params.order_hint;
-    const taskId = await this.repo.createPlannerTaskAsync(params.plan_id, params.title, options);
+    if (params.percent_complete != null) options.percentComplete = params.percent_complete;
+    if (params.description != null) options.description = params.description;
+    if (params.checklist != null) options.checklist = params.checklist;
+    const { taskId, detailsWarning } = await this.repo.createPlannerTaskAsync(params.plan_id, params.title, options);
     return {
       content: [{
         type: 'text' as const,
-        text: JSON.stringify({ success: true, task_id: taskId, message: 'Planner task created', next: nextActionFor('plannerTask') ?? undefined }, null, 2),
+        text: JSON.stringify({
+          success: true,
+          task_id: taskId,
+          message: 'Planner task created',
+          details_warning: detailsWarning ?? undefined,
+          next: nextActionFor('plannerTask') ?? undefined,
+        }, null, 2),
       }],
     };
   }

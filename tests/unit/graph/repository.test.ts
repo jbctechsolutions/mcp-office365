@@ -5521,12 +5521,79 @@ describe('graph/repository', () => {
         const bucketTok = await bucketToken(planTok, 'graph-bucket-1');
         mockClient.createPlannerTask.mockResolvedValue({ id: 'graph-task-new', '@odata.etag': 'W/"etag"' });
 
-        const taskTok = await repository.createPlannerTaskAsync(planTok, 'New Task', { bucketId: bucketTok });
+        const { taskId: taskTok } = await repository.createPlannerTaskAsync(planTok, 'New Task', { bucketId: bucketTok });
 
         expect(taskTok).toMatch(/^pt_/);
         expect(mockClient.createPlannerTask).toHaveBeenCalledWith({
           planId: 'graph-plan-1', title: 'New Task', bucketId: 'graph-bucket-1',
         });
+      });
+
+      it('createPlannerTaskAsync with title only makes exactly one Graph call', async () => {
+        const planTok = await planToken('graph-plan-1');
+        mockClient.createPlannerTask.mockResolvedValue({ id: 'graph-task-new', '@odata.etag': 'W/"etag"' });
+
+        const result = await repository.createPlannerTaskAsync(planTok, 'Bare');
+
+        expect(result.detailsWarning).toBeUndefined();
+        expect(mockClient.createPlannerTask).toHaveBeenCalledTimes(1);
+        expect(mockClient.getPlannerTaskDetails).not.toHaveBeenCalled();
+        expect(mockClient.updatePlannerTaskDetails).not.toHaveBeenCalled();
+      });
+
+      it('createPlannerTaskAsync passes percentComplete in the POST body', async () => {
+        const planTok = await planToken('graph-plan-1');
+        mockClient.createPlannerTask.mockResolvedValue({ id: 'graph-task-new', '@odata.etag': 'W/"etag"' });
+
+        await repository.createPlannerTaskAsync(planTok, 'Half Done', { percentComplete: 50 });
+
+        expect(mockClient.createPlannerTask).toHaveBeenCalledWith({
+          planId: 'graph-plan-1', title: 'Half Done', percentComplete: 50,
+        });
+        expect(mockClient.getPlannerTaskDetails).not.toHaveBeenCalled();
+      });
+
+      it('createPlannerTaskAsync with a description creates, then PATCHes details with the details etag', async () => {
+        const planTok = await planToken('graph-plan-1');
+        const callOrder: string[] = [];
+        mockClient.createPlannerTask.mockImplementation(async () => {
+          callOrder.push('create');
+          return { id: 'graph-task-new', '@odata.etag': 'W/"task-etag"' };
+        });
+        mockClient.getPlannerTaskDetails.mockImplementation(async () => {
+          callOrder.push('get-details');
+          return { description: '', '@odata.etag': 'W/"details-etag"' };
+        });
+        mockClient.updatePlannerTaskDetails.mockImplementation(async () => {
+          callOrder.push('patch-details');
+          return { '@odata.etag': 'W/"details-etag2"' };
+        });
+
+        const result = await repository.createPlannerTaskAsync(planTok, 'Documented', {
+          description: 'Notes', checklist: { 'guid-1': { title: 'Step', isChecked: false } },
+        });
+
+        expect(result.taskId).toMatch(/^pt_/);
+        expect(result.detailsWarning).toBeUndefined();
+        expect(callOrder).toEqual(['create', 'get-details', 'patch-details']);
+        expect(mockClient.updatePlannerTaskDetails).toHaveBeenCalledWith(
+          'graph-task-new',
+          { description: 'Notes', checklist: { 'guid-1': { title: 'Step', isChecked: false } } },
+          'W/"details-etag"',
+        );
+      });
+
+      it('createPlannerTaskAsync returns a details warning naming the recovery tool when the details write fails', async () => {
+        const planTok = await planToken('graph-plan-1');
+        mockClient.createPlannerTask.mockResolvedValue({ id: 'graph-task-new', '@odata.etag': 'W/"etag"' });
+        mockClient.getPlannerTaskDetails.mockRejectedValue(new Error('details not ready'));
+
+        const result = await repository.createPlannerTaskAsync(planTok, 'Partial', { description: 'x' });
+
+        expect(result.taskId).toMatch(/^pt_/);
+        expect(result.detailsWarning).toContain('update_planner_task_details');
+        expect(result.detailsWarning).toContain(result.taskId);
+        expect(result.detailsWarning).toContain('details not ready');
       });
 
       it('createPlannerTaskAsync passes appliedCategories in the POST body', async () => {

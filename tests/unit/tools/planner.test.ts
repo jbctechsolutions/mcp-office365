@@ -301,7 +301,7 @@ describe('PlannerTools', () => {
 
   describe('createPlannerTask', () => {
     it('creates a task and returns the ID', async () => {
-      vi.mocked(repo.createPlannerTaskAsync).mockResolvedValue('pt_200');
+      vi.mocked(repo.createPlannerTaskAsync).mockResolvedValue({ taskId: 'pt_200' });
 
       const result = await tools.createPlannerTask({ plan_id: 'pl_a1', title: 'New Task' });
 
@@ -310,10 +310,11 @@ describe('PlannerTools', () => {
       expect(parsed.success).toBe(true);
       expect(parsed.task_id).toBe('pt_200');
       expect(parsed.message).toBe('Planner task created');
+      expect(parsed.details_warning).toBeUndefined();
     });
 
     it('passes all optional parameters', async () => {
-      vi.mocked(repo.createPlannerTaskAsync).mockResolvedValue('pt_201');
+      vi.mocked(repo.createPlannerTaskAsync).mockResolvedValue({ taskId: 'pt_201' });
       const assignments = { 'user-1': { '@odata.type': '#microsoft.graph.plannerAssignment', 'orderHint': ' !' } };
 
       await tools.createPlannerTask({
@@ -329,7 +330,7 @@ describe('PlannerTools', () => {
     });
 
     it('passes applied_categories through to the repository', async () => {
-      vi.mocked(repo.createPlannerTaskAsync).mockResolvedValue('pt_202');
+      vi.mocked(repo.createPlannerTaskAsync).mockResolvedValue({ taskId: 'pt_202' });
 
       await tools.createPlannerTask({
         plan_id: 'pl_a1', title: 'Labeled Task',
@@ -342,13 +343,49 @@ describe('PlannerTools', () => {
     });
 
     it('passes order_hint through to the repository', async () => {
-      vi.mocked(repo.createPlannerTaskAsync).mockResolvedValue('pt_203');
+      vi.mocked(repo.createPlannerTaskAsync).mockResolvedValue({ taskId: 'pt_203' });
 
       await tools.createPlannerTask({ plan_id: 'pl_a1', title: 'Ordered', order_hint: ' !' });
 
       expect(repo.createPlannerTaskAsync).toHaveBeenCalledWith('pl_a1', 'Ordered', {
         orderHint: ' !',
       });
+    });
+
+    it('passes percent_complete, description, and checklist through to the repository', async () => {
+      vi.mocked(repo.createPlannerTaskAsync).mockResolvedValue({ taskId: 'pt_204' });
+      const checklist = { 'guid-1': { title: 'Step 1', isChecked: false } };
+
+      await tools.createPlannerTask({
+        plan_id: 'pl_a1', title: 'Complete Task',
+        percent_complete: 50, description: 'Notes here', checklist,
+      });
+
+      expect(repo.createPlannerTaskAsync).toHaveBeenCalledWith('pl_a1', 'Complete Task', {
+        percentComplete: 50, description: 'Notes here', checklist,
+      });
+    });
+
+    it('surfaces details_warning when the details follow-up failed', async () => {
+      vi.mocked(repo.createPlannerTaskAsync).mockResolvedValue({
+        taskId: 'pt_205',
+        detailsWarning: 'Task created but details failed. Retry via update_planner_task_details with task_id pt_205.',
+      });
+
+      const result = await tools.createPlannerTask({
+        plan_id: 'pl_a1', title: 'Partial', description: 'x',
+      });
+
+      const parsed = JSON.parse(result.content[0].text);
+      expect(parsed.success).toBe(true);
+      expect(parsed.task_id).toBe('pt_205');
+      expect(parsed.details_warning).toContain('update_planner_task_details');
+    });
+
+    it('rejects percent_complete above 100', () => {
+      expect(() => CreatePlannerTaskInput.parse({
+        plan_id: 'pl_a1', title: 'T', percent_complete: 101,
+      })).toThrow();
     });
   });
 
