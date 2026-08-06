@@ -2620,6 +2620,61 @@ export class GraphRepository implements IRepository {
   }
 
   // ===========================================================================
+  // Planner Plan Details
+  // ===========================================================================
+
+  /**
+   * Gets plan details (category label names, sharedWith). Plan details piggyback
+   * the pl_ plan token — they have no id of their own, and carry their OWN etag
+   * (independent of the plan's).
+   */
+  async getPlanDetailsAsync(planId: string): Promise<{
+    id: string;
+    categoryDescriptions: Record<string, string | null>;
+    sharedWith: Record<string, boolean>;
+    etag: string;
+  }> {
+    const graphPlanId = await this.resolvePlanId(planId);
+    const details = await this.client.getPlanDetails(graphPlanId);
+    return {
+      id: String(planId),
+      categoryDescriptions: (details.categoryDescriptions ?? {}) as Record<string, string | null>,
+      sharedWith: (details.sharedWith ?? {}) as Record<string, boolean>,
+      etag: this.extractEtag(details),
+    };
+  }
+
+  /**
+   * Updates plan category label names (U5b-5: fetches the DETAILS resource's own
+   * fresh etag immediately before the write — never the plan's etag).
+   */
+  async updatePlanDetailsAsync(
+    planId: string,
+    updates: { categoryDescriptions?: Record<string, string | null> },
+  ): Promise<void> {
+    const graphPlanId = await this.resolvePlanId(planId);
+    const graphUpdates: Record<string, unknown> = {};
+    if (updates.categoryDescriptions != null) graphUpdates['categoryDescriptions'] = updates.categoryDescriptions;
+    await this.withFreshEtag(
+      async () => this.extractEtag(await this.client.getPlanDetails(graphPlanId)),
+      (etag) => this.client.updatePlanDetails(graphPlanId, graphUpdates, etag),
+    );
+  }
+
+  /**
+   * Updates plan sharing (sharedWith user GUIDs → true adds, false removes).
+   * Same underlying details PATCH as updatePlanDetailsAsync; split at the tool
+   * layer so remote entitlements can expose labels without sharing writes.
+   */
+  async updatePlanSharingAsync(planId: string, sharedWith: Record<string, boolean>): Promise<void> {
+    const graphPlanId = await this.resolvePlanId(planId);
+    await this.withFreshEtag(
+      async () => this.extractEtag(await this.client.getPlanDetails(graphPlanId)),
+      (etag) => this.client.updatePlanDetails(graphPlanId, { sharedWith }, etag),
+    );
+  }
+
+  // ===========================================================================
   // Planner Buckets
   // ===========================================================================
 

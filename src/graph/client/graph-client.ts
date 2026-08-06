@@ -2128,6 +2128,16 @@ export class GraphClient {
     return await client.api(`/planner/plans/${planId}`).header('If-Match', etag).patch(updates) as MicrosoftGraph.PlannerPlan;
   }
 
+  async getPlanDetails(planId: string): Promise<MicrosoftGraph.PlannerPlanDetails> {
+    const client = await this.getClient();
+    return await client.api(`/planner/plans/${planId}/details`).get() as MicrosoftGraph.PlannerPlanDetails;
+  }
+
+  async updatePlanDetails(planId: string, updates: Record<string, unknown>, etag: string): Promise<MicrosoftGraph.PlannerPlanDetails> {
+    const client = await this.getClient();
+    return await client.api(`/planner/plans/${planId}/details`).header('If-Match', etag).patch(updates) as MicrosoftGraph.PlannerPlanDetails;
+  }
+
   async listBuckets(planId: string): Promise<MicrosoftGraph.PlannerBucket[]> {
     const client = await this.getClient();
     const response = await client.api(`/planner/plans/${planId}/buckets`).get() as PageCollection;

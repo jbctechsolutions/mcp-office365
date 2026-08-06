@@ -12,6 +12,8 @@ import {
   PlannerTools,
   CreatePlannerTaskInput,
   UpdatePlannerTaskInput,
+  UpdatePlanDetailsInput,
+  UpdatePlanSharingInput,
   type IPlannerRepository,
 } from '../../../src/tools/planner.js';
 import { ApprovalTokenManager } from '../../../src/approval/index.js';
@@ -39,6 +41,9 @@ describe('PlannerTools', () => {
       deletePlannerTaskAsync: vi.fn(),
       getPlannerTaskDetailsAsync: vi.fn(),
       updatePlannerTaskDetailsAsync: vi.fn(),
+      getPlanDetailsAsync: vi.fn(),
+      updatePlanDetailsAsync: vi.fn(),
+      updatePlanSharingAsync: vi.fn(),
       listPlannerTaskMessagesAsync: vi.fn(),
       createPlannerTaskMessageAsync: vi.fn(),
       updatePlannerTaskMessageAsync: vi.fn(),
@@ -116,6 +121,75 @@ describe('PlannerTools', () => {
       await tools.updatePlan({ plan_id: 'pl_a1' });
 
       expect(repo.updatePlanAsync).toHaveBeenCalledWith('pl_a1', {});
+    });
+  });
+
+  describe('getPlanDetails', () => {
+    it('returns plan details including label names, sharing, and etag', async () => {
+      const mockDetails = {
+        id: 'pl_a1',
+        categoryDescriptions: { category1: 'Blocked', category2: null },
+        sharedWith: { 'user-guid-1': true },
+        etag: 'W/"details-etag"',
+      };
+      vi.mocked(repo.getPlanDetailsAsync).mockResolvedValue(mockDetails);
+
+      const result = await tools.getPlanDetails({ plan_id: 'pl_a1' });
+
+      expect(repo.getPlanDetailsAsync).toHaveBeenCalledWith('pl_a1');
+      const parsed = JSON.parse(result.content[0].text);
+      expect(parsed.details).toEqual(mockDetails);
+    });
+  });
+
+  describe('updatePlanDetails', () => {
+    it('updates category label names, preserving explicit null resets', async () => {
+      vi.mocked(repo.updatePlanDetailsAsync).mockResolvedValue(undefined);
+
+      const result = await tools.updatePlanDetails({
+        plan_id: 'pl_a1',
+        category_descriptions: { category1: 'Blocked', category2: null },
+      });
+
+      expect(repo.updatePlanDetailsAsync).toHaveBeenCalledWith('pl_a1', {
+        categoryDescriptions: { category1: 'Blocked', category2: null },
+      });
+      const parsed = JSON.parse(result.content[0].text);
+      expect(parsed.success).toBe(true);
+      expect(parsed.message).toBe('Plan details updated');
+    });
+
+    it('schema rejects a shared_with key — sharing cannot ride in through the labels tool', () => {
+      expect(() => UpdatePlanDetailsInput.parse({
+        plan_id: 'pl_a1', shared_with: { 'guid-1': true },
+      })).toThrow();
+    });
+
+    it('schema rejects category26 label keys', () => {
+      expect(() => UpdatePlanDetailsInput.parse({
+        plan_id: 'pl_a1', category_descriptions: { category26: 'Nope' },
+      })).toThrow();
+    });
+  });
+
+  describe('updatePlanSharing', () => {
+    it('passes the shared_with map through to the repository', async () => {
+      vi.mocked(repo.updatePlanSharingAsync).mockResolvedValue(undefined);
+
+      const result = await tools.updatePlanSharing({
+        plan_id: 'pl_a1', shared_with: { 'user-guid-1': true, 'user-guid-2': false },
+      });
+
+      expect(repo.updatePlanSharingAsync).toHaveBeenCalledWith('pl_a1', {
+        'user-guid-1': true, 'user-guid-2': false,
+      });
+      const parsed = JSON.parse(result.content[0].text);
+      expect(parsed.success).toBe(true);
+      expect(parsed.message).toBe('Plan sharing updated');
+    });
+
+    it('schema requires shared_with', () => {
+      expect(() => UpdatePlanSharingInput.parse({ plan_id: 'pl_a1' })).toThrow();
     });
   });
 

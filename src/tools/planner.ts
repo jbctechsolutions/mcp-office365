@@ -65,6 +65,24 @@ export const UpdatePlanInput = z.strictObject({
   title: z.string().min(1).optional().describe('New plan title'),
 });
 
+export const GetPlanDetailsInput = z.strictObject({
+  plan_id: Id.plan,
+});
+
+export const UpdatePlanDetailsInput = z.strictObject({
+  plan_id: Id.plan,
+  category_descriptions: z.record(
+    z.string().regex(/^category([1-9]|1[0-9]|2[0-5])$/, 'Keys must be category1..category25'),
+    z.string().nullable(),
+  ).optional().describe('Label display names. Keys are category1..category25; value is the new name, or null to reset to the default. Omitted keys are preserved.'),
+});
+
+export const UpdatePlanSharingInput = z.strictObject({
+  plan_id: Id.plan,
+  shared_with: z.record(z.string().min(1), z.boolean())
+    .describe('Plan sharing map. Keys are Entra user GUIDs; true shares the plan with the user, false removes them — removal may revoke their plan access. Members of the owning M365 group keep access via group membership.'),
+});
+
 export const ListBucketsInput = z.strictObject({
   plan_id: Id.plan,
 });
@@ -179,6 +197,9 @@ export type ListPlansParams = z.infer<typeof ListPlansInput>;
 export type GetPlanParams = z.infer<typeof GetPlanInput>;
 export type CreatePlanParams = z.infer<typeof CreatePlanInput>;
 export type UpdatePlanParams = z.infer<typeof UpdatePlanInput>;
+export type GetPlanDetailsParams = z.infer<typeof GetPlanDetailsInput>;
+export type UpdatePlanDetailsParams = z.infer<typeof UpdatePlanDetailsInput>;
+export type UpdatePlanSharingParams = z.infer<typeof UpdatePlanSharingInput>;
 export type ListBucketsParams = z.infer<typeof ListBucketsInput>;
 export type CreateBucketParams = z.infer<typeof CreateBucketInput>;
 export type UpdateBucketParams = z.infer<typeof UpdateBucketInput>;
@@ -208,6 +229,16 @@ export interface IPlannerRepository {
   getPlanAsync(planId: string): Promise<{ id: string; title: string; owner: string; createdDateTime: string; etag: string }>;
   createPlanAsync(title: string, groupId: string): Promise<string>;
   updatePlanAsync(planId: string, updates: { title?: string }): Promise<void>;
+  getPlanDetailsAsync(planId: string): Promise<{
+    id: string;
+    categoryDescriptions: Record<string, string | null>;
+    sharedWith: Record<string, boolean>;
+    etag: string;
+  }>;
+  updatePlanDetailsAsync(planId: string, updates: {
+    categoryDescriptions?: Record<string, string | null>;
+  }): Promise<void>;
+  updatePlanSharingAsync(planId: string, sharedWith: Record<string, boolean>): Promise<void>;
   listBucketsAsync(planId: string): Promise<Array<{ id: string; name: string; planId: string; orderHint: string }>>;
   createBucketAsync(planId: string, name: string, orderHint?: string): Promise<string>;
   updateBucketAsync(bucketId: string, updates: { name?: string; orderHint?: string }): Promise<void>;
@@ -324,6 +355,44 @@ export class PlannerTools {
       content: [{
         type: 'text' as const,
         text: JSON.stringify({ success: true, message: 'Plan updated' }, null, 2),
+      }],
+    };
+  }
+
+  async getPlanDetails(params: GetPlanDetailsParams): Promise<{
+    content: Array<{ type: 'text'; text: string }>;
+  }> {
+    const details = await this.repo.getPlanDetailsAsync(params.plan_id);
+    return {
+      content: [{
+        type: 'text' as const,
+        text: JSON.stringify({ details }, null, 2),
+      }],
+    };
+  }
+
+  async updatePlanDetails(params: UpdatePlanDetailsParams): Promise<{
+    content: Array<{ type: 'text'; text: string }>;
+  }> {
+    const updates: { categoryDescriptions?: Record<string, string | null> } = {};
+    if (params.category_descriptions != null) updates.categoryDescriptions = params.category_descriptions;
+    await this.repo.updatePlanDetailsAsync(params.plan_id, updates);
+    return {
+      content: [{
+        type: 'text' as const,
+        text: JSON.stringify({ success: true, message: 'Plan details updated' }, null, 2),
+      }],
+    };
+  }
+
+  async updatePlanSharing(params: UpdatePlanSharingParams): Promise<{
+    content: Array<{ type: 'text'; text: string }>;
+  }> {
+    await this.repo.updatePlanSharingAsync(params.plan_id, params.shared_with);
+    return {
+      content: [{
+        type: 'text' as const,
+        text: JSON.stringify({ success: true, message: 'Plan sharing updated' }, null, 2),
       }],
     };
   }
@@ -814,6 +883,36 @@ export function plannerToolDefinitions(): ToolDefinition[] {
       presets: ['planner'],
       backends: ['graph'],
       handler: (ctx, params) => tools(ctx).updatePlan(params),
+    }),
+    defineTool({
+      name: 'get_plan_details',
+      description: 'Get Planner plan details: category label names (categoryDescriptions) and who the plan is shared with (Graph API)',
+      input: GetPlanDetailsInput,
+      annotations: { readOnlyHint: true, openWorldHint: true },
+      destructive: false,
+      presets: ['planner'],
+      backends: ['graph'],
+      handler: (ctx, params) => tools(ctx).getPlanDetails(params),
+    }),
+    defineTool({
+      name: 'update_plan_details',
+      description: 'Update Planner plan category label names (category1..category25; null resets a name to default) (Graph API)',
+      input: UpdatePlanDetailsInput,
+      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+      destructive: false,
+      presets: ['planner'],
+      backends: ['graph'],
+      handler: (ctx, params) => tools(ctx).updatePlanDetails(params),
+    }),
+    defineTool({
+      name: 'update_plan_sharing',
+      description: 'Share or unshare a Planner plan (sharedWith user GUIDs; true adds, false removes — removal may revoke plan access; owning-group members keep access via membership) (Graph API)',
+      input: UpdatePlanSharingInput,
+      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+      destructive: false,
+      presets: ['planner'],
+      backends: ['graph'],
+      handler: (ctx, params) => tools(ctx).updatePlanSharing(params),
     }),
     defineTool({
       name: 'list_buckets',
