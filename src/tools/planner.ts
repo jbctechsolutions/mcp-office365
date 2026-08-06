@@ -68,6 +68,17 @@ export const ConfirmDeleteBucketInput = z.strictObject({
   approval_token: z.string().describe('Approval token from prepare_delete_bucket'),
 });
 
+/**
+ * Planner labels map: category1..category25 → boolean. `true` applies the
+ * label, `false` removes it (Graph drops false keys); keys omitted from an
+ * update are preserved. Label display names live in plan details
+ * (`get_plan_details` → categoryDescriptions).
+ */
+const AppliedCategories = z.record(
+  z.string().regex(/^category([1-9]|1[0-9]|2[0-5])$/, 'Keys must be category1..category25'),
+  z.boolean(),
+).describe('Planner labels. Keys are category1..category25; true applies a label, false removes it; omitted keys are preserved on update. Label names come from get_plan_details.');
+
 export const ListPlannerTasksInput = z.strictObject({
   plan_id: Id.plan,
 });
@@ -86,6 +97,7 @@ export const CreatePlannerTaskInput = z.strictObject({
   priority: z.number().int().min(0).max(10).optional().describe('Priority (0-10)'),
   start_date: z.string().optional().describe('Start date in ISO format'),
   due_date: z.string().optional().describe('Due date in ISO format'),
+  applied_categories: AppliedCategories.optional(),
 });
 
 export const UpdatePlannerTaskInput = z.strictObject({
@@ -97,6 +109,7 @@ export const UpdatePlannerTaskInput = z.strictObject({
   start_date: z.string().optional().describe('Start date in ISO format'),
   due_date: z.string().optional().describe('Due date in ISO format'),
   assignments: z.record(z.string(), z.object({}).passthrough()).optional().describe('User assignments. Keys are user IDs, values should be { "@odata.type": "#microsoft.graph.plannerAssignment", "orderHint": " !" }'),
+  applied_categories: AppliedCategories.optional(),
 });
 
 export const PrepareDeletePlannerTaskInput = z.strictObject({
@@ -188,27 +201,30 @@ export interface IPlannerRepository {
     id: string; title: string; bucketId: string | null; assignees: string[];
     percentComplete: number; priority: number; startDateTime: string;
     dueDateTime: string; createdDateTime: string;
+    appliedCategories: Record<string, boolean>;
   }>>;
   listMyPlannerTasksAsync(): Promise<Array<{
     id: string; title: string; planId: string; bucketId: string | null;
     assignees: string[]; percentComplete: number; priority: number;
     startDateTime: string; dueDateTime: string; createdDateTime: string;
+    appliedCategories: Record<string, boolean>;
   }>>;
   getPlannerTaskAsync(taskId: string): Promise<{
     id: string; title: string; bucketId: string | null; assignees: string[];
     percentComplete: number; priority: number; startDateTime: string;
     dueDateTime: string; createdDateTime: string; conversationThreadId: string;
-    orderHint: string; etag: string;
+    orderHint: string; etag: string; appliedCategories: Record<string, boolean>;
   }>;
-  createPlannerTaskAsync(
-    planId: string, title: string, bucketId?: string,
-    assignments?: Record<string, object>, priority?: number,
-    startDate?: string, dueDate?: string,
-  ): Promise<string>;
+  createPlannerTaskAsync(planId: string, title: string, options: {
+    bucketId?: string; assignments?: Record<string, object>; priority?: number;
+    startDate?: string; dueDate?: string;
+    appliedCategories?: Record<string, boolean>;
+  }): Promise<string>;
   updatePlannerTaskAsync(taskId: string, updates: {
     title?: string; bucketId?: string; percentComplete?: number;
     priority?: number; startDate?: string; dueDate?: string;
     assignments?: Record<string, object>;
+    appliedCategories?: Record<string, boolean>;
   }): Promise<void>;
   deletePlannerTaskAsync(taskId: string): Promise<void>;
   getPlannerTaskDetailsAsync(taskId: string): Promise<{
@@ -444,15 +460,14 @@ export class PlannerTools {
   async createPlannerTask(params: CreatePlannerTaskParams): Promise<{
     content: Array<{ type: 'text'; text: string }>;
   }> {
-    const taskId = await this.repo.createPlannerTaskAsync(
-      params.plan_id,
-      params.title,
-      params.bucket_id,
-      params.assignments,
-      params.priority,
-      params.start_date,
-      params.due_date,
-    );
+    const options: Parameters<IPlannerRepository['createPlannerTaskAsync']>[2] = {};
+    if (params.bucket_id != null) options.bucketId = params.bucket_id;
+    if (params.assignments != null) options.assignments = params.assignments;
+    if (params.priority != null) options.priority = params.priority;
+    if (params.start_date != null) options.startDate = params.start_date;
+    if (params.due_date != null) options.dueDate = params.due_date;
+    if (params.applied_categories != null) options.appliedCategories = params.applied_categories;
+    const taskId = await this.repo.createPlannerTaskAsync(params.plan_id, params.title, options);
     return {
       content: [{
         type: 'text' as const,
@@ -468,6 +483,7 @@ export class PlannerTools {
       title?: string; bucketId?: string; percentComplete?: number;
       priority?: number; startDate?: string; dueDate?: string;
       assignments?: Record<string, object>;
+      appliedCategories?: Record<string, boolean>;
     } = {};
     if (params.title != null) updates.title = params.title;
     if (params.bucket_id != null) updates.bucketId = params.bucket_id;
@@ -476,6 +492,7 @@ export class PlannerTools {
     if (params.start_date != null) updates.startDate = params.start_date;
     if (params.due_date != null) updates.dueDate = params.due_date;
     if (params.assignments != null) updates.assignments = params.assignments;
+    if (params.applied_categories != null) updates.appliedCategories = params.applied_categories;
     await this.repo.updatePlannerTaskAsync(params.task_id, updates);
     return {
       content: [{

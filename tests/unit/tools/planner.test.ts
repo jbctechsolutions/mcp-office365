@@ -8,7 +8,12 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { PlannerTools, type IPlannerRepository } from '../../../src/tools/planner.js';
+import {
+  PlannerTools,
+  CreatePlannerTaskInput,
+  UpdatePlannerTaskInput,
+  type IPlannerRepository,
+} from '../../../src/tools/planner.js';
 import { ApprovalTokenManager } from '../../../src/approval/index.js';
 
 describe('PlannerTools', () => {
@@ -284,7 +289,7 @@ describe('PlannerTools', () => {
 
       const result = await tools.createPlannerTask({ plan_id: 'pl_a1', title: 'New Task' });
 
-      expect(repo.createPlannerTaskAsync).toHaveBeenCalledWith('pl_a1', 'New Task', undefined, undefined, undefined, undefined, undefined);
+      expect(repo.createPlannerTaskAsync).toHaveBeenCalledWith('pl_a1', 'New Task', {});
       const parsed = JSON.parse(result.content[0].text);
       expect(parsed.success).toBe(true);
       expect(parsed.task_id).toBe('pt_200');
@@ -301,9 +306,45 @@ describe('PlannerTools', () => {
         start_date: '2026-03-01T00:00:00Z', due_date: '2026-04-01T00:00:00Z',
       });
 
-      expect(repo.createPlannerTaskAsync).toHaveBeenCalledWith(
-        'pl_a1', 'Full Task', 'pb_10', assignments, 3, '2026-03-01T00:00:00Z', '2026-04-01T00:00:00Z',
-      );
+      expect(repo.createPlannerTaskAsync).toHaveBeenCalledWith('pl_a1', 'Full Task', {
+        bucketId: 'pb_10', assignments, priority: 3,
+        startDate: '2026-03-01T00:00:00Z', dueDate: '2026-04-01T00:00:00Z',
+      });
+    });
+
+    it('passes applied_categories through to the repository', async () => {
+      vi.mocked(repo.createPlannerTaskAsync).mockResolvedValue('pt_202');
+
+      await tools.createPlannerTask({
+        plan_id: 'pl_a1', title: 'Labeled Task',
+        applied_categories: { category3: true, category25: true },
+      });
+
+      expect(repo.createPlannerTaskAsync).toHaveBeenCalledWith('pl_a1', 'Labeled Task', {
+        appliedCategories: { category3: true, category25: true },
+      });
+    });
+  });
+
+  describe('CreatePlannerTaskInput applied_categories validation', () => {
+    it('accepts category1 through category25 keys', () => {
+      const parsed = CreatePlannerTaskInput.parse({
+        plan_id: 'pl_a1', title: 'T',
+        applied_categories: { category1: true, category25: false },
+      });
+      expect(parsed.applied_categories).toEqual({ category1: true, category25: false });
+    });
+
+    it('rejects category26', () => {
+      expect(() => CreatePlannerTaskInput.parse({
+        plan_id: 'pl_a1', title: 'T', applied_categories: { category26: true },
+      })).toThrow();
+    });
+
+    it('rejects non-category keys', () => {
+      expect(() => UpdatePlannerTaskInput.parse({
+        task_id: 'pt_1', applied_categories: { urgent: true },
+      })).toThrow();
     });
   });
 
@@ -337,6 +378,18 @@ describe('PlannerTools', () => {
       await tools.updatePlannerTask({ task_id: 'pt_100' });
 
       expect(repo.updatePlannerTaskAsync).toHaveBeenCalledWith('pt_100', {});
+    });
+
+    it('passes applied_categories through, preserving explicit false removals', async () => {
+      vi.mocked(repo.updatePlannerTaskAsync).mockResolvedValue(undefined);
+
+      await tools.updatePlannerTask({
+        task_id: 'pt_100', applied_categories: { category3: true, category4: false },
+      });
+
+      expect(repo.updatePlannerTaskAsync).toHaveBeenCalledWith('pt_100', {
+        appliedCategories: { category3: true, category4: false },
+      });
     });
   });
 

@@ -2684,6 +2684,7 @@ export class GraphRepository implements IRepository {
     id: string; title: string; bucketId: string | null; assignees: string[];
     percentComplete: number; priority: number; startDateTime: string;
     dueDateTime: string; createdDateTime: string;
+    appliedCategories: Record<string, boolean>;
   }>> {
     const graphPlanId = await this.resolvePlanId(planId);
     const tasks = await this.client.listPlannerTasks(graphPlanId);
@@ -2699,6 +2700,7 @@ export class GraphRepository implements IRepository {
         startDateTime: task.startDateTime ?? '',
         dueDateTime: task.dueDateTime ?? '',
         createdDateTime: task.createdDateTime ?? '',
+        appliedCategories: (task.appliedCategories ?? {}) as Record<string, boolean>,
       };
     });
   }
@@ -2713,6 +2715,7 @@ export class GraphRepository implements IRepository {
     id: string; title: string; planId: string; bucketId: string | null;
     assignees: string[]; percentComplete: number; priority: number;
     startDateTime: string; dueDateTime: string; createdDateTime: string;
+    appliedCategories: Record<string, boolean>;
   }>> {
     const tasks = await this.client.listMyPlannerTasks();
     return tasks.map((task) => {
@@ -2728,6 +2731,7 @@ export class GraphRepository implements IRepository {
         startDateTime: task.startDateTime ?? '',
         dueDateTime: task.dueDateTime ?? '',
         createdDateTime: task.createdDateTime ?? '',
+        appliedCategories: (task.appliedCategories ?? {}) as Record<string, boolean>,
       };
     });
   }
@@ -2739,7 +2743,7 @@ export class GraphRepository implements IRepository {
     id: string; title: string; bucketId: string | null; assignees: string[];
     percentComplete: number; priority: number; startDateTime: string;
     dueDateTime: string; createdDateTime: string; conversationThreadId: string;
-    orderHint: string; etag: string;
+    orderHint: string; etag: string; appliedCategories: Record<string, boolean>;
   }> {
     const gTaskId = this.toGraphId(taskId, 'plannerTask');
     const task = await this.client.getPlannerTask(gTaskId);
@@ -2756,6 +2760,7 @@ export class GraphRepository implements IRepository {
       conversationThreadId: task.conversationThreadId ?? '',
       orderHint: task.orderHint ?? '',
       etag: this.extractEtag(task),
+      appliedCategories: (task.appliedCategories ?? {}) as Record<string, boolean>,
     };
   }
 
@@ -2765,21 +2770,22 @@ export class GraphRepository implements IRepository {
   async createPlannerTaskAsync(
     planId: string,
     title: string,
-    bucketId?: string,
-    assignments?: Record<string, object>,
-    priority?: number,
-    startDate?: string,
-    dueDate?: string,
+    options: {
+      bucketId?: string; assignments?: Record<string, object>; priority?: number;
+      startDate?: string; dueDate?: string;
+      appliedCategories?: Record<string, boolean>;
+    } = {},
   ): Promise<string> {
     const graphPlanId = await this.resolvePlanId(planId);
     const body: Record<string, unknown> = { planId: graphPlanId, title };
-    if (bucketId != null) {
-      body.bucketId = this.toGraphId(bucketId, 'plannerBucket');
+    if (options.bucketId != null) {
+      body.bucketId = this.toGraphId(options.bucketId, 'plannerBucket');
     }
-    if (assignments != null) body.assignments = assignments;
-    if (priority != null) body.priority = priority;
-    if (startDate != null) body.startDateTime = startDate;
-    if (dueDate != null) body.dueDateTime = dueDate;
+    if (options.assignments != null) body.assignments = options.assignments;
+    if (options.priority != null) body.priority = options.priority;
+    if (options.startDate != null) body.startDateTime = options.startDate;
+    if (options.dueDate != null) body.dueDateTime = options.dueDate;
+    if (options.appliedCategories != null) body.appliedCategories = options.appliedCategories;
     const task = await this.client.createPlannerTask(body);
     return this.mintAlias('plannerTask', task.id!);
   }
@@ -2797,6 +2803,7 @@ export class GraphRepository implements IRepository {
       startDate?: string;
       dueDate?: string;
       assignments?: Record<string, object>;
+      appliedCategories?: Record<string, boolean>;
     },
   ): Promise<void> {
     const gTaskId = this.toGraphId(taskId, 'plannerTask');
@@ -2808,6 +2815,7 @@ export class GraphRepository implements IRepository {
     if (updates.startDate != null) graphUpdates['startDateTime'] = updates.startDate;
     if (updates.dueDate != null) graphUpdates['dueDateTime'] = updates.dueDate;
     if (updates.assignments != null) graphUpdates['assignments'] = updates.assignments;
+    if (updates.appliedCategories != null) graphUpdates['appliedCategories'] = updates.appliedCategories;
     await this.withFreshEtag(
       async () => this.extractEtag(await this.client.getPlannerTask(gTaskId)),
       (etag) => this.client.updatePlannerTask(gTaskId, graphUpdates, etag),

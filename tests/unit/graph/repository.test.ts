@@ -5499,12 +5499,71 @@ describe('graph/repository', () => {
         const bucketTok = await bucketToken(planTok, 'graph-bucket-1');
         mockClient.createPlannerTask.mockResolvedValue({ id: 'graph-task-new', '@odata.etag': 'W/"etag"' });
 
-        const taskTok = await repository.createPlannerTaskAsync(planTok, 'New Task', bucketTok);
+        const taskTok = await repository.createPlannerTaskAsync(planTok, 'New Task', { bucketId: bucketTok });
 
         expect(taskTok).toMatch(/^pt_/);
         expect(mockClient.createPlannerTask).toHaveBeenCalledWith({
           planId: 'graph-plan-1', title: 'New Task', bucketId: 'graph-bucket-1',
         });
+      });
+
+      it('createPlannerTaskAsync passes appliedCategories in the POST body', async () => {
+        const planTok = await planToken('graph-plan-1');
+        mockClient.createPlannerTask.mockResolvedValue({ id: 'graph-task-new', '@odata.etag': 'W/"etag"' });
+
+        await repository.createPlannerTaskAsync(planTok, 'Labeled', {
+          appliedCategories: { category3: true, category25: true },
+        });
+
+        expect(mockClient.createPlannerTask).toHaveBeenCalledWith({
+          planId: 'graph-plan-1', title: 'Labeled',
+          appliedCategories: { category3: true, category25: true },
+        });
+      });
+
+      it('updatePlannerTaskAsync maps appliedCategories into the PATCH body', async () => {
+        const planTok = await planToken('graph-plan-1');
+        const taskTok = await taskToken(planTok, 'graph-task-1');
+        mockClient.getPlannerTask.mockResolvedValue({ title: 'Task', '@odata.etag': 'W/"task-etag"' });
+        mockClient.updatePlannerTask.mockResolvedValue({ '@odata.etag': 'W/"task-etag"' });
+
+        await repository.updatePlannerTaskAsync(taskTok, {
+          appliedCategories: { category3: true, category4: false },
+        });
+
+        expect(mockClient.updatePlannerTask).toHaveBeenCalledWith(
+          'graph-task-1',
+          { appliedCategories: { category3: true, category4: false } },
+          'W/"task-etag"',
+        );
+      });
+
+      it('getPlannerTaskAsync surfaces appliedCategories (empty object when absent)', async () => {
+        const planTok = await planToken('graph-plan-1');
+        const taskTok = await taskToken(planTok, 'graph-task-1');
+        mockClient.getPlannerTask.mockResolvedValue({
+          title: 'Ship', appliedCategories: { category5: true }, '@odata.etag': 'W/"e"',
+        });
+
+        const task = await repository.getPlannerTaskAsync(taskTok);
+        expect(task.appliedCategories).toEqual({ category5: true });
+
+        mockClient.getPlannerTask.mockResolvedValue({ title: 'Bare', '@odata.etag': 'W/"e"' });
+        const bare = await repository.getPlannerTaskAsync(taskTok);
+        expect(bare.appliedCategories).toEqual({});
+      });
+
+      it('listPlannerTasksAsync surfaces appliedCategories per task', async () => {
+        const planTok = await planToken('graph-plan-1');
+        mockClient.listPlannerTasks.mockResolvedValue([
+          { id: 'graph-task-1', title: 'A', appliedCategories: { category1: true } },
+          { id: 'graph-task-2', title: 'B' },
+        ]);
+
+        const tasks = await repository.listPlannerTasksAsync(planTok);
+
+        expect(tasks[0].appliedCategories).toEqual({ category1: true });
+        expect(tasks[1].appliedCategories).toEqual({});
       });
 
       it('updatePlannerTaskAsync fetches a fresh etag immediately before the write (U5b-5)', async () => {
