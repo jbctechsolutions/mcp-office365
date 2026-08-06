@@ -505,10 +505,10 @@ describe('PlannerTools', () => {
       });
     });
 
-    it('surfaces details_warning when the details follow-up failed', async () => {
+    it('composes details_warning naming the recovery tool when the details follow-up failed', async () => {
       vi.mocked(repo.createPlannerTaskAsync).mockResolvedValue({
         taskId: 'pt_205',
-        detailsWarning: 'Task created but details failed. Retry via update_planner_task_details with task_id pt_205.',
+        detailsError: 'details not ready',
       });
 
       const result = await tools.createPlannerTask({
@@ -519,6 +519,8 @@ describe('PlannerTools', () => {
       expect(parsed.success).toBe(true);
       expect(parsed.task_id).toBe('pt_205');
       expect(parsed.details_warning).toContain('update_planner_task_details');
+      expect(parsed.details_warning).toContain('pt_205');
+      expect(parsed.details_warning).toContain('details not ready');
     });
 
     it('rejects percent_complete above 100', () => {

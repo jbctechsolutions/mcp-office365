@@ -2657,16 +2657,24 @@ export class GraphRepository implements IRepository {
   }
 
   /**
-   * Updates plan category label names (U5b-5: fetches the DETAILS resource's own
-   * fresh etag immediately before the write — never the plan's etag).
+   * Updates plan details — category label names and/or sharing (U5b-5: fetches
+   * the DETAILS resource's own fresh etag immediately before the write — never
+   * the plan's etag). The labels-vs-sharing split exists only at the tool layer
+   * (remote entitlements expose labels without sharing writes); both tools
+   * converge here. Empty updates short-circuit before any Graph I/O.
    */
   async updatePlanDetailsAsync(
     planId: string,
-    updates: { categoryDescriptions?: Record<string, string | null> },
+    updates: {
+      categoryDescriptions?: Record<string, string | null>;
+      sharedWith?: Record<string, boolean>;
+    },
   ): Promise<void> {
-    const graphPlanId = await this.resolvePlanId(planId);
     const graphUpdates: Record<string, unknown> = {};
     if (updates.categoryDescriptions != null) graphUpdates['categoryDescriptions'] = updates.categoryDescriptions;
+    if (updates.sharedWith != null) graphUpdates['sharedWith'] = updates.sharedWith;
+    if (Object.keys(graphUpdates).length === 0) return;
+    const graphPlanId = await this.resolvePlanId(planId);
     await this.withFreshEtag(
       async () => this.extractEtag(await this.client.getPlanDetails(graphPlanId)),
       (etag) => this.client.updatePlanDetails(graphPlanId, graphUpdates, etag),
@@ -2675,15 +2683,9 @@ export class GraphRepository implements IRepository {
 
   /**
    * Updates plan sharing (sharedWith user GUIDs → true adds, false removes).
-   * Same underlying details PATCH as updatePlanDetailsAsync; split at the tool
-   * layer so remote entitlements can expose labels without sharing writes.
    */
   async updatePlanSharingAsync(planId: string, sharedWith: Record<string, boolean>): Promise<void> {
-    const graphPlanId = await this.resolvePlanId(planId);
-    await this.withFreshEtag(
-      async () => this.extractEtag(await this.client.getPlanDetails(graphPlanId)),
-      (etag) => this.client.updatePlanDetails(graphPlanId, { sharedWith }, etag),
-    );
+    await this.updatePlanDetailsAsync(planId, { sharedWith });
   }
 
   // ===========================================================================
@@ -2845,7 +2847,7 @@ export class GraphRepository implements IRepository {
       percentComplete?: number; description?: string;
       checklist?: Record<string, object>;
     } = {},
-  ): Promise<{ taskId: string; detailsWarning?: string }> {
+  ): Promise<{ taskId: string; detailsError?: string }> {
     const graphPlanId = await this.resolvePlanId(planId);
     const body: Record<string, unknown> = { planId: graphPlanId, title };
     if (options.bucketId != null) {
@@ -2859,30 +2861,21 @@ export class GraphRepository implements IRepository {
     if (options.orderHint != null) body.orderHint = options.orderHint;
     if (options.percentComplete != null) body.percentComplete = options.percentComplete;
     const task = await this.client.createPlannerTask(body);
-    const gTaskId = task.id!;
-    const taskId = this.mintAlias('plannerTask', gTaskId);
+    const taskId = this.mintAlias('plannerTask', task.id!);
 
     // Description/checklist live on the auto-created details sub-resource and
-    // cannot be set on POST /planner/tasks — apply them via a follow-up PATCH
-    // against the details resource's OWN etag. A details failure must not fail
-    // the create (the task exists); it degrades to an explicit warning.
+    // cannot be set on POST /planner/tasks — apply them via the canonical
+    // details update (which fetches the details resource's OWN etag). A details
+    // failure must not fail the create (the task exists); the raw reason is
+    // returned for the tool layer to compose caller-facing guidance.
     if (options.description != null || options.checklist != null) {
-      const detailsUpdates: Record<string, unknown> = {};
+      const detailsUpdates: { description?: string; checklist?: Record<string, object> } = {};
       if (options.description != null) detailsUpdates.description = options.description;
       if (options.checklist != null) detailsUpdates.checklist = options.checklist;
       try {
-        await this.withFreshEtag(
-          async () => this.extractEtag(await this.client.getPlannerTaskDetails(gTaskId)),
-          (etag) => this.client.updatePlannerTaskDetails(gTaskId, detailsUpdates, etag),
-        );
+        await this.updatePlannerTaskDetailsAsync(taskId, detailsUpdates);
       } catch (e) {
-        const reason = e instanceof Error ? e.message : String(e);
-        return {
-          taskId,
-          detailsWarning:
-            `Task created, but the description/checklist could not be applied (${reason}). ` +
-            `Retry via update_planner_task_details with task_id ${taskId}.`,
-        };
+        return { taskId, detailsError: e instanceof Error ? e.message : String(e) };
       }
     }
     return { taskId };

@@ -5645,7 +5645,7 @@ describe('graph/repository', () => {
 
         const result = await repository.createPlannerTaskAsync(planTok, 'Bare');
 
-        expect(result.detailsWarning).toBeUndefined();
+        expect(result.detailsError).toBeUndefined();
         expect(mockClient.createPlannerTask).toHaveBeenCalledTimes(1);
         expect(mockClient.getPlannerTaskDetails).not.toHaveBeenCalled();
         expect(mockClient.updatePlannerTaskDetails).not.toHaveBeenCalled();
@@ -5684,7 +5684,7 @@ describe('graph/repository', () => {
         });
 
         expect(result.taskId).toMatch(/^pt_/);
-        expect(result.detailsWarning).toBeUndefined();
+        expect(result.detailsError).toBeUndefined();
         expect(callOrder).toEqual(['create', 'get-details', 'patch-details']);
         expect(mockClient.updatePlannerTaskDetails).toHaveBeenCalledWith(
           'graph-task-new',
@@ -5693,7 +5693,7 @@ describe('graph/repository', () => {
         );
       });
 
-      it('createPlannerTaskAsync returns a details warning naming the recovery tool when the details write fails', async () => {
+      it('createPlannerTaskAsync returns the raw details failure reason when the details write fails', async () => {
         const planTok = await planToken('graph-plan-1');
         mockClient.createPlannerTask.mockResolvedValue({ id: 'graph-task-new', '@odata.etag': 'W/"etag"' });
         mockClient.getPlannerTaskDetails.mockRejectedValue(new Error('details not ready'));
@@ -5701,9 +5701,16 @@ describe('graph/repository', () => {
         const result = await repository.createPlannerTaskAsync(planTok, 'Partial', { description: 'x' });
 
         expect(result.taskId).toMatch(/^pt_/);
-        expect(result.detailsWarning).toContain('update_planner_task_details');
-        expect(result.detailsWarning).toContain(result.taskId);
-        expect(result.detailsWarning).toContain('details not ready');
+        expect(result.detailsError).toContain('details not ready');
+      });
+
+      it('updatePlanDetailsAsync with empty updates makes no Graph calls', async () => {
+        const planTok = await planToken('graph-plan-1');
+
+        await repository.updatePlanDetailsAsync(planTok, {});
+
+        expect(mockClient.getPlanDetails).not.toHaveBeenCalled();
+        expect(mockClient.updatePlanDetails).not.toHaveBeenCalled();
       });
 
       it('createPlannerTaskAsync passes appliedCategories in the POST body', async () => {

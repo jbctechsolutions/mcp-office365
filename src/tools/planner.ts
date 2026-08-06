@@ -30,24 +30,16 @@ declare module '../registry/types.js' {
 // Input Schemas
 // =============================================================================
 
-/**
- * Planner labels map: category1..category25 → boolean. `true` applies the
- * label, `false` removes it (Graph drops false keys); keys omitted from an
- * update are preserved. Label display names live in plan details
- * (`get_plan_details` → categoryDescriptions).
- */
-const AppliedCategories = z.record(
-  z.string().regex(/^category([1-9]|1[0-9]|2[0-5])$/, 'Keys must be category1..category25'),
-  z.boolean(),
-).describe('Planner labels. Keys are category1..category25; true applies a label, false removes it; omitted keys are preserved on update. Label names come from get_plan_details.');
+/** Shared key schema for Planner's 25 label categories. */
+const CategoryKey = z.string().regex(/^category([1-9]|1[0-9]|2[0-5])$/, 'Keys must be category1..category25');
 
-/**
- * Planner order hint. Format: "<previous orderHint> <next orderHint>!" — use a
- * neighbor's hint on either side to position between items; use " !" (space +
- * bang) or omit to append. Echoing a service-returned hint back verbatim as a
- * new hint is rejected by Graph with a 400.
- */
-const OrderHint = z.string().min(1).describe('Planner order hint: "<previous> <next>!" positions between neighbors (empty string for a missing neighbor); " !" appends. Never resend a service-returned hint verbatim (Graph 400).');
+const AppliedCategories = z.record(CategoryKey, z.boolean())
+  .describe('Planner labels. Keys are category1..category25; true applies a label, false removes it; omitted keys are preserved on update. Label names come from get_plan_details.');
+
+const OrderHint = z.string().min(1)
+  .describe('Planner order hint: "<previous> <next>!" positions between neighbors (empty string for a missing neighbor); " !" appends. Never resend a service-returned hint verbatim (Graph 400).');
+
+const ChecklistItems = z.record(z.string(), z.object({}).passthrough());
 
 export const ListPlansInput = z.strictObject({});
 
@@ -79,10 +71,8 @@ export const GetPlanDetailsInput = z.strictObject({
 
 export const UpdatePlanDetailsInput = z.strictObject({
   plan_id: Id.plan,
-  category_descriptions: z.record(
-    z.string().regex(/^category([1-9]|1[0-9]|2[0-5])$/, 'Keys must be category1..category25'),
-    z.string().nullable(),
-  ).optional().describe('Label display names. Keys are category1..category25; value is the new name, or null to reset to the default. Omitted keys are preserved.'),
+  category_descriptions: z.record(CategoryKey, z.string().nullable())
+    .optional().describe('Label display names. Keys are category1..category25; value is the new name, or null to reset to the default. Omitted keys are preserved.'),
 });
 
 export const UpdatePlanSharingInput = z.strictObject({
@@ -137,7 +127,7 @@ export const CreatePlannerTaskInput = z.strictObject({
   order_hint: OrderHint.optional(),
   percent_complete: z.number().int().min(0).max(100).optional().describe('Percent complete (0-100)'),
   description: z.string().optional().describe('Task description/notes — applied via a follow-up details write after creation'),
-  checklist: z.record(z.string(), z.object({}).passthrough()).optional().describe('Checklist items, applied via a follow-up details write. Keys are GUIDs, values have title (string) and isChecked (boolean)'),
+  checklist: ChecklistItems.optional().describe('Checklist items, applied via a follow-up details write. Keys are GUIDs, values have title (string) and isChecked (boolean)'),
 });
 
 export const UpdatePlannerTaskInput = z.strictObject({
@@ -168,7 +158,7 @@ export const GetPlannerTaskDetailsInput = z.strictObject({
 export const UpdatePlannerTaskDetailsInput = z.strictObject({
   task_id: Id.plannerTask,
   description: z.string().optional().describe('Task description/notes'),
-  checklist: z.record(z.string(), z.object({}).passthrough()).optional().describe('Checklist items. Keys are GUIDs, values have title (string) and isChecked (boolean)'),
+  checklist: ChecklistItems.optional().describe('Checklist items. Keys are GUIDs, values have title (string) and isChecked (boolean)'),
   references: z.record(z.string(), z.object({}).passthrough()).optional().describe('Reference links. Keys are encoded URLs, values have alias (string) and type (string)'),
 });
 
@@ -247,6 +237,7 @@ export interface IPlannerRepository {
   }>;
   updatePlanDetailsAsync(planId: string, updates: {
     categoryDescriptions?: Record<string, string | null>;
+    sharedWith?: Record<string, boolean>;
   }): Promise<void>;
   updatePlanSharingAsync(planId: string, sharedWith: Record<string, boolean>): Promise<void>;
   deletePlanAsync(planId: string): Promise<void>;
@@ -278,7 +269,7 @@ export interface IPlannerRepository {
     appliedCategories?: Record<string, boolean>; orderHint?: string;
     percentComplete?: number; description?: string;
     checklist?: Record<string, object>;
-  }): Promise<{ taskId: string; detailsWarning?: string }>;
+  }): Promise<{ taskId: string; detailsError?: string }>;
   updatePlannerTaskAsync(taskId: string, updates: {
     title?: string; bucketId?: string; percentComplete?: number;
     priority?: number; startDate?: string; dueDate?: string;
@@ -637,7 +628,11 @@ export class PlannerTools {
     if (params.percent_complete != null) options.percentComplete = params.percent_complete;
     if (params.description != null) options.description = params.description;
     if (params.checklist != null) options.checklist = params.checklist;
-    const { taskId, detailsWarning } = await this.repo.createPlannerTaskAsync(params.plan_id, params.title, options);
+    const { taskId, detailsError } = await this.repo.createPlannerTaskAsync(params.plan_id, params.title, options);
+    const detailsWarning = detailsError != null
+      ? `Task created, but the description/checklist could not be applied (${detailsError}). ` +
+        `Retry via update_planner_task_details with task_id ${taskId}.`
+      : undefined;
     return {
       content: [{
         type: 'text' as const,
@@ -645,7 +640,7 @@ export class PlannerTools {
           success: true,
           task_id: taskId,
           message: 'Planner task created',
-          details_warning: detailsWarning ?? undefined,
+          details_warning: detailsWarning,
           next: nextActionFor('plannerTask') ?? undefined,
         }, null, 2),
       }],

@@ -1,7 +1,7 @@
 ---
 title: 'feat: Full Planner support — labels, plan details, delete plan, ordering, remote write scope'
 type: feat
-status: active
+status: completed
 date: 2026-08-06
 ---
 
