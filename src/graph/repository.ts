@@ -2619,6 +2619,18 @@ export class GraphRepository implements IRepository {
     );
   }
 
+  /**
+   * Deletes a plan and everything in it (U5b-5: fetches a fresh etag immediately
+   * before the write). Contained buckets and tasks are deleted with the plan.
+   */
+  async deletePlanAsync(planId: string): Promise<void> {
+    const graphPlanId = await this.resolvePlanId(planId);
+    await this.withFreshEtag(
+      async () => this.extractEtag(await this.client.getPlan(graphPlanId)),
+      (etag) => this.client.deletePlan(graphPlanId, etag),
+    );
+  }
+
   // ===========================================================================
   // Planner Plan Details
   // ===========================================================================

@@ -44,6 +44,7 @@ describe('PlannerTools', () => {
       getPlanDetailsAsync: vi.fn(),
       updatePlanDetailsAsync: vi.fn(),
       updatePlanSharingAsync: vi.fn(),
+      deletePlanAsync: vi.fn(),
       listPlannerTaskMessagesAsync: vi.fn(),
       createPlannerTaskMessageAsync: vi.fn(),
       updatePlannerTaskMessageAsync: vi.fn(),
@@ -121,6 +122,70 @@ describe('PlannerTools', () => {
       await tools.updatePlan({ plan_id: 'pl_a1' });
 
       expect(repo.updatePlanAsync).toHaveBeenCalledWith('pl_a1', {});
+    });
+  });
+
+  describe('prepareDeletePlan', () => {
+    it('generates an approval token and warns about contained buckets and tasks', () => {
+      const result = tools.prepareDeletePlan({ plan_id: 'pl_a1' });
+
+      const parsed = JSON.parse(result.content[0].text);
+      expect(parsed.approval_token).toBeDefined();
+      expect(typeof parsed.approval_token).toBe('string');
+      expect(parsed.expires_at).toBeDefined();
+      expect(parsed.plan_id).toBe('pl_a1');
+      expect(parsed.action).toContain('confirm_delete_plan');
+      expect(parsed.action).toContain('buckets and tasks');
+    });
+  });
+
+  describe('confirmDeletePlan', () => {
+    it('deletes the plan with a valid token', async () => {
+      vi.mocked(repo.deletePlanAsync).mockResolvedValue(undefined);
+
+      const prepareResult = tools.prepareDeletePlan({ plan_id: 'pl_a1' });
+      const { approval_token } = JSON.parse(prepareResult.content[0].text);
+
+      const result = await tools.confirmDeletePlan({ approval_token });
+
+      const parsed = JSON.parse(result.content[0].text);
+      expect(parsed.success).toBe(true);
+      expect(parsed.message).toBe('Plan deleted');
+      expect(repo.deletePlanAsync).toHaveBeenCalledWith('pl_a1');
+    });
+
+    it('returns error for invalid token', async () => {
+      const result = await tools.confirmDeletePlan({ approval_token: 'invalid-token' });
+
+      const parsed = JSON.parse(result.content[0].text);
+      expect(parsed.success).toBe(false);
+      expect(parsed.error).toBe('Token not found or already used');
+      expect(repo.deletePlanAsync).not.toHaveBeenCalled();
+    });
+
+    it('rejects a token minted for a different operation', async () => {
+      const prepareResult = tools.prepareDeleteBucket({ bucket_id: 'pb_42' });
+      const { approval_token } = JSON.parse(prepareResult.content[0].text);
+
+      const result = await tools.confirmDeletePlan({ approval_token });
+
+      const parsed = JSON.parse(result.content[0].text);
+      expect(parsed.success).toBe(false);
+      expect(repo.deletePlanAsync).not.toHaveBeenCalled();
+    });
+
+    it('returns error when token is reused', async () => {
+      vi.mocked(repo.deletePlanAsync).mockResolvedValue(undefined);
+
+      const prepareResult = tools.prepareDeletePlan({ plan_id: 'pl_a1' });
+      const { approval_token } = JSON.parse(prepareResult.content[0].text);
+
+      await tools.confirmDeletePlan({ approval_token });
+      const result = await tools.confirmDeletePlan({ approval_token });
+
+      const parsed = JSON.parse(result.content[0].text);
+      expect(parsed.success).toBe(false);
+      expect(repo.deletePlanAsync).toHaveBeenCalledTimes(1);
     });
   });
 

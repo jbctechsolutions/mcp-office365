@@ -65,6 +65,14 @@ export const UpdatePlanInput = z.strictObject({
   title: z.string().min(1).optional().describe('New plan title'),
 });
 
+export const PrepareDeletePlanInput = z.strictObject({
+  plan_id: Id.plan,
+});
+
+export const ConfirmDeletePlanInput = z.strictObject({
+  approval_token: z.string().describe('Approval token from prepare_delete_plan'),
+});
+
 export const GetPlanDetailsInput = z.strictObject({
   plan_id: Id.plan,
 });
@@ -197,6 +205,8 @@ export type ListPlansParams = z.infer<typeof ListPlansInput>;
 export type GetPlanParams = z.infer<typeof GetPlanInput>;
 export type CreatePlanParams = z.infer<typeof CreatePlanInput>;
 export type UpdatePlanParams = z.infer<typeof UpdatePlanInput>;
+export type PrepareDeletePlanParams = z.infer<typeof PrepareDeletePlanInput>;
+export type ConfirmDeletePlanParams = z.infer<typeof ConfirmDeletePlanInput>;
 export type GetPlanDetailsParams = z.infer<typeof GetPlanDetailsInput>;
 export type UpdatePlanDetailsParams = z.infer<typeof UpdatePlanDetailsInput>;
 export type UpdatePlanSharingParams = z.infer<typeof UpdatePlanSharingInput>;
@@ -239,6 +249,7 @@ export interface IPlannerRepository {
     categoryDescriptions?: Record<string, string | null>;
   }): Promise<void>;
   updatePlanSharingAsync(planId: string, sharedWith: Record<string, boolean>): Promise<void>;
+  deletePlanAsync(planId: string): Promise<void>;
   listBucketsAsync(planId: string): Promise<Array<{ id: string; name: string; planId: string; orderHint: string }>>;
   createBucketAsync(planId: string, name: string, orderHint?: string): Promise<string>;
   updateBucketAsync(bucketId: string, updates: { name?: string; orderHint?: string }): Promise<void>;
@@ -355,6 +366,74 @@ export class PlannerTools {
       content: [{
         type: 'text' as const,
         text: JSON.stringify({ success: true, message: 'Plan updated' }, null, 2),
+      }],
+    };
+  }
+
+  prepareDeletePlan(params: PrepareDeletePlanParams): {
+    content: Array<{ type: 'text'; text: string }>;
+  } {
+    const token = this.tokenManager.generateToken({
+      operation: 'delete_plan',
+      targetType: 'plan',
+      targetId: params.plan_id,
+      targetHash: String(params.plan_id),
+    });
+
+    return {
+      content: [{
+        type: 'text' as const,
+        text: JSON.stringify({
+          approval_token: token.tokenId,
+          expires_at: new Date(token.expiresAt).toISOString(),
+          plan_id: params.plan_id,
+          action: `To confirm deleting plan ${params.plan_id} — including ALL buckets and tasks it contains — call confirm_delete_plan with the approval_token.`,
+        }, null, 2),
+      }],
+    };
+  }
+
+  async confirmDeletePlan(params: ConfirmDeletePlanParams): Promise<{
+    content: Array<{ type: 'text'; text: string }>;
+  }> {
+    const token = this.tokenManager.lookupToken(params.approval_token);
+    if (token == null) {
+      return {
+        content: [{
+          type: 'text' as const,
+          text: JSON.stringify({
+            success: false,
+            error: 'Token not found or already used',
+          }, null, 2),
+        }],
+      };
+    }
+
+    const result = this.tokenManager.consumeToken(params.approval_token, 'delete_plan', token.targetId);
+    if (!result.valid) {
+      const errorMessages: Record<string, string> = {
+        NOT_FOUND: 'Token not found or already used',
+        EXPIRED: 'Token has expired. Please call prepare_delete_plan again.',
+        OPERATION_MISMATCH: 'Token was not generated for delete_plan',
+        TARGET_MISMATCH: 'Token was generated for a different plan',
+        ALREADY_CONSUMED: 'Token has already been used',
+      };
+      return {
+        content: [{
+          type: 'text' as const,
+          text: JSON.stringify({
+            success: false,
+            error: errorMessages[result.error ?? ''] ?? 'Invalid token',
+          }, null, 2),
+        }],
+      };
+    }
+
+    await this.repo.deletePlanAsync(result.token!.targetId);
+    return {
+      content: [{
+        type: 'text' as const,
+        text: JSON.stringify({ success: true, message: 'Plan deleted' }, null, 2),
       }],
     };
   }
@@ -883,6 +962,27 @@ export function plannerToolDefinitions(): ToolDefinition[] {
       presets: ['planner'],
       backends: ['graph'],
       handler: (ctx, params) => tools(ctx).updatePlan(params),
+    }),
+    defineTool({
+      name: 'prepare_delete_plan',
+      description: 'Prepare to delete a Planner plan INCLUDING all its buckets and tasks. Returns an approval token. (Graph API)',
+      input: PrepareDeletePlanInput,
+      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+      destructive: true,
+      presets: ['planner'],
+      backends: ['graph'],
+      handler: (ctx, params) => tools(ctx).prepareDeletePlan(params),
+      onElicit: approvalTokenLink('confirm_delete_plan'),
+    }),
+    defineTool({
+      name: 'confirm_delete_plan',
+      description: 'Confirm deletion of a Planner plan (and all contained buckets/tasks) using the approval token from prepare_delete_plan. (Graph API)',
+      input: ConfirmDeletePlanInput,
+      annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+      destructive: true,
+      presets: ['planner'],
+      backends: ['graph'],
+      handler: (ctx, params) => tools(ctx).confirmDeletePlan(params),
     }),
     defineTool({
       name: 'get_plan_details',

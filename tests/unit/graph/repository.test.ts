@@ -5599,6 +5599,32 @@ describe('graph/repository', () => {
         expect(mockClient.updatePlanDetails).not.toHaveBeenCalled();
       });
 
+      it('deletePlanAsync fetches a fresh PLAN etag immediately before the delete', async () => {
+        const planTok = await planToken('graph-plan-1');
+        mockClient.getPlan.mockResolvedValue({ title: 'Plan', '@odata.etag': 'W/"plan-etag"' });
+        mockClient.deletePlan.mockResolvedValue(undefined);
+
+        await repository.deletePlanAsync(planTok);
+
+        expect(mockClient.getPlan).toHaveBeenCalledWith('graph-plan-1');
+        expect(mockClient.deletePlan).toHaveBeenCalledWith('graph-plan-1', 'W/"plan-etag"');
+      });
+
+      it('deletePlanAsync retries once on a 412 with a re-fetched etag', async () => {
+        const planTok = await planToken('graph-plan-1');
+        mockClient.getPlan
+          .mockResolvedValueOnce({ title: 'Plan', '@odata.etag': 'W/"stale"' })
+          .mockResolvedValueOnce({ title: 'Plan', '@odata.etag': 'W/"fresh"' });
+        mockClient.deletePlan
+          .mockRejectedValueOnce({ statusCode: 412 })
+          .mockResolvedValueOnce(undefined);
+
+        await repository.deletePlanAsync(planTok);
+
+        expect(mockClient.deletePlan).toHaveBeenCalledTimes(2);
+        expect(mockClient.deletePlan).toHaveBeenNthCalledWith(2, 'graph-plan-1', 'W/"fresh"');
+      });
+
       it('updatePlanSharingAsync PATCHes sharedWith with the details resource etag', async () => {
         const planTok = await planToken('graph-plan-1');
         mockClient.getPlanDetails.mockResolvedValue({ '@odata.etag': 'W/"details-etag"' });

@@ -2128,6 +2128,11 @@ export class GraphClient {
     return await client.api(`/planner/plans/${planId}`).header('If-Match', etag).patch(updates) as MicrosoftGraph.PlannerPlan;
   }
 
+  async deletePlan(planId: string, etag: string): Promise<void> {
+    const client = await this.getClient();
+    await client.api(`/planner/plans/${planId}`).header('If-Match', etag).delete();
+  }
+
   async getPlanDetails(planId: string): Promise<MicrosoftGraph.PlannerPlanDetails> {
     const client = await this.getClient();
     return await client.api(`/planner/plans/${planId}/details`).get() as MicrosoftGraph.PlannerPlanDetails;
