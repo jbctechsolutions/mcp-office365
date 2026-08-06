@@ -171,6 +171,9 @@ vi.mock('../../../src/graph/client/index.js', () => ({
       deletePlannerTask: vi.fn(),
       getPlannerTaskDetails: vi.fn(),
       updatePlannerTaskDetails: vi.fn(),
+      getPlanDetails: vi.fn(),
+      updatePlanDetails: vi.fn(),
+      deletePlan: vi.fn(),
       // OneDrive operations
       listDriveItems: vi.fn(),
       searchDriveItems: vi.fn(),
@@ -5397,7 +5400,29 @@ describe('graph/repository', () => {
         const bucketTok = await repository.createBucketAsync(planTok, 'Done');
 
         expect(bucketTok).toMatch(/^pb_/);
-        expect(mockClient.createBucket).toHaveBeenCalledWith('graph-plan-1', 'Done');
+        expect(mockClient.createBucket).toHaveBeenCalledWith('graph-plan-1', 'Done', undefined);
+      });
+
+      it('createBucketAsync passes an orderHint to the client', async () => {
+        const planTok = await planToken('graph-plan-1');
+        mockClient.createBucket.mockResolvedValue({ id: 'graph-bucket-new', '@odata.etag': 'W/"etag"' });
+
+        await repository.createBucketAsync(planTok, 'First', ' !');
+
+        expect(mockClient.createBucket).toHaveBeenCalledWith('graph-plan-1', 'First', ' !');
+      });
+
+      it('updateBucketAsync passes orderHint in the PATCH body', async () => {
+        const planTok = await planToken('graph-plan-1');
+        const bucketTok = await bucketToken(planTok, 'graph-bucket-1');
+        mockClient.getBucket.mockResolvedValue({ name: 'To Do', '@odata.etag': 'W/"bucket-etag"' });
+        mockClient.updateBucket.mockResolvedValue({ '@odata.etag': 'W/"bucket-etag"' });
+
+        await repository.updateBucketAsync(bucketTok, { orderHint: 'abc def!' });
+
+        expect(mockClient.updateBucket).toHaveBeenCalledWith(
+          'graph-bucket-1', { orderHint: 'abc def!' }, 'W/"bucket-etag"',
+        );
       });
 
       it('updateBucketAsync fetches a fresh etag immediately before the write (U5b-5)', async () => {
@@ -5499,12 +5524,289 @@ describe('graph/repository', () => {
         const bucketTok = await bucketToken(planTok, 'graph-bucket-1');
         mockClient.createPlannerTask.mockResolvedValue({ id: 'graph-task-new', '@odata.etag': 'W/"etag"' });
 
-        const taskTok = await repository.createPlannerTaskAsync(planTok, 'New Task', bucketTok);
+        const { taskId: taskTok } = await repository.createPlannerTaskAsync(planTok, 'New Task', { bucketId: bucketTok });
 
         expect(taskTok).toMatch(/^pt_/);
         expect(mockClient.createPlannerTask).toHaveBeenCalledWith({
           planId: 'graph-plan-1', title: 'New Task', bucketId: 'graph-bucket-1',
         });
+      });
+
+      it('getPlanDetailsAsync resolves the pl_ token and surfaces categoryDescriptions, sharedWith, and etag', async () => {
+        const planTok = await planToken('graph-plan-1');
+        mockClient.getPlanDetails.mockResolvedValue({
+          categoryDescriptions: { category1: 'Blocked', category2: null },
+          sharedWith: { 'user-guid-1': true },
+          '@odata.etag': 'W/"plan-details-etag"',
+        });
+
+        const details = await repository.getPlanDetailsAsync(planTok);
+
+        expect(mockClient.getPlanDetails).toHaveBeenCalledWith('graph-plan-1');
+        expect(details.categoryDescriptions).toEqual({ category1: 'Blocked', category2: null });
+        expect(details.sharedWith).toEqual({ 'user-guid-1': true });
+        expect(details.etag).toBe('W/"plan-details-etag"');
+      });
+
+      it('updatePlanDetailsAsync PATCHes with the details resource etag (get before patch)', async () => {
+        const planTok = await planToken('graph-plan-1');
+        const callOrder: string[] = [];
+        mockClient.getPlanDetails.mockImplementation(async () => {
+          callOrder.push('get');
+          return { '@odata.etag': 'W/"details-etag"' };
+        });
+        mockClient.updatePlanDetails.mockImplementation(async () => {
+          callOrder.push('patch');
+          return { '@odata.etag': 'W/"details-etag2"' };
+        });
+
+        await repository.updatePlanDetailsAsync(planTok, {
+          categoryDescriptions: { category3: 'Urgent', category4: null },
+        });
+
+        expect(callOrder).toEqual(['get', 'patch']);
+        expect(mockClient.updatePlanDetails).toHaveBeenCalledWith(
+          'graph-plan-1',
+          { categoryDescriptions: { category3: 'Urgent', category4: null } },
+          'W/"details-etag"',
+        );
+      });
+
+      it('updatePlanDetailsAsync retries once on a 412 with a re-fetched etag', async () => {
+        const planTok = await planToken('graph-plan-1');
+        mockClient.getPlanDetails
+          .mockResolvedValueOnce({ '@odata.etag': 'W/"stale"' })
+          .mockResolvedValueOnce({ '@odata.etag': 'W/"fresh"' });
+        mockClient.updatePlanDetails
+          .mockRejectedValueOnce({ statusCode: 412 })
+          .mockResolvedValueOnce({ '@odata.etag': 'W/"fresh"' });
+
+        await repository.updatePlanDetailsAsync(planTok, { categoryDescriptions: { category1: 'X' } });
+
+        expect(mockClient.updatePlanDetails).toHaveBeenCalledTimes(2);
+        expect(mockClient.updatePlanDetails).toHaveBeenNthCalledWith(
+          2, 'graph-plan-1', { categoryDescriptions: { category1: 'X' } }, 'W/"fresh"',
+        );
+      });
+
+      it('updatePlanDetailsAsync fails loudly (no PATCH) when the details GET returns no etag', async () => {
+        const planTok = await planToken('graph-plan-1');
+        mockClient.getPlanDetails.mockResolvedValue({ categoryDescriptions: {} });
+
+        await expect(
+          repository.updatePlanDetailsAsync(planTok, { categoryDescriptions: { category1: 'X' } }),
+        ).rejects.toThrow();
+        expect(mockClient.updatePlanDetails).not.toHaveBeenCalled();
+      });
+
+      it('deletePlanAsync fetches a fresh PLAN etag immediately before the delete', async () => {
+        const planTok = await planToken('graph-plan-1');
+        mockClient.getPlan.mockResolvedValue({ title: 'Plan', '@odata.etag': 'W/"plan-etag"' });
+        mockClient.deletePlan.mockResolvedValue(undefined);
+
+        await repository.deletePlanAsync(planTok);
+
+        expect(mockClient.getPlan).toHaveBeenCalledWith('graph-plan-1');
+        expect(mockClient.deletePlan).toHaveBeenCalledWith('graph-plan-1', 'W/"plan-etag"');
+      });
+
+      it('deletePlanAsync retries once on a 412 with a re-fetched etag', async () => {
+        const planTok = await planToken('graph-plan-1');
+        mockClient.getPlan
+          .mockResolvedValueOnce({ title: 'Plan', '@odata.etag': 'W/"stale"' })
+          .mockResolvedValueOnce({ title: 'Plan', '@odata.etag': 'W/"fresh"' });
+        mockClient.deletePlan
+          .mockRejectedValueOnce({ statusCode: 412 })
+          .mockResolvedValueOnce(undefined);
+
+        await repository.deletePlanAsync(planTok);
+
+        expect(mockClient.deletePlan).toHaveBeenCalledTimes(2);
+        expect(mockClient.deletePlan).toHaveBeenNthCalledWith(2, 'graph-plan-1', 'W/"fresh"');
+      });
+
+      it('updatePlanSharingAsync PATCHes sharedWith with the details resource etag', async () => {
+        const planTok = await planToken('graph-plan-1');
+        mockClient.getPlanDetails.mockResolvedValue({ '@odata.etag': 'W/"details-etag"' });
+        mockClient.updatePlanDetails.mockResolvedValue({ '@odata.etag': 'W/"details-etag2"' });
+
+        await repository.updatePlanSharingAsync(planTok, { 'user-guid-1': true, 'user-guid-2': false });
+
+        expect(mockClient.updatePlanDetails).toHaveBeenCalledWith(
+          'graph-plan-1',
+          { sharedWith: { 'user-guid-1': true, 'user-guid-2': false } },
+          'W/"details-etag"',
+        );
+      });
+
+      it('createPlannerTaskAsync with title only makes exactly one Graph call', async () => {
+        const planTok = await planToken('graph-plan-1');
+        mockClient.createPlannerTask.mockResolvedValue({ id: 'graph-task-new', '@odata.etag': 'W/"etag"' });
+
+        const result = await repository.createPlannerTaskAsync(planTok, 'Bare');
+
+        expect(result.detailsError).toBeUndefined();
+        expect(mockClient.createPlannerTask).toHaveBeenCalledTimes(1);
+        expect(mockClient.getPlannerTaskDetails).not.toHaveBeenCalled();
+        expect(mockClient.updatePlannerTaskDetails).not.toHaveBeenCalled();
+      });
+
+      it('createPlannerTaskAsync passes percentComplete in the POST body', async () => {
+        const planTok = await planToken('graph-plan-1');
+        mockClient.createPlannerTask.mockResolvedValue({ id: 'graph-task-new', '@odata.etag': 'W/"etag"' });
+
+        await repository.createPlannerTaskAsync(planTok, 'Half Done', { percentComplete: 50 });
+
+        expect(mockClient.createPlannerTask).toHaveBeenCalledWith({
+          planId: 'graph-plan-1', title: 'Half Done', percentComplete: 50,
+        });
+        expect(mockClient.getPlannerTaskDetails).not.toHaveBeenCalled();
+      });
+
+      it('createPlannerTaskAsync with a description creates, then PATCHes details with the details etag', async () => {
+        const planTok = await planToken('graph-plan-1');
+        const callOrder: string[] = [];
+        mockClient.createPlannerTask.mockImplementation(async () => {
+          callOrder.push('create');
+          return { id: 'graph-task-new', '@odata.etag': 'W/"task-etag"' };
+        });
+        mockClient.getPlannerTaskDetails.mockImplementation(async () => {
+          callOrder.push('get-details');
+          return { description: '', '@odata.etag': 'W/"details-etag"' };
+        });
+        mockClient.updatePlannerTaskDetails.mockImplementation(async () => {
+          callOrder.push('patch-details');
+          return { '@odata.etag': 'W/"details-etag2"' };
+        });
+
+        const result = await repository.createPlannerTaskAsync(planTok, 'Documented', {
+          description: 'Notes', checklist: { 'guid-1': { title: 'Step', isChecked: false } },
+        });
+
+        expect(result.taskId).toMatch(/^pt_/);
+        expect(result.detailsError).toBeUndefined();
+        expect(callOrder).toEqual(['create', 'get-details', 'patch-details']);
+        expect(mockClient.updatePlannerTaskDetails).toHaveBeenCalledWith(
+          'graph-task-new',
+          { description: 'Notes', checklist: { 'guid-1': { title: 'Step', isChecked: false } } },
+          'W/"details-etag"',
+        );
+      });
+
+      it('createPlannerTaskAsync returns the raw details failure reason when the details write fails', async () => {
+        const planTok = await planToken('graph-plan-1');
+        mockClient.createPlannerTask.mockResolvedValue({ id: 'graph-task-new', '@odata.etag': 'W/"etag"' });
+        mockClient.getPlannerTaskDetails.mockRejectedValue(new Error('details not ready'));
+
+        const result = await repository.createPlannerTaskAsync(planTok, 'Partial', { description: 'x' });
+
+        expect(result.taskId).toMatch(/^pt_/);
+        expect(result.detailsError).toContain('details not ready');
+      });
+
+      it('createPlannerTaskAsync rethrows auth failures from the details follow-up instead of degrading to a warning', async () => {
+        const planTok = await planToken('graph-plan-1');
+        mockClient.createPlannerTask.mockResolvedValue({ id: 'graph-task-new', '@odata.etag': 'W/"etag"' });
+        mockClient.getPlannerTaskDetails.mockRejectedValue({ statusCode: 401, message: 'InvalidAuthenticationToken' });
+
+        await expect(
+          repository.createPlannerTaskAsync(planTok, 'Partial', { description: 'x' }),
+        ).rejects.toMatchObject({ statusCode: 401 });
+      });
+
+      it('createPlannerTaskAsync passes appliedCategories in the POST body', async () => {
+        const planTok = await planToken('graph-plan-1');
+        mockClient.createPlannerTask.mockResolvedValue({ id: 'graph-task-new', '@odata.etag': 'W/"etag"' });
+
+        await repository.createPlannerTaskAsync(planTok, 'Labeled', {
+          appliedCategories: { category3: true, category25: true },
+        });
+
+        expect(mockClient.createPlannerTask).toHaveBeenCalledWith({
+          planId: 'graph-plan-1', title: 'Labeled',
+          appliedCategories: { category3: true, category25: true },
+        });
+      });
+
+      it('createPlannerTaskAsync passes orderHint in the POST body', async () => {
+        const planTok = await planToken('graph-plan-1');
+        mockClient.createPlannerTask.mockResolvedValue({ id: 'graph-task-new', '@odata.etag': 'W/"etag"' });
+
+        await repository.createPlannerTaskAsync(planTok, 'Ordered', { orderHint: ' !' });
+
+        expect(mockClient.createPlannerTask).toHaveBeenCalledWith({
+          planId: 'graph-plan-1', title: 'Ordered', orderHint: ' !',
+        });
+      });
+
+      it('updatePlannerTaskAsync maps orderHint into the PATCH body', async () => {
+        const planTok = await planToken('graph-plan-1');
+        const taskTok = await taskToken(planTok, 'graph-task-1');
+        mockClient.getPlannerTask.mockResolvedValue({ title: 'Task', '@odata.etag': 'W/"task-etag"' });
+        mockClient.updatePlannerTask.mockResolvedValue({ '@odata.etag': 'W/"task-etag"' });
+
+        await repository.updatePlannerTaskAsync(taskTok, { orderHint: 'aaa bbb!' });
+
+        expect(mockClient.updatePlannerTask).toHaveBeenCalledWith(
+          'graph-task-1', { orderHint: 'aaa bbb!' }, 'W/"task-etag"',
+        );
+      });
+
+      it('updatePlannerTaskAsync maps appliedCategories into the PATCH body', async () => {
+        const planTok = await planToken('graph-plan-1');
+        const taskTok = await taskToken(planTok, 'graph-task-1');
+        mockClient.getPlannerTask.mockResolvedValue({ title: 'Task', '@odata.etag': 'W/"task-etag"' });
+        mockClient.updatePlannerTask.mockResolvedValue({ '@odata.etag': 'W/"task-etag"' });
+
+        await repository.updatePlannerTaskAsync(taskTok, {
+          appliedCategories: { category3: true, category4: false },
+        });
+
+        expect(mockClient.updatePlannerTask).toHaveBeenCalledWith(
+          'graph-task-1',
+          { appliedCategories: { category3: true, category4: false } },
+          'W/"task-etag"',
+        );
+      });
+
+      it('getPlannerTaskAsync surfaces appliedCategories (empty object when absent)', async () => {
+        const planTok = await planToken('graph-plan-1');
+        const taskTok = await taskToken(planTok, 'graph-task-1');
+        mockClient.getPlannerTask.mockResolvedValue({
+          title: 'Ship', appliedCategories: { category5: true }, '@odata.etag': 'W/"e"',
+        });
+
+        const task = await repository.getPlannerTaskAsync(taskTok);
+        expect(task.appliedCategories).toEqual({ category5: true });
+
+        mockClient.getPlannerTask.mockResolvedValue({ title: 'Bare', '@odata.etag': 'W/"e"' });
+        const bare = await repository.getPlannerTaskAsync(taskTok);
+        expect(bare.appliedCategories).toEqual({});
+      });
+
+      it('listPlannerTasksAsync surfaces appliedCategories and orderHint per task', async () => {
+        const planTok = await planToken('graph-plan-1');
+        mockClient.listPlannerTasks.mockResolvedValue([
+          { id: 'graph-task-1', title: 'A', appliedCategories: { category1: true }, orderHint: '8585269' },
+          { id: 'graph-task-2', title: 'B' },
+        ]);
+
+        const tasks = await repository.listPlannerTasksAsync(planTok);
+
+        expect(tasks[0].appliedCategories).toEqual({ category1: true });
+        expect(tasks[0].orderHint).toBe('8585269');
+        expect(tasks[1].appliedCategories).toEqual({});
+        expect(tasks[1].orderHint).toBe('');
+      });
+
+      it('listMyPlannerTasksAsync surfaces orderHint per task', async () => {
+        mockClient.listMyPlannerTasks.mockResolvedValue([
+          { id: 'graph-task-1', title: 'Mine', planId: 'graph-plan-1', orderHint: '8585270' },
+        ]);
+
+        const tasks = await repository.listMyPlannerTasksAsync();
+
+        expect(tasks[0].orderHint).toBe('8585270');
       });
 
       it('updatePlannerTaskAsync fetches a fresh etag immediately before the write (U5b-5)', async () => {

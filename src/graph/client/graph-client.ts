@@ -2128,15 +2128,32 @@ export class GraphClient {
     return await client.api(`/planner/plans/${planId}`).header('If-Match', etag).patch(updates) as MicrosoftGraph.PlannerPlan;
   }
 
+  async deletePlan(planId: string, etag: string): Promise<void> {
+    const client = await this.getClient();
+    await client.api(`/planner/plans/${planId}`).header('If-Match', etag).delete();
+  }
+
+  async getPlanDetails(planId: string): Promise<MicrosoftGraph.PlannerPlanDetails> {
+    const client = await this.getClient();
+    return await client.api(`/planner/plans/${planId}/details`).get() as MicrosoftGraph.PlannerPlanDetails;
+  }
+
+  async updatePlanDetails(planId: string, updates: Record<string, unknown>, etag: string): Promise<MicrosoftGraph.PlannerPlanDetails> {
+    const client = await this.getClient();
+    return await client.api(`/planner/plans/${planId}/details`).header('If-Match', etag).patch(updates) as MicrosoftGraph.PlannerPlanDetails;
+  }
+
   async listBuckets(planId: string): Promise<MicrosoftGraph.PlannerBucket[]> {
     const client = await this.getClient();
     const response = await client.api(`/planner/plans/${planId}/buckets`).get() as PageCollection;
     return response.value as MicrosoftGraph.PlannerBucket[];
   }
 
-  async createBucket(planId: string, name: string): Promise<MicrosoftGraph.PlannerBucket> {
+  async createBucket(planId: string, name: string, orderHint?: string): Promise<MicrosoftGraph.PlannerBucket> {
     const client = await this.getClient();
-    return await client.api('/planner/buckets').post({ planId, name }) as MicrosoftGraph.PlannerBucket;
+    const body: Record<string, unknown> = { planId, name };
+    if (orderHint != null) body.orderHint = orderHint;
+    return await client.api('/planner/buckets').post(body) as MicrosoftGraph.PlannerBucket;
   }
 
   async getBucket(bucketId: string): Promise<MicrosoftGraph.PlannerBucket> {

@@ -2619,6 +2619,75 @@ export class GraphRepository implements IRepository {
     );
   }
 
+  /**
+   * Deletes a plan and everything in it (U5b-5: fetches a fresh etag immediately
+   * before the write). Contained buckets and tasks are deleted with the plan.
+   */
+  async deletePlanAsync(planId: string): Promise<void> {
+    const graphPlanId = await this.resolvePlanId(planId);
+    await this.withFreshEtag(
+      async () => this.extractEtag(await this.client.getPlan(graphPlanId)),
+      (etag) => this.client.deletePlan(graphPlanId, etag),
+    );
+  }
+
+  // ===========================================================================
+  // Planner Plan Details
+  // ===========================================================================
+
+  /**
+   * Gets plan details (category label names, sharedWith). Plan details piggyback
+   * the pl_ plan token — they have no id of their own, and carry their OWN etag
+   * (independent of the plan's).
+   */
+  async getPlanDetailsAsync(planId: string): Promise<{
+    id: string;
+    categoryDescriptions: Record<string, string | null>;
+    sharedWith: Record<string, boolean>;
+    etag: string;
+  }> {
+    const graphPlanId = await this.resolvePlanId(planId);
+    const details = await this.client.getPlanDetails(graphPlanId);
+    return {
+      id: String(planId),
+      categoryDescriptions: (details.categoryDescriptions ?? {}) as Record<string, string | null>,
+      sharedWith: (details.sharedWith ?? {}) as Record<string, boolean>,
+      etag: this.extractEtag(details),
+    };
+  }
+
+  /**
+   * Updates plan details — category label names and/or sharing (U5b-5: fetches
+   * the DETAILS resource's own fresh etag immediately before the write — never
+   * the plan's etag). The labels-vs-sharing split exists only at the tool layer
+   * (remote entitlements expose labels without sharing writes); both tools
+   * converge here. (No-op guarding lives at the tool layer; this method keeps the
+   * always-fetch/always-write shape of its sibling update methods.)
+   */
+  async updatePlanDetailsAsync(
+    planId: string,
+    updates: {
+      categoryDescriptions?: Record<string, string | null>;
+      sharedWith?: Record<string, boolean>;
+    },
+  ): Promise<void> {
+    const graphUpdates: Record<string, unknown> = {};
+    if (updates.categoryDescriptions != null) graphUpdates['categoryDescriptions'] = updates.categoryDescriptions;
+    if (updates.sharedWith != null) graphUpdates['sharedWith'] = updates.sharedWith;
+    const graphPlanId = await this.resolvePlanId(planId);
+    await this.withFreshEtag(
+      async () => this.extractEtag(await this.client.getPlanDetails(graphPlanId)),
+      (etag) => this.client.updatePlanDetails(graphPlanId, graphUpdates, etag),
+    );
+  }
+
+  /**
+   * Updates plan sharing (sharedWith user GUIDs → true adds, false removes).
+   */
+  async updatePlanSharingAsync(planId: string, sharedWith: Record<string, boolean>): Promise<void> {
+    await this.updatePlanDetailsAsync(planId, { sharedWith });
+  }
+
   // ===========================================================================
   // Planner Buckets
   // ===========================================================================
@@ -2643,19 +2712,20 @@ export class GraphRepository implements IRepository {
   /**
    * Creates a new bucket in a plan.
    */
-  async createBucketAsync(planId: string, name: string): Promise<string> {
+  async createBucketAsync(planId: string, name: string, orderHint?: string): Promise<string> {
     const graphPlanId = await this.resolvePlanId(planId);
-    const bucket = await this.client.createBucket(graphPlanId, name);
+    const bucket = await this.client.createBucket(graphPlanId, name, orderHint);
     return this.mintAlias('plannerBucket', bucket.id!);
   }
 
   /**
    * Updates a bucket (U5b-5: fetches a fresh etag immediately before the write).
    */
-  async updateBucketAsync(bucketId: string, updates: { name?: string }): Promise<void> {
+  async updateBucketAsync(bucketId: string, updates: { name?: string; orderHint?: string }): Promise<void> {
     const graphBucketId = this.toGraphId(bucketId, 'plannerBucket');
     const graphUpdates: Record<string, unknown> = {};
     if (updates.name != null) graphUpdates['name'] = updates.name;
+    if (updates.orderHint != null) graphUpdates['orderHint'] = updates.orderHint;
     await this.withFreshEtag(
       async () => this.extractEtag(await this.client.getBucket(graphBucketId)),
       (etag) => this.client.updateBucket(graphBucketId, graphUpdates, etag),
@@ -2684,6 +2754,7 @@ export class GraphRepository implements IRepository {
     id: string; title: string; bucketId: string | null; assignees: string[];
     percentComplete: number; priority: number; startDateTime: string;
     dueDateTime: string; createdDateTime: string;
+    appliedCategories: Record<string, boolean>; orderHint: string;
   }>> {
     const graphPlanId = await this.resolvePlanId(planId);
     const tasks = await this.client.listPlannerTasks(graphPlanId);
@@ -2699,6 +2770,8 @@ export class GraphRepository implements IRepository {
         startDateTime: task.startDateTime ?? '',
         dueDateTime: task.dueDateTime ?? '',
         createdDateTime: task.createdDateTime ?? '',
+        appliedCategories: (task.appliedCategories ?? {}) as Record<string, boolean>,
+        orderHint: task.orderHint ?? '',
       };
     });
   }
@@ -2713,6 +2786,7 @@ export class GraphRepository implements IRepository {
     id: string; title: string; planId: string; bucketId: string | null;
     assignees: string[]; percentComplete: number; priority: number;
     startDateTime: string; dueDateTime: string; createdDateTime: string;
+    appliedCategories: Record<string, boolean>; orderHint: string;
   }>> {
     const tasks = await this.client.listMyPlannerTasks();
     return tasks.map((task) => {
@@ -2728,6 +2802,8 @@ export class GraphRepository implements IRepository {
         startDateTime: task.startDateTime ?? '',
         dueDateTime: task.dueDateTime ?? '',
         createdDateTime: task.createdDateTime ?? '',
+        appliedCategories: (task.appliedCategories ?? {}) as Record<string, boolean>,
+        orderHint: task.orderHint ?? '',
       };
     });
   }
@@ -2739,7 +2815,7 @@ export class GraphRepository implements IRepository {
     id: string; title: string; bucketId: string | null; assignees: string[];
     percentComplete: number; priority: number; startDateTime: string;
     dueDateTime: string; createdDateTime: string; conversationThreadId: string;
-    orderHint: string; etag: string;
+    orderHint: string; etag: string; appliedCategories: Record<string, boolean>;
   }> {
     const gTaskId = this.toGraphId(taskId, 'plannerTask');
     const task = await this.client.getPlannerTask(gTaskId);
@@ -2756,6 +2832,7 @@ export class GraphRepository implements IRepository {
       conversationThreadId: task.conversationThreadId ?? '',
       orderHint: task.orderHint ?? '',
       etag: this.extractEtag(task),
+      appliedCategories: (task.appliedCategories ?? {}) as Record<string, boolean>,
     };
   }
 
@@ -2765,23 +2842,50 @@ export class GraphRepository implements IRepository {
   async createPlannerTaskAsync(
     planId: string,
     title: string,
-    bucketId?: string,
-    assignments?: Record<string, object>,
-    priority?: number,
-    startDate?: string,
-    dueDate?: string,
-  ): Promise<string> {
+    options: {
+      bucketId?: string; assignments?: Record<string, object>; priority?: number;
+      startDate?: string; dueDate?: string;
+      appliedCategories?: Record<string, boolean>; orderHint?: string;
+      percentComplete?: number; description?: string;
+      checklist?: Record<string, object | null>;
+    } = {},
+  ): Promise<{ taskId: string; detailsError?: string }> {
     const graphPlanId = await this.resolvePlanId(planId);
     const body: Record<string, unknown> = { planId: graphPlanId, title };
-    if (bucketId != null) {
-      body.bucketId = this.toGraphId(bucketId, 'plannerBucket');
+    if (options.bucketId != null) {
+      body.bucketId = this.toGraphId(options.bucketId, 'plannerBucket');
     }
-    if (assignments != null) body.assignments = assignments;
-    if (priority != null) body.priority = priority;
-    if (startDate != null) body.startDateTime = startDate;
-    if (dueDate != null) body.dueDateTime = dueDate;
+    if (options.assignments != null) body.assignments = options.assignments;
+    if (options.priority != null) body.priority = options.priority;
+    if (options.startDate != null) body.startDateTime = options.startDate;
+    if (options.dueDate != null) body.dueDateTime = options.dueDate;
+    if (options.appliedCategories != null) body.appliedCategories = options.appliedCategories;
+    if (options.orderHint != null) body.orderHint = options.orderHint;
+    if (options.percentComplete != null) body.percentComplete = options.percentComplete;
     const task = await this.client.createPlannerTask(body);
-    return this.mintAlias('plannerTask', task.id!);
+    const taskId = this.mintAlias('plannerTask', task.id!);
+
+    // Description/checklist live on the auto-created details sub-resource and
+    // cannot be set on POST /planner/tasks — apply them via the canonical
+    // details update (which fetches the details resource's OWN etag). A details
+    // failure must not fail the create (the task exists); the raw reason is
+    // returned for the tool layer to compose caller-facing guidance.
+    if (options.description != null || options.checklist != null) {
+      const detailsUpdates: { description?: string; checklist?: Record<string, object | null> } = {};
+      if (options.description != null) detailsUpdates.description = options.description;
+      if (options.checklist != null) detailsUpdates.checklist = options.checklist;
+      try {
+        await this.updatePlannerTaskDetailsAsync(taskId, detailsUpdates);
+      } catch (e) {
+        // Session-wide auth failures must fail loudly — a "retry the details"
+        // warning would mislead when every subsequent call will also 401.
+        const status = (e as { statusCode?: unknown }).statusCode;
+        const code = (e as { code?: unknown }).code;
+        if (status === 401 || code === 'AUTH_EXPIRED') throw e;
+        return { taskId, detailsError: e instanceof Error ? e.message : String(e) };
+      }
+    }
+    return { taskId };
   }
 
   /**
@@ -2797,6 +2901,8 @@ export class GraphRepository implements IRepository {
       startDate?: string;
       dueDate?: string;
       assignments?: Record<string, object>;
+      appliedCategories?: Record<string, boolean>;
+      orderHint?: string;
     },
   ): Promise<void> {
     const gTaskId = this.toGraphId(taskId, 'plannerTask');
@@ -2808,6 +2914,8 @@ export class GraphRepository implements IRepository {
     if (updates.startDate != null) graphUpdates['startDateTime'] = updates.startDate;
     if (updates.dueDate != null) graphUpdates['dueDateTime'] = updates.dueDate;
     if (updates.assignments != null) graphUpdates['assignments'] = updates.assignments;
+    if (updates.appliedCategories != null) graphUpdates['appliedCategories'] = updates.appliedCategories;
+    if (updates.orderHint != null) graphUpdates['orderHint'] = updates.orderHint;
     await this.withFreshEtag(
       async () => this.extractEtag(await this.client.getPlannerTask(gTaskId)),
       (etag) => this.client.updatePlannerTask(gTaskId, graphUpdates, etag),
@@ -2916,7 +3024,7 @@ export class GraphRepository implements IRepository {
     taskId: string,
     updates: {
       description?: string;
-      checklist?: Record<string, object>;
+      checklist?: Record<string, object | null>;
       references?: Record<string, object>;
     },
   ): Promise<void> {

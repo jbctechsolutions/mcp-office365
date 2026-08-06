@@ -30,6 +30,24 @@ declare module '../registry/types.js' {
 // Input Schemas
 // =============================================================================
 
+/** Shared key schema for Planner's 25 label categories. */
+const CategoryKey = z.string().regex(/^category([1-9]|1[0-9]|2[0-5])$/, 'Keys must be category1..category25');
+
+const AppliedCategories = z.record(CategoryKey, z.boolean())
+  .describe('Planner labels. Keys are category1..category25; true applies a label, false removes it; omitted keys are preserved on update. Label names come from get_plan_details.');
+
+const OrderHint = z.string().min(1)
+  .describe('Planner order hint: "<previous> <next>!" positions between neighbors (empty string for a missing neighbor); " !" appends. Never resend a service-returned hint verbatim (Graph 400).');
+
+const ChecklistItems = z.record(z.string(), z.object({}).passthrough().nullable())
+  .describe('Checklist items. Keys are GUIDs; values need { "@odata.type": "#microsoft.graph.plannerChecklistItem", "title": string, "isChecked": boolean }. Update semantics merge: omitted keys are preserved, set a key to null to remove it.');
+
+/** Entra user object-id (GUID) — the only key shape Graph accepts in sharedWith. */
+const UserGuid = z.string().regex(
+  /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/,
+  'Keys must be Entra user GUIDs',
+);
+
 export const ListPlansInput = z.strictObject({});
 
 export const GetPlanInput = z.strictObject({
@@ -46,6 +64,30 @@ export const UpdatePlanInput = z.strictObject({
   title: z.string().min(1).optional().describe('New plan title'),
 });
 
+export const PrepareDeletePlanInput = z.strictObject({
+  plan_id: Id.plan,
+});
+
+export const ConfirmDeletePlanInput = z.strictObject({
+  approval_token: z.string().describe('Approval token from prepare_delete_plan'),
+});
+
+export const GetPlanDetailsInput = z.strictObject({
+  plan_id: Id.plan,
+});
+
+export const UpdatePlanDetailsInput = z.strictObject({
+  plan_id: Id.plan,
+  category_descriptions: z.record(CategoryKey, z.string().nullable())
+    .optional().describe('Label display names. Keys are category1..category25; value is the new name, or null to reset to the default. Omitted keys are preserved.'),
+});
+
+export const UpdatePlanSharingInput = z.strictObject({
+  plan_id: Id.plan,
+  shared_with: z.record(UserGuid, z.boolean())
+    .describe('Plan sharing map. Keys are Entra user GUIDs; true shares the plan with the user, false removes them — removal may revoke their plan access. Members of the owning M365 group keep access via group membership.'),
+});
+
 export const ListBucketsInput = z.strictObject({
   plan_id: Id.plan,
 });
@@ -53,11 +95,13 @@ export const ListBucketsInput = z.strictObject({
 export const CreateBucketInput = z.strictObject({
   plan_id: Id.plan,
   name: z.string().min(1).describe('Bucket name'),
+  order_hint: OrderHint.optional(),
 });
 
 export const UpdateBucketInput = z.strictObject({
   bucket_id: Id.plannerBucket,
   name: z.string().min(1).optional().describe('New bucket name'),
+  order_hint: OrderHint.optional(),
 });
 
 export const PrepareDeleteBucketInput = z.strictObject({
@@ -86,6 +130,11 @@ export const CreatePlannerTaskInput = z.strictObject({
   priority: z.number().int().min(0).max(10).optional().describe('Priority (0-10)'),
   start_date: z.string().optional().describe('Start date in ISO format'),
   due_date: z.string().optional().describe('Due date in ISO format'),
+  applied_categories: AppliedCategories.optional(),
+  order_hint: OrderHint.optional(),
+  percent_complete: z.number().int().min(0).max(100).optional().describe('Percent complete (0-100)'),
+  description: z.string().optional().describe('Task description/notes — applied via a follow-up details write after creation'),
+  checklist: ChecklistItems.optional().describe('Checklist items, applied via a follow-up details write. Keys are GUIDs, values have title (string) and isChecked (boolean)'),
 });
 
 export const UpdatePlannerTaskInput = z.strictObject({
@@ -97,6 +146,8 @@ export const UpdatePlannerTaskInput = z.strictObject({
   start_date: z.string().optional().describe('Start date in ISO format'),
   due_date: z.string().optional().describe('Due date in ISO format'),
   assignments: z.record(z.string(), z.object({}).passthrough()).optional().describe('User assignments. Keys are user IDs, values should be { "@odata.type": "#microsoft.graph.plannerAssignment", "orderHint": " !" }'),
+  applied_categories: AppliedCategories.optional(),
+  order_hint: OrderHint.optional(),
 });
 
 export const PrepareDeletePlannerTaskInput = z.strictObject({
@@ -114,7 +165,7 @@ export const GetPlannerTaskDetailsInput = z.strictObject({
 export const UpdatePlannerTaskDetailsInput = z.strictObject({
   task_id: Id.plannerTask,
   description: z.string().optional().describe('Task description/notes'),
-  checklist: z.record(z.string(), z.object({}).passthrough()).optional().describe('Checklist items. Keys are GUIDs, values have title (string) and isChecked (boolean)'),
+  checklist: ChecklistItems.optional().describe('Checklist items. Keys are GUIDs, values have title (string) and isChecked (boolean)'),
   references: z.record(z.string(), z.object({}).passthrough()).optional().describe('Reference links. Keys are encoded URLs, values have alias (string) and type (string)'),
 });
 
@@ -151,6 +202,11 @@ export type ListPlansParams = z.infer<typeof ListPlansInput>;
 export type GetPlanParams = z.infer<typeof GetPlanInput>;
 export type CreatePlanParams = z.infer<typeof CreatePlanInput>;
 export type UpdatePlanParams = z.infer<typeof UpdatePlanInput>;
+export type PrepareDeletePlanParams = z.infer<typeof PrepareDeletePlanInput>;
+export type ConfirmDeletePlanParams = z.infer<typeof ConfirmDeletePlanInput>;
+export type GetPlanDetailsParams = z.infer<typeof GetPlanDetailsInput>;
+export type UpdatePlanDetailsParams = z.infer<typeof UpdatePlanDetailsInput>;
+export type UpdatePlanSharingParams = z.infer<typeof UpdatePlanSharingInput>;
 export type ListBucketsParams = z.infer<typeof ListBucketsInput>;
 export type CreateBucketParams = z.infer<typeof CreateBucketInput>;
 export type UpdateBucketParams = z.infer<typeof UpdateBucketInput>;
@@ -180,35 +236,52 @@ export interface IPlannerRepository {
   getPlanAsync(planId: string): Promise<{ id: string; title: string; owner: string; createdDateTime: string; etag: string }>;
   createPlanAsync(title: string, groupId: string): Promise<string>;
   updatePlanAsync(planId: string, updates: { title?: string }): Promise<void>;
+  getPlanDetailsAsync(planId: string): Promise<{
+    id: string;
+    categoryDescriptions: Record<string, string | null>;
+    sharedWith: Record<string, boolean>;
+    etag: string;
+  }>;
+  updatePlanDetailsAsync(planId: string, updates: {
+    categoryDescriptions?: Record<string, string | null>;
+    sharedWith?: Record<string, boolean>;
+  }): Promise<void>;
+  updatePlanSharingAsync(planId: string, sharedWith: Record<string, boolean>): Promise<void>;
+  deletePlanAsync(planId: string): Promise<void>;
   listBucketsAsync(planId: string): Promise<Array<{ id: string; name: string; planId: string; orderHint: string }>>;
-  createBucketAsync(planId: string, name: string): Promise<string>;
-  updateBucketAsync(bucketId: string, updates: { name?: string }): Promise<void>;
+  createBucketAsync(planId: string, name: string, orderHint?: string): Promise<string>;
+  updateBucketAsync(bucketId: string, updates: { name?: string; orderHint?: string }): Promise<void>;
   deleteBucketAsync(bucketId: string): Promise<void>;
   listPlannerTasksAsync(planId: string): Promise<Array<{
     id: string; title: string; bucketId: string | null; assignees: string[];
     percentComplete: number; priority: number; startDateTime: string;
     dueDateTime: string; createdDateTime: string;
+    appliedCategories: Record<string, boolean>; orderHint: string;
   }>>;
   listMyPlannerTasksAsync(): Promise<Array<{
     id: string; title: string; planId: string; bucketId: string | null;
     assignees: string[]; percentComplete: number; priority: number;
     startDateTime: string; dueDateTime: string; createdDateTime: string;
+    appliedCategories: Record<string, boolean>; orderHint: string;
   }>>;
   getPlannerTaskAsync(taskId: string): Promise<{
     id: string; title: string; bucketId: string | null; assignees: string[];
     percentComplete: number; priority: number; startDateTime: string;
     dueDateTime: string; createdDateTime: string; conversationThreadId: string;
-    orderHint: string; etag: string;
+    orderHint: string; etag: string; appliedCategories: Record<string, boolean>;
   }>;
-  createPlannerTaskAsync(
-    planId: string, title: string, bucketId?: string,
-    assignments?: Record<string, object>, priority?: number,
-    startDate?: string, dueDate?: string,
-  ): Promise<string>;
+  createPlannerTaskAsync(planId: string, title: string, options: {
+    bucketId?: string; assignments?: Record<string, object>; priority?: number;
+    startDate?: string; dueDate?: string;
+    appliedCategories?: Record<string, boolean>; orderHint?: string;
+    percentComplete?: number; description?: string;
+    checklist?: Record<string, object | null>;
+  }): Promise<{ taskId: string; detailsError?: string }>;
   updatePlannerTaskAsync(taskId: string, updates: {
     title?: string; bucketId?: string; percentComplete?: number;
     priority?: number; startDate?: string; dueDate?: string;
     assignments?: Record<string, object>;
+    appliedCategories?: Record<string, boolean>; orderHint?: string;
   }): Promise<void>;
   deletePlannerTaskAsync(taskId: string): Promise<void>;
   getPlannerTaskDetailsAsync(taskId: string): Promise<{
@@ -216,7 +289,7 @@ export interface IPlannerRepository {
     references: Record<string, unknown>; etag: string;
   }>;
   updatePlannerTaskDetailsAsync(taskId: string, updates: {
-    description?: string; checklist?: Record<string, object>;
+    description?: string; checklist?: Record<string, object | null>;
     references?: Record<string, object>;
   }): Promise<void>;
   listPlannerTaskMessagesAsync(taskId: string, skipToken?: string): Promise<{
@@ -295,6 +368,126 @@ export class PlannerTools {
     };
   }
 
+  prepareDeletePlan(params: PrepareDeletePlanParams): {
+    content: Array<{ type: 'text'; text: string }>;
+  } {
+    const token = this.tokenManager.generateToken({
+      operation: 'delete_plan',
+      targetType: 'plan',
+      targetId: params.plan_id,
+      targetHash: String(params.plan_id),
+    });
+
+    return {
+      content: [{
+        type: 'text' as const,
+        text: JSON.stringify({
+          approval_token: token.tokenId,
+          expires_at: new Date(token.expiresAt).toISOString(),
+          plan_id: params.plan_id,
+          action: `To confirm deleting plan ${params.plan_id} — including ALL buckets and tasks it contains — call confirm_delete_plan with the approval_token.`,
+        }, null, 2),
+      }],
+    };
+  }
+
+  async confirmDeletePlan(params: ConfirmDeletePlanParams): Promise<{
+    content: Array<{ type: 'text'; text: string }>;
+  }> {
+    const token = this.tokenManager.lookupToken(params.approval_token);
+    if (token == null) {
+      return {
+        content: [{
+          type: 'text' as const,
+          text: JSON.stringify({
+            success: false,
+            error: 'Token not found or already used',
+          }, null, 2),
+        }],
+      };
+    }
+
+    const result = this.tokenManager.consumeToken(params.approval_token, 'delete_plan', token.targetId);
+    if (!result.valid) {
+      const errorMessages: Record<string, string> = {
+        NOT_FOUND: 'Token not found or already used',
+        EXPIRED: 'Token has expired. Please call prepare_delete_plan again.',
+        OPERATION_MISMATCH: 'Token was not generated for delete_plan',
+        TARGET_MISMATCH: 'Token was generated for a different plan',
+        ALREADY_CONSUMED: 'Token has already been used',
+      };
+      return {
+        content: [{
+          type: 'text' as const,
+          text: JSON.stringify({
+            success: false,
+            error: errorMessages[result.error ?? ''] ?? 'Invalid token',
+          }, null, 2),
+        }],
+      };
+    }
+
+    await this.repo.deletePlanAsync(result.token!.targetId);
+    return {
+      content: [{
+        type: 'text' as const,
+        text: JSON.stringify({ success: true, message: 'Plan deleted' }, null, 2),
+      }],
+    };
+  }
+
+  async getPlanDetails(params: GetPlanDetailsParams): Promise<{
+    content: Array<{ type: 'text'; text: string }>;
+  }> {
+    const details = await this.repo.getPlanDetailsAsync(params.plan_id);
+    return {
+      content: [{
+        type: 'text' as const,
+        text: JSON.stringify({ details }, null, 2),
+      }],
+    };
+  }
+
+  async updatePlanDetails(params: UpdatePlanDetailsParams): Promise<{
+    content: Array<{ type: 'text'; text: string }>;
+  }> {
+    if (params.category_descriptions == null || Object.keys(params.category_descriptions).length === 0) {
+      return {
+        content: [{
+          type: 'text' as const,
+          text: JSON.stringify({ success: true, message: 'No updates provided' }, null, 2),
+        }],
+      };
+    }
+    await this.repo.updatePlanDetailsAsync(params.plan_id, { categoryDescriptions: params.category_descriptions });
+    return {
+      content: [{
+        type: 'text' as const,
+        text: JSON.stringify({ success: true, message: 'Plan details updated' }, null, 2),
+      }],
+    };
+  }
+
+  async updatePlanSharing(params: UpdatePlanSharingParams): Promise<{
+    content: Array<{ type: 'text'; text: string }>;
+  }> {
+    if (Object.keys(params.shared_with).length === 0) {
+      return {
+        content: [{
+          type: 'text' as const,
+          text: JSON.stringify({ success: true, message: 'No updates provided' }, null, 2),
+        }],
+      };
+    }
+    await this.repo.updatePlanSharingAsync(params.plan_id, params.shared_with);
+    return {
+      content: [{
+        type: 'text' as const,
+        text: JSON.stringify({ success: true, message: 'Plan sharing updated' }, null, 2),
+      }],
+    };
+  }
+
   async listBuckets(params: ListBucketsParams): Promise<{
     content: Array<{ type: 'text'; text: string }>;
   }> {
@@ -310,7 +503,7 @@ export class PlannerTools {
   async createBucket(params: CreateBucketParams): Promise<{
     content: Array<{ type: 'text'; text: string }>;
   }> {
-    const bucketId = await this.repo.createBucketAsync(params.plan_id, params.name);
+    const bucketId = await this.repo.createBucketAsync(params.plan_id, params.name, params.order_hint);
     return {
       content: [{
         type: 'text' as const,
@@ -322,8 +515,9 @@ export class PlannerTools {
   async updateBucket(params: UpdateBucketParams): Promise<{
     content: Array<{ type: 'text'; text: string }>;
   }> {
-    const updates: { name?: string } = {};
+    const updates: { name?: string; orderHint?: string } = {};
     if (params.name != null) updates.name = params.name;
+    if (params.order_hint != null) updates.orderHint = params.order_hint;
     await this.repo.updateBucketAsync(params.bucket_id, updates);
     return {
       content: [{
@@ -444,19 +638,32 @@ export class PlannerTools {
   async createPlannerTask(params: CreatePlannerTaskParams): Promise<{
     content: Array<{ type: 'text'; text: string }>;
   }> {
-    const taskId = await this.repo.createPlannerTaskAsync(
-      params.plan_id,
-      params.title,
-      params.bucket_id,
-      params.assignments,
-      params.priority,
-      params.start_date,
-      params.due_date,
-    );
+    const options: Parameters<IPlannerRepository['createPlannerTaskAsync']>[2] = {};
+    if (params.bucket_id != null) options.bucketId = params.bucket_id;
+    if (params.assignments != null) options.assignments = params.assignments;
+    if (params.priority != null) options.priority = params.priority;
+    if (params.start_date != null) options.startDate = params.start_date;
+    if (params.due_date != null) options.dueDate = params.due_date;
+    if (params.applied_categories != null) options.appliedCategories = params.applied_categories;
+    if (params.order_hint != null) options.orderHint = params.order_hint;
+    if (params.percent_complete != null) options.percentComplete = params.percent_complete;
+    if (params.description != null) options.description = params.description;
+    if (params.checklist != null) options.checklist = params.checklist;
+    const { taskId, detailsError } = await this.repo.createPlannerTaskAsync(params.plan_id, params.title, options);
+    const detailsWarning = detailsError != null
+      ? `Task created, but the description/checklist could not be applied (${detailsError}). ` +
+        `Retry via update_planner_task_details with task_id ${taskId}.`
+      : undefined;
     return {
       content: [{
         type: 'text' as const,
-        text: JSON.stringify({ success: true, task_id: taskId, message: 'Planner task created', next: nextActionFor('plannerTask') ?? undefined }, null, 2),
+        text: JSON.stringify({
+          success: true,
+          task_id: taskId,
+          message: 'Planner task created',
+          details_warning: detailsWarning,
+          next: nextActionFor('plannerTask') ?? undefined,
+        }, null, 2),
       }],
     };
   }
@@ -468,6 +675,7 @@ export class PlannerTools {
       title?: string; bucketId?: string; percentComplete?: number;
       priority?: number; startDate?: string; dueDate?: string;
       assignments?: Record<string, object>;
+      appliedCategories?: Record<string, boolean>; orderHint?: string;
     } = {};
     if (params.title != null) updates.title = params.title;
     if (params.bucket_id != null) updates.bucketId = params.bucket_id;
@@ -476,6 +684,8 @@ export class PlannerTools {
     if (params.start_date != null) updates.startDate = params.start_date;
     if (params.due_date != null) updates.dueDate = params.due_date;
     if (params.assignments != null) updates.assignments = params.assignments;
+    if (params.applied_categories != null) updates.appliedCategories = params.applied_categories;
+    if (params.order_hint != null) updates.orderHint = params.order_hint;
     await this.repo.updatePlannerTaskAsync(params.task_id, updates);
     return {
       content: [{
@@ -574,7 +784,7 @@ export class PlannerTools {
   }> {
     const updates: {
       description?: string;
-      checklist?: Record<string, object>;
+      checklist?: Record<string, object | null>;
       references?: Record<string, object>;
     } = {};
     if (params.description != null) updates.description = params.description;
@@ -770,6 +980,57 @@ export function plannerToolDefinitions(): ToolDefinition[] {
       handler: (ctx, params) => tools(ctx).updatePlan(params),
     }),
     defineTool({
+      name: 'prepare_delete_plan',
+      description: 'Prepare to delete a Planner plan INCLUDING all its buckets and tasks. Returns an approval token. (Graph API)',
+      input: PrepareDeletePlanInput,
+      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+      destructive: true,
+      presets: ['planner'],
+      backends: ['graph'],
+      handler: (ctx, params) => tools(ctx).prepareDeletePlan(params),
+      onElicit: approvalTokenLink('confirm_delete_plan'),
+    }),
+    defineTool({
+      name: 'confirm_delete_plan',
+      description: 'Confirm deletion of a Planner plan (and all contained buckets/tasks) using the approval token from prepare_delete_plan. (Graph API)',
+      input: ConfirmDeletePlanInput,
+      annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+      destructive: true,
+      presets: ['planner'],
+      backends: ['graph'],
+      handler: (ctx, params) => tools(ctx).confirmDeletePlan(params),
+    }),
+    defineTool({
+      name: 'get_plan_details',
+      description: 'Get Planner plan details: category label names (categoryDescriptions) and who the plan is shared with (Graph API)',
+      input: GetPlanDetailsInput,
+      annotations: { readOnlyHint: true, openWorldHint: true },
+      destructive: false,
+      presets: ['planner'],
+      backends: ['graph'],
+      handler: (ctx, params) => tools(ctx).getPlanDetails(params),
+    }),
+    defineTool({
+      name: 'update_plan_details',
+      description: 'Update Planner plan category label names (category1..category25; null resets a name to default) (Graph API)',
+      input: UpdatePlanDetailsInput,
+      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+      destructive: false,
+      presets: ['planner'],
+      backends: ['graph'],
+      handler: (ctx, params) => tools(ctx).updatePlanDetails(params),
+    }),
+    defineTool({
+      name: 'update_plan_sharing',
+      description: 'Share or unshare a Planner plan (sharedWith user GUIDs; true adds, false removes — removal may revoke plan access; owning-group members keep access via membership) (Graph API)',
+      input: UpdatePlanSharingInput,
+      annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+      destructive: true,
+      presets: ['planner'],
+      backends: ['graph'],
+      handler: (ctx, params) => tools(ctx).updatePlanSharing(params),
+    }),
+    defineTool({
       name: 'list_buckets',
       description: 'List all buckets in a Planner plan (Graph API)',
       input: ListBucketsInput,
@@ -781,7 +1042,7 @@ export function plannerToolDefinitions(): ToolDefinition[] {
     }),
     defineTool({
       name: 'create_bucket',
-      description: 'Create a new bucket in a Planner plan (Graph API)',
+      description: 'Create a new bucket in a Planner plan, optionally positioned via order_hint (Graph API)',
       input: CreateBucketInput,
       annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
       destructive: false,
@@ -791,7 +1052,7 @@ export function plannerToolDefinitions(): ToolDefinition[] {
     }),
     defineTool({
       name: 'update_bucket',
-      description: 'Update a Planner bucket name (Graph API)',
+      description: 'Update a Planner bucket name and/or board position (order_hint) (Graph API)',
       input: UpdateBucketInput,
       annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
       destructive: false,
@@ -903,7 +1164,7 @@ export function plannerToolDefinitions(): ToolDefinition[] {
     }),
     defineTool({
       name: 'update_planner_task_details',
-      description: 'Update details for a Planner task (description, checklist, references). Requires get_planner_task_details first for ETag. (Graph API)',
+      description: 'Update details for a Planner task (description, checklist, references). (Graph API)',
       input: UpdatePlannerTaskDetailsInput,
       annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
       destructive: false,

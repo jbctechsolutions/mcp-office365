@@ -8,7 +8,14 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { PlannerTools, type IPlannerRepository } from '../../../src/tools/planner.js';
+import {
+  PlannerTools,
+  CreatePlannerTaskInput,
+  UpdatePlannerTaskInput,
+  UpdatePlanDetailsInput,
+  UpdatePlanSharingInput,
+  type IPlannerRepository,
+} from '../../../src/tools/planner.js';
 import { ApprovalTokenManager } from '../../../src/approval/index.js';
 
 describe('PlannerTools', () => {
@@ -34,6 +41,10 @@ describe('PlannerTools', () => {
       deletePlannerTaskAsync: vi.fn(),
       getPlannerTaskDetailsAsync: vi.fn(),
       updatePlannerTaskDetailsAsync: vi.fn(),
+      getPlanDetailsAsync: vi.fn(),
+      updatePlanDetailsAsync: vi.fn(),
+      updatePlanSharingAsync: vi.fn(),
+      deletePlanAsync: vi.fn(),
       listPlannerTaskMessagesAsync: vi.fn(),
       createPlannerTaskMessageAsync: vi.fn(),
       updatePlannerTaskMessageAsync: vi.fn(),
@@ -114,6 +125,165 @@ describe('PlannerTools', () => {
     });
   });
 
+  describe('prepareDeletePlan', () => {
+    it('generates an approval token and warns about contained buckets and tasks', () => {
+      const result = tools.prepareDeletePlan({ plan_id: 'pl_a1' });
+
+      const parsed = JSON.parse(result.content[0].text);
+      expect(parsed.approval_token).toBeDefined();
+      expect(typeof parsed.approval_token).toBe('string');
+      expect(parsed.expires_at).toBeDefined();
+      expect(parsed.plan_id).toBe('pl_a1');
+      expect(parsed.action).toContain('confirm_delete_plan');
+      expect(parsed.action).toContain('buckets and tasks');
+    });
+  });
+
+  describe('confirmDeletePlan', () => {
+    it('deletes the plan with a valid token', async () => {
+      vi.mocked(repo.deletePlanAsync).mockResolvedValue(undefined);
+
+      const prepareResult = tools.prepareDeletePlan({ plan_id: 'pl_a1' });
+      const { approval_token } = JSON.parse(prepareResult.content[0].text);
+
+      const result = await tools.confirmDeletePlan({ approval_token });
+
+      const parsed = JSON.parse(result.content[0].text);
+      expect(parsed.success).toBe(true);
+      expect(parsed.message).toBe('Plan deleted');
+      expect(repo.deletePlanAsync).toHaveBeenCalledWith('pl_a1');
+    });
+
+    it('returns error for invalid token', async () => {
+      const result = await tools.confirmDeletePlan({ approval_token: 'invalid-token' });
+
+      const parsed = JSON.parse(result.content[0].text);
+      expect(parsed.success).toBe(false);
+      expect(parsed.error).toBe('Token not found or already used');
+      expect(repo.deletePlanAsync).not.toHaveBeenCalled();
+    });
+
+    it('rejects a token minted for a different operation', async () => {
+      const prepareResult = tools.prepareDeleteBucket({ bucket_id: 'pb_42' });
+      const { approval_token } = JSON.parse(prepareResult.content[0].text);
+
+      const result = await tools.confirmDeletePlan({ approval_token });
+
+      const parsed = JSON.parse(result.content[0].text);
+      expect(parsed.success).toBe(false);
+      expect(repo.deletePlanAsync).not.toHaveBeenCalled();
+    });
+
+    it('returns error when token is reused', async () => {
+      vi.mocked(repo.deletePlanAsync).mockResolvedValue(undefined);
+
+      const prepareResult = tools.prepareDeletePlan({ plan_id: 'pl_a1' });
+      const { approval_token } = JSON.parse(prepareResult.content[0].text);
+
+      await tools.confirmDeletePlan({ approval_token });
+      const result = await tools.confirmDeletePlan({ approval_token });
+
+      const parsed = JSON.parse(result.content[0].text);
+      expect(parsed.success).toBe(false);
+      expect(repo.deletePlanAsync).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('getPlanDetails', () => {
+    it('returns plan details including label names, sharing, and etag', async () => {
+      const mockDetails = {
+        id: 'pl_a1',
+        categoryDescriptions: { category1: 'Blocked', category2: null },
+        sharedWith: { 'user-guid-1': true },
+        etag: 'W/"details-etag"',
+      };
+      vi.mocked(repo.getPlanDetailsAsync).mockResolvedValue(mockDetails);
+
+      const result = await tools.getPlanDetails({ plan_id: 'pl_a1' });
+
+      expect(repo.getPlanDetailsAsync).toHaveBeenCalledWith('pl_a1');
+      const parsed = JSON.parse(result.content[0].text);
+      expect(parsed.details).toEqual(mockDetails);
+    });
+  });
+
+  describe('updatePlanDetails', () => {
+    it('updates category label names, preserving explicit null resets', async () => {
+      vi.mocked(repo.updatePlanDetailsAsync).mockResolvedValue(undefined);
+
+      const result = await tools.updatePlanDetails({
+        plan_id: 'pl_a1',
+        category_descriptions: { category1: 'Blocked', category2: null },
+      });
+
+      expect(repo.updatePlanDetailsAsync).toHaveBeenCalledWith('pl_a1', {
+        categoryDescriptions: { category1: 'Blocked', category2: null },
+      });
+      const parsed = JSON.parse(result.content[0].text);
+      expect(parsed.success).toBe(true);
+      expect(parsed.message).toBe('Plan details updated');
+    });
+
+    it('schema rejects a shared_with key — sharing cannot ride in through the labels tool', () => {
+      expect(() => UpdatePlanDetailsInput.parse({
+        plan_id: 'pl_a1', shared_with: { 'guid-1': true },
+      })).toThrow();
+    });
+
+    it('returns a distinct no-op message without any repository call when nothing to update', async () => {
+      const noField = await tools.updatePlanDetails({ plan_id: 'pl_a1' });
+      const emptyMap = await tools.updatePlanDetails({ plan_id: 'pl_a1', category_descriptions: {} });
+
+      expect(repo.updatePlanDetailsAsync).not.toHaveBeenCalled();
+      expect(JSON.parse(noField.content[0].text).message).toBe('No updates provided');
+      expect(JSON.parse(emptyMap.content[0].text).message).toBe('No updates provided');
+    });
+
+    it('schema rejects category26 label keys', () => {
+      expect(() => UpdatePlanDetailsInput.parse({
+        plan_id: 'pl_a1', category_descriptions: { category26: 'Nope' },
+      })).toThrow();
+    });
+  });
+
+  describe('updatePlanSharing', () => {
+    it('passes the shared_with map through to the repository', async () => {
+      vi.mocked(repo.updatePlanSharingAsync).mockResolvedValue(undefined);
+
+      const result = await tools.updatePlanSharing({
+        plan_id: 'pl_a1', shared_with: { 'user-guid-1': true, 'user-guid-2': false },
+      });
+
+      expect(repo.updatePlanSharingAsync).toHaveBeenCalledWith('pl_a1', {
+        'user-guid-1': true, 'user-guid-2': false,
+      });
+      const parsed = JSON.parse(result.content[0].text);
+      expect(parsed.success).toBe(true);
+      expect(parsed.message).toBe('Plan sharing updated');
+    });
+
+    it('schema requires shared_with', () => {
+      expect(() => UpdatePlanSharingInput.parse({ plan_id: 'pl_a1' })).toThrow();
+    });
+
+    it('schema rejects non-GUID shared_with keys and accepts GUIDs', () => {
+      expect(() => UpdatePlanSharingInput.parse({
+        plan_id: 'pl_a1', shared_with: { 'bob@contoso.com': true },
+      })).toThrow();
+      const ok = UpdatePlanSharingInput.parse({
+        plan_id: 'pl_a1', shared_with: { 'fae7c692-c24a-4ec2-8f95-d5ca6d6b79de': true },
+      });
+      expect(ok.shared_with).toEqual({ 'fae7c692-c24a-4ec2-8f95-d5ca6d6b79de': true });
+    });
+
+    it('returns a distinct no-op message without any repository call for an empty shared_with map', async () => {
+      const result = await tools.updatePlanSharing({ plan_id: 'pl_a1', shared_with: {} });
+
+      expect(repo.updatePlanSharingAsync).not.toHaveBeenCalled();
+      expect(JSON.parse(result.content[0].text).message).toBe('No updates provided');
+    });
+  });
+
   // ===========================================================================
   // Buckets
   // ===========================================================================
@@ -140,11 +310,19 @@ describe('PlannerTools', () => {
 
       const result = await tools.createBucket({ plan_id: 'pl_a1', name: 'Done' });
 
-      expect(repo.createBucketAsync).toHaveBeenCalledWith('pl_a1', 'Done');
+      expect(repo.createBucketAsync).toHaveBeenCalledWith('pl_a1', 'Done', undefined);
       const parsed = JSON.parse(result.content[0].text);
       expect(parsed.success).toBe(true);
       expect(parsed.bucket_id).toBe('pb_99');
       expect(parsed.message).toBe('Bucket created');
+    });
+
+    it('passes order_hint through to the repository', async () => {
+      vi.mocked(repo.createBucketAsync).mockResolvedValue('pb_100');
+
+      await tools.createBucket({ plan_id: 'pl_a1', name: 'First', order_hint: ' !' });
+
+      expect(repo.createBucketAsync).toHaveBeenCalledWith('pl_a1', 'First', ' !');
     });
   });
 
@@ -166,6 +344,14 @@ describe('PlannerTools', () => {
       await tools.updateBucket({ bucket_id: 'pb_10' });
 
       expect(repo.updateBucketAsync).toHaveBeenCalledWith('pb_10', {});
+    });
+
+    it('passes order_hint through to the repository', async () => {
+      vi.mocked(repo.updateBucketAsync).mockResolvedValue(undefined);
+
+      await tools.updateBucket({ bucket_id: 'pb_10', order_hint: 'abc def!' });
+
+      expect(repo.updateBucketAsync).toHaveBeenCalledWith('pb_10', { orderHint: 'abc def!' });
     });
   });
 
@@ -280,19 +466,20 @@ describe('PlannerTools', () => {
 
   describe('createPlannerTask', () => {
     it('creates a task and returns the ID', async () => {
-      vi.mocked(repo.createPlannerTaskAsync).mockResolvedValue('pt_200');
+      vi.mocked(repo.createPlannerTaskAsync).mockResolvedValue({ taskId: 'pt_200' });
 
       const result = await tools.createPlannerTask({ plan_id: 'pl_a1', title: 'New Task' });
 
-      expect(repo.createPlannerTaskAsync).toHaveBeenCalledWith('pl_a1', 'New Task', undefined, undefined, undefined, undefined, undefined);
+      expect(repo.createPlannerTaskAsync).toHaveBeenCalledWith('pl_a1', 'New Task', {});
       const parsed = JSON.parse(result.content[0].text);
       expect(parsed.success).toBe(true);
       expect(parsed.task_id).toBe('pt_200');
       expect(parsed.message).toBe('Planner task created');
+      expect(parsed.details_warning).toBeUndefined();
     });
 
     it('passes all optional parameters', async () => {
-      vi.mocked(repo.createPlannerTaskAsync).mockResolvedValue('pt_201');
+      vi.mocked(repo.createPlannerTaskAsync).mockResolvedValue({ taskId: 'pt_201' });
       const assignments = { 'user-1': { '@odata.type': '#microsoft.graph.plannerAssignment', 'orderHint': ' !' } };
 
       await tools.createPlannerTask({
@@ -301,9 +488,100 @@ describe('PlannerTools', () => {
         start_date: '2026-03-01T00:00:00Z', due_date: '2026-04-01T00:00:00Z',
       });
 
-      expect(repo.createPlannerTaskAsync).toHaveBeenCalledWith(
-        'pl_a1', 'Full Task', 'pb_10', assignments, 3, '2026-03-01T00:00:00Z', '2026-04-01T00:00:00Z',
-      );
+      expect(repo.createPlannerTaskAsync).toHaveBeenCalledWith('pl_a1', 'Full Task', {
+        bucketId: 'pb_10', assignments, priority: 3,
+        startDate: '2026-03-01T00:00:00Z', dueDate: '2026-04-01T00:00:00Z',
+      });
+    });
+
+    it('passes applied_categories through to the repository', async () => {
+      vi.mocked(repo.createPlannerTaskAsync).mockResolvedValue({ taskId: 'pt_202' });
+
+      await tools.createPlannerTask({
+        plan_id: 'pl_a1', title: 'Labeled Task',
+        applied_categories: { category3: true, category25: true },
+      });
+
+      expect(repo.createPlannerTaskAsync).toHaveBeenCalledWith('pl_a1', 'Labeled Task', {
+        appliedCategories: { category3: true, category25: true },
+      });
+    });
+
+    it('passes order_hint through to the repository', async () => {
+      vi.mocked(repo.createPlannerTaskAsync).mockResolvedValue({ taskId: 'pt_203' });
+
+      await tools.createPlannerTask({ plan_id: 'pl_a1', title: 'Ordered', order_hint: ' !' });
+
+      expect(repo.createPlannerTaskAsync).toHaveBeenCalledWith('pl_a1', 'Ordered', {
+        orderHint: ' !',
+      });
+    });
+
+    it('passes percent_complete, description, and checklist through to the repository', async () => {
+      vi.mocked(repo.createPlannerTaskAsync).mockResolvedValue({ taskId: 'pt_204' });
+      const checklist = { 'guid-1': { title: 'Step 1', isChecked: false } };
+
+      await tools.createPlannerTask({
+        plan_id: 'pl_a1', title: 'Complete Task',
+        percent_complete: 50, description: 'Notes here', checklist,
+      });
+
+      expect(repo.createPlannerTaskAsync).toHaveBeenCalledWith('pl_a1', 'Complete Task', {
+        percentComplete: 50, description: 'Notes here', checklist,
+      });
+    });
+
+    it('composes details_warning naming the recovery tool when the details follow-up failed', async () => {
+      vi.mocked(repo.createPlannerTaskAsync).mockResolvedValue({
+        taskId: 'pt_205',
+        detailsError: 'details not ready',
+      });
+
+      const result = await tools.createPlannerTask({
+        plan_id: 'pl_a1', title: 'Partial', description: 'x',
+      });
+
+      const parsed = JSON.parse(result.content[0].text);
+      expect(parsed.success).toBe(true);
+      expect(parsed.task_id).toBe('pt_205');
+      expect(parsed.details_warning).toContain('update_planner_task_details');
+      expect(parsed.details_warning).toContain('pt_205');
+      expect(parsed.details_warning).toContain('details not ready');
+    });
+
+    it('rejects percent_complete above 100', () => {
+      expect(() => CreatePlannerTaskInput.parse({
+        plan_id: 'pl_a1', title: 'T', percent_complete: 101,
+      })).toThrow();
+    });
+
+    it('checklist accepts null values (removal semantics promised by the description)', () => {
+      const parsed = CreatePlannerTaskInput.parse({
+        plan_id: 'pl_a1', title: 'T', checklist: { 'guid-1': null },
+      });
+      expect(parsed.checklist).toEqual({ 'guid-1': null });
+    });
+  });
+
+  describe('CreatePlannerTaskInput applied_categories validation', () => {
+    it('accepts category1 through category25 keys', () => {
+      const parsed = CreatePlannerTaskInput.parse({
+        plan_id: 'pl_a1', title: 'T',
+        applied_categories: { category1: true, category25: false },
+      });
+      expect(parsed.applied_categories).toEqual({ category1: true, category25: false });
+    });
+
+    it('rejects category26', () => {
+      expect(() => CreatePlannerTaskInput.parse({
+        plan_id: 'pl_a1', title: 'T', applied_categories: { category26: true },
+      })).toThrow();
+    });
+
+    it('rejects non-category keys', () => {
+      expect(() => UpdatePlannerTaskInput.parse({
+        task_id: 'pt_1', applied_categories: { urgent: true },
+      })).toThrow();
     });
   });
 
@@ -337,6 +615,28 @@ describe('PlannerTools', () => {
       await tools.updatePlannerTask({ task_id: 'pt_100' });
 
       expect(repo.updatePlannerTaskAsync).toHaveBeenCalledWith('pt_100', {});
+    });
+
+    it('passes applied_categories through, preserving explicit false removals', async () => {
+      vi.mocked(repo.updatePlannerTaskAsync).mockResolvedValue(undefined);
+
+      await tools.updatePlannerTask({
+        task_id: 'pt_100', applied_categories: { category3: true, category4: false },
+      });
+
+      expect(repo.updatePlannerTaskAsync).toHaveBeenCalledWith('pt_100', {
+        appliedCategories: { category3: true, category4: false },
+      });
+    });
+
+    it('passes order_hint through to the repository', async () => {
+      vi.mocked(repo.updatePlannerTaskAsync).mockResolvedValue(undefined);
+
+      await tools.updatePlannerTask({ task_id: 'pt_100', order_hint: 'aaa bbb!' });
+
+      expect(repo.updatePlannerTaskAsync).toHaveBeenCalledWith('pt_100', {
+        orderHint: 'aaa bbb!',
+      });
     });
   });
 

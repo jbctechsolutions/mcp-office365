@@ -117,6 +117,12 @@ describe('DEFAULT_TOOL_SURFACE registry contract', () => {
     );
     expect(bad).toEqual([]);
   });
+
+  it('the pinned surface excludes the Planner blast-radius tools (plan delete, plan sharing)', () => {
+    // Deliberate 2026-08-06 exclusions — re-adding any of these must be a reviewed decision.
+    const excluded = ['prepare_delete_plan', 'confirm_delete_plan', 'update_plan_sharing'];
+    expect(DEFAULT_TOOL_SURFACE.filter((n) => excluded.includes(n))).toEqual([]);
+  });
 });
 
 describe('registry allow/exclude filtering (U6)', () => {
