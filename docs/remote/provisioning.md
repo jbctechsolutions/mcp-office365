@@ -65,9 +65,19 @@ Verify:
 az ad app permission list-grants --id 484c0657-6a05-4aad-a175-dabac48acb05 -o table
 ```
 
-> Planner **write** is intentionally not requested yet — only Planner-read.
-> Enabling Planner writes needs a broader group scope; validate the exact scope
-> and re-consent (a `jp-infrastructure` change) before turning it on.
+> **Planner write** is requested via `Tasks.ReadWrite` (added in jp-infrastructure,
+> 2026-08-06 — verified as the least-privileged delegated scope for ALL Planner
+> writes; no `Group.ReadWrite.All` needed). After any scope addition:
+>
+> 1. Re-run the admin-consent command above and verify the new row shows granted.
+> 2. **Restart the connector replica.** MSAL's in-memory OBO cache keeps serving
+>    each user's pre-consent Graph token (missing the new `scp` claim) until it
+>    expires (~60–90 min); a restart clears it. Without this, "retry after
+>    consent" still 403s and looks like the consent failed.
+> 3. Verify with one Planner write against a plan **whose owning M365 group the
+>    tester is a member of** — delegated Planner writes require group membership
+>    regardless of scope, so a membership 403 on someone else's plan is expected,
+>    not a regression.
 
 ---
 

@@ -26,6 +26,13 @@ import type { Backend, SurfaceOptions } from '../registry/index.js';
  * Planner — deliberately excluding shared-mailbox, mail-rules, and file-download
  * / photo tools. Generated from the registry; update via a reviewed change when
  * the default surface should shift (the contract test flags registry drift).
+ *
+ * Planner blast-radius exclusions (2026-08-06, deliberate): the
+ * prepare/confirm_delete_plan pair and update_plan_sharing are NOT in the
+ * default surface — whole-plan deletion and plan-sharing writes (access
+ * grant/revoke via sharedWith) exceed what pilot users need; labels ship via
+ * get_plan_details/update_plan_details. Local stdio and fullAccess users get
+ * all planner tools automatically.
  */
 export const DEFAULT_TOOL_SURFACE: readonly string[] = Object.freeze([
   'add_draft_attachment', 'add_draft_inline_image', 'check_availability', 'check_new_emails',
@@ -42,7 +49,7 @@ export const DEFAULT_TOOL_SURFACE: readonly string[] = Object.freeze([
   'find_meeting_times', 'forward_as_draft', 'generate_burndown_chart', 'generate_gantt_chart',
   'generate_kanban_board', 'generate_plan_summary', 'get_automatic_replies', 'get_drive_item',
   'get_email', 'get_emails', 'get_event', 'get_list', 'get_list_item', 'get_mail_tips',
-  'get_mailbox_settings', 'get_message_headers', 'get_message_mime', 'get_plan', 'get_planner_task',
+  'get_mailbox_settings', 'get_message_headers', 'get_message_mime', 'get_plan', 'get_plan_details', 'get_planner_task',
   'get_planner_task_details', 'get_signature', 'get_site', 'get_unread_count', 'list_attachments',
   'list_buckets', 'list_calendar_groups', 'list_calendar_permissions', 'list_calendars',
   'list_categories', 'list_conversation', 'list_document_libraries', 'list_drafts',
@@ -61,7 +68,7 @@ export const DEFAULT_TOOL_SURFACE: readonly string[] = Object.freeze([
   'search_emails', 'search_emails_advanced', 'search_events', 'search_sites', 'send_email',
   'set_automatic_replies', 'set_email_categories', 'set_email_flag', 'set_email_importance',
   'set_signature', 'update_bucket', 'update_draft', 'update_event', 'update_list_item',
-  'update_mailbox_settings', 'update_plan', 'update_planner_task', 'update_planner_task_details',
+  'update_mailbox_settings', 'update_plan', 'update_plan_details', 'update_planner_task', 'update_planner_task_details',
   'what_changed',
 ]);
 

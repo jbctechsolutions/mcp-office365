@@ -6,7 +6,7 @@
 
 MCP server for Microsoft 365 -- mail, calendar, contacts, tasks, teams, people, and planner.
 
-A [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) server that provides **250 tools** for full read/write access to Microsoft 365 via the Microsoft Graph API. Manage your emails, calendar events, contacts, tasks, OneNote notes, Teams channels and chats, people directory, and Planner boards directly through MCP.
+A [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) server that provides **255 tools** for full read/write access to Microsoft 365 via the Microsoft Graph API. Manage your emails, calendar events, contacts, tasks, OneNote notes, Teams channels and chats, people directory, and Planner boards directly through MCP.
 
 ## Features Overview
 
@@ -37,9 +37,9 @@ A [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) server that p
 | Teams -- Channel Messages | 6 | Read and send channel messages with replies |
 | Teams -- Chats | 7 | 1:1 and group chats, find by participant, send messages |
 | People & Presence | 8 | People search, org chart, presence status |
-| Planner | 18 | Plans, buckets, tasks, task details with ETag |
+| Planner | 28 | Plans, plan details & labels, sharing, buckets, tasks, task details, comments |
 | Shared Mailbox | 8 | Read another user's mailbox, calendar, and OneDrive via delegate/shared access |
-| **Total** | **250** | |
+| **Total** | **255** | |
 
 ## Quick Start
 
@@ -221,7 +221,7 @@ end-user guide live in [`docs/remote/`](./docs/remote/):
 
 ## Tool Reference
 
-All 250 tools listed below.
+All 255 tools listed below.
 
 <details>
 <summary><strong>Mail -- Reading (9)</strong></summary>
@@ -591,7 +591,7 @@ All 250 tools listed below.
 </details>
 
 <details>
-<summary><strong>Planner (23)</strong> <em>(Graph API; task comments use Graph beta, delegated only)</em></summary>
+<summary><strong>Planner (28)</strong> <em>(Graph API; task comments use Graph beta, delegated only)</em></summary>
 
 | Tool | Description |
 |------|-------------|
@@ -599,20 +599,25 @@ All 250 tools listed below.
 | `get_plan` | Get details for a specific Planner plan |
 | `create_plan` | Create a new Planner plan in a Microsoft 365 group |
 | `update_plan` | Update a Planner plan title |
+| `prepare_delete_plan` | Prepare to delete a plan and all its buckets/tasks (two-phase) |
+| `confirm_delete_plan` | Confirm Planner plan deletion |
+| `get_plan_details` | Get plan details: category label names and sharing |
+| `update_plan_details` | Update category label names (category1..category25; null resets) |
+| `update_plan_sharing` | Share/unshare a plan with users (sharedWith GUIDs) |
 | `list_buckets` | List all buckets in a Planner plan |
-| `create_bucket` | Create a new bucket in a Planner plan |
-| `update_bucket` | Update a Planner bucket name |
+| `create_bucket` | Create a new bucket in a Planner plan (optional orderHint) |
+| `update_bucket` | Update a Planner bucket name or position (orderHint) |
 | `prepare_delete_bucket` | Prepare to delete a Planner bucket (two-phase) |
 | `confirm_delete_bucket` | Confirm Planner bucket deletion |
 | `list_planner_tasks` | List all tasks in a Planner plan |
 | `list_my_planner_tasks` | List all Planner tasks assigned to the signed-in user across every plan |
 | `get_planner_task` | Get details for a specific Planner task |
-| `create_planner_task` | Create a new task in a Planner plan |
-| `update_planner_task` | Update a Planner task |
+| `create_planner_task` | Create a new task (labels, orderHint, percent complete, description, checklist at creation) |
+| `update_planner_task` | Update a Planner task (incl. labels via applied_categories, orderHint) |
 | `prepare_delete_planner_task` | Prepare to delete a Planner task (two-phase) |
 | `confirm_delete_planner_task` | Confirm Planner task deletion |
 | `get_planner_task_details` | Get task details (description, checklist, references) |
-| `update_planner_task_details` | Update task details (requires ETag from get_planner_task_details) |
+| `update_planner_task_details` | Update task details (description, checklist, references) |
 | `list_planner_task_messages` | List chat comments on a task (Comments tab) *(Graph API beta)* |
 | `create_planner_task_message` | Post a task comment with optional @mentions *(Graph API beta; Tasks.ReadWrite)* |
 | `update_planner_task_message` | Update a task comment *(Graph API beta; Tasks.ReadWrite)* |
@@ -641,7 +646,7 @@ Read another user's mailbox, calendar, or OneDrive via `/users/{upn}/...`, relyi
 
 ## Architecture
 
-The server connects to Microsoft 365 cloud services via the **Microsoft Graph API**. Full read/write access across all 250 tools. No Outlook installation required. Works on macOS, Windows, and Linux.
+The server connects to Microsoft 365 cloud services via the **Microsoft Graph API**. Full read/write access across all 255 tools. No Outlook installation required. Works on macOS, Windows, and Linux.
 
 ### Two-Phase Approval
 
@@ -651,9 +656,9 @@ Destructive operations (delete, send, move, forward, etc.) use a prepare/confirm
 
 The server maintains an internal ID mapping layer that assigns stable, durable identifier tokens for Graph API resources so tool callers do not need to track raw Graph object IDs.
 
-### ETag Caching
+### ETag Concurrency
 
-Planner resources use ETag-based concurrency control. The server caches ETags from read operations and automatically includes them in update/delete requests to prevent conflicts.
+Planner resources use ETag-based concurrency control. ETags are never cached: immediately before every update/delete the server fetches the resource's current ETag, sends it as `If-Match`, and retries once with a re-fetched ETag on a 412 conflict (last-writer-wins). Details sub-resources (task details, plan details) carry their own ETags, independent of the parent task/plan.
 
 ### Source Layout
 
@@ -678,7 +683,7 @@ These delegated permissions are requested via Microsoft Graph:
 | `Mail.Send` | Send mail as the signed-in user |
 | `Calendars.ReadWrite` | Read and manage calendar events |
 | `Contacts.ReadWrite` | Read and manage contacts |
-| `Tasks.ReadWrite` | Read and manage To Do tasks |
+| `Tasks.ReadWrite` | Read and manage To Do tasks and Planner (plans, buckets, tasks, details) |
 | `User.Read` | Read user profile |
 | `offline_access` | Token refresh (maintain access) |
 | `ChannelMessage.Read.All` | Read Teams channel messages |
