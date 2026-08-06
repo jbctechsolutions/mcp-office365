@@ -5397,7 +5397,29 @@ describe('graph/repository', () => {
         const bucketTok = await repository.createBucketAsync(planTok, 'Done');
 
         expect(bucketTok).toMatch(/^pb_/);
-        expect(mockClient.createBucket).toHaveBeenCalledWith('graph-plan-1', 'Done');
+        expect(mockClient.createBucket).toHaveBeenCalledWith('graph-plan-1', 'Done', undefined);
+      });
+
+      it('createBucketAsync passes an orderHint to the client', async () => {
+        const planTok = await planToken('graph-plan-1');
+        mockClient.createBucket.mockResolvedValue({ id: 'graph-bucket-new', '@odata.etag': 'W/"etag"' });
+
+        await repository.createBucketAsync(planTok, 'First', ' !');
+
+        expect(mockClient.createBucket).toHaveBeenCalledWith('graph-plan-1', 'First', ' !');
+      });
+
+      it('updateBucketAsync passes orderHint in the PATCH body', async () => {
+        const planTok = await planToken('graph-plan-1');
+        const bucketTok = await bucketToken(planTok, 'graph-bucket-1');
+        mockClient.getBucket.mockResolvedValue({ name: 'To Do', '@odata.etag': 'W/"bucket-etag"' });
+        mockClient.updateBucket.mockResolvedValue({ '@odata.etag': 'W/"bucket-etag"' });
+
+        await repository.updateBucketAsync(bucketTok, { orderHint: 'abc def!' });
+
+        expect(mockClient.updateBucket).toHaveBeenCalledWith(
+          'graph-bucket-1', { orderHint: 'abc def!' }, 'W/"bucket-etag"',
+        );
       });
 
       it('updateBucketAsync fetches a fresh etag immediately before the write (U5b-5)', async () => {
@@ -5519,6 +5541,30 @@ describe('graph/repository', () => {
           planId: 'graph-plan-1', title: 'Labeled',
           appliedCategories: { category3: true, category25: true },
         });
+      });
+
+      it('createPlannerTaskAsync passes orderHint in the POST body', async () => {
+        const planTok = await planToken('graph-plan-1');
+        mockClient.createPlannerTask.mockResolvedValue({ id: 'graph-task-new', '@odata.etag': 'W/"etag"' });
+
+        await repository.createPlannerTaskAsync(planTok, 'Ordered', { orderHint: ' !' });
+
+        expect(mockClient.createPlannerTask).toHaveBeenCalledWith({
+          planId: 'graph-plan-1', title: 'Ordered', orderHint: ' !',
+        });
+      });
+
+      it('updatePlannerTaskAsync maps orderHint into the PATCH body', async () => {
+        const planTok = await planToken('graph-plan-1');
+        const taskTok = await taskToken(planTok, 'graph-task-1');
+        mockClient.getPlannerTask.mockResolvedValue({ title: 'Task', '@odata.etag': 'W/"task-etag"' });
+        mockClient.updatePlannerTask.mockResolvedValue({ '@odata.etag': 'W/"task-etag"' });
+
+        await repository.updatePlannerTaskAsync(taskTok, { orderHint: 'aaa bbb!' });
+
+        expect(mockClient.updatePlannerTask).toHaveBeenCalledWith(
+          'graph-task-1', { orderHint: 'aaa bbb!' }, 'W/"task-etag"',
+        );
       });
 
       it('updatePlannerTaskAsync maps appliedCategories into the PATCH body', async () => {

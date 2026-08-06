@@ -145,11 +145,19 @@ describe('PlannerTools', () => {
 
       const result = await tools.createBucket({ plan_id: 'pl_a1', name: 'Done' });
 
-      expect(repo.createBucketAsync).toHaveBeenCalledWith('pl_a1', 'Done');
+      expect(repo.createBucketAsync).toHaveBeenCalledWith('pl_a1', 'Done', undefined);
       const parsed = JSON.parse(result.content[0].text);
       expect(parsed.success).toBe(true);
       expect(parsed.bucket_id).toBe('pb_99');
       expect(parsed.message).toBe('Bucket created');
+    });
+
+    it('passes order_hint through to the repository', async () => {
+      vi.mocked(repo.createBucketAsync).mockResolvedValue('pb_100');
+
+      await tools.createBucket({ plan_id: 'pl_a1', name: 'First', order_hint: ' !' });
+
+      expect(repo.createBucketAsync).toHaveBeenCalledWith('pl_a1', 'First', ' !');
     });
   });
 
@@ -171,6 +179,14 @@ describe('PlannerTools', () => {
       await tools.updateBucket({ bucket_id: 'pb_10' });
 
       expect(repo.updateBucketAsync).toHaveBeenCalledWith('pb_10', {});
+    });
+
+    it('passes order_hint through to the repository', async () => {
+      vi.mocked(repo.updateBucketAsync).mockResolvedValue(undefined);
+
+      await tools.updateBucket({ bucket_id: 'pb_10', order_hint: 'abc def!' });
+
+      expect(repo.updateBucketAsync).toHaveBeenCalledWith('pb_10', { orderHint: 'abc def!' });
     });
   });
 
@@ -324,6 +340,16 @@ describe('PlannerTools', () => {
         appliedCategories: { category3: true, category25: true },
       });
     });
+
+    it('passes order_hint through to the repository', async () => {
+      vi.mocked(repo.createPlannerTaskAsync).mockResolvedValue('pt_203');
+
+      await tools.createPlannerTask({ plan_id: 'pl_a1', title: 'Ordered', order_hint: ' !' });
+
+      expect(repo.createPlannerTaskAsync).toHaveBeenCalledWith('pl_a1', 'Ordered', {
+        orderHint: ' !',
+      });
+    });
   });
 
   describe('CreatePlannerTaskInput applied_categories validation', () => {
@@ -389,6 +415,16 @@ describe('PlannerTools', () => {
 
       expect(repo.updatePlannerTaskAsync).toHaveBeenCalledWith('pt_100', {
         appliedCategories: { category3: true, category4: false },
+      });
+    });
+
+    it('passes order_hint through to the repository', async () => {
+      vi.mocked(repo.updatePlannerTaskAsync).mockResolvedValue(undefined);
+
+      await tools.updatePlannerTask({ task_id: 'pt_100', order_hint: 'aaa bbb!' });
+
+      expect(repo.updatePlannerTaskAsync).toHaveBeenCalledWith('pt_100', {
+        orderHint: 'aaa bbb!',
       });
     });
   });

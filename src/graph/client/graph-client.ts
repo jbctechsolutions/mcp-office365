@@ -2134,9 +2134,11 @@ export class GraphClient {
     return response.value as MicrosoftGraph.PlannerBucket[];
   }
 
-  async createBucket(planId: string, name: string): Promise<MicrosoftGraph.PlannerBucket> {
+  async createBucket(planId: string, name: string, orderHint?: string): Promise<MicrosoftGraph.PlannerBucket> {
     const client = await this.getClient();
-    return await client.api('/planner/buckets').post({ planId, name }) as MicrosoftGraph.PlannerBucket;
+    const body: Record<string, unknown> = { planId, name };
+    if (orderHint != null) body.orderHint = orderHint;
+    return await client.api('/planner/buckets').post(body) as MicrosoftGraph.PlannerBucket;
   }
 
   async getBucket(bucketId: string): Promise<MicrosoftGraph.PlannerBucket> {

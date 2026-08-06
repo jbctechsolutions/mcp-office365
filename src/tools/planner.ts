@@ -30,6 +30,25 @@ declare module '../registry/types.js' {
 // Input Schemas
 // =============================================================================
 
+/**
+ * Planner labels map: category1..category25 → boolean. `true` applies the
+ * label, `false` removes it (Graph drops false keys); keys omitted from an
+ * update are preserved. Label display names live in plan details
+ * (`get_plan_details` → categoryDescriptions).
+ */
+const AppliedCategories = z.record(
+  z.string().regex(/^category([1-9]|1[0-9]|2[0-5])$/, 'Keys must be category1..category25'),
+  z.boolean(),
+).describe('Planner labels. Keys are category1..category25; true applies a label, false removes it; omitted keys are preserved on update. Label names come from get_plan_details.');
+
+/**
+ * Planner order hint. Format: "<previous orderHint> <next orderHint>!" — use a
+ * neighbor's hint on either side to position between items; use " !" (space +
+ * bang) or omit to append. Echoing a service-returned hint back verbatim as a
+ * new hint is rejected by Graph with a 400.
+ */
+const OrderHint = z.string().min(1).describe('Planner order hint: "<previous> <next>!" positions between neighbors (empty string for a missing neighbor); " !" appends. Never resend a service-returned hint verbatim (Graph 400).');
+
 export const ListPlansInput = z.strictObject({});
 
 export const GetPlanInput = z.strictObject({
@@ -53,11 +72,13 @@ export const ListBucketsInput = z.strictObject({
 export const CreateBucketInput = z.strictObject({
   plan_id: Id.plan,
   name: z.string().min(1).describe('Bucket name'),
+  order_hint: OrderHint.optional(),
 });
 
 export const UpdateBucketInput = z.strictObject({
   bucket_id: Id.plannerBucket,
   name: z.string().min(1).optional().describe('New bucket name'),
+  order_hint: OrderHint.optional(),
 });
 
 export const PrepareDeleteBucketInput = z.strictObject({
@@ -67,17 +88,6 @@ export const PrepareDeleteBucketInput = z.strictObject({
 export const ConfirmDeleteBucketInput = z.strictObject({
   approval_token: z.string().describe('Approval token from prepare_delete_bucket'),
 });
-
-/**
- * Planner labels map: category1..category25 → boolean. `true` applies the
- * label, `false` removes it (Graph drops false keys); keys omitted from an
- * update are preserved. Label display names live in plan details
- * (`get_plan_details` → categoryDescriptions).
- */
-const AppliedCategories = z.record(
-  z.string().regex(/^category([1-9]|1[0-9]|2[0-5])$/, 'Keys must be category1..category25'),
-  z.boolean(),
-).describe('Planner labels. Keys are category1..category25; true applies a label, false removes it; omitted keys are preserved on update. Label names come from get_plan_details.');
 
 export const ListPlannerTasksInput = z.strictObject({
   plan_id: Id.plan,
@@ -98,6 +108,7 @@ export const CreatePlannerTaskInput = z.strictObject({
   start_date: z.string().optional().describe('Start date in ISO format'),
   due_date: z.string().optional().describe('Due date in ISO format'),
   applied_categories: AppliedCategories.optional(),
+  order_hint: OrderHint.optional(),
 });
 
 export const UpdatePlannerTaskInput = z.strictObject({
@@ -110,6 +121,7 @@ export const UpdatePlannerTaskInput = z.strictObject({
   due_date: z.string().optional().describe('Due date in ISO format'),
   assignments: z.record(z.string(), z.object({}).passthrough()).optional().describe('User assignments. Keys are user IDs, values should be { "@odata.type": "#microsoft.graph.plannerAssignment", "orderHint": " !" }'),
   applied_categories: AppliedCategories.optional(),
+  order_hint: OrderHint.optional(),
 });
 
 export const PrepareDeletePlannerTaskInput = z.strictObject({
@@ -194,8 +206,8 @@ export interface IPlannerRepository {
   createPlanAsync(title: string, groupId: string): Promise<string>;
   updatePlanAsync(planId: string, updates: { title?: string }): Promise<void>;
   listBucketsAsync(planId: string): Promise<Array<{ id: string; name: string; planId: string; orderHint: string }>>;
-  createBucketAsync(planId: string, name: string): Promise<string>;
-  updateBucketAsync(bucketId: string, updates: { name?: string }): Promise<void>;
+  createBucketAsync(planId: string, name: string, orderHint?: string): Promise<string>;
+  updateBucketAsync(bucketId: string, updates: { name?: string; orderHint?: string }): Promise<void>;
   deleteBucketAsync(bucketId: string): Promise<void>;
   listPlannerTasksAsync(planId: string): Promise<Array<{
     id: string; title: string; bucketId: string | null; assignees: string[];
@@ -218,13 +230,13 @@ export interface IPlannerRepository {
   createPlannerTaskAsync(planId: string, title: string, options: {
     bucketId?: string; assignments?: Record<string, object>; priority?: number;
     startDate?: string; dueDate?: string;
-    appliedCategories?: Record<string, boolean>;
+    appliedCategories?: Record<string, boolean>; orderHint?: string;
   }): Promise<string>;
   updatePlannerTaskAsync(taskId: string, updates: {
     title?: string; bucketId?: string; percentComplete?: number;
     priority?: number; startDate?: string; dueDate?: string;
     assignments?: Record<string, object>;
-    appliedCategories?: Record<string, boolean>;
+    appliedCategories?: Record<string, boolean>; orderHint?: string;
   }): Promise<void>;
   deletePlannerTaskAsync(taskId: string): Promise<void>;
   getPlannerTaskDetailsAsync(taskId: string): Promise<{
@@ -326,7 +338,7 @@ export class PlannerTools {
   async createBucket(params: CreateBucketParams): Promise<{
     content: Array<{ type: 'text'; text: string }>;
   }> {
-    const bucketId = await this.repo.createBucketAsync(params.plan_id, params.name);
+    const bucketId = await this.repo.createBucketAsync(params.plan_id, params.name, params.order_hint);
     return {
       content: [{
         type: 'text' as const,
@@ -338,8 +350,9 @@ export class PlannerTools {
   async updateBucket(params: UpdateBucketParams): Promise<{
     content: Array<{ type: 'text'; text: string }>;
   }> {
-    const updates: { name?: string } = {};
+    const updates: { name?: string; orderHint?: string } = {};
     if (params.name != null) updates.name = params.name;
+    if (params.order_hint != null) updates.orderHint = params.order_hint;
     await this.repo.updateBucketAsync(params.bucket_id, updates);
     return {
       content: [{
@@ -467,6 +480,7 @@ export class PlannerTools {
     if (params.start_date != null) options.startDate = params.start_date;
     if (params.due_date != null) options.dueDate = params.due_date;
     if (params.applied_categories != null) options.appliedCategories = params.applied_categories;
+    if (params.order_hint != null) options.orderHint = params.order_hint;
     const taskId = await this.repo.createPlannerTaskAsync(params.plan_id, params.title, options);
     return {
       content: [{
@@ -483,7 +497,7 @@ export class PlannerTools {
       title?: string; bucketId?: string; percentComplete?: number;
       priority?: number; startDate?: string; dueDate?: string;
       assignments?: Record<string, object>;
-      appliedCategories?: Record<string, boolean>;
+      appliedCategories?: Record<string, boolean>; orderHint?: string;
     } = {};
     if (params.title != null) updates.title = params.title;
     if (params.bucket_id != null) updates.bucketId = params.bucket_id;
@@ -493,6 +507,7 @@ export class PlannerTools {
     if (params.due_date != null) updates.dueDate = params.due_date;
     if (params.assignments != null) updates.assignments = params.assignments;
     if (params.applied_categories != null) updates.appliedCategories = params.applied_categories;
+    if (params.order_hint != null) updates.orderHint = params.order_hint;
     await this.repo.updatePlannerTaskAsync(params.task_id, updates);
     return {
       content: [{

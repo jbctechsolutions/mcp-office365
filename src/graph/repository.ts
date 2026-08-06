@@ -2643,19 +2643,20 @@ export class GraphRepository implements IRepository {
   /**
    * Creates a new bucket in a plan.
    */
-  async createBucketAsync(planId: string, name: string): Promise<string> {
+  async createBucketAsync(planId: string, name: string, orderHint?: string): Promise<string> {
     const graphPlanId = await this.resolvePlanId(planId);
-    const bucket = await this.client.createBucket(graphPlanId, name);
+    const bucket = await this.client.createBucket(graphPlanId, name, orderHint);
     return this.mintAlias('plannerBucket', bucket.id!);
   }
 
   /**
    * Updates a bucket (U5b-5: fetches a fresh etag immediately before the write).
    */
-  async updateBucketAsync(bucketId: string, updates: { name?: string }): Promise<void> {
+  async updateBucketAsync(bucketId: string, updates: { name?: string; orderHint?: string }): Promise<void> {
     const graphBucketId = this.toGraphId(bucketId, 'plannerBucket');
     const graphUpdates: Record<string, unknown> = {};
     if (updates.name != null) graphUpdates['name'] = updates.name;
+    if (updates.orderHint != null) graphUpdates['orderHint'] = updates.orderHint;
     await this.withFreshEtag(
       async () => this.extractEtag(await this.client.getBucket(graphBucketId)),
       (etag) => this.client.updateBucket(graphBucketId, graphUpdates, etag),
@@ -2773,7 +2774,7 @@ export class GraphRepository implements IRepository {
     options: {
       bucketId?: string; assignments?: Record<string, object>; priority?: number;
       startDate?: string; dueDate?: string;
-      appliedCategories?: Record<string, boolean>;
+      appliedCategories?: Record<string, boolean>; orderHint?: string;
     } = {},
   ): Promise<string> {
     const graphPlanId = await this.resolvePlanId(planId);
@@ -2786,6 +2787,7 @@ export class GraphRepository implements IRepository {
     if (options.startDate != null) body.startDateTime = options.startDate;
     if (options.dueDate != null) body.dueDateTime = options.dueDate;
     if (options.appliedCategories != null) body.appliedCategories = options.appliedCategories;
+    if (options.orderHint != null) body.orderHint = options.orderHint;
     const task = await this.client.createPlannerTask(body);
     return this.mintAlias('plannerTask', task.id!);
   }
@@ -2804,6 +2806,7 @@ export class GraphRepository implements IRepository {
       dueDate?: string;
       assignments?: Record<string, object>;
       appliedCategories?: Record<string, boolean>;
+      orderHint?: string;
     },
   ): Promise<void> {
     const gTaskId = this.toGraphId(taskId, 'plannerTask');
@@ -2816,6 +2819,7 @@ export class GraphRepository implements IRepository {
     if (updates.dueDate != null) graphUpdates['dueDateTime'] = updates.dueDate;
     if (updates.assignments != null) graphUpdates['assignments'] = updates.assignments;
     if (updates.appliedCategories != null) graphUpdates['appliedCategories'] = updates.appliedCategories;
+    if (updates.orderHint != null) graphUpdates['orderHint'] = updates.orderHint;
     await this.withFreshEtag(
       async () => this.extractEtag(await this.client.getPlannerTask(gTaskId)),
       (etag) => this.client.updatePlannerTask(gTaskId, graphUpdates, etag),
