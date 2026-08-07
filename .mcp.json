@@ -1,13 +1,13 @@
 {
   "mcpServers": {
-    "office365": {
-      "command": "npx",
-      "args": ["-y", "@jbctechsolutions/mcp-office365"],
+    "office365-dev": {
+      "command": "node",
+      "args": ["dist/index.js", "--state-dir", "${HOME}/.mcp-office365-dev"],
       "env": {
         "OUTLOOK_MCP_CLIENT_ID": "${OUTLOOK_MCP_CLIENT_ID:-}",
         "OUTLOOK_MCP_TENANT_ID": "${OUTLOOK_MCP_TENANT_ID:-common}"
       },
-      "description": "Access Microsoft 365 data - emails, calendar, contacts, and tasks"
+      "description": "Local dev build (run npm run build first). State is isolated in ~/.mcp-office365-dev so a dev migration can never touch the shared ~/.mcp-office365 store (#99). tokens.json stays shared by design."
     }
   }
 }
