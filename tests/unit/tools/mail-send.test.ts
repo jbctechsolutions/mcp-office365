@@ -87,6 +87,7 @@ const mockGraphClient = {
   sendDraft: vi.fn().mockResolvedValue(undefined),
   addAttachment: vi.fn().mockResolvedValue(undefined),
   createUploadSession: vi.fn(),
+  getMessage: vi.fn(),
 } as unknown as ReturnType<IMailSendRepository['getGraphClient']>;
 
 function createMockRepository(): IMailSendRepository {
@@ -142,6 +143,7 @@ describe('MailSendTools', () => {
     // Reset attachment mocks
     vi.mocked(uploadAttachment).mockClear();
     vi.mocked(mockGraphClient.sendDraft).mockClear();
+    vi.mocked(mockGraphClient.getMessage).mockReset();
 
     // Reset signature mocks
     vi.mocked(readSignature).mockClear();
@@ -326,6 +328,26 @@ describe('MailSendTools', () => {
       });
 
       expect(repo.updateDraftAsync).toHaveBeenCalledWith(5, {});
+    });
+
+    it('keeps the <hr> separator that sits above the quoted thread', async () => {
+      (repo.updateDraftAsync as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
+      (repo.getGraphIdForDraft as ReturnType<typeof vi.fn>).mockReturnValue('AAA-graph-47');
+      const quoted = '<hr tabindex="-1" style="display:inline-block; width:98%">'
+        + '<div id="divRplyFwdMsg" dir="ltr"><b>From:</b> someone@example.com</div>';
+      mockGraphClient.getMessage.mockResolvedValue({
+        body: { contentType: 'html', content: `<html><body><p>old</p>${quoted}</body></html>` },
+      });
+
+      await tools.updateDraft({
+        draft_id: 5,
+        body: '<p>New reply</p>',
+        body_type: 'html',
+      });
+
+      expect(repo.updateDraftAsync).toHaveBeenCalledWith(5, {
+        body: { contentType: 'html', content: `<p>New reply</p>${quoted}</body></html>` },
+      });
     });
 
     it('reads body from body_file when provided', async () => {

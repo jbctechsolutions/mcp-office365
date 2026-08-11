@@ -1343,42 +1343,46 @@ export class GraphClient {
 
   /**
    * Creates a reply draft for a message.
+   *
+   * `comment` is HTML, and Graph inserts it above the quoted thread it
+   * generates. Do not reach for the `message` parameter to set the body
+   * instead: Graph applies `message` as a property overwrite on the draft it
+   * just built, so `message.body` replaces the generated body and silently
+   * discards the quoted thread. Post-creation PATCHes of `body` do the same.
    */
-  async createReplyDraft(messageId: string, comment?: string, body?: { contentType: string; content: string }): Promise<MicrosoftGraph.Message> {
+  async createReplyDraft(messageId: string, comment?: string): Promise<MicrosoftGraph.Message> {
     const client = await this.getClient();
-    const postBody: Record<string, unknown> = {};
-    if (comment != null) postBody.comment = comment;
-    if (body != null) postBody.message = { body };
     const result = await client
       .api(`/me/messages/${messageId}/createReply`)
-      .post(Object.keys(postBody).length > 0 ? postBody : null) as MicrosoftGraph.Message;
+      .post(comment != null ? { comment } : null) as MicrosoftGraph.Message;
     this.cache.clear();
     return result;
   }
 
   /**
    * Creates a reply-all draft for a message.
+   *
+   * See {@link createReplyDraft} for why the body must ride in as `comment`.
    */
-  async createReplyAllDraft(messageId: string, comment?: string, body?: { contentType: string; content: string }): Promise<MicrosoftGraph.Message> {
+  async createReplyAllDraft(messageId: string, comment?: string): Promise<MicrosoftGraph.Message> {
     const client = await this.getClient();
-    const postBody: Record<string, unknown> = {};
-    if (comment != null) postBody.comment = comment;
-    if (body != null) postBody.message = { body };
     const result = await client
       .api(`/me/messages/${messageId}/createReplyAll`)
-      .post(Object.keys(postBody).length > 0 ? postBody : null) as MicrosoftGraph.Message;
+      .post(comment != null ? { comment } : null) as MicrosoftGraph.Message;
     this.cache.clear();
     return result;
   }
 
   /**
    * Creates a forward draft for a message.
+   *
+   * See {@link createReplyDraft} for why the body must ride in as `comment`.
    */
-  async createForwardDraft(messageId: string): Promise<MicrosoftGraph.Message> {
+  async createForwardDraft(messageId: string, comment?: string): Promise<MicrosoftGraph.Message> {
     const client = await this.getClient();
     const result = await client
       .api(`/me/messages/${messageId}/createForward`)
-      .post(null) as MicrosoftGraph.Message;
+      .post(comment != null ? { comment } : null) as MicrosoftGraph.Message;
     this.cache.clear();
     return result;
   }

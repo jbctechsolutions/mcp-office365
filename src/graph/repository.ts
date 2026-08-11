@@ -1049,11 +1049,11 @@ export class GraphRepository implements IRepository {
   ): Promise<{ token: string; graphId: string }> {
     const graphMessageId = this.toGraphId(messageId, 'message');
 
-    // Pass comment/body through createReply so the quoted thread is preserved
-    const body = comment != null ? { contentType: bodyType, content: comment } : undefined;
+    // Must ride in as `comment` — see GraphClient.createReplyDraft.
+    const draftComment = toDraftComment(comment, bodyType);
     const draft = replyAll
-      ? await this.client.createReplyAllDraft(graphMessageId, undefined, body)
-      : await this.client.createReplyDraft(graphMessageId, undefined, body);
+      ? await this.client.createReplyAllDraft(graphMessageId, draftComment)
+      : await this.client.createReplyDraft(graphMessageId, draftComment);
 
     const graphId = draft.id!;
     return { token: mintSelfEncoded('message', graphId), graphId };
@@ -1075,21 +1075,18 @@ export class GraphRepository implements IRepository {
   ): Promise<{ token: string; graphId: string }> {
     const graphMessageId = this.toGraphId(messageId, 'message');
 
-    const draft = await this.client.createForwardDraft(graphMessageId);
+    // Must ride in as `comment` — see GraphClient.createReplyDraft. Recipients
+    // are safe to PATCH afterwards; the body is not.
+    const draft = await this.client.createForwardDraft(graphMessageId, toDraftComment(comment, bodyType));
 
     const graphId = draft.id!;
 
-    const updates: Record<string, unknown> = {};
     if (toRecipients != null && toRecipients.length > 0) {
-      updates.toRecipients = toRecipients.map(addr => ({
-        emailAddress: { address: addr },
-      }));
-    }
-    if (comment != null) {
-      updates.body = { contentType: bodyType, content: comment };
-    }
-    if (Object.keys(updates).length > 0) {
-      await this.client.updateDraft(graphId, updates);
+      await this.client.updateDraft(graphId, {
+        toRecipients: toRecipients.map(addr => ({
+          emailAddress: { address: addr },
+        })),
+      });
     }
 
     return { token: mintSelfEncoded('message', graphId), graphId };
@@ -3841,6 +3838,17 @@ export class GraphRepository implements IRepository {
     const { siteId, listId, itemId: graphItemId } = this.toGraphParts(itemId, 'sharePointListItem', ['siteId', 'listId', 'itemId']);
     await this.client.deleteSharePointListItem(siteId, listId, graphItemId);
   }
+}
+
+/**
+ * Renders a reply/forward comment as the HTML Graph expects for the `comment`
+ * parameter. Graph drops it into an HTML body above the quoted thread, so a
+ * plain-text comment is wrapped in <pre> to keep its line breaks — the same
+ * treatment update_draft gives text bodies on a quoted draft.
+ */
+function toDraftComment(comment: string | undefined, bodyType: string): string | undefined {
+  if (comment == null) return undefined;
+  return bodyType === 'html' ? comment : `<pre>${comment}</pre>`;
 }
 
 /**

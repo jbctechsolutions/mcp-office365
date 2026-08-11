@@ -407,8 +407,10 @@ export class MailSendTools {
       if (graphId != null) {
         const existingMsg = await this.repository.getGraphClient().getMessage(graphId);
         const existingBody = existingMsg?.body?.content ?? '';
-        // Detect quoted thread: Outlook uses <div id="appendonsend"> or <div id="divRplyFwdMsg">
-        const replyMarkerMatch = existingBody.match(/<div id="(?:appendonsend|divRplyFwdMsg)"[\s\S]*/i);
+        // Detect quoted thread: Outlook uses <div id="appendonsend"> or <div id="divRplyFwdMsg">.
+        // Graph puts an <hr> immediately above that div as the visual separator, so take it
+        // along when present — slicing from the div alone drops the rule on every edit.
+        const replyMarkerMatch = existingBody.match(/(?:<hr[^>]*>\s*)?<div id="(?:appendonsend|divRplyFwdMsg)"[\s\S]*/i);
         if (replyMarkerMatch != null) {
           // Prepend new content before the quoted thread
           if (contentType === 'html') {
