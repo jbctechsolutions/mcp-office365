@@ -29,7 +29,7 @@ function ensureDir(): void {
 /**
  * Escapes HTML special characters so text is safe inside HTML.
  */
-function escapeHtml(text: string): string {
+export function escapeHtml(text: string): string {
   return text
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')

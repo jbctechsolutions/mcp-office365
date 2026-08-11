@@ -36,7 +36,7 @@ import {
 } from '../utils/errors.js';
 import type { GraphClient } from '../graph/client/index.js';
 import { uploadAttachment, uploadInlineAttachment } from '../graph/attachments.js';
-import { readSignature, writeSignature, appendSignature } from '../signature.js';
+import { readSignature, writeSignature, appendSignature, escapeHtml } from '../signature.js';
 
 declare module '../registry/types.js' {
   interface GraphToolsets {
@@ -407,14 +407,18 @@ export class MailSendTools {
       if (graphId != null) {
         const existingMsg = await this.repository.getGraphClient().getMessage(graphId);
         const existingBody = existingMsg?.body?.content ?? '';
-        // Detect quoted thread: Outlook uses <div id="appendonsend"> or <div id="divRplyFwdMsg">
-        const replyMarkerMatch = existingBody.match(/<div id="(?:appendonsend|divRplyFwdMsg)"[\s\S]*/i);
+        // Detect quoted thread: Outlook uses <div id="appendonsend"> or <div id="divRplyFwdMsg">.
+        // Graph puts an <hr> immediately above that div as the visual separator, so take it
+        // along when present — slicing from the div alone drops the rule on every edit.
+        const replyMarkerMatch = existingBody.match(/(?:<hr[^>]*>\s*)?<div id="(?:appendonsend|divRplyFwdMsg)"[\s\S]*/i);
         if (replyMarkerMatch != null) {
           // Prepend new content before the quoted thread
           if (contentType === 'html') {
             finalContent = bodyContent + replyMarkerMatch[0];
           } else {
-            finalContent = `<pre>${bodyContent}</pre>` + replyMarkerMatch[0];
+            // Escaped: the quoted thread forces an HTML body, so an unescaped
+            // text body would render any markup the sender typed literally.
+            finalContent = `<pre>${escapeHtml(bodyContent)}</pre>` + replyMarkerMatch[0];
           }
           // Force HTML since the quoted thread is HTML
           updates['body'] = { contentType: 'html', content: finalContent };

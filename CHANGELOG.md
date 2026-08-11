@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **`reply_as_draft` and `forward_as_draft` no longer drop the quoted thread.**
+  Both passed their comment as `message.body` on `createReply`/`createReplyAll`
+  (or PATCHed `body` after `createForward`). Graph applies `message` as a
+  property overwrite on the draft it just generated, so that replaced the
+  generated body — quote, `<hr>`, and all — with the comment alone. Verified
+  against live Graph: a reply draft went from 65,313 B to 131 B. Because
+  `include_signature` defaults to `true`, the comment was never null and the
+  thread was lost on *every* call, not just ones with comment text. Both now
+  route the body through Graph's `comment` parameter, which inserts it above
+  the quote; `forward_as_draft` PATCHes only `toRecipients`.
+- **`update_draft` keeps the `<hr>` above the quoted thread.** The marker regex
+  sliced from `<div id="divRplyFwdMsg">`, dropping the separator Graph places
+  immediately before it on every edit.
+- **Plain-text reply/forward bodies are HTML-escaped.** A quoted draft is always
+  an HTML body, so `body_type: 'text'` content is `<pre>`-wrapped — previously
+  unescaped, which rendered markup the sender typed literally.
+
 ## [4.5.0] - 2026-08-06
 
 ### Added

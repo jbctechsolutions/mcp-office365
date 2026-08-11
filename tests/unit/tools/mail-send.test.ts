@@ -44,6 +44,14 @@ vi.mock('../../../src/signature.js', () => ({
   readSignature: mockReadSignature,
   writeSignature: mockWriteSignature,
   appendSignature: mockAppendSignature,
+  // Pure helper — mirror the real implementation rather than stubbing it, so
+  // escaping assertions test the escaping and not the mock.
+  escapeHtml: (text: string) => text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;'),
 }));
 
 import { readSignature, writeSignature, appendSignature } from '../../../src/signature.js';
@@ -87,6 +95,7 @@ const mockGraphClient = {
   sendDraft: vi.fn().mockResolvedValue(undefined),
   addAttachment: vi.fn().mockResolvedValue(undefined),
   createUploadSession: vi.fn(),
+  getMessage: vi.fn(),
 } as unknown as ReturnType<IMailSendRepository['getGraphClient']>;
 
 function createMockRepository(): IMailSendRepository {
@@ -142,6 +151,7 @@ describe('MailSendTools', () => {
     // Reset attachment mocks
     vi.mocked(uploadAttachment).mockClear();
     vi.mocked(mockGraphClient.sendDraft).mockClear();
+    vi.mocked(mockGraphClient.getMessage).mockReset();
 
     // Reset signature mocks
     vi.mocked(readSignature).mockClear();
@@ -326,6 +336,48 @@ describe('MailSendTools', () => {
       });
 
       expect(repo.updateDraftAsync).toHaveBeenCalledWith(5, {});
+    });
+
+    it('keeps the <hr> separator that sits above the quoted thread', async () => {
+      (repo.updateDraftAsync as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
+      (repo.getGraphIdForDraft as ReturnType<typeof vi.fn>).mockReturnValue('AAA-graph-47');
+      const quoted = '<hr tabindex="-1" style="display:inline-block; width:98%">'
+        + '<div id="divRplyFwdMsg" dir="ltr"><b>From:</b> someone@example.com</div>';
+      mockGraphClient.getMessage.mockResolvedValue({
+        body: { contentType: 'html', content: `<html><body><p>old</p>${quoted}</body></html>` },
+      });
+
+      await tools.updateDraft({
+        draft_id: 5,
+        body: '<p>New reply</p>',
+        body_type: 'html',
+      });
+
+      expect(repo.updateDraftAsync).toHaveBeenCalledWith(5, {
+        body: { contentType: 'html', content: `<p>New reply</p>${quoted}</body></html>` },
+      });
+    });
+
+    it('escapes a text body before <pre>-wrapping it above the quoted thread', async () => {
+      (repo.updateDraftAsync as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
+      (repo.getGraphIdForDraft as ReturnType<typeof vi.fn>).mockReturnValue('AAA-graph-47');
+      const quoted = '<hr><div id="divRplyFwdMsg" dir="ltr"><b>From:</b> someone@example.com</div>';
+      mockGraphClient.getMessage.mockResolvedValue({
+        body: { contentType: 'html', content: `<html><body><p>old</p>${quoted}</body></html>` },
+      });
+
+      await tools.updateDraft({
+        draft_id: 5,
+        body: 'use <b>bold</b> & "quotes"',
+        body_type: 'text',
+      });
+
+      expect(repo.updateDraftAsync).toHaveBeenCalledWith(5, {
+        body: {
+          contentType: 'html',
+          content: `<pre>use &lt;b&gt;bold&lt;/b&gt; &amp; &quot;quotes&quot;</pre>${quoted}</body></html>`,
+        },
+      });
     });
 
     it('reads body from body_file when provided', async () => {

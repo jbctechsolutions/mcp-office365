@@ -1771,7 +1771,7 @@ describe('graph/repository', () => {
 
         const result = await repository.replyAsDraftAsync(mintSelfEncoded('message', 'msg-orig'));
 
-        expect(mockClient.createReplyDraft).toHaveBeenCalledWith('msg-orig', undefined, undefined);
+        expect(mockClient.createReplyDraft).toHaveBeenCalledWith('msg-orig', undefined);
         expect(result.token).toBe(mintSelfEncoded('message', 'draft-reply-1'));
         expect(result.graphId).toBe('draft-reply-1');
       });
@@ -1790,11 +1790,11 @@ describe('graph/repository', () => {
 
         const result = await repository.replyAsDraftAsync(mintSelfEncoded('message', 'msg-orig2'), true);
 
-        expect(mockClient.createReplyAllDraft).toHaveBeenCalledWith('msg-orig2', undefined, undefined);
+        expect(mockClient.createReplyAllDraft).toHaveBeenCalledWith('msg-orig2', undefined);
         expect(result.graphId).toBe('draft-ra-1');
       });
 
-      it('passes comment as body through createReply to preserve quoted thread', async () => {
+      it('passes comment through the createReply comment param, never as message.body', async () => {
         mockClient.searchMessages.mockResolvedValue([
           { id: 'msg-comment', subject: 'FYI' },
         ]);
@@ -1808,13 +1808,30 @@ describe('graph/repository', () => {
 
         await repository.replyAsDraftAsync(mintSelfEncoded('message', 'msg-comment'), false, 'Thanks for sharing!');
 
-        expect(mockClient.createReplyDraft).toHaveBeenCalledWith('msg-comment', undefined, {
-          contentType: 'text', content: 'Thanks for sharing!',
-        });
+        // Graph inserts `comment` above the quoted thread. Supplying message.body
+        // instead replaces the generated body and drops the quote entirely.
+        expect(mockClient.createReplyDraft).toHaveBeenCalledWith('msg-comment', '<pre>Thanks for sharing!</pre>');
         expect(mockClient.updateDraft).not.toHaveBeenCalled();
       });
 
-      it('uses provided bodyType when passing comment', async () => {
+      it('escapes markup in a text comment so it stays literal', async () => {
+        mockClient.searchMessages.mockResolvedValue([
+          { id: 'msg-escape', subject: 'Escaping' },
+        ]);
+        await repository.searchEmailsAsync('Escaping', 50);
+
+        mockClient.createReplyDraft.mockResolvedValue({ id: 'draft-escape', toRecipients: [] });
+
+        await repository.replyAsDraftAsync(mintSelfEncoded('message', 'msg-escape'), false, 'use <b>bold</b> & "quotes"');
+
+        // Graph drops the comment into an HTML body, so text must not render as markup.
+        expect(mockClient.createReplyDraft).toHaveBeenCalledWith(
+          'msg-escape',
+          '<pre>use &lt;b&gt;bold&lt;/b&gt; &amp; &quot;quotes&quot;</pre>',
+        );
+      });
+
+      it('passes an html comment through verbatim', async () => {
         mockClient.searchMessages.mockResolvedValue([
           { id: 'msg-html', subject: 'HTML test' },
         ]);
@@ -1828,9 +1845,25 @@ describe('graph/repository', () => {
 
         await repository.replyAsDraftAsync(mintSelfEncoded('message', 'msg-html'), false, '<p>HTML reply</p>', 'html');
 
-        expect(mockClient.createReplyDraft).toHaveBeenCalledWith('msg-html', undefined, {
-          contentType: 'html', content: '<p>HTML reply</p>',
+        expect(mockClient.createReplyDraft).toHaveBeenCalledWith('msg-html', '<p>HTML reply</p>');
+        expect(mockClient.updateDraft).not.toHaveBeenCalled();
+      });
+
+      it('routes a reply-all comment through the comment param too', async () => {
+        mockClient.searchMessages.mockResolvedValue([
+          { id: 'msg-ra-comment', subject: 'Team' },
+        ]);
+        await repository.searchEmailsAsync('Team', 50);
+
+        mockClient.createReplyAllDraft.mockResolvedValue({
+          id: 'draft-ra-comment',
+          subject: 'Re: Team',
+          toRecipients: [],
         });
+
+        await repository.replyAsDraftAsync(mintSelfEncoded('message', 'msg-ra-comment'), true, '<p>All</p>', 'html');
+
+        expect(mockClient.createReplyAllDraft).toHaveBeenCalledWith('msg-ra-comment', '<p>All</p>');
         expect(mockClient.updateDraft).not.toHaveBeenCalled();
       });
 
@@ -1856,11 +1889,11 @@ describe('graph/repository', () => {
 
         const result = await repository.forwardAsDraftAsync(mintSelfEncoded('message', 'msg-fwd'));
 
-        expect(mockClient.createForwardDraft).toHaveBeenCalledWith('msg-fwd');
+        expect(mockClient.createForwardDraft).toHaveBeenCalledWith('msg-fwd', undefined);
         expect(result.token).toBe(mintSelfEncoded('message', 'draft-fwd-1'));
       });
 
-      it('updates draft with recipients and comment when provided', async () => {
+      it('sends the comment through createForward and PATCHes only recipients', async () => {
         mockClient.searchMessages.mockResolvedValue([
           { id: 'msg-fwd2', subject: 'Info' },
         ]);
@@ -1879,16 +1912,17 @@ describe('graph/repository', () => {
           'Please review'
         );
 
+        expect(mockClient.createForwardDraft).toHaveBeenCalledWith('msg-fwd2', '<pre>Please review</pre>');
+        // PATCHing body here would overwrite the quoted thread Graph generated.
         expect(mockClient.updateDraft).toHaveBeenCalledWith('draft-fwd-2', {
           toRecipients: [
             { emailAddress: { address: 'alice@example.com' } },
             { emailAddress: { address: 'bob@example.com' } },
           ],
-          body: { contentType: 'text', content: 'Please review' },
         });
       });
 
-      it('uses provided bodyType when updating comment', async () => {
+      it('skips the PATCH entirely when only a comment is provided', async () => {
         mockClient.searchMessages.mockResolvedValue([
           { id: 'msg-fwd-html', subject: 'HTML forward' },
         ]);
@@ -1908,9 +1942,8 @@ describe('graph/repository', () => {
           'html'
         );
 
-        expect(mockClient.updateDraft).toHaveBeenCalledWith('draft-fwd-html-1', {
-          body: { contentType: 'html', content: '<p>HTML comment</p>' },
-        });
+        expect(mockClient.createForwardDraft).toHaveBeenCalledWith('msg-fwd-html', '<p>HTML comment</p>');
+        expect(mockClient.updateDraft).not.toHaveBeenCalled();
       });
 
       it('throws if message not in cache', async () => {

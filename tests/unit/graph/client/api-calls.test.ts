@@ -883,6 +883,23 @@ describe('Graph API endpoint and method validation', () => {
       expect(apiCalls[0].body).toBeNull();
       expect(result).toEqual(mockDraft);
     });
+
+    // Graph applies a `message` payload as a property overwrite on the draft it
+    // just generated, so `message.body` silently discards the quoted thread.
+    // `comment` is inserted above the quote instead. Never send the former.
+    it.each([
+      ['createReplyDraft', 'createReply'],
+      ['createReplyAllDraft', 'createReplyAll'],
+      ['createForwardDraft', 'createForward'],
+    ] as const)('%s sends the comment as `comment`, never as message.body', async (method, action) => {
+      setupMock({ id: 'draft-c' });
+
+      await client[method]('msg-1', '<p>Reply text</p>');
+
+      expect(apiCalls[0].url).toBe(`/me/messages/msg-1/${action}`);
+      expect(apiCalls[0].body).toEqual({ comment: '<p>Reply text</p>' });
+      expect(apiCalls[0].body).not.toHaveProperty('message');
+    });
   });
 
   // =========================================================================
