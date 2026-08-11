@@ -27,11 +27,19 @@ import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
 
-// Any failure to dlopen the binding is rebuild-fixable, not just a version-number
+// Any binding that will not load is rebuild-fixable, not just a version-number
 // mismatch: a truncated or wrong-arch artifact ("slice is not valid mach-o file")
-// heals the same way. Note ERR_DLOPEN_FAILED arrives on err.code, not err.message.
-const REBUILDABLE = /NODE_MODULE_VERSION|ERR_DLOPEN_FAILED|compiled against a different Node|invalid ELF|mach-o/i;
-const NOT_INSTALLED = /Cannot find module|MODULE_NOT_FOUND/i;
+// and an absent one ("Could not locate the bindings file", which is what an
+// --ignore-scripts install leaves behind) both heal the same way. Note that
+// ERR_DLOPEN_FAILED arrives on err.code, and the bindings-package miss carries
+// no code at all — so classification reads code and message together.
+const REBUILDABLE =
+  /NODE_MODULE_VERSION|ERR_DLOPEN_FAILED|compiled against a different Node|invalid ELF|mach-o|Could not locate the bindings file/i;
+
+// The package itself is absent (no node_modules at all). `npm install` is the
+// right fix and compiles the binding for this Node on its own — distinct from
+// the package being present with its binding missing, which is rebuildable.
+const NOT_INSTALLED = /Cannot find module '?better-sqlite3|MODULE_NOT_FOUND/i;
 
 /**
  * Returns the load error, or null when the binding loads cleanly.
