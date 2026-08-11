@@ -18,16 +18,20 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
+import { join } from 'node:path';
 
+// Join OS paths rather than interpolating one into a `file://` string: a repo
+// checked out under a path containing #, ? or % would otherwise produce a URL
+// that parses as fragment/query/escape and reads the wrong file.
 const repoRoot = fileURLToPath(new URL('../../', import.meta.url));
-const pkg = JSON.parse(readFileSync(new URL('package.json', `file://${repoRoot}`), 'utf8')) as {
+const pkg = JSON.parse(readFileSync(join(repoRoot, 'package.json'), 'utf8')) as {
   scripts: Record<string, string>;
   files: string[];
 };
 
 describe('better-sqlite3 ABI auto-heal stays wired', () => {
   it('the heal script exists', () => {
-    expect(existsSync(new URL('scripts/ensure-native.mjs', `file://${repoRoot}`))).toBe(true);
+    expect(existsSync(join(repoRoot, 'scripts', 'ensure-native.mjs'))).toBe(true);
   });
 
   it.each(['pretest', 'prestart:dev'])('%s runs the heal script', (hook) => {
