@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [4.5.1] - 2026-08-10
+
 ### Fixed
 
 - **`reply_as_draft` and `forward_as_draft` no longer drop the quoted thread.**
