@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **A stale better-sqlite3 native binding now self-heals on dev/CI runs.** The
+  recurring failure (#88, #95) is always the same shape — the Node that compiled
+  the binding is not the Node loading it — and #99 made it legible without making
+  it stop happening. `npm test` / `npm run start:dev` now detect an unloadable
+  binding and run `npm rebuild better-sqlite3` automatically. Detection
+  constructs a `Database`, because better-sqlite3 dlopens lazily and a bare
+  `require` of a broken install still succeeds.
+
 ## [4.5.1] - 2026-08-10
 
 ### Fixed
