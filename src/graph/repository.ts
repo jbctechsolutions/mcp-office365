@@ -40,6 +40,7 @@ import type { CompiledSearch } from '../search/compiler.js';
 import { downloadAttachment, getDownloadDir } from './attachments.js';
 import { buildPlannerTaskMessagePayload } from './planner-task-message-payload.js';
 import type { PlanVisualizationData } from '../visualization/types.js';
+import { escapeHtml } from '../signature.js';
 import * as fs from 'fs';
 import * as path from 'path';
 import { createHash } from 'node:crypto';
@@ -3843,12 +3844,12 @@ export class GraphRepository implements IRepository {
 /**
  * Renders a reply/forward comment as the HTML Graph expects for the `comment`
  * parameter. Graph drops it into an HTML body above the quoted thread, so a
- * plain-text comment is wrapped in <pre> to keep its line breaks — the same
- * treatment update_draft gives text bodies on a quoted draft.
+ * plain-text comment is escaped and wrapped in <pre> — it keeps the line
+ * breaks, and markup the sender typed literally stays literal.
  */
 function toDraftComment(comment: string | undefined, bodyType: string): string | undefined {
   if (comment == null) return undefined;
-  return bodyType === 'html' ? comment : `<pre>${comment}</pre>`;
+  return bodyType === 'html' ? comment : `<pre>${escapeHtml(comment)}</pre>`;
 }
 
 /**

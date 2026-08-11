@@ -1814,6 +1814,23 @@ describe('graph/repository', () => {
         expect(mockClient.updateDraft).not.toHaveBeenCalled();
       });
 
+      it('escapes markup in a text comment so it stays literal', async () => {
+        mockClient.searchMessages.mockResolvedValue([
+          { id: 'msg-escape', subject: 'Escaping' },
+        ]);
+        await repository.searchEmailsAsync('Escaping', 50);
+
+        mockClient.createReplyDraft.mockResolvedValue({ id: 'draft-escape', toRecipients: [] });
+
+        await repository.replyAsDraftAsync(mintSelfEncoded('message', 'msg-escape'), false, 'use <b>bold</b> & "quotes"');
+
+        // Graph drops the comment into an HTML body, so text must not render as markup.
+        expect(mockClient.createReplyDraft).toHaveBeenCalledWith(
+          'msg-escape',
+          '<pre>use &lt;b&gt;bold&lt;/b&gt; &amp; &quot;quotes&quot;</pre>',
+        );
+      });
+
       it('passes an html comment through verbatim', async () => {
         mockClient.searchMessages.mockResolvedValue([
           { id: 'msg-html', subject: 'HTML test' },
