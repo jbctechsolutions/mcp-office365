@@ -22,17 +22,14 @@
   "scripts": {
     "build": "tsc && node scripts/write-build-info.mjs && chmod +x dist/index.js",
     "start": "node dist/index.js",
-    "prestart:dev": "node scripts/ensure-native.mjs",
     "start:dev": "node dist/index.js --state-dir \"${HOME}/.mcp-office365-dev\"",
     "dev": "tsc --watch",
-    "pretest": "node scripts/ensure-native.mjs",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "lint": "eslint src --ext .ts",
     "lint:fix": "eslint src --ext .ts --fix",
     "typecheck": "tsc --noEmit",
-    "ensure-native": "node scripts/ensure-native.mjs",
     "prepublishOnly": "npm run build"
   },
   "keywords": [
@@ -73,14 +70,12 @@
     "@azure/msal-node": "5.0.3",
     "@microsoft/microsoft-graph-client": "^3.0.7",
     "@modelcontextprotocol/sdk": "^1.29.0",
-    "better-sqlite3": "^12.11.1",
     "express": "^5.2.1",
     "isomorphic-fetch": "^3.0.0",
     "zod": "4.3.6"
   },
   "devDependencies": {
     "@microsoft/microsoft-graph-types": "^2.40.0",
-    "@types/better-sqlite3": "^7.6.11",
     "@types/express": "^5.0.0",
     "@types/node": "^22.10.2",
     "@typescript-eslint/eslint-plugin": "^7.18.0",

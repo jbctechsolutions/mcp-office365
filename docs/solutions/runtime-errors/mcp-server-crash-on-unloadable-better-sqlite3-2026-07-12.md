@@ -21,6 +21,19 @@ tags: [better-sqlite3, native-module, node-abi, npm-link, build-stamp, version-d
 
 # MCP server crash on unloadable better-sqlite3 + stale npm-link build misreporting its version
 
+> **Status note (2026-08-11, v5.0.0):** the ABI half of this document is now
+> historical. `better-sqlite3` was removed entirely in #108 — the durable store
+> runs on the standard library's `node:sqlite`, so there is no compiled binding
+> to mismatch and no `ERR_DLOPEN_FAILED` path to hit. The remedies below
+> (`npm rebuild`, clearing the npx cache, matching launcher Node) apply only to
+> builds at v4.5.1 and earlier.
+>
+> Keep reading it anyway. The diagnostic journey stayed valuable long after the
+> fix: the "what didn't work" note about the classifier missing the code-less
+> `Could not locate the bindings file` error described a bug that was then
+> reintroduced verbatim in #107 and caught again in review. The stale-build and
+> false-`list_accounts` halves are unaffected by v5.0.0 and still current.
+
 ## Problem
 
 A stale, npm-linked build of the MCP server (shadowing the published npx package) misreported its version and answered tool calls with a false `list_accounts: []`, making a fully-authenticated server look disconnected — while a separate latent bug crashed the server outright on any Node ABI mismatch, because its "in-memory fallback" was backed by the same native module that had just failed to load. Fixed in v4.2.1 (PR #77).

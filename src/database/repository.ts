@@ -225,11 +225,3 @@ export interface IMailboxRepository {
   moveFolder(folderId: string, destinationParentId: string): MaybePromise<void>;
   emptyFolder(folderId: string): MaybePromise<void>;
 }
-
-// =============================================================================
-// Repository Implementation
-// =============================================================================
-
-/**
- * Repository implementation using better-sqlite3.
- */
