@@ -28,7 +28,7 @@ import express, {
 } from 'express';
 import type { AddressInfo } from 'node:net';
 import type { Server as HttpServer } from 'node:http';
-import { createServer, type ServerOptions } from '../index.js';
+import { createServer, type ServerOptions } from '../server.js';
 import type { StateStore } from '../state/store.js';
 import type { RemoteAuthConfig } from './config.js';
 import type { DenyList } from './auth/deny-list.js';

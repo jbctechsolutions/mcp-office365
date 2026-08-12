@@ -22,7 +22,7 @@ import http, { type Server as HttpServer } from 'node:http';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import { startHttpServer } from '../../../src/remote/http-server.js';
-import { serveServerOptions } from '../../../src/index.js';
+import { serveServerOptions } from '../../../src/server.js';
 import { StateStore } from '../../../src/state/store.js';
 
 const tempDirs: string[] = [];
