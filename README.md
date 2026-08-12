@@ -724,23 +724,18 @@ approval tokens and durable IDs. Its schema is versioned and migrated forward on
 open; a build only opens a `state.db` at a schema it understands, and degrades to
 an in-memory store (durability lost for the run) otherwise.
 
-**Running more than one build?** A newer/dev build can migrate the shared
-`state.db` past what a released build understands, and — separately — a native
-module (`better-sqlite3`) compiled under one Node.js version can't load under
-another (an ABI mismatch crashes startup). Two guardrails:
+Since v5.0.0 the store runs on Node's built-in `node:sqlite`, so there is no
+compiled native module — the ABI mismatches that used to crash startup when the
+launching Node.js differed from the one that installed the server are gone. This
+is why v5.0.0 requires **Node.js 24 or newer**; v4.x supports Node 20+ but
+carries the native `better-sqlite3` binding.
+
+**Running more than one build?** A newer/dev build can still migrate the shared
+`state.db` past what a released build understands:
 
 - **Give each build its own state dir.** Point a dev build elsewhere with
   `--state-dir` or `OUTLOOK_MCP_STATE_DIR` (the `start:dev` script uses
   `~/.mcp-office365-dev`) so it never migrates an installed build's store.
-- **Prefer a direct-path install over `npx` for a pinned setup.** `npx` reuses a
-  shared cache (`~/.npm/_npx`) whose native binding is compiled under whatever
-  Node.js last populated it — launch under a different Node.js and it fails to
-  load. Installing into a fixed location and pointing your client at
-  `.../node_modules/@jbctechsolutions/mcp-office365/dist/index.js` (run under the
-  Node.js it was installed with) avoids the shared-cache trap. If you do hit an
-  ABI error, the message names the offending binding and the fix
-  (`npm rebuild better-sqlite3`, clear `~/.npm/_npx`, or match the Node.js
-  version).
 
 ## Contributing
 

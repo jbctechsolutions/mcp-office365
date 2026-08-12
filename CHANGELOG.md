@@ -7,15 +7,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Fixed
+### Changed
 
-- **A stale better-sqlite3 native binding now self-heals on dev/CI runs.** The
-  recurring failure (#88, #95) is always the same shape — the Node that compiled
-  the binding is not the Node loading it — and #99 made it legible without making
-  it stop happening. `npm test` / `npm run start:dev` now detect an unloadable
-  binding and run `npm rebuild better-sqlite3` automatically. Detection
-  constructs a `Database`, because better-sqlite3 dlopens lazily and a bare
-  `require` of a broken install still succeeds.
+- **BREAKING: Node.js 24 or newer is now required** (#108). `engines.node` moves
+  from `>=20.0.0` to `>=24.0.0`, and the CI matrix drops to 24.x/26.x. Note that
+  npm only *warns* on an unsatisfied `engines` by default — it rejects the
+  install only under `engine-strict=true` — so a Node 20 or 22 user can install
+  this version and then fail at startup. Node 20 is EOL (April 2026); Node 22
+  users should stay on 4.5.x.
+- **The durable state store runs on `node:sqlite` instead of `better-sqlite3`**
+  (#108). This is the reason for the Node floor, and it removes the last
+  compiled dependency: no native binding remains to mismatch, so the ABI
+  failures behind #88, #95, and the 2026-08-10 recurrence are now structurally
+  impossible rather than diagnosed (#77, #99) or auto-healed (#107). Existing
+  `state.db` files are read in place — SQLite's file format is
+  driver-independent, verified cross-driver against a real 2,083-alias store.
+  Behavior is preserved deliberately: `BEGIN IMMEDIATE` on alias registration,
+  an idempotent `close()`, and foreign-key enforcement pinned off (`node:sqlite`
+  defaults it on, better-sqlite3 did not).
+- The container builds and runs on Node 24 rather than Node 26 (#109), matching
+  the toolchain pin #99 established. The toolchain guard now covers the
+  Dockerfile — its absence is how the Node 26 pin survived that repin — and
+  asserts every stage shares one Node major.
+
+### Removed
+
+- `better-sqlite3` and `@types/better-sqlite3` (#108). No production dependency
+  ships a native artifact any more.
+- The unreachable legacy SQLite data layer — `src/database/connection.ts`,
+  `queries.ts`, `index.ts`, and the `OutlookRepository` runtime half. Dead since
+  the AppleScript backend was removed, constructed by nothing.
+  `src/database/repository.ts` remains as the shared row/repository *types*.
+- `scripts/ensure-native.mjs` and its `pretest` / `prestart:dev` hooks. Added in
+  #107 to auto-rebuild an unloadable binding, then superseded before ever
+  shipping in a release — with no binding, there is nothing to heal.
 
 ## [4.5.1] - 2026-08-10
 
