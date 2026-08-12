@@ -14,7 +14,7 @@
 import { describe, it, expect } from 'vitest';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
-import { createServer } from '../../src/index.js';
+import { createServer } from '../../src/server.js';
 
 describe('MCP Client E2E', () => {
   describe('protocol communication', () => {

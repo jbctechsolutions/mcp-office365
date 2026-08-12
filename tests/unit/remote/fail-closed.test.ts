@@ -12,7 +12,7 @@
 import { describe, expect, it } from 'vitest';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
-import { createServer } from '../../../src/index.js';
+import { createServer } from '../../../src/server.js';
 
 async function callFolders(remoteMode: boolean): Promise<string> {
   const server = createServer(remoteMode ? { remoteMode: true } : {});

@@ -18,7 +18,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
-import { createServer, type ServerOptions } from '../../../src/index.js';
+import { createServer, type ServerOptions } from '../../../src/server.js';
 import { StateStore, type AuditStore } from '../../../src/state/store.js';
 
 const IDENTITY = { oid: 'oid-abc', tid: 'tid-xyz' };

@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **An unsupported Node.js now fails with an actionable message instead of a raw
+  module-resolution stack** (#76). npm only warns on an unsatisfied `engines`,
+  so v5.0.0 installs fine on Node 20/22 and then died at launch with
+  `ERR_UNKNOWN_BUILTIN_MODULE` — which an MCP host shows as an unexplained
+  "failed to connect". The entry point now checks the runtime first and names
+  the remedies, including pinning `@4` for Node 20+ support. The check lives in
+  a standalone entry module because ESM resolves the whole graph before running
+  any of it, so a check inside the server could never fire.
+
 ## [5.0.0] - 2026-08-11
 
 ### Changed

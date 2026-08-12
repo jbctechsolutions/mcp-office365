@@ -4,7 +4,7 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { createServer } from '../../src/index.js';
+import { createServer } from '../../src/server.js';
 
 // Mock the config to use a test database
 vi.mock('../../src/config.js', () => ({
