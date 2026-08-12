@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [5.0.0] - 2026-08-11
+
 ### Changed
 
 - **BREAKING: Node.js 24 or newer is now required** (#108). `engines.node` moves
