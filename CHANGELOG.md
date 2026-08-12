@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [5.0.2] - 2026-08-11
+
+### Fixed
+
+- **A fatal startup error is no longer truncated on a piped stderr.** The error
+  path did `console.error` then `process.exit(1)`, which can terminate before an
+  asynchronous stderr drains — on the output that explains why the server died.
+  Same fix already applied to the Node-floor guard in 5.0.1: set
+  `process.exitCode` and let the process end.
+
+### Documentation
+
+- Recorded the runtime-floor learning in
+  `docs/solutions/conventions/`, including a measured correction: `node:sqlite`
+  is warning-free only from Node **24.15+**, not from 24.0 as 5.0.0's rationale
+  assumed. `engines.node` deliberately stays `>=24.0.0` — Node 24.0–24.14 works
+  and merely emits an `ExperimentalWarning`, and narrowing supported versions in
+  a patch is not worth cosmetic stderr noise.
+
 ## [5.0.1] - 2026-08-11
 
 ### Fixed
