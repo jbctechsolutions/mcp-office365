@@ -28,14 +28,19 @@ import { nodeFloorError } from './node-floor.js';
 const floorError = nodeFloorError(process.versions.node);
 if (floorError !== null) {
   process.stderr.write(floorError);
-  process.exit(1);
+  // Set the code and let the process end on its own rather than calling
+  // process.exit(). Node writes to stderr asynchronously when it is a pipe —
+  // which it always is under an MCP host — so exiting here can terminate
+  // before the buffer drains and truncate the very message this check exists
+  // to deliver.
+  process.exitCode = 1;
+} else {
+  // Dynamic on purpose — see the note above. A static import would be resolved
+  // before the check above ever runs.
+  const { main } = await import('./server.js');
+
+  main().catch((error: unknown) => {
+    console.error('Fatal error:', error);
+    process.exit(1);
+  });
 }
-
-// Dynamic on purpose — see the note above. A static import would be resolved
-// before the check above ever runs.
-const { main } = await import('./server.js');
-
-main().catch((error: unknown) => {
-  console.error('Fatal error:', error);
-  process.exit(1);
-});

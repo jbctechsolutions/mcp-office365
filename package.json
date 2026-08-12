@@ -3,12 +3,12 @@
   "version": "5.0.0",
   "description": "MCP server for Microsoft 365 via the Microsoft Graph API. Read/write access to mail, calendar, contacts, tasks, teams, planner, and more.",
   "type": "module",
-  "main": "./dist/index.js",
-  "types": "./dist/index.d.ts",
+  "main": "./dist/server.js",
+  "types": "./dist/server.d.ts",
   "exports": {
     ".": {
-      "types": "./dist/index.d.ts",
-      "import": "./dist/index.js"
+      "types": "./dist/server.d.ts",
+      "import": "./dist/server.js"
     }
   },
   "bin": {
