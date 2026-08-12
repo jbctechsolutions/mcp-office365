@@ -12,14 +12,15 @@
 
 import { chmodSync, copyFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
-import type Database from 'better-sqlite3';
+import { transaction } from './sqlite-compat.js';
+import type { DatabaseSync } from 'node:sqlite';
 import {
   MIGRATIONS,
   META_SCHEMA_VERSION,
   META_LEGACY_TOKENS_MIGRATED,
 } from './schema.js';
 
-type DB = Database.Database;
+type DB = DatabaseSync;
 
 /** Creates the meta table if absent (needed before reading the schema version). */
 function ensureMetaTable(db: DB): void {
@@ -65,11 +66,11 @@ export function runMigrations(db: DB): void {
   while (current < MIGRATIONS.length) {
     const sql = MIGRATIONS[current];
     if (sql == null) break;
-    const apply = db.transaction((migrationSql: string, next: number) => {
-      db.exec(migrationSql);
+    const next = current + 1;
+    transaction(db, () => {
+      db.exec(sql);
       setMeta(db, META_SCHEMA_VERSION, String(next));
     });
-    apply(sql, current + 1);
     current += 1;
   }
 }

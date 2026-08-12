@@ -4,7 +4,7 @@
  */
 
 /**
- * Durable state store (U4) — a better-sqlite3-backed store at
+ * Durable state store (U4) — a `node:sqlite`-backed store at
  * `~/.mcp-office365/state.db` holding durable-ID aliases and two-phase approval
  * tokens. Provides the concurrency (WAL + busy_timeout + atomic consume, D7),
  * at-rest (0700/0600 permissions, D18), account-stamping (D7), and
@@ -14,15 +14,25 @@
  * approval manager (U9) lands in those units.
  */
 
-import Database from 'better-sqlite3';
+import { DatabaseSync } from 'node:sqlite';
 import { chmodSync, existsSync, mkdirSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { runMigrations, migrateLegacyTokens } from './migrate.js';
 import { APPROVAL_RETENTION_MS } from './schema.js';
 import { DeltaStore } from './delta-store.js';
+import { pragmaGet, pragmaSet, transaction, immediateTransaction } from './sqlite-compat.js';
 
-type DB = Database.Database;
+type DB = DatabaseSync;
+
+/**
+ * Foreign-key enforcement is pinned off for parity with better-sqlite3, which
+ * inherits SQLite's default of off; `node:sqlite` defaults it on. The schema
+ * declares no foreign keys today, so this is inert — it exists so a future
+ * schema does not silently acquire enforcement as a side effect of a driver
+ * choice. Turning it on should be its own deliberate change (#108).
+ */
+const OPEN_OPTIONS = { enableForeignKeyConstraints: false } as const;
 
 const DEFAULT_DIR = join(homedir(), '.mcp-office365');
 const LEGACY_DIR = join(homedir(), '.outlook-mcp');
@@ -184,8 +194,8 @@ export class StateStore implements AuditStore {
     this.path = path;
     this.degraded = degraded;
     this.now = now;
-    this.journalMode = String(db.pragma('journal_mode', { simple: true }));
-    this.busyTimeout = Number(db.pragma('busy_timeout', { simple: true }));
+    this.journalMode = String(pragmaGet(db, 'journal_mode'));
+    this.busyTimeout = Number(pragmaGet(db, 'busy_timeout'));
     this.delta = new DeltaStore(db, now);
   }
 
@@ -211,7 +221,7 @@ export class StateStore implements AuditStore {
       }
 
       const dbPath = join(dir, DB_FILENAME);
-      fileDb = new Database(dbPath);
+      fileDb = new DatabaseSync(dbPath, OPEN_OPTIONS);
       configurePragmas(fileDb);
       runMigrations(fileDb); // executes DDL — surfaces a corrupt/newer file here
       // The file (and its -wal/-shm sidecars) may have just been created;
@@ -247,24 +257,12 @@ export class StateStore implements AuditStore {
         }
       }
       const reason = error instanceof Error ? error.message : String(error);
-      // The in-memory fallback is backed by the same native module, so a module
-      // that cannot load (Node ABI mismatch, missing build) would just rethrow
-      // the raw dlopen stack from the fallback. Surface remediation instead.
-      if (isNativeLoadFailure(error)) {
-        const bindingPath = extractBindingPath(reason);
-        throw new Error(
-          `better-sqlite3 native module failed to load — ABI mismatch or missing compiled ` +
-            `binding (running Node.js ${process.version}), so neither the on-disk state ` +
-            `store nor its in-memory fallback can start.\n` +
-            (bindingPath != null ? `Offending binding: ${bindingPath}\n` : '') +
-            `Fix one of:\n` +
-            `  - npm rebuild better-sqlite3   # in the directory the server is installed in\n` +
-            `  - rm -rf ~/.npm/_npx           # clear the npx cache so it recompiles on next run\n` +
-            `  - run the server under the Node.js version that installed it\n` +
-            `Original error: ${reason}`,
-          { cause: error },
-        );
-      }
+      // No native-binding branch here any more: the driver is `node:sqlite`, so
+      // there is no compiled artifact that can fail to load and no ABI to
+      // mismatch. That failure mode — #88, #95, and the 2026-08-10 recurrence —
+      // is gone with the dependency (#108). The in-memory fallback below is now
+      // genuinely a fallback rather than a second way to hit the same crash.
+      //
       // A db migrated by a newer build (forward-schema) can't be opened by this
       // one. Degrading silently loses durability; point the operator at the
       // isolation remedy so the newer/dev build stops sharing this build's db.
@@ -275,13 +273,13 @@ export class StateStore implements AuditStore {
             `newer/dev build its own dir via --state-dir or OUTLOOK_MCP_STATE_DIR, ` +
             `or upgrade this build.`,
         );
-        const memFwd = new Database(':memory:');
+        const memFwd = new DatabaseSync(':memory:', OPEN_OPTIONS);
         configurePragmas(memFwd);
         runMigrations(memFwd);
         return new StateStore(memFwd, ':memory:', true, now);
       }
       warn(`[mcp-office365] state store unavailable (${reason}); running in-memory (durability degraded).`);
-      const mem = new Database(':memory:');
+      const mem = new DatabaseSync(':memory:', OPEN_OPTIONS);
       configurePragmas(mem);
       runMigrations(mem);
       return new StateStore(mem, ':memory:', true, now);
@@ -345,7 +343,7 @@ export class StateStore implements AuditStore {
    * returns `'ok'`.
    */
   registerAlias(input: AliasInput): 'ok' | 'collision' {
-    const run = this.db.transaction((): 'ok' | 'collision' => {
+    return immediateTransaction(this.db, (): 'ok' | 'collision' => {
       const existing = this.getAliasUnscoped(input.token);
       if (
         existing !== null &&
@@ -358,7 +356,6 @@ export class StateStore implements AuditStore {
       this.putAlias(input);
       return 'ok';
     });
-    return run.immediate();
   }
 
   /**
@@ -542,14 +539,13 @@ export class StateStore implements AuditStore {
    * Returns the total rows removed.
    */
   purgeAccount(accountId: string): number {
-    const purge = this.db.transaction((id: string): number => {
+    return transaction(this.db, (): number => {
       let n = 0;
       for (const table of ['approval_tokens', 'aliases', 'delta_links', 'delta_items']) {
-        n += this.db.prepare(`DELETE FROM ${table} WHERE account_id = ?`).run(id).changes;
+        n += Number(this.db.prepare(`DELETE FROM ${table} WHERE account_id = ?`).run(accountId).changes);
       }
       return n;
     });
-    return purge(accountId);
   }
 
   // ---- Audit log (U8) ------------------------------------------------------
@@ -590,7 +586,7 @@ export class StateStore implements AuditStore {
   /** Audit rows matching the filter, newest first. */
   listAudit(query: AuditQuery = {}): AuditEntryRow[] {
     const clauses: string[] = [];
-    const params: unknown[] = [];
+    const params: Array<string | number> = [];
     if (query.oid != null) {
       clauses.push('oid = ?');
       params.push(query.oid);
@@ -649,30 +645,19 @@ export class StateStore implements AuditStore {
   purgeExpired(now: number): number {
     const cutoff = now - APPROVAL_RETENTION_MS;
     const result = this.db.prepare('DELETE FROM approval_tokens WHERE expires_at < ?').run(cutoff);
-    return result.changes;
+    return Number(result.changes);
   }
 
+  /**
+   * Closes the underlying handle. Idempotent: better-sqlite3 treated a repeat
+   * close as a no-op, while `node:sqlite` throws `database is not open`.
+   * Callers (test teardown, shutdown paths that may run twice) relied on the
+   * former, so the guard preserves it rather than pushing the check outward.
+   */
   close(): void {
+    if (!this.db.isOpen) return;
     this.db.close();
   }
-}
-
-/**
- * True when the error means the better-sqlite3 native binding itself cannot be
- * loaded (as opposed to a bad/locked db file): dlopen ABI rejection, or the
- * compiled `.node` artifact missing entirely.
- */
-function isNativeLoadFailure(error: unknown): boolean {
-  if (!(error instanceof Error)) return false;
-  const code = (error as NodeJS.ErrnoException).code;
-  if (code === 'ERR_DLOPEN_FAILED') return true;
-  if (/NODE_MODULE_VERSION|was compiled against a different Node\.js version/.test(error.message)) {
-    return true;
-  }
-  // The `bindings` package throws a code-less plain Error when the compiled
-  // artifact is missing entirely (never built / pruned).
-  if (/Could not locate the bindings file/.test(error.message)) return true;
-  return code === 'MODULE_NOT_FOUND' && error.message.includes('better_sqlite3.node');
 }
 
 /**
@@ -687,24 +672,9 @@ function isForwardSchemaFailure(error: unknown): boolean {
   );
 }
 
-/**
- * Pulls the offending `.node` binding path out of a native-load error message
- * so the remediation can name it exactly. Handles both the dlopen form
- * (`The module '/path/better_sqlite3.node' was compiled…`) and the `bindings`
- * "Could not locate the bindings file" form. Returns undefined when no path is
- * present in the message. Prefers a quoted path (the dlopen form) so paths
- * containing spaces (e.g. macOS `/Users/me/My App/...`) aren't truncated, then
- * falls back to the `bindings` arrow-listing form.
- */
-function extractBindingPath(message: string): string | undefined {
-  const quoted = /['"]([^'"]+\.node)['"]/.exec(message)?.[1];
-  if (quoted != null) return quoted;
-  return /(?:^|\n)\s*(?:→|->)\s*([^\r\n]+?\.node)\s*$/m.exec(message)?.[1];
-}
-
 function configurePragmas(db: DB): void {
-  db.pragma('journal_mode = WAL');
-  db.pragma('busy_timeout = 5000');
+  pragmaSet(db, 'journal_mode = WAL');
+  pragmaSet(db, 'busy_timeout = 5000');
 }
 
 /**

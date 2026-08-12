@@ -6,7 +6,7 @@
 # would. Debian slim (glibc) is used over Alpine (musl) for reliable native builds.
 
 # ---- builder: install deps, compile the native addon, build TS ----
-FROM node:26-bookworm-slim AS builder
+FROM node:24-bookworm-slim AS builder
 WORKDIR /app
 
 # Toolchain for better-sqlite3's node-gyp build. Removed with the stage.
@@ -28,7 +28,7 @@ RUN npm run build
 RUN npm prune --omit=dev
 
 # ---- runtime: minimal, non-root ----
-FROM node:26-bookworm-slim AS runtime
+FROM node:24-bookworm-slim AS runtime
 ENV NODE_ENV=production
 WORKDIR /app
 

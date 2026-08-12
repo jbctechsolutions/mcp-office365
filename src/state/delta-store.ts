@@ -15,13 +15,14 @@
  *
  * This is the storage layer only; the sync orchestration and change
  * classification live in {@link ../delta/mirror.ts}. It is a thin companion to
- * {@link StateStore} (sharing its single better-sqlite3 connection), kept in its
+ * {@link StateStore} (sharing its single node:sqlite connection), kept in its
  * own module so the mirror's SQL does not bloat the core store.
  */
 
-import type Database from 'better-sqlite3';
+import type { DatabaseSync } from 'node:sqlite';
+import { transaction } from './sqlite-compat.js';
 
-type DB = Database.Database;
+type DB = DatabaseSync;
 
 /** A mirrored item's stored snapshot. */
 export interface MirrorItem {
@@ -127,7 +128,8 @@ export class DeltaStore {
    * usable deltaLink).
    */
   commit(commit: DeltaCommit): void {
-    const apply = this.db.transaction((c: DeltaCommit): void => {
+    transaction(this.db, (): void => {
+      const c = commit;
       // A baseline replaces the mirror wholesale, so no stale row from a prior
       // (possibly cursor-less) round can survive to inflate counts or force a
       // future add to misclassify as an update.
@@ -179,7 +181,6 @@ export class DeltaStore {
         del.run(c.accountId, c.resource, graphId);
       }
     });
-    apply(commit);
   }
 
   /**
@@ -188,7 +189,7 @@ export class DeltaStore {
    * sync. Local-only; never touches the user's Graph data.
    */
   reset(accountId: string, resource?: string): void {
-    const wipe = this.db.transaction((): void => {
+    transaction(this.db, (): void => {
       if (resource != null) {
         this.db.prepare('DELETE FROM delta_links WHERE account_id = ? AND resource = ?').run(accountId, resource);
         this.db.prepare('DELETE FROM delta_items WHERE account_id = ? AND resource = ?').run(accountId, resource);
@@ -197,6 +198,5 @@ export class DeltaStore {
         this.db.prepare('DELETE FROM delta_items WHERE account_id = ?').run(accountId);
       }
     });
-    wipe();
   }
 }

@@ -7,7 +7,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { mkdtempSync, rmSync, writeFileSync, readFileSync, existsSync, statSync, chmodSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import Database from 'better-sqlite3';
+import { DatabaseSync } from 'node:sqlite';
 import { StateStore } from '../../../src/state/store.js';
 import { SCHEMA_VERSION, APPROVAL_RETENTION_MS } from '../../../src/state/schema.js';
 
@@ -67,7 +67,7 @@ describe('StateStore.open', () => {
     const seed = StateStore.open({ dir, legacyDir, warn: () => {} });
     seed.close();
     const dbPath = join(dir, 'state.db');
-    const raw = new Database(dbPath);
+    const raw = new DatabaseSync(dbPath);
     raw
       .prepare(
         "INSERT INTO meta (key, value) VALUES ('schema_version', ?) " +
@@ -84,9 +84,19 @@ describe('StateStore.open', () => {
     expect(warnings.some((w) => w.includes('--state-dir'))).toBe(true);
   });
 
+  it('close() is idempotent', () => {
+    // better-sqlite3 treated a repeat close as a no-op; node:sqlite throws
+    // "database is not open" (#108). Teardown paths that may run twice relied
+    // on the old contract, so the store preserves it.
+    const store = openStore();
+    store.close();
+    expect(() => store.close()).not.toThrow();
+    open.delete(store);
+  });
+
   it('creates the db with the current schema version and expected tables', () => {
     openStore();
-    const raw = new Database(join(dir, 'state.db'));
+    const raw = new DatabaseSync(join(dir, 'state.db'));
     const version = raw.prepare("SELECT value FROM meta WHERE key = 'schema_version'").get() as { value: string };
     expect(Number(version.value)).toBe(SCHEMA_VERSION);
     const tables = raw
@@ -124,7 +134,7 @@ describe('StateStore.open', () => {
 
   it('degrades to in-memory when the db was migrated by a newer build (downgrade guard)', () => {
     // Simulate a future build: stamp a schema_version beyond this build's count.
-    const raw = new Database(join(dir, 'state.db'));
+    const raw = new DatabaseSync(join(dir, 'state.db'));
     raw.exec('CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);');
     raw.prepare("INSERT INTO meta (key, value) VALUES ('schema_version', ?)").run(String(SCHEMA_VERSION + 5));
     raw.close();
