@@ -84,6 +84,16 @@ describe('StateStore.open', () => {
     expect(warnings.some((w) => w.includes('--state-dir'))).toBe(true);
   });
 
+  it('close() is idempotent', () => {
+    // better-sqlite3 treated a repeat close as a no-op; node:sqlite throws
+    // "database is not open" (#108). Teardown paths that may run twice relied
+    // on the old contract, so the store preserves it.
+    const store = openStore();
+    store.close();
+    expect(() => store.close()).not.toThrow();
+    open.delete(store);
+  });
+
   it('creates the db with the current schema version and expected tables', () => {
     openStore();
     const raw = new Database(join(dir, 'state.db'));
