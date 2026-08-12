@@ -72,9 +72,16 @@ export function immediateTransaction<T>(db: DatabaseSync, fn: () => T): T {
 
 function runInTransaction<T>(db: DatabaseSync, begin: string, fn: () => T): T {
   db.exec(begin);
-  let result: T;
   try {
-    result = fn();
+    const result = fn();
+    // COMMIT must be inside the protected block. It can fail on its own — a
+    // deferred constraint is only checked here, and a busy timeout can expire
+    // at commit — and a failed COMMIT leaves the transaction *open*. Without
+    // the rollback below, the next BEGIN would fail with "cannot start a
+    // transaction within a transaction" and the real cause would be two
+    // operations upstream.
+    db.exec('COMMIT');
+    return result;
   } catch (error) {
     try {
       db.exec('ROLLBACK');
@@ -83,6 +90,4 @@ function runInTransaction<T>(db: DatabaseSync, begin: string, fn: () => T): T {
     }
     throw error;
   }
-  db.exec('COMMIT');
-  return result;
 }

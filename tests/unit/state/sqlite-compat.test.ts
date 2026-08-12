@@ -98,6 +98,35 @@ describe('state/sqlite-compat', () => {
       expect(db.prepare('SELECT count(*) AS c FROM t').get()).toEqual({ c: 2 });
     });
 
+    it('leaves no transaction open when COMMIT itself fails', () => {
+      // A DEFERRABLE INITIALLY DEFERRED constraint is only checked at COMMIT,
+      // so this makes COMMIT — not the callback — throw. If COMMIT ran outside
+      // the protected block, the transaction would stay open and the *next*
+      // BEGIN would fail, surfacing the problem two operations downstream.
+      const fk = new DatabaseSync(join(dir, 'fk.db'), { enableForeignKeyConstraints: true });
+      try {
+        fk.exec('CREATE TABLE parent (id INTEGER PRIMARY KEY)');
+        fk.exec(
+          'CREATE TABLE child (id INTEGER PRIMARY KEY, parent_id INTEGER REFERENCES parent(id) DEFERRABLE INITIALLY DEFERRED)',
+        );
+
+        expect(() =>
+          transaction(fk, () => {
+            fk.prepare('INSERT INTO child (parent_id) VALUES (?)').run(999);
+          }),
+        ).toThrow(/FOREIGN KEY/i);
+
+        // The proof: a subsequent transaction still works.
+        transaction(fk, () => {
+          fk.prepare('INSERT INTO parent (id) VALUES (?)').run(1);
+        });
+        expect(fk.prepare('SELECT count(*) AS c FROM parent').get()).toEqual({ c: 1 });
+        expect(fk.prepare('SELECT count(*) AS c FROM child').get()).toEqual({ c: 0 });
+      } finally {
+        fk.close();
+      }
+    });
+
     it('leaves no transaction open after a rollback, so the next one succeeds', () => {
       expect(() =>
         transaction(db, () => {

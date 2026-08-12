@@ -33,7 +33,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 
 - `better-sqlite3` and `@types/better-sqlite3` (#108). No production dependency
-  ships a native artifact any more.
+  ships a native artifact anymore.
 - The unreachable legacy SQLite data layer — `src/database/connection.ts`,
   `queries.ts`, `index.ts`, and the `OutlookRepository` runtime half. Dead since
   the AppleScript backend was removed, constructed by nothing.
