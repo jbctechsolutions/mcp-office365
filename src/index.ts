@@ -40,7 +40,10 @@ if (floorError !== null) {
   const { main } = await import('./server.js');
 
   main().catch((error: unknown) => {
+    // Same reasoning as the floor message above: process.exit() can terminate
+    // before an asynchronous stderr drains, and this is the output that
+    // explains why the server died. Set the code and let the process end.
     console.error('Fatal error:', error);
-    process.exit(1);
+    process.exitCode = 1;
   });
 }

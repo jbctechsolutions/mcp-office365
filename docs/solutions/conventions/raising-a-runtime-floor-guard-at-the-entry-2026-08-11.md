@@ -41,7 +41,7 @@ That re-created the exact failure class the release existed to eliminate — in 
 
 **2. Guard the floor at runtime, and say what to do.** Check the version at startup and fail with remedies, not a stack trace:
 
-```
+```text
 mcp-office365 requires Node.js 24 or newer — this is Node.js 20.20.2.
 
 Fix one of:
@@ -66,18 +66,24 @@ if (floorError !== null) {
   process.exitCode = 1;          // NOT process.exit() — see below
 } else {
   const { main } = await import('./server.js');     // dynamic on purpose
-  main().catch(/* ... */);
+  main().catch((error: unknown) => {
+    console.error('Fatal error:', error);
+    process.exitCode = 1;                           // same reason as above
+  });
 }
 ```
 
-**4. Do not `process.exit()` right after writing the message.** Node writes to `stderr` asynchronously when it is a pipe — which it always is under a host that captures output. Calling `process.exit()` can terminate before the buffer drains and truncate the very guidance the guard exists to deliver. Set `process.exitCode` and let the process end naturally.
+**4. Do not `process.exit()` right after writing the message.** Node writes to `stderr` asynchronously when it is a pipe or socket, and synchronously to a file or TTY. A host that captures output gives you the asynchronous case, which is exactly when the guidance matters most. Calling `process.exit()` can terminate before the buffer drains and truncate the very guidance the guard exists to deliver. Set `process.exitCode` and let the process end naturally.
 
 **5. Test *below* the floor.** A matrix that only runs supported versions proves nothing about what an unsupported user sees. Assert on the message, not just the exit code, and pin the constant to the manifest so the two cannot drift:
 
 ```ts
-it.each(['20.20.2', '22.11.0', '22.13.0'])('refuses to start on Node %s', (v) => {
-  expect(nodeFloorError(v)).toContain('requires Node.js 24');
-});
+it.each([`${MIN_NODE_MAJOR - 4}.20.2`, `${MIN_NODE_MAJOR - 2}.11.0`, `${MIN_NODE_MAJOR - 1}.0.0`])(
+  'refuses to start on Node %s',
+  (v) => {
+    expect(nodeFloorError(v)).toContain(`requires Node.js ${MIN_NODE_MAJOR}`);
+  },
+);
 
 it('matches the floor declared in engines.node', () => {
   expect(MIN_NODE_MAJOR).toBe(Number(/(\d+)/.exec(pkg.engines.node)?.[1]));
@@ -88,13 +94,17 @@ it('matches the floor declared in engines.node', () => {
 
 **7. Verify the boundary claim, do not infer it from release notes.** The floor was chosen as 24 rather than 22.5 because measurement disagreed with the documentation:
 
-| Node | `require('node:sqlite')` unflagged |
+| Node | `DatabaseSync` + `prepare`/`exec`/`run`, unflagged |
 |---|---|
 | 22.11.0 | fails — `No such built-in module` |
 | 22.13.0 / 22.15.0 | works, emits `ExperimentalWarning` on every launch |
+| **24.11.0** | **works, still emits `ExperimentalWarning`** |
 | 24.18.0 | works, silent |
+| 26.2.0 | works, silent |
 
-The commonly cited "available since 22.5" is true only behind `--experimental-sqlite`. Unflagged availability starts at 22.13, and warning-free only at 24.
+Three lessons in one table. The commonly cited "available since 22.5" is true only behind `--experimental-sqlite`; unflagged availability starts at **22.13**. And "warning-free from 24" — the reason this floor was set at 24 rather than 22.13 — is **wrong at major granularity**: 24.11 still warns, because the module only reached Release Candidate mid-24.x. A major-only floor of `>=24.0.0` therefore still admits versions carrying the exact noise 22.13 was rejected for.
+
+That is the trap: a floor expressed in majors cannot express a boundary that moved at a patch. Measure the *specific* APIs you call, at more than one patch level inside the major you are about to require, and say which points you actually tested.
 
 ## Why This Matters
 
@@ -108,13 +118,13 @@ A release that removes an illegible-startup failure can install a new one throug
 - Adopting a stdlib API gated on runtime version — check unflagged *and* warning-free availability separately
 - Dropping a runtime major in a breaking release, especially for a CLI or server launched by a host that captures stderr
 
-Skip it for a pure library with no executable entry, where the consumer's own toolchain surfaces the failure at build time.
+The *entry guard* is the only part a pure library can skip — there is no entry to guard. Everything else still applies: a consumer importing your ESM graph hits the unavailable module in their runtime, not at build time, so keep the manifest-alignment test and add a below-floor import test.
 
 ## Examples
 
 Before — what a Node 20 user got from v5.0.0:
 
-```
+```text
 node:internal/modules/esm/translators:391
     throw new ERR_UNKNOWN_BUILTIN_MODULE(url);
           ^
@@ -124,7 +134,7 @@ After — v5.0.1, verified by installing the published tarball and launching it 
 
 ## Related
 
-- `mcp-server-crash-on-unloadable-better-sqlite3-2026-07-12.md` — the earlier form of the same illegible-startup class, from the native binding. Shares the symptom and the module, differs on cause and remedy; worth reading together.
+- [`mcp-server-crash-on-unloadable-better-sqlite3-2026-07-12.md`](../runtime-errors/mcp-server-crash-on-unloadable-better-sqlite3-2026-07-12.md) — the earlier form of the same illegible-startup class, from the native binding. Shares the symptom and the module, differs on cause and remedy; worth reading together.
 - jbctechsolutions/mcp-office365#76 — the issue whose re-reading surfaced this, narrowed from "pure-JS store fallback" to this guard
 - jbctechsolutions/mcp-office365#108 — the driver swap that raised the floor
 - jbctechsolutions/mcp-office365#113 — the fix
