@@ -1,7 +1,7 @@
 ---
 title: 'refactor: Replace better-sqlite3 with node:sqlite (issue #108)'
 type: refactor
-status: active
+status: completed
 date: 2026-08-11
 ---
 
