@@ -29,7 +29,16 @@ Mitigations to date and what each leaves open:
 | #99 (v4.4.0) | Pin the build toolchain to Node 24 LTS; name the offending binding | A consumer whose launcher Node differs from the cache's compile Node |
 | #107 | Auto-rebuild an unloadable binding on `pretest` / `prestart:dev` | End users — `scripts/` is not published, so the hook cannot ship |
 
-`node:sqlite` has been in the standard library since Node 22.5 and is available unflagged. There is no artifact to compile, cache, or mismatch.
+`node:sqlite` is in the standard library, so there is no artifact to compile, cache, or mismatch. Its availability is version-dependent, verified directly rather than taken from release notes:
+
+| Node | `require('node:sqlite')` unflagged |
+|---|---|
+| 22.11.0 | fails — `No such built-in module` (needs `--experimental-sqlite`) |
+| 22.13.0 | works, emits `ExperimentalWarning` |
+| 22.15.0 | works, emits `ExperimentalWarning` |
+| 24.18.0 | works, silent |
+
+The module is under active development / release-candidate status rather than fully stable, which is a deliberate accepted risk: the surface this store uses (`DatabaseSync`, `prepare`, `run`, `get`, `all`, `exec`) is the long-settled core, and the alternative is keeping a dependency that has broken production three times.
 
 ---
 
@@ -109,7 +118,7 @@ Differences requiring action, all handled in U1/U2:
 - `transaction` returns the callback's return value unchanged
 - `transaction` commits: rows written inside are visible after return
 - `transaction` rolls back on throw: no rows persist, and the original error propagates
-- Nested/consecutive transactions on the same handle behave (sequential begin/commit pairs do not error)
+- Consecutive transactions on the same handle behave — sequential begin/commit pairs do not error. Not nesting: `BEGIN` cannot run inside an active transaction, and no call site nests (all five callbacks only `prepare`/`run`/`exec`). If a future caller needs nesting, that requires `SAVEPOINT` support and is a separate change.
 
 ---
 
@@ -208,7 +217,11 @@ Do not delete the #77 learning doc. It documents a real diagnostic journey that 
 
 **Test scenarios:**
 - `Test expectation: none -- dependency and tooling removal.`
-- Verification: a clean `rm -rf node_modules && npm install` produces no `build/Release/*.node` under `node_modules/better-sqlite3` (the directory should not exist), and the full suite passes.
+- Verification after a clean `rm -rf node_modules && npm install`: neither `better-sqlite3` nor `@types/better-sqlite3` appears anywhere in the tree. Check all three — a direct-path check alone misses a transitive copy some other dependency pulls in:
+  - recursive search of `node_modules` (not just the top-level directory)
+  - `package-lock.json` contains no entry for either package
+  - `npm ls --all` reports neither
+- The full suite passes.
 
 ---
 
@@ -297,7 +310,7 @@ U4 is independent and can land first or in parallel; everything else is a chain.
 
 | Surface | Impact |
 |---|---|
-| npm consumers | **Breaking.** Node 20 and 22 installs fail the engines check. Requires a major version and a release note leading with the floor change. |
+| npm consumers | **Breaking at runtime, not necessarily at install.** npm only *warns* on an unsatisfied `engines.node` by default; it rejects the install only under `engine-strict=true`. So a Node 20 or 22 user can install v5.0.0 and then fail at startup — Node 20 and Node 22 below 22.13 cannot load `node:sqlite` unflagged at all, and 22.13+ loads it with an `ExperimentalWarning`. Requires a major version and a release note leading with the floor change, since the default install path gives only a warning. |
 | JP remote connector | Container rebuild and redeploy required by U7. Behavior unchanged; the store is a fresh volume per revision. |
 | Local stdio launchers | None — all already run 24.18.0. Existing `state.db` files are read in place. |
 | CI | Matrix drops two legs, shortening the run. The known Windows/Node-20 `Install dependencies` flake disappears with the 20.x leg. |
@@ -313,7 +326,7 @@ U4 is independent and can land first or in parallel; everything else is a chain.
 | Silent `undefined` from a pragma read keyed by name | Medium if unguarded | U1 reads positionally and carries a dedicated `busy_timeout` regression test — this is the trap most likely to pass review unnoticed. |
 | Transaction shim mishandles nested or failed rollback, losing the original error | Low | Explicit test scenarios in U1 for rollback-on-throw and error propagation. |
 | Dropping Node 22 strands a consumer | Low, accepted | Major version; Node 20 is EOL and 22 users remain on v4.x. Confirmed no local launcher affected. |
-| `node:sqlite` API changes under its stability designation | Low | Node 24 is the floor; the surface used (`DatabaseSync`, `prepare`, `run`, `get`, `all`, `exec`) is the stable core. |
+| `node:sqlite` API changes — the module is release-candidate / actively developed, not fully stable | Low-medium | The surface used (`DatabaseSync`, `prepare`, `run`, `get`, `all`, `exec`) is its long-settled core, and Node 24 is the floor so the flagged-module era is behind us. Accepted deliberately: the alternative is retaining a dependency that has broken production three times. If a breaking change does land, the shims in U1 are the single place adaptation is needed. |
 
 ---
 
