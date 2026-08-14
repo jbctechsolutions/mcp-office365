@@ -22,10 +22,11 @@ import { readFileSync, statSync } from 'node:fs';
 import type { Backend, SurfaceOptions } from '../registry/index.js';
 
 /**
- * PINNED v1 default tool surface (R7): mail, calendar, files/SharePoint, and
- * Planner — deliberately excluding shared-mailbox, mail-rules, and file-download
- * / photo tools. Generated from the registry; update via a reviewed change when
- * the default surface should shift (the contract test flags registry drift).
+ * PINNED default tool surface (R7): mail, calendar, files/SharePoint, Planner,
+ * and Teams messaging — deliberately excluding shared-mailbox, mail-rules, and
+ * file-download / photo tools. Generated from the registry; update via a
+ * reviewed change when the default surface should shift (the contract test
+ * flags registry drift).
  *
  * Planner blast-radius exclusions (2026-08-06, deliberate): the
  * prepare/confirm_delete_plan pair and update_plan_sharing are NOT in the
@@ -33,43 +34,62 @@ import type { Backend, SurfaceOptions } from '../registry/index.js';
  * grant/revoke via sharedWith) exceed what pilot users need; labels ship via
  * get_plan_details/update_plan_details. Local stdio and fullAccess users get
  * all planner tools automatically.
+ *
+ * Teams exclusions (2026-08-14, deliberate): channel lifecycle
+ * (create_channel, update_channel, prepare/confirm_delete_channel) is
+ * org-structure change rather than messaging, so it stays out on the same
+ * blast-radius reasoning as plan deletion. list_team_members is also out —
+ * it is the only Teams tool requiring TeamMember.Read.All, and adding a
+ * directory-read scope for one convenience tool is a poor least-privilege
+ * trade. Re-adding it is a consented-scope change, not just a surface edit.
+ * Everything reachable here is covered by Team.ReadBasic.All,
+ * Channel.ReadBasic.All, ChannelMessage.Read.All, ChannelMessage.Send, and
+ * Chat.ReadWrite; reactions need no permission beyond the send scopes.
  */
 export const DEFAULT_TOOL_SURFACE: readonly string[] = Object.freeze([
   'add_draft_attachment', 'add_draft_inline_image', 'check_availability', 'check_new_emails',
-  'clear_email_flag', 'confirm_archive_email', 'confirm_batch_operation', 'confirm_delete_bucket',
-  'confirm_delete_calendar_permission', 'confirm_delete_category', 'confirm_delete_drive_item',
-  'confirm_delete_email', 'confirm_delete_event', 'confirm_delete_focused_override',
-  'confirm_delete_folder', 'confirm_delete_list_item', 'confirm_delete_planner_task',
-  'confirm_empty_folder', 'confirm_forward_email', 'confirm_junk_email', 'confirm_move_email',
-  'confirm_reply_email', 'confirm_send_draft', 'confirm_send_email', 'confirm_upload_file',
+  'clear_email_flag', 'confirm_add_message_reaction', 'confirm_archive_email',
+  'confirm_batch_operation', 'confirm_delete_bucket', 'confirm_delete_calendar_permission',
+  'confirm_delete_category', 'confirm_delete_drive_item', 'confirm_delete_email',
+  'confirm_delete_event', 'confirm_delete_focused_override', 'confirm_delete_folder',
+  'confirm_delete_list_item', 'confirm_delete_planner_task', 'confirm_empty_folder',
+  'confirm_forward_email', 'confirm_junk_email', 'confirm_move_email',
+  'confirm_reply_channel_message', 'confirm_reply_email', 'confirm_send_channel_message',
+  'confirm_send_chat_message', 'confirm_send_draft', 'confirm_send_email', 'confirm_upload_file',
   'confirm_upload_library_file', 'create_bucket', 'create_calendar_group',
-  'create_calendar_permission', 'create_category', 'create_draft', 'create_event',
-  'create_focused_override', 'create_folder', 'create_library_folder', 'create_list',
-  'create_list_item', 'create_plan', 'create_planner_task', 'create_sharing_link', 'delete_event',
-  'find_meeting_times', 'forward_as_draft', 'generate_burndown_chart', 'generate_gantt_chart',
-  'generate_kanban_board', 'generate_plan_summary', 'get_automatic_replies', 'get_drive_item',
-  'get_email', 'get_emails', 'get_event', 'get_list', 'get_list_item', 'get_mail_tips',
-  'get_mailbox_settings', 'get_message_headers', 'get_message_mime', 'get_plan', 'get_plan_details', 'get_planner_task',
+  'create_calendar_permission', 'create_category', 'create_draft',
+  'create_event', 'create_focused_override', 'create_folder', 'create_library_folder',
+  'create_list', 'create_list_item', 'create_plan', 'create_planner_task', 'create_sharing_link',
+  'delete_event', 'find_chat', 'find_meeting_times', 'forward_as_draft',
+  'generate_burndown_chart', 'generate_gantt_chart', 'generate_kanban_board',
+  'generate_plan_summary', 'get_automatic_replies', 'get_channel', 'get_channel_message',
+  'get_chat', 'get_drive_item', 'get_email', 'get_emails', 'get_event', 'get_list',
+  'get_list_item', 'get_mail_tips', 'get_mailbox_settings', 'get_message_headers',
+  'get_message_mime', 'get_plan', 'get_plan_details', 'get_planner_task',
   'get_planner_task_details', 'get_signature', 'get_site', 'get_unread_count', 'list_attachments',
   'list_buckets', 'list_calendar_groups', 'list_calendar_permissions', 'list_calendars',
-  'list_categories', 'list_conversation', 'list_document_libraries', 'list_drafts',
-  'list_drive_items', 'list_emails', 'list_event_instances', 'list_events', 'list_focused_overrides',
-  'list_folders', 'list_library_items', 'list_list_columns', 'list_list_items', 'list_lists',
-  'list_my_planner_tasks', 'list_planner_tasks', 'list_plans', 'list_recent_files', 'list_room_lists',
-  'list_rooms', 'list_shared_with_me', 'list_sites', 'mark_email_read', 'mark_email_unread',
-  'move_folder', 'prepare_archive_email', 'prepare_batch_delete_emails', 'prepare_batch_move_emails',
-  'prepare_delete_bucket', 'prepare_delete_calendar_permission', 'prepare_delete_category',
-  'prepare_delete_drive_item', 'prepare_delete_email', 'prepare_delete_event',
-  'prepare_delete_focused_override', 'prepare_delete_folder', 'prepare_delete_list_item',
-  'prepare_delete_planner_task', 'prepare_empty_folder', 'prepare_forward_email',
-  'prepare_junk_email', 'prepare_move_email', 'prepare_reply_email', 'prepare_send_draft',
-  'prepare_send_email', 'prepare_upload_file', 'prepare_upload_library_file', 'rename_folder',
-  'reply_as_draft', 'reset_change_tracking', 'respond_to_event', 'search_drive_items',
-  'search_emails', 'search_emails_advanced', 'search_events', 'search_sites', 'send_email',
+  'list_categories', 'list_channel_messages', 'list_channels', 'list_chat_members',
+  'list_chat_messages', 'list_chats', 'list_conversation', 'list_document_libraries',
+  'list_drafts', 'list_drive_items', 'list_emails', 'list_event_instances', 'list_events',
+  'list_focused_overrides', 'list_folders', 'list_library_items', 'list_list_columns',
+  'list_list_items', 'list_lists', 'list_message_reactions', 'list_my_planner_tasks',
+  'list_planner_tasks', 'list_plans', 'list_recent_files', 'list_room_lists', 'list_rooms',
+  'list_shared_with_me', 'list_sites', 'list_teams', 'mark_email_read', 'mark_email_unread',
+  'move_folder', 'prepare_add_message_reaction', 'prepare_archive_email',
+  'prepare_batch_delete_emails', 'prepare_batch_move_emails', 'prepare_delete_bucket',
+  'prepare_delete_calendar_permission', 'prepare_delete_category', 'prepare_delete_drive_item',
+  'prepare_delete_email', 'prepare_delete_event', 'prepare_delete_focused_override',
+  'prepare_delete_folder', 'prepare_delete_list_item', 'prepare_delete_planner_task',
+  'prepare_empty_folder', 'prepare_forward_email', 'prepare_junk_email', 'prepare_move_email',
+  'prepare_reply_channel_message', 'prepare_reply_email', 'prepare_send_channel_message',
+  'prepare_send_chat_message', 'prepare_send_draft', 'prepare_send_email', 'prepare_upload_file',
+  'prepare_upload_library_file', 'remove_message_reaction', 'rename_folder', 'reply_as_draft',
+  'reset_change_tracking', 'respond_to_event', 'search_drive_items', 'search_emails',
+  'search_emails_advanced', 'search_events', 'search_sites', 'send_email',
   'set_automatic_replies', 'set_email_categories', 'set_email_flag', 'set_email_importance',
   'set_signature', 'update_bucket', 'update_draft', 'update_event', 'update_list_item',
-  'update_mailbox_settings', 'update_plan', 'update_plan_details', 'update_planner_task', 'update_planner_task_details',
-  'what_changed',
+  'update_mailbox_settings', 'update_plan', 'update_plan_details', 'update_planner_task',
+  'update_planner_task_details', 'what_changed',
 ]);
 
 /** A single user's entitlement entry. */

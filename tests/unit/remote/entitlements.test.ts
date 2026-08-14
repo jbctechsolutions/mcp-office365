@@ -123,6 +123,36 @@ describe('DEFAULT_TOOL_SURFACE registry contract', () => {
     const excluded = ['prepare_delete_plan', 'confirm_delete_plan', 'update_plan_sharing'];
     expect(DEFAULT_TOOL_SURFACE.filter((n) => excluded.includes(n))).toEqual([]);
   });
+
+  it('the pinned surface excludes Teams channel lifecycle and list_team_members', () => {
+    // Deliberate 2026-08-14 exclusions. Channel create/update/delete is org-structure
+    // change, not messaging. list_team_members is the only Teams tool requiring
+    // TeamMember.Read.All, so it is dropped rather than widen the consented scopes for
+    // one convenience read. Re-adding the last one is a scope change, not just a surface edit.
+    const excluded = [
+      'create_channel',
+      'update_channel',
+      'prepare_delete_channel',
+      'confirm_delete_channel',
+      'list_team_members',
+    ];
+    expect(DEFAULT_TOOL_SURFACE.filter((n) => excluded.includes(n))).toEqual([]);
+  });
+
+  it('every Teams send is exposed as a complete two-phase pair', () => {
+    // A confirm without its prepare would be reachable without the approval step;
+    // a prepare without its confirm strands the token. Both halves or neither.
+    const pairs = [
+      ['prepare_send_channel_message', 'confirm_send_channel_message'],
+      ['prepare_reply_channel_message', 'confirm_reply_channel_message'],
+      ['prepare_send_chat_message', 'confirm_send_chat_message'],
+      ['prepare_add_message_reaction', 'confirm_add_message_reaction'],
+    ];
+    for (const [prepare, confirm] of pairs) {
+      expect(DEFAULT_TOOL_SURFACE).toContain(prepare);
+      expect(DEFAULT_TOOL_SURFACE).toContain(confirm);
+    }
+  });
 });
 
 describe('registry allow/exclude filtering (U6)', () => {
