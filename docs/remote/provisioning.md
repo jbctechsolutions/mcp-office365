@@ -45,7 +45,9 @@ portal edit.
 ## Step 1 — Grant admin consent for the API app's Graph scopes
 
 The API app requests delegated Microsoft Graph scopes (mail, calendar,
-files/SharePoint, Planner read/write via `Tasks.ReadWrite`) but they are **not yet consented**. Grant
+files/SharePoint, Planner read/write via `Tasks.ReadWrite`, and Teams messaging via
+`Team.ReadBasic.All` / `Channel.ReadBasic.All` / `ChannelMessage.Read.All` /
+`ChannelMessage.Send` / `Chat.ReadWrite`) but they are **not yet consented**. Grant
 tenant-wide admin consent so pilot users are not each prompted (and so
 `Sites.ReadWrite.All`, which requires admin consent, works).
 
@@ -70,10 +72,19 @@ az ad app permission list-grants --id 484c0657-6a05-4aad-a175-dabac48acb05 -o ta
 > writes; no `Group.ReadWrite.All` needed). After any scope addition:
 >
 > 1. Re-run the admin-consent command above and verify the new row shows granted.
-> 2. **Restart the connector replica.** MSAL's in-memory OBO cache keeps serving
->    each user's pre-consent Graph token (missing the new `scp` claim) until it
->    expires (~60–90 min); a restart clears it. Without this, "retry after
->    consent" still 403s and looks like the consent failed.
+>    **Verify against the grants list, not the command's exit code** — on
+>    2026-08-06 the CLI returned `Authorization_RequestDenied` from a plain
+>    session and needed portal or PIM-activated escalation. Budget for that.
+> 2. **Clear the MSAL OBO cache.** It is in-process and keeps serving each user's
+>    pre-consent Graph token (missing the new `scp` claim) until it expires
+>    (~60–90 min). Without this, "retry after consent" still 403s and looks like
+>    the consent failed.
+>
+>    **Preferred: consent *before* the next deploy.** A revision created after
+>    consent starts with an empty cache, so the deploy is the cache clear and
+>    there is no stale window at all (proven on the 2026-08-08 Planner rollout,
+>    after the 2026-08-06 attempt hit the stale window by consenting second).
+>    If no deploy is pending, restart the replica instead.
 > 3. Verify with one Planner write against a plan **whose owning M365 group the
 >    tester is a member of** — delegated Planner writes require group membership
 >    regardless of scope, so a membership 403 on someone else's plan is expected,
@@ -81,16 +92,30 @@ az ad app permission list-grants --id 484c0657-6a05-4aad-a175-dabac48acb05 -o ta
 
 ---
 
-## Step 2 — Assign pilot users
+## Step 2 — Grant a user access
 
-Only assigned members can sign in (member-only enforcement). Add pilot users (or
-a security group) to the **Client** enterprise app.
+Only assigned members can sign in (member-only enforcement). Access is governed by
+a **security group** assigned to the **Client** enterprise app, codified in
+`jp-infrastructure` (`stacks/azure/entra/mcp-office365-connector/`).
 
-**Portal:** Entra ID → Enterprise applications → **MCP Office365 Connector
-(Client)** → Users and groups → Add user/group.
+**To add someone:** add them to the connector access group. That is the whole
+step — the group's app assignment is already in place, so membership is the only
+thing that changes.
 
-Prefer a security group as the rollout widens; per-user assignment can also be
-codified in `jp-infrastructure` alongside the seeded operator assignment.
+Group membership is deliberately **not** reconciled by Terraform
+(`lifecycle { ignore_changes = [members] }`), so adding or removing a person does
+not require a Terraform change and will not be stripped by the next apply. The
+seeded operator assignment stays as a break-glass path if group resolution ever
+fails.
+
+> **Do not assign individual users in the portal.** Per-user assignments are
+> invisible to Terraform and drift silently — that is exactly the state this group
+> replaced.
+
+**To remove someone:** remove them from the group **and** run
+`node dist/index.js revoke --oid <oid> --reason "..."`. Group removal alone stops
+new sign-ins but does not clear their server-side state, and removing the
+connector in claude.ai does not either. Both steps, every time.
 
 ---
 

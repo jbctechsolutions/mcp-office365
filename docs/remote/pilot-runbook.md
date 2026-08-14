@@ -1,5 +1,11 @@
 # Remote connector — pilot runbook & exit criteria (JP)
 
+> **Status: the pilot is CLOSED as of 2026-08-14.** The verdict against each exit
+> criterion is recorded in [Pilot closure](#pilot-closure) at the bottom of this
+> document. The sections below are kept as the operating reference — the watch
+> list and the operating procedures still apply now that the connector is in
+> steady use.
+
 How the pilot runs and how it ends. The pilot exists to answer the questions unit
 tests can't: does the real claude.ai handshake hold, does one shared app
 registration throttle under real use, and is the curated tool surface right? Run
@@ -87,11 +93,70 @@ comfortable. Any of those is worth solving before more users depend on it.
 
 ## Operating during the pilot
 
-- **Add a user:** provisioning Step 2, record their oid for entitlements.
-- **Remove a user now:** `node dist/index.js revoke <oid>` (deny-lists + purges
-  their server-side state), and unassign them from the enterprise app. Removing
-  the connector in claude.ai does **not** clear server state — always revoke.
+- **Add a user:** add them to the connector access group (provisioning Step 2).
+  Record their oid only if they need a non-default tool surface.
+- **Remove a user now:** `node dist/index.js revoke --oid <oid> --reason "..."`
+  (deny-lists + purges their server-side state) **and** remove them from the
+  access group. Neither step alone is sufficient, and removing the connector in
+  claude.ai does **not** clear server state.
 - **Narrow a user's tools:** edit the entitlement config (hot-reloaded, no
   restart).
 - **Incident (all users failing):** check `/healthz`, then the OBO credential
   (`AADSTS7000222` = expired cert → rotate per deployment §6), then Graph status.
+
+---
+
+## Pilot closure
+
+**Decision (2026-08-14): widen to the Executive Leadership Team; the pilot ends.**
+
+The pilot ran 2026-07-18 → 2026-08-14 with **two users** (Joel and Bud Houston),
+not the ~3 it was scoped for. Access widens to all nine ELT members, gated by a
+Terraform-managed security group, with Teams messaging added to the pinned
+surface.
+
+The verdict below marks each criterion as **evidence** (satisfied by observation)
+or **accepted** (judged acceptable without the evidence the pilot was meant to
+produce). The distinction matters more than the pass/fail — an accepted criterion
+is a live bet, not a closed question.
+
+| # | Criterion | Verdict | Basis |
+|---|-----------|---------|-------|
+| 1 | Handshake is reliable | **Evidence** | Bud onboarded from the user guide without hand-holding. One user is thin proof, but it is the criterion's actual bar. |
+| 2 | Auth is clean | **Evidence** | No unexplained auth failures over the window. Every denial reviewed was expected (unassigned accounts). |
+| 3 | Throttling is tolerable | **Accepted — not tested** | Two users never exercised the shared app registration. This is the one thing the pilot existed to measure and it did not. Going 2 → 10 is a bet, watched rather than proven. |
+| 4 | No session-stability regression | **Evidence** | No session-drop reports over the window. Stateless transport appears to hold. |
+| 5 | Audit trail is trustworthy | **Evidence** | Writes reconstruct with correct per-user attribution via the `audit` CLI. |
+| 6 | Tool surface feels right | **Evidence, and acted on** | The gap users actually hit was Teams — absent entirely. That is what this rollout fixes. |
+| 7 | Prompt-injection posture reviewed | **Accepted — reviewed** | See below. |
+
+### Criterion 7 — the injection review, recorded
+
+Reviewed and accepted 2026-08-13. A `prepare_*` → `confirm_*` action can be driven
+by content the model read, so a malicious email or channel post can *propose* an
+action. The defense is three layers: **client-side approval** on every write (a
+human reads and clicks before anything happens), the **curated surface** (channel
+lifecycle, plan deletion, plan sharing, downloads, and shared-mailbox access are
+simply not reachable), and the **audit trail** (every write attributable to a
+person).
+
+Teams *sending* was added under this same judgment, with eyes open: it is the
+largest blast-radius addition in this rollout, because a post goes out under an
+exec's name to a channel other people read. It was accepted because the approval
+step is unchanged — the model can draft, but only a person can send.
+
+This is a judgment, not a metric. It should be re-reviewed before the surface
+widens again, and it is not a permanent finding.
+
+### What to watch now
+
+**Throttling is the open question.** Criterion 3 closed on judgment, not data, so
+the signal now comes from users rather than from the pilot. A rising rate of
+"service busy" reports, or any user regularly blocked, is a **hold** signal — it
+means the shared-app-registration decision needs revisiting before access widens
+past the ELT, not that exec access should be rolled back. The user guide now asks
+people to flag persistent throttling explicitly, since reports are the only
+instrumentation for it.
+
+Second-order: the OBO client secret expires **2027-07-18** and its failure mode is
+a total outage for everyone at once. That now affects nine people rather than two.
