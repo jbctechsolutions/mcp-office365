@@ -7,6 +7,61 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [5.1.0] - 2026-08-14
+
+### Added
+
+- **Teams messaging on the remote connector's pinned tool surface.** Team,
+  channel, and chat discovery; message reads; channel posts and replies; chat
+  sends; and reactions — taking the pinned surface from 142 to 161 tools. No new
+  server code: every tool already existed and is declared for the Graph backend,
+  so this widens an allow-list rather than adding behaviour. Local stdio and
+  `fullAccess` users are unaffected; they already had these tools.
+
+  Requires the matching delegated Graph scopes on the connector's API app
+  (`Team.ReadBasic.All`, `Channel.ReadBasic.All`, `ChannelMessage.Read.All`,
+  `ChannelMessage.Send`, `Chat.Read`, `ChatMessage.Send`) and tenant admin
+  consent. `Chat.Read` + `ChatMessage.Send` is deliberately narrower than the
+  single `Chat.ReadWrite` that would also cover them.
+
+### Changed
+
+- **Deliberate exclusions from the pinned surface, each pinned out by test.**
+  Teams channel lifecycle (`create_channel`, `update_channel`,
+  `prepare`/`confirm_delete_channel`) stays out as org-structure change rather
+  than messaging — the same blast-radius reasoning that keeps `delete_plan` out.
+  `list_team_members` stays out because it is the only Teams tool requiring
+  `TeamMember.Read.All`, and a directory-read scope for one convenience tool is a
+  poor least-privilege trade.
+
+### Fixed
+
+- **`find_chat` removed from the pinned surface — a read-named write.** Given a
+  single email or UPN, `findChatsAsync` calls `createChat` unconditionally, so a
+  "find" could open a 1:1 chat thread with someone: a write, with no
+  `prepare_`/`confirm_` pair to approve it, on a tool registered
+  `destructive: false`. Use `list_chats` / `get_chat` to locate an existing
+  conversation. A new contract test guards the class — no tool named
+  `list_`/`get_`/`find_`/`search_`/`check_` may be non-read-only. Local stdio is
+  unaffected.
+
+### Documentation
+
+- **The JP pilot is closed**, with a verdict recorded against all seven exit
+  criteria in `docs/remote/pilot-runbook.md`, each marked evidence-backed or
+  accepted-without-evidence. Throttling was never measured — the criterion the
+  pilot existed to answer — and the record says so rather than marking it passed.
+- **Provisioning moves to a security group.** `docs/remote/provisioning.md` Step 2
+  is now "add them to the access group" instead of a per-user portal assignment,
+  with the group's app assignment codified in Terraform and its membership
+  deliberately left out of Terraform state. Offboarding states both required
+  steps: group removal **and** `revoke`.
+- **Consent-before-deploy is recorded as the preferred ordering.** A revision
+  created after admin consent starts with an empty MSAL OBO cache, so the deploy
+  is the cache clear and there is no ~90-minute stale-token window.
+- **User guide** gains a Teams section and corrects setup steps that still
+  described adding a custom connector by URL.
+
 ## [5.0.2] - 2026-08-11
 
 ### Fixed
