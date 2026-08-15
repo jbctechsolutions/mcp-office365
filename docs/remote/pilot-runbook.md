@@ -119,10 +119,23 @@ comfortable. Any of those is worth solving before more users depend on it.
 
 **Decision (2026-08-14): widen to the Executive Leadership Team; the pilot ends.**
 
-The pilot ran 2026-07-18 → 2026-08-14 with **two users** (Joel and Bud Houston),
-not the ~3 it was scoped for. Access widens to all nine ELT members, gated by a
-Terraform-managed security group, with Teams messaging added to the pinned
-surface.
+The pilot ran 2026-07-18 → 2026-08-14 with **three assigned users** — Joel, Bud
+Houston, and Kelly Benthem — roughly the ~3 it was scoped for. Access widens to
+all nine ELT members, gated by a Terraform-managed security group, with Teams
+messaging added to the pinned surface.
+
+> **How many actually used it is unverified.** Three people held assignments;
+> only Bud's onboarding was observed. Confirming real usage means reading the
+> audit log on the deployment host, which has not been done. Treat "three" as an
+> upper bound on the load the pilot placed on the shared app registration, not a
+> measurement of it.
+>
+> This was discovered at rollout, not during the pilot: the tenant carried
+> **three** individual portal assignments (Bud, Kelly, and Joel's admin account),
+> where the record knew of one. All three were removed when the access group took
+> over. That is the concrete cost of per-user portal assignment — the roster
+> drifted away from the record without anyone noticing, and the closure record
+> was written against the record rather than the tenant.
 
 The verdict below marks each criterion as **evidence** (satisfied by observation)
 or **accepted** (judged acceptable without the evidence the pilot was meant to
@@ -133,7 +146,7 @@ is a live bet, not a closed question.
 |---|-----------|---------|-------|
 | 1 | Handshake is reliable | **Evidence** | Bud onboarded from the user guide without hand-holding. One user is thin proof, but it is the criterion's actual bar. |
 | 2 | Auth is clean | **Evidence** | No unexplained auth failures over the window. Every denial reviewed was expected (unassigned accounts). |
-| 3 | Throttling is tolerable | **Accepted — not tested** | Two users never exercised the shared app registration. This is the one thing the pilot existed to measure and it did not. Going 2 → 10 is a bet, watched rather than proven. (Ten: the nine group members plus the operator, who holds a separate break-glass assignment.) |
+| 3 | Throttling is tolerable | **Accepted — not tested** | At most three assigned users, with real usage unverified, never exercised the shared app registration. This is the one thing the pilot existed to measure and it did not. Going 3 → 10 is a bet, watched rather than proven. (Ten: the nine group members plus the operator, who holds a separate break-glass assignment.) |
 | 4 | No session-stability regression | **Evidence** | No session-drop reports over the window. Stateless transport appears to hold. |
 | 5 | Audit trail is trustworthy | **Evidence** | Writes reconstruct with correct per-user attribution via the `audit` CLI. |
 | 6 | Tool surface feels right | **Evidence, and acted on** | The gap users actually hit was Teams — absent entirely. That is what this rollout fixes. |
