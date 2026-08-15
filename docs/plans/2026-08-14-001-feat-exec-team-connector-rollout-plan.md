@@ -12,7 +12,7 @@ origin: docs/brainstorms/2026-08-13-exec-team-connector-rollout-requirements.md
 
 ## Summary
 
-Ship exec-team access as one coordinated rollout: a Terraform-managed security group replaces hand-maintained assignment, the connector API app gains the delegated Teams scopes, and the pinned tool surface widens to cover Teams discovery, reading, sending, and reactions. Ordering is the hard part — consent must land before the new image deploys so the fresh revision starts with a clean OBO cache.
+Ship exec-team access as one coordinated rollout: a security group with a Terraform-managed app assignment replaces hand-maintained per-user assignment, the connector API app gains the delegated Teams scopes, and the pinned tool surface widens to cover Teams discovery, reading, sending, and reactions. Ordering is the hard part — consent must land before the new image deploys so the fresh revision starts with a clean OBO cache.
 
 ---
 
