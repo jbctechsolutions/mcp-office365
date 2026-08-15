@@ -51,8 +51,10 @@ import type { Backend, SurfaceOptions } from '../registry/index.js';
  * the lookup becomes genuinely read-only or gains a two-phase flow.
  *
  * Everything reachable here is covered by Team.ReadBasic.All,
- * Channel.ReadBasic.All, ChannelMessage.Read.All, ChannelMessage.Send, and
- * Chat.ReadWrite; reactions need no permission beyond the send scopes.
+ * Channel.ReadBasic.All, ChannelMessage.Read.All, ChannelMessage.Send,
+ * Chat.Read, and ChatMessage.Send; reactions need no permission beyond the
+ * send scopes. Chat.Read + ChatMessage.Send is deliberately narrower than the
+ * single Chat.ReadWrite that would also cover them.
  */
 export const DEFAULT_TOOL_SURFACE: readonly string[] = Object.freeze([
   'add_draft_attachment', 'add_draft_inline_image', 'check_availability', 'check_new_emails',

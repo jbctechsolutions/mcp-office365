@@ -84,14 +84,14 @@ Plan-specific: the work is almost entirely permissions and configuration. No new
 - Graph `chatMessage: setReaction` — delegated permissions are `ChannelMessage.Send` (channel) and `Chat.ReadWrite` / `ChatMessage.Send` (chat). Reactions require no permission beyond what sending already needs.
 - Graph `channel: post messages` — least-privileged delegated is `ChannelMessage.Send`. Protected-API and migration constraints apply to *application* permissions only.
 - Graph `channel: list messages` — least-privileged delegated is `ChannelMessage.Read.All`. Resource-specific consent applies to the application permission variant, not delegated.
-- Graph `chat: list` — least-privileged delegated is `Chat.ReadBasic`; `Chat.ReadWrite` is the variant that also covers sending, so one scope serves reads and writes.
+- Graph `chat: list` — least-privileged delegated is `Chat.ReadBasic`; `Chat.Read` covers listing plus reading messages and members, and `ChatMessage.Send` covers sending and reactions. That pair is narrower than the single `Chat.ReadWrite` that would serve both.
 
 ---
 
 ## Key Technical Decisions
 
 - **Consent before deploy, not deploy then restart.** The MSAL OBO cache is in-process, so a revision created *after* consent never serves pre-consent tokens. This removes the replica-restart step and its ~90-minute failure window entirely.
-- **`Chat.ReadWrite` alone for chats; no `ChatMessage.Send`.** Chat reading is required regardless, and `Chat.ReadWrite` covers reads, sends, and reactions. Adding the narrower send scope on top grants nothing new.
+- **`Chat.Read` + `ChatMessage.Send` for chats, not `Chat.ReadWrite`.** One scope would have covered both, but it is the higher-privileged option — the same trade rejected for `TeamMember.Read.All`. Corrected in review after an earlier revision took the convenient scope.
 - **Reactions included.** Verified to cost no additional permission. The only argument against was scope creep, and that argument doesn't survive the permission check.
 - **`list_team_members` dropped.** It's the sole tool needing `TeamMember.Read.All`. Adding a directory-read permission for one convenience tool is a poor trade against least privilege.
 - **Channel lifecycle exclusion pinned by a negative test.** Mirrors how the Planner exclusions are enforced, so re-adding them has to be a deliberate, reviewed edit rather than an accident.
@@ -103,7 +103,7 @@ Plan-specific: the work is almost entirely permissions and configuration. No new
 
 ### Resolved During Planning
 
-- Is `ChatMessage.Send` required alongside `Chat.ReadWrite`? No — redundant given chat reads are needed anyway.
+- What is the least-privileged chat scope set? `Chat.Read` + `ChatMessage.Send`. `Chat.ReadWrite` would cover both in one scope but grants strictly more.
 - Do reactions require a broader scope? No — `setReaction` needs only the send permission.
 - Is `ChannelMessage.Read.All` subject to protected-API approval? Not on the delegated flow.
 - Does the container need resizing? No. Production already runs 0.5 vCPU / 1 GiB with `min_replicas = max_replicas = 1` — the cost estimate's "full JP" figure. R11 becomes verification, not change.
@@ -166,8 +166,8 @@ Plan-specific: the work is almost entirely permissions and configuration. No new
 - Modify: `stacks/azure/entra/mcp-office365-connector/main.tf`
 
 **Approach:**
-- Add five `resource_access` entries to the existing Graph `required_resource_access` block: `Team.ReadBasic.All`, `Channel.ReadBasic.All`, `ChannelMessage.Read.All`, `ChannelMessage.Send`, and `Chat.ReadWrite`.
-- Do not add `ChatMessage.Send` (redundant) or `TeamMember.Read.All` (dropped with `list_team_members`).
+- Add six `resource_access` entries to the existing Graph `required_resource_access` block: `Team.ReadBasic.All`, `Channel.ReadBasic.All`, `ChannelMessage.Read.All`, `ChannelMessage.Send`, `Chat.Read`, and `ChatMessage.Send`.
+- Do not add `Chat.ReadWrite` (the higher-privileged single scope that `Chat.Read` + `ChatMessage.Send` replaces) or `TeamMember.Read.All` (dropped with `list_team_members`).
 - Follow the existing comment convention in that block: record why each scope is the least-privileged choice and cite the date, as the Planner block does.
 - Leave identifier URIs, pre-authorization, and the client app untouched — those carry the handshake fixes.
 
@@ -202,7 +202,7 @@ Plan-specific: the work is almost entirely permissions and configuration. No new
 - Test expectation: none (tenant state change).
 
 **Verification:**
-- The permission grants list shows `Team.ReadBasic.All`, `Channel.ReadBasic.All`, `ChannelMessage.Read.All`, `ChannelMessage.Send`, and `Chat.ReadWrite` as granted for the tenant.
+- The permission grants list shows `Team.ReadBasic.All`, `Channel.ReadBasic.All`, `ChannelMessage.Read.All`, `ChannelMessage.Send`, `Chat.Read`, and `ChatMessage.Send` as granted for the tenant.
 
 ---
 

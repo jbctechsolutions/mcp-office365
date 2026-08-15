@@ -47,7 +47,8 @@ portal edit.
 The API app requests delegated Microsoft Graph scopes (mail, calendar,
 files/SharePoint, Planner read/write via `Tasks.ReadWrite`, and Teams messaging via
 `Team.ReadBasic.All` / `Channel.ReadBasic.All` / `ChannelMessage.Read.All` /
-`ChannelMessage.Send` / `Chat.ReadWrite`) but they are **not yet consented**. Grant
+`ChannelMessage.Send` / `Chat.Read` / `ChatMessage.Send`) but they are **not yet
+consented**. Grant
 tenant-wide admin consent so pilot users are not each prompted (and so
 `Sites.ReadWrite.All`, which requires admin consent, works).
 
