@@ -42,6 +42,14 @@ import type { Backend, SurfaceOptions } from '../registry/index.js';
  * it is the only Teams tool requiring TeamMember.Read.All, and adding a
  * directory-read scope for one convenience tool is a poor least-privilege
  * trade. Re-adding it is a consented-scope change, not just a surface edit.
+ *
+ * find_chat is out for a different reason: given a single email/UPN,
+ * findChatsAsync calls createChat unconditionally, so a "find" can create a
+ * 1:1 chat thread with someone. That is a write, it has no prepare/confirm
+ * pair to approve it, and the tool is registered destructive: false. Use
+ * list_chats / get_chat to locate an existing conversation. Re-add only if
+ * the lookup becomes genuinely read-only or gains a two-phase flow.
+ *
  * Everything reachable here is covered by Team.ReadBasic.All,
  * Channel.ReadBasic.All, ChannelMessage.Read.All, ChannelMessage.Send, and
  * Chat.ReadWrite; reactions need no permission beyond the send scopes.
@@ -60,7 +68,7 @@ export const DEFAULT_TOOL_SURFACE: readonly string[] = Object.freeze([
   'create_calendar_permission', 'create_category', 'create_draft',
   'create_event', 'create_focused_override', 'create_folder', 'create_library_folder',
   'create_list', 'create_list_item', 'create_plan', 'create_planner_task', 'create_sharing_link',
-  'delete_event', 'find_chat', 'find_meeting_times', 'forward_as_draft',
+  'delete_event', 'find_meeting_times', 'forward_as_draft',
   'generate_burndown_chart', 'generate_gantt_chart', 'generate_kanban_board',
   'generate_plan_summary', 'get_automatic_replies', 'get_channel', 'get_channel_message',
   'get_chat', 'get_drive_item', 'get_email', 'get_emails', 'get_event', 'get_list',

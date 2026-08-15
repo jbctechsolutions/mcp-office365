@@ -179,9 +179,10 @@ Set a calendar reminder ~30 days before expiry — an expired credential fails
 
 ## Offboarding
 
-- **Revoke access now:** unassign the user from the **Client** enterprise app
-  (Step 2, in reverse), or disable their Entra account. Either stops new
-  sign-ins.
+- **Revoke access now:** remove the user from the connector access group (Step 2,
+  in reverse), or disable their Entra account. Either stops new sign-ins.
+  Do **not** look for an individual app assignment — access is group-governed, so
+  unassigning a user who was never individually assigned does nothing.
 - **Server-side token purge + deny-list** (so a still-valid claude.ai token can't
   silently re-onboard): run `node dist/index.js revoke <oid>` on the deployment
   host. It deny-lists the oid and purges their durable state. `revoke --readmit

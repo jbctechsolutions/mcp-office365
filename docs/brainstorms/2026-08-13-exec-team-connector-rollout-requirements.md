@@ -44,9 +44,9 @@ Separately, the exec team's daily coordination happens in Teams, and the connect
 - F2. Teams surface activation
   - **Trigger:** The Teams scope addition is merged and applied.
   - **Actors:** A1, A3
-  - **Steps:** Scopes added to the connector API app in Terraform → applied → A3 grants admin consent → A1 restarts the connector replica to clear the MSAL OBO cache → A1 verifies one channel post and one chat send.
+  - **Steps:** Scopes added to the connector API app in Terraform → applied → A3 grants admin consent → the new revision deploys → A1 verifies one channel post and one chat send.
   - **Outcome:** Teams messaging tools resolve for all assigned users.
-  - **Failure path:** Skipping the replica restart leaves users on pre-consent Graph tokens for ~60–90 minutes, producing 403s that look like a failed consent.
+  - **Recovery path:** A revision deployed *before* consent keeps serving pre-consent Graph tokens from its in-process MSAL cache for ~60–90 minutes, producing 403s that look like a failed consent. Restarting the replica clears it. Consenting first avoids the window entirely.
   - **Covered by:** R4, R5, R6, R12
 
 ---
@@ -83,7 +83,7 @@ Separately, the exec team's daily coordination happens in Teams, and the connect
 
 - AE1. **Covers R1, R3.** Given Bud is assigned to the Client app through the portal, when the group-based assignment is applied and the portal assignment removed, Bud's access is uninterrupted and the codified state matches the live state.
 - AE2. **Covers R2, R9.** Given a JP staff member who is not in the access group, when they open the connector in claude.ai and attempt sign-in, they are rejected with `not_member` and no server-side state is created for them.
-- AE3. **Covers R4, R5.** Given Teams scopes are consented and the replica has been restarted, when an ELT member asks for their recent channel messages, the tools resolve and Graph returns data rather than a 403.
+- AE3. **Covers R4, R5.** Given Teams scopes are consented and the running revision was created after that consent, when an ELT member asks for their recent channel messages, the tools resolve and Graph returns data rather than a 403.
 - AE4. **Covers R6.** Given an ELT member on the default surface, when they attempt to delete a Teams channel, the tool is not exposed to them.
 - AE5. **Covers R7.** Given an ELT member drafts a channel post through the connector, when the model calls the send tool, nothing is posted until the member explicitly confirms.
 
@@ -136,7 +136,7 @@ Separately, the exec team's daily coordination happens in Teams, and the connect
 
 ### Deferred to Planning
 
-- [Affects R4][Needs research] Is `Chat.ReadWrite` sufficient for chat sends, or is `ChatMessage.Send` also required? The local stdio app requests both; the minimal delegated set for the connector should be established rather than copied.
-- [Affects R5][Technical] Which Teams tools belong in the pinned list beyond messaging — reactions, team member listing, presence? Presence in particular may pull in additional scopes.
-- [Affects R11][Technical] What size is right for ten users? The cost estimate suggests 0.5 vCPU / 1 GiB for full JP against the current 0.25 / 0.5, but nothing has been measured at load.
-- [Affects R1][Technical] Does a suitable JP security group already exist, or does the rollout create one?
+- **Affects R4 — needs research:** Is `Chat.ReadWrite` sufficient for chat sends, or is `ChatMessage.Send` also required? The local stdio app requests both; the minimal delegated set for the connector should be established rather than copied.
+- **Affects R5 — technical:** Which Teams tools belong in the pinned list beyond messaging — reactions, team member listing, presence? Presence in particular may pull in additional scopes.
+- **Affects R11 — technical:** What size is right for ten users? The cost estimate suggests 0.5 vCPU / 1 GiB for full JP against the current 0.25 / 0.5, but nothing has been measured at load.
+- **Affects R1 — technical:** Does a suitable JP security group already exist, or does the rollout create one?

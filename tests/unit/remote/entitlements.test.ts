@@ -124,19 +124,38 @@ describe('DEFAULT_TOOL_SURFACE registry contract', () => {
     expect(DEFAULT_TOOL_SURFACE.filter((n) => excluded.includes(n))).toEqual([]);
   });
 
-  it('the pinned surface excludes Teams channel lifecycle and list_team_members', () => {
+  it('the pinned surface excludes Teams channel lifecycle, list_team_members, find_chat', () => {
     // Deliberate 2026-08-14 exclusions. Channel create/update/delete is org-structure
     // change, not messaging. list_team_members is the only Teams tool requiring
     // TeamMember.Read.All, so it is dropped rather than widen the consented scopes for
-    // one convenience read. Re-adding the last one is a scope change, not just a surface edit.
+    // one convenience read — re-adding it is a scope change, not just a surface edit.
+    // find_chat creates a 1:1 chat via createChat when given a single email/UPN, so it
+    // writes with no prepare/confirm pair despite registering destructive: false.
     const excluded = [
       'create_channel',
       'update_channel',
       'prepare_delete_channel',
       'confirm_delete_channel',
       'list_team_members',
+      'find_chat',
     ];
     expect(DEFAULT_TOOL_SURFACE.filter((n) => excluded.includes(n))).toEqual([]);
+  });
+
+  it('no read-named tool in the surface actually writes', () => {
+    // Generalizes the find_chat catch. Bare writes are fine on this surface --
+    // send_email and create_event are both here -- but a tool NAMED like a read must
+    // not write, because nothing downstream (the user, the model, or the destructive
+    // annotation) will expect it to. find_chat violated this: it calls createChat for
+    // a single email/UPN while registering readOnlyHint: false and destructive: false.
+    const registry = new ToolRegistry();
+    registry.register(allToolDefinitions());
+    const offenders = DEFAULT_TOOL_SURFACE.filter(
+      (name) =>
+        /^(list|get|find|search|check)_/.test(name)
+        && registry.get(name)?.annotations?.readOnlyHint !== true,
+    );
+    expect(offenders).toEqual([]);
   });
 
   it('every Teams send is exposed as a complete two-phase pair', () => {

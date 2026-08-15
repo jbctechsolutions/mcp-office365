@@ -93,8 +93,10 @@ comfortable. Any of those is worth solving before more users depend on it.
 
 ## Operating during the pilot
 
-- **Add a user:** add them to the connector access group (provisioning Step 2).
-  Record their oid only if they need a non-default tool surface.
+- **Add a user:** add them to the connector access group (provisioning Step 2),
+  and **record their Entra oid** — revocation takes the oid, so not having it on
+  file is what turns an urgent offboard into a directory lookup under pressure.
+  (`az ad user show --id <upn> --query id -o tsv` if you need to recover one.)
 - **Remove a user now:** `node dist/index.js revoke --oid <oid> --reason "..."`
   (deny-lists + purges their server-side state) **and** remove them from the
   access group. Neither step alone is sufficient, and removing the connector in

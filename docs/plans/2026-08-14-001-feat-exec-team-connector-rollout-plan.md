@@ -166,7 +166,7 @@ Plan-specific: the work is almost entirely permissions and configuration. No new
 - Modify: `stacks/azure/entra/mcp-office365-connector/main.tf`
 
 **Approach:**
-- Add four `resource_access` entries to the existing Graph `required_resource_access` block: `Team.ReadBasic.All`, `Channel.ReadBasic.All`, `ChannelMessage.Read.All`, `ChannelMessage.Send`, plus `Chat.ReadWrite`.
+- Add five `resource_access` entries to the existing Graph `required_resource_access` block: `Team.ReadBasic.All`, `Channel.ReadBasic.All`, `ChannelMessage.Read.All`, `ChannelMessage.Send`, and `Chat.ReadWrite`.
 - Do not add `ChatMessage.Send` (redundant) or `TeamMember.Read.All` (dropped with `list_team_members`).
 - Follow the existing comment convention in that block: record why each scope is the least-privileged choice and cite the date, as the Planner block does.
 - Leave identifier URIs, pre-authorization, and the client app untouched — those carry the handshake fixes.
