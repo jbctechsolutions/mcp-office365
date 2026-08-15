@@ -1,16 +1,18 @@
 # Remote connector — pilot runbook & exit criteria (JP)
 
-> **Status: the pilot is CLOSED as of 2026-08-14.** The verdict against each exit
-> criterion is recorded in [Pilot closure](#pilot-closure) at the bottom of this
-> document. The sections below are kept as the operating reference — the watch
-> list and the operating procedures still apply now that the connector is in
-> steady use.
+> **Status: the pilot is CLOSED as of 2026-08-14.** Read
+> [Pilot closure](#pilot-closure) first — it carries the verdict and what to
+> watch now.
+>
+> - **Still live:** [What to watch](#what-to-watch-observation-checklist) and
+>   [Operating](#operating). These apply to steady-state use.
+> - **Historical:** Scope and [Exit criteria](#exit-criteria-r11--decide-at-the-end).
+>   The decision they describe has been made; they are kept so the closure record
+>   has something to be a verdict *against*.
 
-How the pilot runs and how it ends. The pilot exists to answer the questions unit
-tests can't: does the real claude.ai handshake hold, does one shared app
-registration throttle under real use, and is the curated tool surface right? Run
-it consciously against the exit criteria below, then decide: widen, hold, or
-change course.
+How the pilot ran and how it ended. The pilot existed to answer the questions
+unit tests can't: does the real claude.ai handshake hold, does one shared app
+registration throttle under real use, and is the curated tool surface right?
 
 Related: [`deployment.md`](./deployment.md) (infra), [`user-guide.md`](./user-guide.md)
 (what pilot users get), [`provisioning.md`](./provisioning.md) (assign/offboard).
@@ -18,6 +20,9 @@ Related: [`deployment.md`](./deployment.md) (infra), [`user-guide.md`](./user-gu
 ---
 
 ## Scope
+
+*Historical — this is what the pilot was scoped to, kept for context. What
+actually happened is in [Pilot closure](#pilot-closure).*
 
 - **Users:** start with Joel, then a small handful (~3) of JP staff assigned via
   the provisioning runbook (Step 2). Add users deliberately, one or two at a time.
@@ -63,6 +68,8 @@ and that nothing unexpected appears.
 
 ## Exit criteria (R11) — decide at the end
 
+*Historical — assessed 2026-08-14, see [Pilot closure](#pilot-closure).*
+
 The pilot **passes** (widen toward full JP) when all of these hold:
 
 1. **Handshake is reliable.** New users add the connector and sign in using only
@@ -91,7 +98,7 @@ comfortable. Any of those is worth solving before more users depend on it.
 
 ---
 
-## Operating during the pilot
+## Operating
 
 - **Add a user:** add them to the connector access group (provisioning Step 2),
   and **record their Entra oid** — revocation takes the oid, so not having it on
@@ -126,7 +133,7 @@ is a live bet, not a closed question.
 |---|-----------|---------|-------|
 | 1 | Handshake is reliable | **Evidence** | Bud onboarded from the user guide without hand-holding. One user is thin proof, but it is the criterion's actual bar. |
 | 2 | Auth is clean | **Evidence** | No unexplained auth failures over the window. Every denial reviewed was expected (unassigned accounts). |
-| 3 | Throttling is tolerable | **Accepted — not tested** | Two users never exercised the shared app registration. This is the one thing the pilot existed to measure and it did not. Going 2 → 10 is a bet, watched rather than proven. |
+| 3 | Throttling is tolerable | **Accepted — not tested** | Two users never exercised the shared app registration. This is the one thing the pilot existed to measure and it did not. Going 2 → 10 is a bet, watched rather than proven. (Ten: the nine group members plus the operator, who holds a separate break-glass assignment.) |
 | 4 | No session-stability regression | **Evidence** | No session-drop reports over the window. Stateless transport appears to hold. |
 | 5 | Audit trail is trustworthy | **Evidence** | Writes reconstruct with correct per-user attribution via the `audit` CLI. |
 | 6 | Tool surface feels right | **Evidence, and acted on** | The gap users actually hit was Teams — absent entirely. That is what this rollout fixes. |

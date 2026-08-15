@@ -63,9 +63,11 @@ Claude can work with Microsoft Teams on your behalf:
 
 Two things to know:
 
-- **Nothing posts without your approval.** Claude drafts the message and shows it
-  to you; it only sends after you approve. Read it first — it goes out under your
-  name, in your voice, to a channel other people are reading.
+- **Nothing posts or reacts without your approval.** Claude drafts the message —
+  or the reaction — and shows it to you; it only goes through after you approve.
+  Read it first. Everything here happens under your name, in your voice, in front
+  of whoever else is in that channel or chat. A reaction is smaller than a post
+  but it's just as visible, and just as much you.
 - **Claude can't create or delete channels.** That's deliberate — changing the
   shape of a team is an admin action, not something to do through a chat window.
 
@@ -87,7 +89,7 @@ review.
 | **Sign-in succeeds, but the connector then shows "failed" / "not authorized"** | Your account reached the server but isn't in the connector's access group (e.g. it's a guest account, or you haven't been added yet). | Ask Joel / IT to add your JP account to the access group. Make sure you signed in with your JP work account, not a personal or guest one. |
 | **Claude says it needs you to reconnect / sign in again** | Your sign-in session expired (this is normal after a while). | Reconnect the connector (repeat "add / sign in"). Nothing is lost. |
 | **Sign-in loops or is blocked before you can approve** | A Conditional Access / security policy is blocking the connector. | Tell IT — the connector may need a Conditional Access exemption. Not something you can fix yourself. |
-| **"Service busy" / try-again errors** | The M365 service is rate-limiting (everyone shares one connection, so heavy use by one person can slow others). | Wait a moment and retry. **If it's persistent, flag it** — this is the one thing we're actively watching, and reports are the only way we'll know. |
+| **"Service busy" / try-again errors** | Microsoft is rate-limiting. Everyone shares one registration with M365, so the limit is pooled across all users — heavy use by one person can slow others. Reconnecting won't help; it's the same shared limit. | Wait a moment and retry. **If it's persistent, flag it** — this is the one thing we're actively watching, and reports are the only way we'll know. |
 | **A large file upload/download times out** | Very large transfers can exceed Claude's tool time limit. | Break it up or use OneDrive/Outlook directly for very large files. |
 
 ---
