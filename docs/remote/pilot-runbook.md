@@ -121,8 +121,10 @@ comfortable. Any of those is worth solving before more users depend on it.
 
 The pilot ran 2026-07-18 → 2026-08-14 with **three people able to sign in** —
 Joel, Bud Houston, and Kelly Benthem — roughly the ~3 it was scoped for. Access
-widens to all nine ELT members, gated by a Terraform-managed security group, with
-Teams messaging added to the pinned surface.
+widens to all nine ELT members, gated by a security group whose app assignment is
+Terraform-managed — its **membership deliberately is not**, so adding or removing
+a person is a group edit rather than a Terraform run. Teams messaging is added to
+the pinned surface.
 
 > **Who actually used it is unverified.** Holding an assignment is not using the
 > connector; only Bud's onboarding was observed. Confirming real usage means

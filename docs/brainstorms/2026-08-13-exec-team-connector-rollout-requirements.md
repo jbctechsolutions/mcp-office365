@@ -7,7 +7,7 @@ topic: exec-team-connector-rollout
 
 ## Summary
 
-Roll the JP remote connector out to the full Executive Leadership Team (9 members), replacing ad-hoc per-user assignment with a Terraform-managed security group, and widen the pinned tool surface to include Teams channel and chat messaging. The pilot formally closes with a recorded verdict against its exit criteria.
+Roll the JP remote connector out to the full Executive Leadership Team (9 members), replacing ad-hoc per-user assignment with a security group whose app assignment is Terraform-managed, and widen the pinned tool surface to include Teams channel and chat messaging. The pilot formally closes with a recorded verdict against its exit criteria.
 
 ---
 
