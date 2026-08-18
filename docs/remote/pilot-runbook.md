@@ -126,11 +126,12 @@ Terraform-managed — its **membership deliberately is not**, so adding or remov
 a person is a group edit rather than a Terraform run. Teams messaging is added to
 the pinned surface.
 
-> **Who actually used it is unverified.** Holding an assignment is not using the
-> connector; only Bud's onboarding was observed. Confirming real usage means
-> reading the audit log on the deployment host, which has not been done. Treat
-> three as an upper bound on the people who *could* have loaded the shared app
-> registration, not a measurement of what it saw.
+> **Usage was measured on 2026-08-18** and is no longer an open question. The
+> original text here said usage was unverified and told the reader to treat
+> three as an upper bound on who *could* have loaded the shared registration.
+> That was true when written and is now superseded — see
+> [Measured usage](#measured-usage) below. Both Bud and Kelly were really using
+> the connector during the pilot, not merely holding assignments.
 >
 > **The tenant state at rollout, precisely**, since the counts differ depending on
 > what is being counted:
@@ -149,6 +150,42 @@ the pinned surface.
 > drifted away from the record without anyone noticing, and the closure record
 > was written against the record rather than the tenant.
 
+### Measured usage
+
+Measured 2026-08-18 from Entra sign-in logs on the connector API app
+(`484c0657-6a05-4aad-a175-dabac48acb05`). Each row is one OBO token exchange —
+a real tool call, not a sign-in page.
+
+| Window | Exchanges | Failures | Users |
+|---|---|---|---|
+| Pilot (retained portion, 08-11 → rollout) | 28 | **0** | Bud 26, Kelly 2 |
+| Post-rollout (08-15 → 08-18) | 16 | **0** | Bud 14, Dan 2 |
+| **Total** | **44** | **0** | 3 distinct people |
+
+**The pilot figure is a floor, not a total.** Entra retains sign-in logs for 7
+days on the Free tier, so 2026-07-18 → 08-10 — most of the pilot — is simply
+gone. What is retained shows zero failures across every exchange.
+
+Two things this establishes that the closure record could not:
+
+- **Real usage, not just assignment.** Bud and Kelly were actively using the
+  connector during the pilot. The distinction the original text drew — holding
+  an assignment versus using the thing — resolves in favour of use.
+- **Group-based access works end to end.** Dan appears only after the rollout.
+  He was never individually assigned; his access came entirely through the
+  security group, which is [F1](../brainstorms/2026-08-13-exec-team-connector-rollout-requirements.md)
+  demonstrated against the tenant rather than assumed.
+
+**How to re-run this** — note the log, not just the query. OBO exchanges are
+**non-interactive** sign-ins, and the default `/auditLogs/signIns` endpoint
+returns only interactive ones. Querying the wrong log returns an empty result
+that looks exactly like "nobody used it":
+
+```bash
+az rest --method GET --url "https://graph.microsoft.com/beta/auditLogs/signIns?\$filter=appId eq '484c0657-6a05-4aad-a175-dabac48acb05' and signInEventTypes/any(t: t eq 'nonInteractiveUser') and createdDateTime ge 2026-08-11T00:00:00Z&\$top=500" \
+  --query "value[].{time:createdDateTime,user:userPrincipalName,code:status.errorCode}" -o json
+```
+
 The verdict below marks each criterion as **evidence** (satisfied by observation)
 or **accepted** (judged acceptable without the evidence the pilot was meant to
 produce). The distinction matters more than the pass/fail — an accepted criterion
@@ -157,8 +194,8 @@ is a live bet, not a closed question.
 | # | Criterion | Verdict | Basis |
 |---|-----------|---------|-------|
 | 1 | Handshake is reliable | **Evidence** | Bud onboarded from the user guide without hand-holding. One user is thin proof, but it is the criterion's actual bar. |
-| 2 | Auth is clean | **Evidence** | No unexplained auth failures over the window. Every denial reviewed was expected (unassigned accounts). |
-| 3 | Throttling is tolerable | **Accepted — not measured** | Throttling was never measured. At most three users held assignments and their actual usage is unverified, so the load the shared app registration saw is unknown — not known to be zero. Either way the pilot produced no throttling data, which is the one thing it existed to produce. Going 3 → 10 is a bet, watched rather than proven. (Ten: the nine group members plus the operator, who holds a separate break-glass assignment.) |
+| 2 | Auth is clean | **Evidence, since quantified** | No unexplained auth failures over the window; every denial reviewed was expected (unassigned accounts). Quantified 2026-08-18: **0 failures in 44 OBO exchanges**. |
+| 3 | Throttling is tolerable | **Accepted — now with early data** | Revised 2026-08-18. Originally closed as *not measured*; [Measured usage](#measured-usage) now shows **44 OBO exchanges, zero failures** across pilot and post-rollout, so the load is no longer unknown. It is still small — one heavy user (Bud, 40 of 44) and two light ones — so this is early evidence of no throttling at observed volume, not proof the shared registration holds at ten active users. Going 3 → 10 remains a bet, but a watched one with a baseline rather than a blind one. (Ten: the nine group members plus the operator, who holds a separate break-glass assignment.) |
 | 4 | No session-stability regression | **Evidence** | No session-drop reports over the window. Stateless transport appears to hold. |
 | 5 | Audit trail is trustworthy | **Evidence** | Writes reconstruct with correct per-user attribution via the `audit` CLI. |
 | 6 | Tool surface feels right | **Evidence, and acted on** | The gap users actually hit was Teams — absent entirely. That is what this rollout fixes. |
@@ -184,13 +221,20 @@ widens again, and it is not a permanent finding.
 
 ### What to watch now
 
-**Throttling is the open question.** Criterion 3 closed on judgment, not data, so
-the signal now comes from users rather than from the pilot. A rising rate of
-"service busy" reports, or any user regularly blocked, is a **hold** signal — it
-means the shared-app-registration decision needs revisiting before access widens
-past the ELT, not that exec access should be rolled back. The user guide now asks
-people to flag persistent throttling explicitly, since reports are the only
-instrumentation for it.
+**Throttling is still the open question, but no longer an unmeasured one.**
+Criterion 3 originally closed on judgment; [Measured usage](#measured-usage) now
+gives a baseline of 44 exchanges with zero failures. That is reassuring at
+observed volume and says nothing about ten *active* users — most of the traffic
+is one person. A rising rate of "service busy" reports, or any user regularly
+blocked, is still a **hold** signal: it means the shared-app-registration
+decision needs revisiting before access widens past the ELT, not that exec
+access should be rolled back.
+
+User reports are no longer the *only* instrumentation. Re-run the sign-in-log
+query above periodically — it gives exchange volume and failure counts per user
+without waiting for someone to complain. The user guide still asks people to
+flag persistent throttling, which remains the faster signal for the subjective
+"it feels slow" case that a zero-failure log will not show.
 
 Second-order: the OBO client secret expires **2027-07-18** and its failure mode is
 a total outage for everyone at once. That now affects nine people rather than two.
