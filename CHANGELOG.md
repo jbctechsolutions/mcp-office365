@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+
+- **Production dependency tree is clear of known advisories (was 16).** Pins
+  `@azure/msal-node` to 5.5.0, which drops its `uuid` dependency outright rather
+  than patching around it — that transitive `uuid@^8.3.0` was the source of 7
+  advisories on every install. The remaining 9 were in the remote connector's
+  HTTP stack and resolved inside existing semver ranges (lockfile only, no
+  manifest change): `@hono/node-server` (authorization bypass on protected
+  static paths via encoded slashes, plus middleware bypass via repeated
+  slashes), `hono` (cookie attribute injection via unsanitized `setCookie`
+  domain/path; timing-comparison hardening), `express-rate-limit`
+  (IPv4-mapped IPv6 addresses bypassing per-client limits), `path-to-regexp`
+  and `ajv` (ReDoS), `ip-address`, `fast-uri`, `qs`, and `body-parser`.
+
+  The `@hono/node-server` and `express-rate-limit` advisories are the load
+  bearing ones for the deployed connector: it is an authenticated multi-user
+  HTTP surface, so an authorization bypass and a rate-limit bypass are
+  reachable in the shape the connector is actually deployed in.
+
+  Dev-only tooling still carries advisories that need semver-major bumps; those
+  do not ship in the published package and are tracked separately.
+
 ## [5.1.0] - 2026-08-14
 
 ### Added
