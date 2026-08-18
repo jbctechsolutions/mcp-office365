@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [5.1.1] - 2026-08-17
+
 ### Security
 
 - **Production dependency tree is clear of known advisories (was 16).** Pins
