@@ -1,17 +1,27 @@
 name: Deploy Remote Connector
 
 # Builds the connector container image and publishes it to the JP Azure Container
-# Registry, then rolls the staging Container App to the new image and health-gates
-# it. Mirrors the JP deploy pattern (OIDC to Azure, no stored credentials;
-# SHA-tagged immutable images).
+# Registry, then rolls each environment's Container App to the new image and
+# health-gates it. Mirrors the JP deploy pattern (OIDC to Azure, no stored
+# credentials; SHA-tagged immutable images).
+#
+# Staging rolls automatically on every merge to main. Production rolls the SAME
+# image digest, but only after the GitHub `production` environment's required
+# reviewer approves — so prod never runs an unverified build, and never silently
+# falls behind staging either (it did exactly that from 2026-07-19 to 2026-09-01,
+# when this workflow had no production job at all and prod was torn down as
+# "unused").
 #
 # Prerequisites (one-time):
 #   - Repo variables: AZURE_CLIENT_ID, AZURE_TENANT_ID, AZURE_SUBSCRIPTION_ID
 #     (a workload-identity federation to a service principal with AcrPush on
-#     jpcontainerregistry and Contributor on the connector resource group).
-#   - The Container App exists (jp-infrastructure stack
-#     stacks/staging/apps/mcp-office365-connector applied). Until then the
-#     build-and-push job still publishes the image; the deploy job self-skips.
+#     jpcontainerregistry and Contributor on the connector resource groups).
+#   - GitHub environments `staging` and `production` exist, `production` carrying
+#     a required reviewer. Each needs a matching federated credential on the
+#     deploy SP (jp-infrastructure stacks/azure/entra/github-oidc).
+#   - The Container App exists (jp-infrastructure stacks/<env>/apps/
+#     mcp-office365-connector applied). Until then the build-and-push job still
+#     publishes the image; the deploy job self-skips.
 
 on:
   push:
@@ -25,11 +35,12 @@ on:
       - ".github/workflows/deploy-connector.yml"
   workflow_dispatch:
 
+# Only registry coordinates are workflow-wide. The target resource group and
+# Container App are per-job — a workflow-level default here is what let the
+# staging target masquerade as "the" deploy target.
 env:
   ACR_NAME: jpcontainerregistry
   IMAGE_REPO: jpcontainerregistry.azurecr.io/mcp-office365-connector
-  RESOURCE_GROUP: rg-jp-mcp-office365-staging
-  CONTAINER_APP_NAME: jp-mcp-office365-staging
 
 permissions:
   id-token: write
@@ -72,11 +83,14 @@ jobs:
           docker push "${{ steps.meta.outputs.image }}"
           docker push "${IMAGE_REPO}:latest"
 
-  deploy:
+  deploy-staging:
     if: github.repository_owner == 'joshua-project'
     needs: build-and-push
     runs-on: ubuntu-latest
     environment: staging
+    env:
+      RESOURCE_GROUP: rg-jp-mcp-office365-staging
+      CONTAINER_APP_NAME: jp-mcp-office365-staging
     steps:
       - name: Log in to Azure
         uses: azure/login@v2
@@ -116,4 +130,76 @@ jobs:
             sleep 10
           done
           echo "Container App did not become healthy within 5 minutes."
+          exit 1
+
+  deploy-production:
+    # Promotes the exact image digest staging just proved — no rebuild, so the
+    # artifact is identical. Held behind the `production` environment's required
+    # reviewer; without approval this job waits and prod stays on its current
+    # image. `needs: deploy-staging` means a broken staging roll never reaches
+    # the approval prompt in the first place.
+    if: github.repository_owner == 'joshua-project'
+    needs: [build-and-push, deploy-staging]
+    runs-on: ubuntu-latest
+    environment: production
+    env:
+      RESOURCE_GROUP: rg-jp-mcp-office365-production
+      CONTAINER_APP_NAME: jp-mcp-office365-production
+    steps:
+      - name: Log in to Azure
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Roll the Container App to the new image
+        id: roll
+        run: |
+          set -euo pipefail
+          if ! az containerapp show -n "${CONTAINER_APP_NAME}" -g "${RESOURCE_GROUP}" >/dev/null 2>&1; then
+            echo "::notice::Container App ${CONTAINER_APP_NAME} not found — image published, skipping roll. Apply the jp-infrastructure stack first."
+            echo "skipped=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          az containerapp update \
+            --name "${CONTAINER_APP_NAME}" \
+            --resource-group "${RESOURCE_GROUP}" \
+            --image "${{ needs.build-and-push.outputs.image }}"
+          echo "skipped=false" >> "$GITHUB_OUTPUT"
+
+      - name: Health-gate the new revision
+        if: steps.roll.outputs.skipped == 'false'
+        run: |
+          set -euo pipefail
+          # Deliberately NOT a public curl like the staging job does. Production
+          # ingress is (or will be) locked to Anthropic's egress range — a GitHub
+          # runner is not in it, so curling /healthz would fail for an app that is
+          # perfectly healthy. The revision's healthState is the readiness probe's
+          # own verdict, evaluated inside the Container Apps environment, so it
+          # stays truthful whether or not ingress is restricted.
+          REV=$(az containerapp show -n "${CONTAINER_APP_NAME}" -g "${RESOURCE_GROUP}" \
+            --query properties.latestRevisionName -o tsv)
+          echo "Health-gating revision ${REV}"
+          # runningState is NOT simply "Running" — a healthy single-replica app
+          # reports "RunningAtMaxScale". Gate on healthState and use runningState
+          # only to fail fast, rather than enumerating every healthy spelling.
+          for attempt in $(seq 1 30); do
+            read -r RUNNING HEALTH < <(az containerapp revision show \
+              -n "${CONTAINER_APP_NAME}" -g "${RESOURCE_GROUP}" --revision "${REV}" \
+              --query "[properties.runningState, properties.healthState]" -o tsv)
+            echo "runningState=${RUNNING} healthState=${HEALTH} (attempt ${attempt}/30)"
+            case "${RUNNING}" in
+              Failed|Degraded|Stopped)
+                echo "Revision ${REV} is in terminal state ${RUNNING}."
+                exit 1
+                ;;
+            esac
+            if [ "${HEALTH}" = "Healthy" ]; then
+              echo "Production revision ${REV} is healthy (${RUNNING})."
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "Production revision did not become healthy within 5 minutes."
           exit 1
