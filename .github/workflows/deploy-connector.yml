@@ -5,27 +5,46 @@ name: Deploy Remote Connector
 # health-gates it. Mirrors the JP deploy pattern (OIDC to Azure, no stored
 # credentials; SHA-tagged immutable images).
 #
-# Staging rolls automatically on every merge to main. Production rolls the SAME
-# image digest, but only after the GitHub `production` environment's required
-# reviewer approves — so prod never runs an unverified build, and never silently
-# falls behind staging either (it did exactly that from 2026-07-19 to 2026-09-01,
-# when this workflow had no production job at all and prod was torn down as
-# "unused").
+# Branch-driven promotion, matching the JP staging/production split:
+#
+#   canonical/main --gh repo sync--> fork/dev  --> staging
+#                                       |  PR (the promotion gate)
+#                                       v
+#                                   fork/main --> production
+#
+# `dev` is the fork's integration branch and the target of `gh repo sync` from
+# jbctechsolutions/mcp-office365. Promotion to production is the dev -> main PR;
+# there is deliberately no GitHub environment approval on top of it, because the
+# PR review IS the gate and two gates for one promotion is just friction.
+#
+# Production previously had NO job here at all — this workflow hardcoded the
+# staging Container App, so prod sat on its 2026-07-19 bootstrap image, looked
+# unused, and was torn down on 2026-09-01 while an ELT member still had its URL
+# saved as their claude.ai connector.
+#
+# Note: prod does not run the byte-identical image staging proved. Each branch
+# builds its own SHA-tagged image, so a dev -> main merge commit produces a new
+# digest from the same tree. That is the accepted tradeoff of branch-driven
+# promotion; if prod ever needs digest-exact promotion, retag the dev image
+# rather than rebuilding on main.
 #
 # Prerequisites (one-time):
 #   - Repo variables: AZURE_CLIENT_ID, AZURE_TENANT_ID, AZURE_SUBSCRIPTION_ID
 #     (a workload-identity federation to a service principal with AcrPush on
 #     jpcontainerregistry and Contributor on the connector resource groups).
-#   - GitHub environments `staging` and `production` exist, `production` carrying
-#     a required reviewer. Each needs a matching federated credential on the
-#     deploy SP (jp-infrastructure stacks/azure/entra/github-oidc).
+#   - GitHub environments `staging` and `production` exist. Each job declares
+#     `environment:`, so GitHub mints the OIDC token with an
+#     `...:environment:<name>` subject — which is what the deploy SP's federated
+#     credentials match on (jp-infrastructure stacks/azure/entra/github-oidc).
+#     No per-branch credential is needed, and adding `dev` did not require an
+#     OIDC change.
 #   - The Container App exists (jp-infrastructure stacks/<env>/apps/
 #     mcp-office365-connector applied). Until then the build-and-push job still
 #     publishes the image; the deploy job self-skips.
 
 on:
   push:
-    branches: [main]
+    branches: [dev, main]
     paths:
       - "src/**"
       - "package.json"
@@ -54,7 +73,12 @@ jobs:
     # clean fast-forward) but only executes in the joshua-project fork.
     if: github.repository_owner == 'joshua-project'
     runs-on: ubuntu-latest
-    environment: staging
+    # Tracks the branch so the OIDC subject matches the environment this run is
+    # ultimately deploying to. AcrPush is granted on the SP itself, so either
+    # environment can push the image — but a main-triggered run claiming the
+    # staging subject would be a lie waiting to break under environment
+    # protection rules.
+    environment: ${{ github.ref == 'refs/heads/main' && 'production' || 'staging' }}
     outputs:
       image: ${{ steps.meta.outputs.image }}
     steps:
@@ -84,7 +108,7 @@ jobs:
           docker push "${IMAGE_REPO}:latest"
 
   deploy-staging:
-    if: github.repository_owner == 'joshua-project'
+    if: github.repository_owner == 'joshua-project' && github.ref == 'refs/heads/dev'
     needs: build-and-push
     runs-on: ubuntu-latest
     environment: staging
@@ -133,13 +157,11 @@ jobs:
           exit 1
 
   deploy-production:
-    # Promotes the exact image digest staging just proved — no rebuild, so the
-    # artifact is identical. Held behind the `production` environment's required
-    # reviewer; without approval this job waits and prod stays on its current
-    # image. `needs: deploy-staging` means a broken staging roll never reaches
-    # the approval prompt in the first place.
-    if: github.repository_owner == 'joshua-project'
-    needs: [build-and-push, deploy-staging]
+    # Runs only on main. The gate is the dev -> main PR, not an approval prompt
+    # here — so this job does NOT need deploy-staging: that job belongs to a
+    # different branch's run and never executes in a main-triggered run.
+    if: github.repository_owner == 'joshua-project' && github.ref == 'refs/heads/main'
+    needs: build-and-push
     runs-on: ubuntu-latest
     environment: production
     env:
