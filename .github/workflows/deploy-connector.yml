@@ -197,31 +197,53 @@ jobs:
           # Deliberately NOT a public curl like the staging job does. Production
           # ingress is (or will be) locked to Anthropic's egress range — a GitHub
           # runner is not in it, so curling /healthz would fail for an app that is
-          # perfectly healthy. The revision's healthState is the readiness probe's
-          # own verdict, evaluated inside the Container Apps environment, so it
-          # stays truthful whether or not ingress is restricted.
+          # perfectly healthy. Everything below is control-plane state, so it stays
+          # truthful whether or not ingress is restricted.
+          #
+          # The success signal is REPLICA READINESS, not the revision's healthState.
+          # healthState is populated lazily on a freshly created revision: on the
+          # 2026-09-14 first production roll it was still empty 5 minutes after the
+          # revision went RunningAtMaxScale, and only filled in later — so gating on
+          # it failed a deploy that had in fact succeeded. Replica `ready` is the
+          # readiness probe's result directly and is populated as soon as the probe
+          # passes. healthState is kept only as an early-exit fast path.
           REV=$(az containerapp show -n "${CONTAINER_APP_NAME}" -g "${RESOURCE_GROUP}" \
             --query properties.latestRevisionName -o tsv)
           echo "Health-gating revision ${REV}"
           # runningState is NOT simply "Running" — a healthy single-replica app
-          # reports "RunningAtMaxScale". Gate on healthState and use runningState
-          # only to fail fast, rather than enumerating every healthy spelling.
-          for attempt in $(seq 1 30); do
+          # reports "RunningAtMaxScale". It is used only to fail fast, never as the
+          # success condition.
+          for attempt in $(seq 1 40); do
             read -r RUNNING HEALTH < <(az containerapp revision show \
               -n "${CONTAINER_APP_NAME}" -g "${RESOURCE_GROUP}" --revision "${REV}" \
               --query "[properties.runningState, properties.healthState]" -o tsv)
-            echo "runningState=${RUNNING} healthState=${HEALTH} (attempt ${attempt}/30)"
+
+            # Replicas not ready / not yet scheduled -> READY is 0, never unset.
+            READY=$(az containerapp replica list \
+              -n "${CONTAINER_APP_NAME}" -g "${RESOURCE_GROUP}" --revision "${REV}" \
+              --query "length([?length(properties.containers[?ready!=\`true\`])==\`0\`])" -o tsv 2>/dev/null || echo 0)
+            READY=${READY:-0}
+
+            echo "runningState=${RUNNING} healthState=${HEALTH:-<unset>} readyReplicas=${READY} (attempt ${attempt}/40)"
+
             case "${RUNNING}" in
               Failed|Degraded|Stopped)
                 echo "Revision ${REV} is in terminal state ${RUNNING}."
                 exit 1
                 ;;
             esac
+
+            if [ "${READY}" -ge 1 ]; then
+              echo "Production revision ${REV} has ${READY} ready replica(s) — healthy."
+              exit 0
+            fi
             if [ "${HEALTH}" = "Healthy" ]; then
-              echo "Production revision ${REV} is healthy (${RUNNING})."
+              echo "Production revision ${REV} reports healthState=Healthy."
               exit 0
             fi
             sleep 10
           done
-          echo "Production revision did not become healthy within 5 minutes."
+          echo "Production revision did not become ready within ~7 minutes."
+          az containerapp replica list -n "${CONTAINER_APP_NAME}" -g "${RESOURCE_GROUP}" \
+            --revision "${REV}" -o json || true
           exit 1
